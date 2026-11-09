@@ -108,3 +108,43 @@ $("tasks").addEventListener("click", async event => {
   } catch (error) { $("notice").textContent = error.message; }
 });
 refresh();
+
+async function checkRenderer() {
+  try {
+    const info = await request("/api/render/capabilities");
+    $("renderNotice").textContent = info.available
+      ? "Ready: " + info.supported_output + " · Silent text cards only."
+      : "Server par FFmpeg available nahi hai. Deployment par FFmpeg install hone ke baad MP4 rendering enable hogi.";
+    $("renderButton").disabled = !info.available;
+  } catch (error) {
+    $("renderNotice").textContent = "Renderer status unavailable.";
+    $("renderButton").disabled = true;
+  }
+}
+$("renderButton").addEventListener("click", async () => {
+  const title = $("renderTitle").value.trim();
+  const scenes = $("renderScenes").value.split("\n").map(x => x.trim()).filter(Boolean);
+  const seconds = Number($("sceneSeconds").value || 4);
+  if (!title || !scenes.length) {
+    $("renderNotice").textContent = "Title aur kam se kam ek scene likhein.";
+    return;
+  }
+  $("renderButton").disabled = true;
+  $("renderNotice").textContent = "MP4 render ho raha hai…";
+  $("renderResult").hidden = true;
+  try {
+    const result = await request("/api/render", {
+      method: "POST",
+      body: JSON.stringify({title, scenes, seconds_per_scene: seconds})
+    });
+    $("renderVideo").src = result.url;
+    $("renderDownload").href = result.url;
+    $("renderNotice").textContent = result.resolution + " · " + result.duration_seconds + " sec · " + result.format + " · No audio";
+    $("renderResult").hidden = false;
+  } catch (error) {
+    $("renderNotice").textContent = error.message;
+  } finally {
+    $("renderButton").disabled = false;
+  }
+});
+checkRenderer();
