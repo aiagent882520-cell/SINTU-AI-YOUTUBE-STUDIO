@@ -201,3 +201,49 @@ $("subtitleButton").addEventListener("click", async () => {
   finally { $("subtitleButton").disabled = false; }
 });
 checkVoiceService();
+
+
+async function checkImageService() {
+  try {
+    const info = await request("/api/images/capabilities");
+    $("imageNotice").textContent = info.available
+      ? "Ready: " + info.provider + " · " + info.model + " · PNG source / JPEG download. Paid API usage."
+      : !info.enabled_by_admin
+        ? "AI image generation server administrator ke explicit paid-media enable karne ka wait kar raha hai."
+        : !info.access_token_configured
+          ? "Server par MEDIA_GENERATION_TOKEN configure nahi hai."
+          : "OpenAI API key server par configured nahi hai.";
+    $("imageButton").disabled = !info.available;
+  } catch (error) {
+    $("imageNotice").textContent = "Image service status unavailable.";
+    $("imageButton").disabled = true;
+  }
+}
+$("imageKind").addEventListener("change", () => {
+  if ($("imageKind").value === "thumbnail") $("imageAspect").value = "landscape";
+});
+$("imageButton").addEventListener("click", async () => {
+  const prompt = $("imagePrompt").value.trim();
+  const kind = $("imageKind").value;
+  const aspect = $("imageAspect").value;
+  if (!prompt) { $("imageNotice").textContent = "Pehle image prompt likhein."; return; }
+  if (kind === "thumbnail" && aspect !== "landscape") {
+    $("imageNotice").textContent = "YouTube thumbnail ke liye landscape aspect ratio chunein."; return;
+  }
+  $("imageButton").disabled = true;
+  $("imageNotice").textContent = "AI image generate ho rahi hai. Ismein kuch samay lag sakta hai…";
+  $("imageResult").hidden = true;
+  try {
+    const result = await request("/api/images", {
+      method: "POST",
+      headers: {"X-Media-Token": $("mediaToken").value},
+      body: JSON.stringify({prompt, kind, aspect})
+    });
+    $("generatedImage").src = result.url;
+    $("imageDownload").href = result.url;
+    $("imageNotice").textContent = result.width + " × " + result.height + " · " + result.format + " · " + Math.ceil(result.size_bytes / 1024) + " KB";
+    $("imageResult").hidden = false;
+  } catch (error) { $("imageNotice").textContent = error.message; }
+  finally { $("imageButton").disabled = false; }
+});
+checkImageService();
