@@ -93,3 +93,30 @@ def test_unknown_workflow_is_rejected(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     response = client.post("/api/generate", json={"prompt": "Test", "workflow": "unknown-workflow"})
     assert response.status_code == 400
+
+
+def test_storyboard_render_api_contract(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main.shutil, "which", lambda name: None)
+    capability = client.get("/api/render/capabilities")
+    assert capability.status_code == 200
+    assert capability.json()["available"] is False
+    blocked = client.post("/api/render", json={"title": "Test", "scenes": ["First scene"]})
+    assert blocked.status_code == 503
+    assert client.get("/api/videos/not-a-valid-id").status_code == 400
+
+
+def test_storyboard_render_success_contract(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "render_storyboard", lambda title, scenes, seconds: {
+        "video_id": "a" * 32, "url": "/api/videos/" + "a" * 32,
+        "scenes": len(scenes), "duration_seconds": len(scenes) * seconds,
+        "resolution": "720x1280", "format": "MP4 / H.264",
+        "audio": "none", "note": "Silent text storyboard video."
+    })
+    result = client.post("/api/render", json={
+        "title": "My Short", "scenes": ["Hook", "Main point", "CTA"], "seconds_per_scene": 3
+    })
+    assert result.status_code == 200
+    assert result.json()["duration_seconds"] == 9
+    assert result.json()["resolution"] == "720x1280"
