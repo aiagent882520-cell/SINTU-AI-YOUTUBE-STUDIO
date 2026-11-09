@@ -1,4 +1,5 @@
 from pathlib import Path
+import base64
 import io
 import sqlite3
 import re
@@ -20,6 +21,8 @@ from .image_generator import generate_image, image_status, ImageUnavailable, Ima
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT.parent / "sintu_studio.db"
 STATIC = ROOT / "static"
+MUSIC_DIR = ROOT.parent / "generated_music"
+ALLOWED_MUSIC_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".ogg"}
 
 app = FastAPI(title="SINTU AI STUDIO", version="0.3.0")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
@@ -72,6 +75,13 @@ class RenderInput(BaseModel):
     image_ids: list[str] = Field(default_factory=list, max_length=25)
     audio_id: str | None = Field(default=None, max_length=32)
     subtitles: list[str] = Field(default_factory=list, max_length=25)
+    music_id: str | None = Field(default=None, max_length=32)
+    music_volume: float = Field(default=0.18, ge=0, le=1)
+    transition: str = Field(default="fade", max_length=10)
+
+class MusicUploadInput(BaseModel):
+    filename: str = Field(min_length=1, max_length=120)
+    data_base64: str = Field(min_length=1, max_length=21_000_000)
 
 class ImageInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=3000)
@@ -130,7 +140,7 @@ def capabilities():
         "image_generation": image_status(),
         "requires_external_integration": [
             "video_generation",
-            "licensed_music", "advanced_video_rendering", "youtube_oauth", "social_oauth",
+            "advanced_video_rendering", "youtube_oauth", "social_oauth",
             "channel_analytics", "managed_database"
         ],
         "safety": {
@@ -260,8 +270,54 @@ def render_capabilities():
         "available": bool(shutil.which("ffmpeg")),
         "renderer": "FFmpeg + Pillow storyboard renderer",
         "supported_output": "720x1280 portrait MP4 (H.264) with optional saved scene images, MP3 narration and burned-in captions",
-        "limitations": ["no music track", "no transitions or advanced motion", "FFmpeg must be installed"],
+        "limitations": ["background music is user-uploaded; music licensing remains user's responsibility", "no advanced motion/VFX", "FFmpeg must be installed"],
     }
+
+
+@app.post("/api/music/upload")
+def upload_music(payload: MusicUploadInput, media_token: str = Header(default="", alias="X-Media-Token")):
+    import hmac, os
+    expected = os.getenv("MEDIA_GENERATION_TOKEN", "")
+    if not expected or not hmac.compare_digest(media_token, expected):
+        raise HTTPException(status_code=403, detail="Valid media access token required.")
+    suffix = Path(payload.filename).suffix.lower()
+    if suffix not in ALLOWED_MUSIC_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="MP3, WAV, M4A, AAC ya OGG audio file upload karein.")
+    try:
+        raw = base64.b64decode(payload.data_base64, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid audio upload data.") from None
+    if not raw or len(raw) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Audio file 15 MB se chhoti honi chahiye.")
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise HTTPException(status_code=503, detail="Server par FFmpeg available nahi hai.")
+    MUSIC_DIR.mkdir(parents=True, exist_ok=True)
+    import uuid
+    music_id = uuid.uuid4().hex
+    path = MUSIC_DIR / f"{music_id}{suffix}"
+    path.write_bytes(raw)
+    try:
+        checked = shutil.which("ffprobe")
+        if checked:
+            result = shutil.run if False else None
+            import subprocess
+            probe = subprocess.run([checked, "-v", "error", "-show_entries", "format=duration",
+                                    "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+                                   capture_output=True, text=True, timeout=15, check=False)
+            if probe.returncode != 0 or not probe.stdout.strip():
+                raise ValueError("Audio file decode nahi ho saki.")
+        else:
+            import subprocess
+            probe = subprocess.run([ffmpeg, "-v", "error", "-i", str(path), "-t", "0.2",
+                                    "-f", "null", "-"], capture_output=True, text=True, timeout=20, check=False)
+            if probe.returncode != 0:
+                raise ValueError("Audio file decode nahi ho saki.")
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail="Valid audio file upload karein.") from None
+    return {"music_id": music_id, "filename": path.name, "format": suffix[1:].upper(),
+            "size_bytes": len(raw), "notice": "Use only music you own or are licensed to use."}
 
 
 @app.post("/api/render")
@@ -285,6 +341,17 @@ def render_video(payload: RenderInput):
             raise HTTPException(status_code=404, detail="Scene image not found.")
         image_paths.append(path)
     audio_path = None
+    if payload.transition not in {"cut", "fade"}:
+        raise HTTPException(status_code=400, detail="Transition cut ya fade hona chahiye.")
+    music_path = None
+    if payload.music_id:
+        if not re.fullmatch(r"[a-f0-9]{32}", payload.music_id):
+            raise HTTPException(status_code=400, detail="Invalid background music ID.")
+        matches = list(MUSIC_DIR.glob(payload.music_id + ".*"))
+        if not matches or matches[0].suffix.lower() not in ALLOWED_MUSIC_EXTENSIONS:
+            raise HTTPException(status_code=404, detail="Background music not found.")
+        music_path = matches[0]
+    audio_path = None
     if payload.audio_id:
         if not re.fullmatch(r"[a-f0-9]{32}", payload.audio_id):
             raise HTTPException(status_code=400, detail="Invalid voiceover audio ID.")
@@ -294,7 +361,8 @@ def render_video(payload: RenderInput):
     try:
         return render_storyboard(title, scenes, payload.seconds_per_scene,
                                  image_paths=image_paths, audio_path=audio_path,
-                                 subtitles=payload.subtitles)
+                                 subtitles=payload.subtitles, music_path=music_path,
+                                 music_volume=payload.music_volume, transition=payload.transition)
     except RendererUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except RenderFailed as exc:
