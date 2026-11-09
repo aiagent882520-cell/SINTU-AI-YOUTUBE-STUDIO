@@ -135,7 +135,12 @@ $("renderButton").addEventListener("click", async () => {
   try {
     const result = await request("/api/render", {
       method: "POST",
-      body: JSON.stringify({title, scenes, seconds_per_scene: seconds})
+      body: JSON.stringify({
+        title, scenes, seconds_per_scene: seconds,
+        image_ids: $("renderImageIds").value.split(",").map(x => x.trim()).filter(Boolean),
+        audio_id: $("renderAudioId").value.trim() || null,
+        subtitles: $("renderSubtitles").value.split("\\n").map(x => x.trim()).filter(Boolean)
+      })
     });
     $("renderVideo").src = result.url;
     $("renderDownload").href = result.url;
@@ -175,6 +180,7 @@ $("voiceButton").addEventListener("click", async () => {
       method: "POST", headers: {"X-Media-Token": $("mediaToken").value}, body: JSON.stringify({text, voice: $("voiceChoice").value})
     });
     $("voiceAudio").src = result.url;
+    $("voiceAssetId").textContent = "Audio ID: " + result.audio_id + " · Is ID ko final MP4 panel mein paste karein.";
     $("voiceDownload").href = result.url;
     $("voiceNotice").textContent = result.format + " · " + result.voice + " · " + Math.ceil(result.size_bytes / 1024) + " KB";
     $("voiceResult").hidden = false;
@@ -240,6 +246,7 @@ $("imageButton").addEventListener("click", async () => {
       body: JSON.stringify({prompt, kind, aspect})
     });
     $("generatedImage").src = result.url;
+    $("imageAssetId").textContent = "Image ID: " + result.image_id + " · Har scene image ID ko comma-separated order mein paste karein.";
     $("imageDownload").href = result.url;
     $("imageNotice").textContent = result.width + " × " + result.height + " · " + result.format + " · " + Math.ceil(result.size_bytes / 1024) + " KB";
     $("imageResult").hidden = false;
