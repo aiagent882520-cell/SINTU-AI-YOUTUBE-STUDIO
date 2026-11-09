@@ -26,7 +26,7 @@ API keys and billing are separate from a ChatGPT or Google AI Studio consumer su
 - Dedicated AI workflows: Shorts, long video, thumbnail concepts, script/storytelling, research/fact-check plan, course/lesson/quiz, social content, general content.
 - Workflow-aware OpenAI and Gemini text generation adapters.
 - Task history, task detail retrieval, status counters and TXT / Markdown / JSON exports.
-- Basic portrait MP4 storyboard renderer: creates silent 720×1280 H.264 scene-card videos from user-provided text using Pillow + FFmpeg; scene count and duration are limited.\n- SRT subtitle export with configurable per-line timing.\n- Optional OpenAI text-to-speech MP3 voiceover; disabled by default and requires `ENABLE_PAID_MEDIA_GENERATION=true` plus a server-side `OPENAI_API_KEY`. Paid provider usage may apply.
+- Basic portrait MP4 storyboard renderer: creates silent 720×1280 H.264 scene-card videos from user-provided text using Pillow + FFmpeg; scene count and duration are limited.\n- SRT subtitle export with configurable per-line timing.\n- Optional OpenAI text-to-speech MP3 voiceover; disabled by default and requires `ENABLE_PAID_MEDIA_GENERATION=true` plus a server-side `OPENAI_API_KEY`. Paid provider usage may apply. The route also requires a server-side `MEDIA_GENERATION_TOKEN` and the same token in the dashboard field; do not reuse your OpenAI API key as this token.
 - FastAPI health, provider, agent and workflow endpoints.
 - 61-role specialist catalog with workflow-based team routing across all 8 workflows.
 - The configured model receives selected role missions in one coordinated request. This is not 61 independent autonomous agents or parallel model sessions.
