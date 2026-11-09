@@ -139,18 +139,43 @@ $("renderButton").addEventListener("click", async () => {
         title, scenes, seconds_per_scene: seconds,
         image_ids: $("renderImageIds").value.split(",").map(x => x.trim()).filter(Boolean),
         audio_id: $("renderAudioId").value.trim() || null,
+        music_id: $("renderMusicId").value.trim() || null,
+        music_volume: Number($("musicVolume").value || 0.18),
+        transition: $("renderTransition").value,
         subtitles: $("renderSubtitles").value.split("\\n").map(x => x.trim()).filter(Boolean)
       })
     });
     $("renderVideo").src = result.url;
     $("renderDownload").href = result.url;
-    $("renderNotice").textContent = result.resolution + " · " + result.duration_seconds + " sec · " + result.format + " · No audio";
+    $("renderNotice").textContent = result.resolution + " · " + result.duration_seconds + " sec · " + result.format + " · Audio: " + result.audio + " · Transition: " + result.transition;
     $("renderResult").hidden = false;
   } catch (error) {
     $("renderNotice").textContent = error.message;
   } finally {
     $("renderButton").disabled = false;
   }
+});
+
+$("musicUploadButton").addEventListener("click", async () => {
+  const file = $("musicFile").files[0];
+  if (!file) { $("musicNotice").textContent = "Pehle music file select karein."; return; }
+  if (file.size > 15 * 1024 * 1024) { $("musicNotice").textContent = "Music file 15 MB se chhoti honi chahiye."; return; }
+  if (!$("mediaToken").value.trim()) { $("musicNotice").textContent = "Media access token enter karein."; return; }
+  $("musicUploadButton").disabled = true;
+  $("musicNotice").textContent = "Music upload aur validation ho rahi hai…";
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    const result = await request("/api/music/upload", {
+      method: "POST",
+      headers: {"X-Media-Token": $("mediaToken").value},
+      body: JSON.stringify({filename: file.name, data_base64: btoa(binary)})
+    });
+    $("renderMusicId").value = result.music_id;
+    $("musicNotice").textContent = result.format + " · " + Math.ceil(result.size_bytes / 1024) + " KB · Music ID saved. " + result.notice;
+  } catch (error) { $("musicNotice").textContent = error.message; }
+  finally { $("musicUploadButton").disabled = false; }
 });
 checkRenderer();
 
