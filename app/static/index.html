@@ -57,7 +57,7 @@
       <p id="providerStatus" class="muted">AI provider status checking…</p>
     </section>
     <section class="panel">
-      <div class="panel-head"><div><h2>MP4 Storyboard Renderer</h2><p>Scene images, optional AI voiceover aur subtitles ko vertical MP4 mein combine karein. Music aur advanced motion abhi pending hain.</p></div></div>
+      <div class="panel-head"><div><h2>MP4 Storyboard Renderer</h2><p>Scene images, voiceover, music, subtitles, fade transitions aur slow cinematic zoom ko vertical MP4 mein combine karein.</p></div></div>
       <label for="renderTitle">Video title</label>
       <input id="renderTitle" maxlength="100" placeholder="Video ka title">
       <label for="renderScenes">Scenes (har line ek scene)</label>
@@ -78,6 +78,8 @@
       <input id="musicVolume" type="range" min="0" max="1" step="0.05" value="0.18">
       <label for="renderTransition">Scene transition</label>
       <select id="renderTransition"><option value="fade">Fade</option><option value="cut">Cut</option></select>
+      <label for="renderMotion">Cinematic motion effect</label>
+      <select id="renderMotion"><option value="none">Static (no motion)</option><option value="slow-zoom-in">Slow cinematic zoom in</option><option value="slow-zoom-out">Slow cinematic zoom out</option></select>
       <label for="renderSubtitles">Burn-in subtitles (har line ek scene; optional)</label>
       <textarea id="renderSubtitles" rows="3" placeholder="Scene 1 subtitle&#10;Scene 2 subtitle"></textarea>
       <div class="actions"><button id="renderButton" type="button">Create MP4</button></div>
@@ -141,7 +143,7 @@
       <h2>Integration Status</h2>
       <div class="status-grid">
         <div><b>AI text generation</b><span>OpenAI / Gemini adapter ready; server key required</span></div>
-        <div><b>Basic MP4 rendering</b><span>Silent 720×1280 text storyboard renderer; FFmpeg required. AI footage, voice and music pending.</span></div>
+        <div><b>MP4 production</b><span>720×1280 renderer with optional images, voice, uploaded music, captions, fade and slow zoom; FFmpeg required.</span></div>
         <div><b>Voice, images & music</b><span>Provider integrations pending</span></div>
         <div><b>YouTube publishing</b><span>OAuth and channel connection pending</span></div>
         <div><b>Analytics & monetization</b><span>Channel data integration pending</span></div>
