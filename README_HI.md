@@ -25,7 +25,8 @@ API keys and billing are separate from a ChatGPT or Google AI Studio consumer su
 - Responsive mobile-first Hindi creator dashboard / installable PWA foundation.
 - Dedicated AI workflows: Shorts, long video, thumbnail concepts, script/storytelling, research/fact-check plan, course/lesson/quiz, social content, general content.
 - Workflow-aware OpenAI and Gemini text generation adapters.
-- Task history, task detail retrieval, status counters and TXT export.
+- Task history, task detail retrieval, status counters and TXT / Markdown / JSON exports.
+- Basic portrait MP4 storyboard renderer: creates silent 720×1280 H.264 scene-card videos from user-provided text using Pillow + FFmpeg; scene count and duration are limited.
 - FastAPI health, provider, agent and workflow endpoints.
 - 61-role specialist catalog with workflow-based team routing across all 8 workflows.
 - The configured model receives selected role missions in one coordinated request. This is not 61 independent autonomous agents or parallel model sessions.
@@ -35,7 +36,7 @@ API keys and billing are separate from a ChatGPT or Google AI Studio consumer su
 
 ## Not yet integrated / not verified
 
-This repository is not yet a complete autonomous video studio. Actual image/video generation, AI voice, music licensing/provider, FFmpeg rendering pipeline, YouTube/social OAuth publishing, analytics/revenue connectors, autonomous multi-agent execution, managed database and native Android/iOS apps require further integrations and testing. A generated script or production package is not a rendered video file. No publishing or external account action occurs automatically.
+This repository is not yet a complete autonomous video studio. AI image/video footage generation, AI voice, licensed music, advanced FFmpeg editing/effects, YouTube/social OAuth publishing, analytics/revenue connectors, autonomous multi-agent execution, managed database and native Android/iOS apps require further integrations and testing. Basic storyboard MP4 rendering is available only where FFmpeg is installed. A generated script or production package is not a rendered video file. No publishing or external account action occurs automatically.
 
 ## Production notes
 
