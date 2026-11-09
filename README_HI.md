@@ -36,7 +36,7 @@ API keys and billing are separate from a ChatGPT or Google AI Studio consumer su
 
 ## Not yet integrated / not verified
 
-This repository is not yet a complete autonomous video studio. AI image/video footage generation, AI voice, licensed music, advanced FFmpeg editing/effects, YouTube/social OAuth publishing, analytics/revenue connectors, autonomous multi-agent execution, managed database and native Android/iOS apps require further integrations and testing. Basic storyboard MP4 rendering is available only where FFmpeg is installed. A generated script or production package is not a rendered video file. No publishing or external account action occurs automatically.
+This repository is not yet a complete autonomous video studio. AI video footage generation, licensed music, advanced FFmpeg editing/effects, YouTube/social OAuth publishing, analytics/revenue connectors, autonomous multi-agent execution, managed database and native Android/iOS apps require further integrations and testing. Basic storyboard MP4 rendering is available only where FFmpeg is installed. A generated script or production package is not a rendered video file. No publishing or external account action occurs automatically.
 
 ## Production notes
 
