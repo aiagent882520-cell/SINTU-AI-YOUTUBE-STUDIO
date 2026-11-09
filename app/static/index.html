@@ -88,6 +88,19 @@
       <p id="subtitleNotice" class="muted" role="status" aria-live="polite"></p>
     </section>
 <section class="panel">
+      <div class="panel-head"><div><h2>AI Image & Thumbnail Studio</h2><p>Scene artwork, cinematic visuals aur YouTube thumbnail concepts ko image mein banayein.</p></div></div>
+      <label for="imagePrompt">Image prompt / visual description</label>
+      <textarea id="imagePrompt" rows="4" maxlength="3000" placeholder="Example: Ancient Indian stepwell at night, mysterious blue moonlight, cinematic documentary photography, no text…"></textarea>
+      <label for="imageKind">Image type</label>
+      <select id="imageKind"><option value="scene">Video scene artwork</option><option value="thumbnail">YouTube thumbnail</option></select>
+      <label for="imageAspect">Aspect ratio</label>
+      <select id="imageAspect"><option value="portrait">Portrait 2:3 (Shorts scene)</option><option value="landscape">Landscape 3:2 (YouTube thumbnail)</option><option value="square">Square 1:1</option></select>
+      <p class="muted">Thumbnail ke liye landscape select karein. AI image mein text galat ho sakta hai; final thumbnail text editor mein add karein.</p>
+      <div class="actions"><button id="imageButton" type="button">Generate AI Image</button></div>
+      <p id="imageNotice" class="muted" role="status" aria-live="polite">Image service status checking…</p>
+      <div id="imageResult" hidden><img id="generatedImage" alt="Generated SINTU AI artwork" style="display:block;width:100%;height:auto;border-radius:12px"><p><a id="imageDownload" download="sintu-ai-image.jpg">Download image</a></p></div>
+    </section>
+    <section class="panel">
       <div class="panel-head"><div><h2>Creator Departments</h2><p>Har department ke liye dedicated workflow.</p></div></div>
       <div class="departments">
         <button class="dept" data-workflow="research"><b>Research & Trends</b><span>Topic discovery, fact-check planning, competitor and keyword research</span></button>
