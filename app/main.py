@@ -141,6 +141,8 @@ def generate(payload: TaskInput):
     prompt = payload.prompt.strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="Prompt cannot be empty")
+    if payload.workflow not in WORKFLOW_GUIDES:
+        raise HTTPException(status_code=400, detail="Unknown workflow. Choose an available workflow.")
     created = datetime.now(timezone.utc).isoformat()
     with db() as conn:
         cur = conn.execute(
@@ -197,7 +199,7 @@ def export_task(task_id: int, format: str = "txt"):
             "product": "SINTU AI STUDIO",
             "task": {key: item[key] for key in ("id", "workflow", "status", "created_at", "prompt", "output")},
             "notice": "AI-generated production package; not a rendered or published video."
-        }, headers={"Content-Disposition": "attachment; filename=sintu-task-${task_id}.json"})
+        }, headers={"Content-Disposition": f"attachment; filename=sintu-task-{task_id}.json"})
     if format == "md":
         content = (
             f"# SINTU AI STUDIO — {item['workflow']}\n\n"
@@ -217,7 +219,7 @@ def export_task(task_id: int, format: str = "txt"):
     return StreamingResponse(
         io.BytesIO(content.encode("utf-8")),
         media_type=media_type,
-        headers={"Content-Disposition": f"attachment; filename=sintu-task-{task_id}.${extension}"},
+        headers={"Content-Disposition": f"attachment; filename=sintu-task-{task_id}.{extension}"},
     )
 
 
