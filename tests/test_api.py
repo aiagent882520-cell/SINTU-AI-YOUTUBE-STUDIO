@@ -37,3 +37,15 @@ def test_invalid_prompt_is_rejected(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     result = client.post("/api/generate", json={"prompt": "   ", "workflow": "shorts"})
     assert result.status_code == 400
+
+def test_installable_app_shell(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    page = client.get("/")
+    assert page.status_code == 200
+    assert 'rel="manifest"' in page.text
+    assert 'navigator.serviceWorker.register("/static/sw.js")' in page.text
+    manifest = client.get("/static/manifest.json")
+    assert manifest.status_code == 200
+    assert manifest.json()["display"] == "standalone"
+    assert client.get("/static/sw.js").status_code == 200
+    assert client.get("/static/icon.svg").status_code == 200
