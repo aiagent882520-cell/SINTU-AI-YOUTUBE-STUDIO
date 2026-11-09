@@ -160,5 +160,11 @@ def test_voiceover_requires_media_access_token(tmp_path, monkeypatch):
     monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "expected-token")
     response = client.post("/api/voice", json={"text": "Hello", "voice": "alloy"})
     assert response.status_code == 403
-    assert client.post("/api/voice", json={"text": "Hello", "voice": "alloy"},
-                       headers={"X-Media-Token": "expected-token"}).status_code == 502
+    monkeypatch.setattr(main, "generate_voiceover", lambda text, voice: {
+        "audio_id": "a" * 32, "url": "/api/audio/" + "a" * 32,
+        "format": "MP3", "voice": voice, "size_bytes": 123
+    })
+    allowed = client.post("/api/voice", json={"text": "Hello", "voice": "alloy"},
+                          headers={"X-Media-Token": "expected-token"})
+    assert allowed.status_code == 200
+    assert allowed.json()["format"] == "MP3"
