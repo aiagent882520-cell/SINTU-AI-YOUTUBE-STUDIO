@@ -322,8 +322,8 @@ def create_subtitles(payload: SubtitleInput):
     for index, scene in enumerate(scenes):
         start = index * payload.seconds_per_scene
         end = start + payload.seconds_per_scene
-        chunks.append(f"{index + 1}\\n{_srt_time(start)} --> {_srt_time(end)}\\n{scene}")
-    content = "\\n\\n".join(chunks) + "\\n"
+        chunks.append(f"{index + 1}\n{_srt_time(start)} --> {_srt_time(end)}\n{scene}")
+    content = "\n\n".join(chunks) + "\n"
     return StreamingResponse(
         io.BytesIO(content.encode("utf-8")),
         media_type="application/x-subrip; charset=utf-8",
