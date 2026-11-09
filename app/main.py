@@ -14,6 +14,7 @@ from .agents import list_agents
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
 from .video_renderer import render_storyboard, RendererUnavailable, RenderFailed, OUTPUT_DIR
+from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable, VoiceGenerationFailed, AUDIO_DIR
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT.parent / "sintu_studio.db"
@@ -68,6 +69,14 @@ class RenderInput(BaseModel):
     scenes: list[str] = Field(min_length=1, max_length=25)
     seconds_per_scene: int = Field(default=4, ge=2, le=12)
 
+class VoiceInput(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+    voice: str = Field(default="alloy", max_length=20)
+
+class SubtitleInput(BaseModel):
+    scenes: list[str] = Field(min_length=1, max_length=100)
+    seconds_per_scene: int = Field(default=4, ge=1, le=60)
+
 @app.get("/")
 def home():
     return FileResponse(STATIC / "index.html")
@@ -108,8 +117,9 @@ def capabilities():
             "gemini": providers["gemini"]["configured"],
         },
         "storyboard_renderer": {"available": bool(shutil.which("ffmpeg")), "output": "silent 720x1280 MP4"},
+        "voiceover": voice_status(),
         "requires_external_integration": [
-            "image_generation", "video_generation", "voice_generation",
+            "image_generation", "video_generation",
             "licensed_music", "advanced_video_rendering", "youtube_oauth", "social_oauth",
             "channel_analytics", "managed_database"
         ],
@@ -268,6 +278,57 @@ def get_video(video_id: str):
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Video not found")
     return FileResponse(path, media_type="video/mp4", filename=f"sintu-{video_id}.mp4")
+
+
+@app.get("/api/voice/capabilities")
+def voice_capabilities():
+    return voice_status()
+
+
+@app.post("/api/voice")
+def create_voiceover(payload: VoiceInput):
+    try:
+        return generate_voiceover(payload.text, payload.voice)
+    except VoiceUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except VoiceGenerationFailed as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/audio/{audio_id}")
+def get_audio(audio_id: str):
+    if not re.fullmatch(r"[a-f0-9]{32}", audio_id):
+        raise HTTPException(status_code=400, detail="Invalid audio ID")
+    path = AUDIO_DIR / f"{audio_id}.mp3"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Audio not found")
+    return FileResponse(path, media_type="audio/mpeg", filename=f"sintu-voice-{audio_id}.mp3")
+
+
+def _srt_time(seconds: int) -> str:
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},000"
+
+
+@app.post("/api/subtitles")
+def create_subtitles(payload: SubtitleInput):
+    scenes = [scene.strip() for scene in payload.scenes]
+    if any(not scene or len(scene) > 1000 for scene in scenes):
+        raise HTTPException(status_code=400, detail="Each subtitle scene must contain 1 to 1000 characters.")
+    chunks = []
+    for index, scene in enumerate(scenes):
+        start = index * payload.seconds_per_scene
+        end = start + payload.seconds_per_scene
+        chunks.append(f"{index + 1}\\n{_srt_time(start)} --> {_srt_time(end)}\\n{scene}")
+    content = "\\n\\n".join(chunks) + "\\n"
+    return StreamingResponse(
+        io.BytesIO(content.encode("utf-8")),
+        media_type="application/x-subrip; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="sintu-subtitles.srt"'},
+    )
 
 
 @app.get("/api/status")
