@@ -53,8 +53,23 @@ def _wrap(draw, text, font, max_width):
     return lines or [""]
 
 
-def _make_frame(path: Path, title: str, scene: str, index: int, total: int):
-    image = Image.new("RGB", (WIDTH, HEIGHT), (16, 24, 39))
+def _make_frame(path: Path, title: str, scene: str, index: int, total: int,
+                source_image: Path | None = None, subtitle: str | None = None):
+    if source_image:
+        with Image.open(source_image) as source:
+            source.load()
+            image = source.convert("RGB")
+            image.thumbnail((WIDTH, HEIGHT), Image.Resampling.LANCZOS)
+            canvas = Image.new("RGB", (WIDTH, HEIGHT), (16, 24, 39))
+            canvas.paste(image, ((WIDTH - image.width) // 2, (HEIGHT - image.height) // 2))
+            image = canvas
+        overlay = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+        shade = ImageDraw.Draw(overlay)
+        shade.rectangle((0, 0, WIDTH, 330), fill=(0, 0, 0, 150))
+        shade.rectangle((0, HEIGHT - 360, WIDTH, HEIGHT), fill=(0, 0, 0, 175))
+        image = Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB")
+    else:
+        image = Image.new("RGB", (WIDTH, HEIGHT), (16, 24, 39))
     draw = ImageDraw.Draw(image)
     draw.rounded_rectangle((42, 70, WIDTH - 42, HEIGHT - 70), radius=34, outline=(68, 89, 120), width=3)
     small = _font(26)
@@ -73,7 +88,9 @@ def _make_frame(path: Path, title: str, scene: str, index: int, total: int):
     image.save(path, format="PNG")
 
 
-def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4) -> dict:
+def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
+                      image_paths: list[Path] | None = None, audio_path: Path | None = None,
+                      subtitles: list[str] | None = None) -> dict:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RendererUnavailable("FFmpeg server par installed nahi hai. Video rendering filhaal unavailable hai.")
@@ -81,6 +98,21 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4)
         raise ValueError("1 se 25 scenes required hain.")
     if not 2 <= seconds_per_scene <= 12:
         raise ValueError("Har scene ki duration 2 se 12 seconds honi chahiye.")
+
+    image_paths = image_paths or []
+    subtitles = subtitles or []
+    if image_paths and len(image_paths) != len(scenes):
+        raise ValueError("Scene images ki sankhya scenes ke barabar honi chahiye.")
+    if subtitles and len(subtitles) != len(scenes):
+        raise ValueError("Subtitle lines ki sankhya scenes ke barabar honi chahiye.")
+    for image_path in image_paths:
+        if not image_path.is_file():
+            raise ValueError("Selected scene image file nahi mili.")
+        try:
+            with Image.open(image_path) as check:
+                check.verify()
+        except Exception:
+            raise ValueError("Selected scene image valid image file nahi hai.") from None
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     video_id = uuid.uuid4().hex
@@ -91,18 +123,23 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4)
             lines = []
             for index, scene in enumerate(scenes, start=1):
                 frame = work / f"frame-{index:03d}.png"
-                _make_frame(frame, title, scene, index, len(scenes))
+                source_image = image_paths[index - 1] if image_paths else None
+                subtitle = subtitles[index - 1] if subtitles else None
+                _make_frame(frame, title, scene, index, len(scenes), source_image, subtitle)
                 lines.append(f"file '{frame.as_posix()}'")
                 lines.append(f"duration {seconds_per_scene}")
             lines.append(f"file '{(work / f'frame-{len(scenes):03d}.png').as_posix()}'")
             concat = work / "frames.txt"
             concat.write_text("\\n".join(lines) + "\\n", encoding="utf-8")
-            command = [
-                ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-                "-f", "concat", "-safe", "0", "-i", str(concat),
-                "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                "-r", "30", "-movflags", "+faststart", str(output_path),
-            ]
+            command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+                       "-f", "concat", "-safe", "0", "-i", str(concat)]
+            if audio_path:
+                command += ["-i", str(audio_path), "-map", "0:v:0", "-map", "1:a:0",
+                            "-c:a", "aac", "-b:a", "192k", "-shortest"]
+            else:
+                command += ["-an"]
+            command += ["-c:v", "libx264", "-pix_fmt", "yuv420p",
+                        "-r", "30", "-movflags", "+faststart", str(output_path)]
             completed = subprocess.run(command, capture_output=True, text=True, timeout=180, check=False)
             if completed.returncode != 0 or not output_path.exists():
                 detail = (completed.stderr or "FFmpeg render failed")[-1200:]
@@ -120,7 +157,9 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4)
         "scenes": len(scenes),
         "duration_seconds": len(scenes) * seconds_per_scene,
         "resolution": f"{WIDTH}x{HEIGHT}",
-        "audio": "none",
+        "audio": "voiceover" if audio_path else "none",
+        "scene_images": len(image_paths),
+        "subtitles_burned_in": bool(subtitles),
         "format": "MP4 / H.264",
-        "note": "Silent text storyboard video. AI visuals, voiceover, music, and advanced motion are not included.",
+        "note": "Scene images and optional narration/subtitles are combined when supplied. No music or advanced motion is added.",
     }
