@@ -120,3 +120,33 @@ def test_storyboard_render_success_contract(tmp_path, monkeypatch):
     assert result.status_code == 200
     assert result.json()["duration_seconds"] == 9
     assert result.json()["resolution"] == "720x1280"
+
+
+def test_voiceover_is_disabled_by_default(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.delenv("ENABLE_PAID_MEDIA_GENERATION", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    info = client.get("/api/voice/capabilities")
+    assert info.status_code == 200
+    assert info.json()["available"] is False
+    result = client.post("/api/voice", json={"text": "Namaste", "voice": "alloy"})
+    assert result.status_code == 503
+
+
+def test_voiceover_invalid_voice_is_rejected(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(main, "generate_voiceover", lambda text, voice: (_ for _ in ()).throw(ValueError("Unsupported voice selection.")))
+    result = client.post("/api/voice", json={"text": "Hello", "voice": "bad-voice"})
+    assert result.status_code == 400
+
+
+def test_subtitle_srt_generation(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    result = client.post("/api/subtitles", json={
+        "scenes": ["Namaste dosto", "Aaj hum seekhenge"], "seconds_per_scene": 4
+    })
+    assert result.status_code == 200
+    assert "1\\n00:00:00,000 --> 00:00:04,000\\nNamaste dosto" in result.text
+    assert "2\\n00:00:04,000 --> 00:00:08,000\\nAaj hum seekhenge" in result.text
