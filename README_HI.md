@@ -27,8 +27,11 @@ API keys and billing are separate from a ChatGPT or Google AI Studio consumer su
 - Workflow-aware OpenAI and Gemini text generation adapters.
 - Task history, task detail retrieval, status counters and TXT export.
 - FastAPI health, provider, agent and workflow endpoints.
-- 61-role agent registry. The registry is a roadmap/catalog, not 61 independently running autonomous agents.
-- API tests for health, catalog, generation flow, task retrieval and export.
+- 61-role specialist catalog with workflow-based team routing across all 8 workflows.
+- The configured model receives selected role missions in one coordinated request. This is not 61 independent autonomous agents or parallel model sessions.
+- Workflow-team API, platform capability API, and explicit provider/integration readiness reporting.
+- Basic browser security headers (CSP, frame protection, MIME sniffing protection, referrer and permissions policies).
+- API tests for health, catalog, generation flow, task retrieval, export, PWA shell, team routing and capability safety.
 
 ## Not yet integrated / not verified
 
