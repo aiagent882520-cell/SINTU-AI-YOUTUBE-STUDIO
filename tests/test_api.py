@@ -261,3 +261,51 @@ def test_final_video_passes_assets_to_renderer(tmp_path, monkeypatch):
     assert captured["image_paths"] == [image_dir / (image_id + ".jpg")]
     assert captured["audio_path"] == audio_dir / (audio_id + ".mp3")
     assert captured["subtitles"] == ["Namaste"]
+
+
+def test_music_upload_requires_token_and_valid_extension(tmp_path, monkeypatch):
+    import base64
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "secure-token")
+    payload = {"filename": "track.mp3", "data_base64": base64.b64encode(b"fake").decode()}
+    assert client.post("/api/music/upload", json=payload).status_code == 403
+    bad = client.post("/api/music/upload", json={"filename": "track.exe", "data_base64": "ZmFrZQ=="},
+                      headers={"X-Media-Token": "secure-token"})
+    assert bad.status_code == 400
+    invalid = client.post("/api/music/upload", json=payload,
+                          headers={"X-Media-Token": "secure-token"})
+    assert invalid.status_code == 503
+
+
+def test_render_rejects_invalid_music_and_transition(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    invalid_transition = client.post("/api/render", json={
+        "title": "Test", "scenes": ["One"], "transition": "explode"
+    })
+    assert invalid_transition.status_code == 400
+    invalid_music = client.post("/api/render", json={
+        "title": "Test", "scenes": ["One"], "music_id": "f" * 32
+    })
+    assert invalid_music.status_code == 404
+
+
+def test_render_passes_music_options(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    music_dir = tmp_path / "music"
+    music_dir.mkdir()
+    monkeypatch.setattr(main, "MUSIC_DIR", music_dir)
+    music_id = "f" * 32
+    (music_dir / (music_id + ".mp3")).write_bytes(b"placeholder")
+    captured = {}
+    def fake_render(title, scenes, seconds, **kwargs):
+        captured.update(kwargs)
+        return {"video_id": "1" * 32, "url": "/api/videos/" + "1" * 32}
+    monkeypatch.setattr(main, "render_storyboard", fake_render)
+    response = client.post("/api/render", json={
+        "title": "Music test", "scenes": ["One"], "music_id": music_id,
+        "music_volume": 0.25, "transition": "fade"
+    })
+    assert response.status_code == 200
+    assert captured["music_path"] == music_dir / (music_id + ".mp3")
+    assert captured["music_volume"] == 0.25
+    assert captured["transition"] == "fade"
