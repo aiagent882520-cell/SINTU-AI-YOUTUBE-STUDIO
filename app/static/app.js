@@ -113,7 +113,7 @@ async function checkRenderer() {
   try {
     const info = await request("/api/render/capabilities");
     $("renderNotice").textContent = info.available
-      ? "Ready: " + info.supported_output + " · Silent text cards only."
+      ? "Ready: " + info.supported_output + " · Scene images + optional narration + captions."
       : "Server par FFmpeg available nahi hai. Deployment par FFmpeg install hone ke baad MP4 rendering enable hogi.";
     $("renderButton").disabled = !info.available;
   } catch (error) {
