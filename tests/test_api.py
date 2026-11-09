@@ -137,8 +137,9 @@ def test_voiceover_invalid_voice_is_rejected(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "test-token")
     monkeypatch.setattr(main, "generate_voiceover", lambda text, voice: (_ for _ in ()).throw(ValueError("Unsupported voice selection.")))
-    result = client.post("/api/voice", json={"text": "Hello", "voice": "bad-voice"})
+    result = client.post("/api/voice", json={"text": "Hello", "voice": "bad-voice"}, headers={"X-Media-Token": "test-token"})
     assert result.status_code == 400
 
 
@@ -150,3 +151,14 @@ def test_subtitle_srt_generation(tmp_path, monkeypatch):
     assert result.status_code == 200
     assert "1\\n00:00:00,000 --> 00:00:04,000\\nNamaste dosto" in result.text
     assert "2\\n00:00:04,000 --> 00:00:08,000\\nAaj hum seekhenge" in result.text
+
+
+def test_voiceover_requires_media_access_token(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "expected-token")
+    response = client.post("/api/voice", json={"text": "Hello", "voice": "alloy"})
+    assert response.status_code == 403
+    assert client.post("/api/voice", json={"text": "Hello", "voice": "alloy"},
+                       headers={"X-Media-Token": "expected-token"}).status_code == 502
