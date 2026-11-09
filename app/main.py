@@ -1,5 +1,4 @@
 from pathlib import Path
-import json
 import sqlite3
 from datetime import datetime, timezone
 
@@ -9,12 +8,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .agents import list_agents
+from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT.parent / "sintu_studio.db"
 STATIC = ROOT / "static"
 
-app = FastAPI(title="SINTU AI STUDIO", version="0.1.0")
+app = FastAPI(title="SINTU AI STUDIO", version="0.2.0")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 def db():
@@ -33,6 +33,9 @@ def init_db():
                 created_at TEXT NOT NULL
             )
         """)
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(tasks)")}
+        if "output" not in columns:
+            conn.execute("ALTER TABLE tasks ADD COLUMN output TEXT")
 
 init_db()
 
@@ -52,6 +55,11 @@ def health():
 def agents():
     return {"total": len(list_agents()), "agents": list_agents()}
 
+@app.get("/api/providers")
+def providers():
+    # Only safe configuration metadata is returned; never expose secret values.
+    return provider_status()
+
 @app.post("/api/tasks")
 def create_task(payload: TaskInput):
     prompt = payload.prompt.strip()
@@ -64,17 +72,56 @@ def create_task(payload: TaskInput):
             (prompt, payload.workflow, "Pending", created),
         )
         task_id = cur.lastrowid
-    return {"id": task_id, "status": "Pending", "message": "Request saved. AI provider is not configured yet."}
+    return {"id": task_id, "status": "Pending", "message": "Task saved. AI generation has not been run."}
+
+@app.post("/api/generate")
+def generate(payload: TaskInput):
+    prompt = payload.prompt.strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Prompt cannot be empty")
+    created = datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        cur = conn.execute(
+            "INSERT INTO tasks(prompt, workflow, status, created_at) VALUES (?, ?, ?, ?)",
+            (prompt, payload.workflow, "Generating", created),
+        )
+        task_id = cur.lastrowid
+    try:
+        result = generate_text(prompt, payload.workflow)
+    except ProviderNotConfigured as exc:
+        with db() as conn:
+            conn.execute("UPDATE tasks SET status = ? WHERE id = ?", ("Blocked", task_id))
+        raise HTTPException(status_code=503, detail=str(exc))
+    except ProviderRequestError as exc:
+        with db() as conn:
+            conn.execute("UPDATE tasks SET status = ? WHERE id = ?", ("Failed", task_id))
+        raise HTTPException(status_code=502, detail=str(exc))
+    with db() as conn:
+        conn.execute(
+            "UPDATE tasks SET status = ?, output = ? WHERE id = ?",
+            ("Completed", result["output"], task_id),
+        )
+    return {"id": task_id, "status": "Completed", "provider": result["provider"],
+            "model": result["model"], "output": result["output"]}
 
 @app.get("/api/tasks")
 def tasks():
     with db() as conn:
-        rows = conn.execute("SELECT * FROM tasks ORDER BY id DESC LIMIT 100").fetchall()
+        rows = conn.execute(
+            "SELECT id, prompt, workflow, status, created_at, output FROM tasks ORDER BY id DESC LIMIT 100"
+        ).fetchall()
     return {"tasks": [dict(row) for row in rows]}
 
 @app.get("/api/status")
 def status():
     with db() as conn:
         count = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
-    return {"agents_total": len(list_agents()), "agents_implemented": 0, "tasks_saved": count,
-            "video_generation": "Not configured", "publishing": "Not configured"}
+    providers = provider_status()
+    return {
+        "agents_total": len(list_agents()),
+        "agents_implemented": 0,
+        "tasks_saved": count,
+        "ai_provider_configured": providers["openai"]["configured"] or providers["gemini"]["configured"],
+        "video_generation": "Not configured",
+        "publishing": "Not configured",
+    }
