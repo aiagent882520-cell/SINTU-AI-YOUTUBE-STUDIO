@@ -35,6 +35,19 @@ async function refresh() {
     ).join("") : "No tasks yet.";
   } catch (error) { $("health").textContent = "API unavailable"; }
 }
+async function loadTeam() {
+  try {
+    const workflow = $("workflow").value;
+    const data = await request("/api/workflows/" + encodeURIComponent(workflow) + "/team");
+    const names = data.team.map(role => role.name).join(" · ");
+    $("teamStatus").textContent = "Assigned role team (" + data.team.length + "): " + names +
+      " — one configured AI model coordinates these role prompts; these are not 61 independent agents.";
+  } catch (error) {
+    $("teamStatus").textContent = "Workflow team details unavailable.";
+  }
+}
+$("workflow").addEventListener("change", loadTeam);
+
 async function generate() {
   const prompt = $("prompt").value.trim();
   if (!prompt) { $("notice").textContent = "Pehle apna topic ya prompt likhein."; $("prompt").focus(); return; }
@@ -51,6 +64,7 @@ async function generate() {
     $("result").textContent = result.output;
     $("resultWrap").hidden = false;
     await refresh();
+loadTeam();
   } catch (error) {
     $("notice").textContent = error.message;
     await refresh();
@@ -72,6 +86,7 @@ $("prompt").addEventListener("keydown", event => {
 });
 document.querySelectorAll("[data-workflow]").forEach(button => button.addEventListener("click", () => {
   $("workflow").value = button.dataset.workflow;
+  loadTeam();
   $("prompt").focus();
   document.querySelector("#create").scrollIntoView({behavior:"smooth"});
 }));
