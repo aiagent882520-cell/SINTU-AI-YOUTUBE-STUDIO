@@ -85,12 +85,23 @@ def _make_frame(path: Path, title: str, scene: str, index: int, total: int,
         draw.text((82, y), line, font=body, fill=(238, 242, 255))
         y += line_height
     draw.text((82, HEIGHT - 150), f"SCENE {index} / {total}", font=small, fill=(148, 163, 184))
+    if subtitle:
+        caption_font = _font(30)
+        caption_lines = _wrap(draw, subtitle, caption_font, WIDTH - 120)[:3]
+        caption_height = len(caption_lines) * 42 + 28
+        caption_top = HEIGHT - 300 - caption_height
+        draw.rounded_rectangle((48, caption_top, WIDTH - 48, caption_top + caption_height),
+                               radius=18, fill=(0, 0, 0))
+        for line_no, line in enumerate(caption_lines):
+            draw.text((68, caption_top + 14 + line_no * 42), line, font=caption_font,
+                      fill=(255, 255, 255), stroke_width=1, stroke_fill=(0, 0, 0))
     image.save(path, format="PNG")
 
 
 def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                       image_paths: list[Path] | None = None, audio_path: Path | None = None,
-                      subtitles: list[str] | None = None) -> dict:
+                      subtitles: list[str] | None = None, music_path: Path | None = None,
+                      music_volume: float = 0.18, transition: str = "fade") -> dict:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RendererUnavailable("FFmpeg server par installed nahi hai. Video rendering filhaal unavailable hai.")
@@ -98,6 +109,12 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         raise ValueError("1 se 25 scenes required hain.")
     if not 2 <= seconds_per_scene <= 12:
         raise ValueError("Har scene ki duration 2 se 12 seconds honi chahiye.")
+    if transition not in {"cut", "fade"}:
+        raise ValueError("Transition cut ya fade hona chahiye.")
+    if not 0.0 <= music_volume <= 1.0:
+        raise ValueError("Music volume 0 se 1 ke beech hona chahiye.")
+    if music_path and not music_path.is_file():
+        raise ValueError("Background music file nahi mili.")
 
     image_paths = image_paths or []
     subtitles = subtitles or []
@@ -131,14 +148,39 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             lines.append(f"file '{(work / f'frame-{len(scenes):03d}.png').as_posix()}'")
             concat = work / "frames.txt"
             concat.write_text("\\n".join(lines) + "\\n", encoding="utf-8")
+            duration = len(scenes) * seconds_per_scene
+            filters = []
+            if transition == "fade" and len(scenes) > 1:
+                for boundary in range(1, len(scenes)):
+                    point = boundary * seconds_per_scene
+                    filters.append(f"fade=t=out:st={point - 0.35}:d=0.35")
+                    filters.append(f"fade=t=in:st={point}:d=0.35")
+            video_filter = ",".join(filters)
             command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
                        "-f", "concat", "-safe", "0", "-i", str(concat)]
+            audio_inputs = []
             if audio_path:
-                command += ["-i", str(audio_path), "-map", "0:v:0", "-map", "1:a:0",
-                            "-c:a", "aac", "-b:a", "192k", "-shortest"]
+                command += ["-i", str(audio_path)]
+                audio_inputs.append("voice")
+            if music_path:
+                command += ["-stream_loop", "-1", "-i", str(music_path)]
+                audio_inputs.append("music")
+            if audio_inputs == ["voice", "music"]:
+                command += ["-filter_complex",
+                    f"[1:a]volume=1[voice];[2:a]volume={music_volume},atrim=duration={duration}[music];"
+                    "[voice][music]amix=inputs=2:duration=longest:dropout_transition=2,apad,atrim=duration="
+                    f"{duration}[aout]", "-map", "0:v:0", "-map", "[aout]", "-c:a", "aac", "-b:a", "192k"]
+            elif audio_inputs == ["voice"]:
+                command += ["-map", "0:v:0", "-map", "1:a:0", "-af", f"apad,atrim=duration={duration}",
+                            "-c:a", "aac", "-b:a", "192k"]
+            elif audio_inputs == ["music"]:
+                command += ["-map", "0:v:0", "-map", "1:a:0", "-af",
+                            f"volume={music_volume},atrim=duration={duration}", "-c:a", "aac", "-b:a", "192k"]
             else:
-                command += ["-an"]
-            command += ["-c:v", "libx264", "-pix_fmt", "yuv420p",
+                command += ["-map", "0:v:0", "-an"]
+            if video_filter:
+                command += ["-vf", video_filter]
+            command += ["-t", str(duration), "-c:v", "libx264", "-pix_fmt", "yuv420p",
                         "-r", "30", "-movflags", "+faststart", str(output_path)]
             completed = subprocess.run(command, capture_output=True, text=True, timeout=180, check=False)
             if completed.returncode != 0 or not output_path.exists():
@@ -157,9 +199,12 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         "scenes": len(scenes),
         "duration_seconds": len(scenes) * seconds_per_scene,
         "resolution": f"{WIDTH}x{HEIGHT}",
-        "audio": "voiceover" if audio_path else "none",
+        "audio": "voiceover+music" if audio_path and music_path else "voiceover" if audio_path else "music" if music_path else "none",
+        "music": bool(music_path),
+        "music_volume": music_volume if music_path else None,
+        "transition": transition,
         "scene_images": len(image_paths),
         "subtitles_burned_in": bool(subtitles),
         "format": "MP4 / H.264",
-        "note": "Scene images and optional narration/subtitles are combined when supplied. No music or advanced motion is added.",
+        "note": "Scene images, optional narration, uploaded background music and burned-in captions are combined. Fade transitions are supported; advanced motion/VFX are not included.",
     }
