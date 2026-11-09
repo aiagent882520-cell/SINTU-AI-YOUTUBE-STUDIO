@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .agents import list_agents
+from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
 
 ROOT = Path(__file__).resolve().parent
@@ -69,7 +70,38 @@ def workflows():
 
 @app.get("/api/agents")
 def agents():
-    return {"total": len(list_agents()), "agents": list_agents()}
+    return {"total": len(list_agents()), "agents": list_agents(), "orchestration": orchestration_summary()}
+
+@app.get("/api/capabilities")
+def capabilities():
+    providers = provider_status()
+    return {
+        "product": "SINTU AI STUDIO",
+        "workflows": list(WORKFLOW_GUIDES.keys()),
+        "agent_catalog": len(list_agents()),
+        "orchestration": orchestration_summary(),
+        "providers": {
+            "openai": providers["openai"]["configured"],
+            "gemini": providers["gemini"]["configured"],
+        },
+        "requires_external_integration": [
+            "image_generation", "video_generation", "voice_generation",
+            "licensed_music", "rendering", "youtube_oauth", "social_oauth",
+            "channel_analytics", "managed_database"
+        ],
+        "safety": {
+            "public_actions_require_approval": True,
+            "secrets_returned_by_api": False,
+            "cybersecurity_scope": "authorized defensive labs only"
+        }
+    }
+
+@app.get("/api/workflows/{workflow_id}/team")
+def workflow_team_detail(workflow_id: str):
+    if workflow_id not in WORKFLOW_GUIDES:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return {"workflow": workflow_id, "team": workflow_team(workflow_id),
+            "execution_mode": orchestration_summary()["execution_mode"]}
 
 @app.get("/api/providers")
 def providers():
@@ -165,6 +197,8 @@ def status():
     return {
         "agents_total": len(list_agents()),
         "agents_implemented": 0,
+        "roles_routed": orchestration_summary()["roles_routed"],
+        "orchestration_mode": orchestration_summary()["execution_mode"],
         "workflows_available": len(WORKFLOW_GUIDES),
         "tasks_saved": count,
         "tasks_completed": completed,
