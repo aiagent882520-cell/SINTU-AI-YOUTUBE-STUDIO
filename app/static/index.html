@@ -2,9 +2,14 @@
 <html lang="hi">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101827">
   <meta name="description" content="SINTU AI STUDIO — AI-powered creator workspace for scripts, videos, thumbnails, courses and social content.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="SINTU STUDIO">
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/icon.svg">
   <title>SINTU AI STUDIO — Creator Workspace</title>
   <link rel="manifest" href="/static/manifest.json">
   <link rel="stylesheet" href="/static/style.css">
@@ -19,6 +24,7 @@
       <p class="eyebrow">YOUR AI CREATION COMMAND CENTER</p>
       <h2>Idea se <em>production plan</em> tak.</h2>
       <p>Ek hi workspace mein video scripts, research, thumbnails, courses aur social content.</p>
+      <p class="install-hint">Mobile par browser menu se “Add to Home screen” karke app ki tarah install karein.</p>
     </section>
     <section class="stats">
       <article><strong id="agentCount">61</strong><span>Agents planned</span></article>
@@ -84,5 +90,10 @@
     <p class="foot">AI generation ke liye server par OpenAI ya Gemini API key zaroori hai. API usage par provider charges lag sakte hain. Keys ko GitHub ya chat mein share na karein. Text package generate hona video render, upload ya publish hone ke barabar nahi hai.</p>
   </main>
   <script src="/static/app.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => navigator.serviceWorker.register("/static/sw.js").catch(() => {}));
+    }
+  </script>
 </body>
 </html>
