@@ -51,3 +51,24 @@ def test_installable_app_shell(tmp_path, monkeypatch):
     assert worker.status_code == 200
     assert worker.headers["Service-Worker-Allowed"] == "/"
     assert client.get("/static/icon.svg").status_code == 200
+
+def test_agent_orchestration_catalog_and_teams(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    agents = client.get("/api/agents").json()
+    assert agents["total"] == 61
+    assert agents["orchestration"]["workflow_teams"] == 8
+    assert agents["orchestration"]["independent_agents_running"] == 0
+    team = client.get("/api/workflows/shorts/team")
+    assert team.status_code == 200
+    names = [role["name"] for role in team.json()["team"]]
+    assert "Script Writer" in names
+    assert "Fact Checker" in names
+    assert client.get("/api/workflows/not-real/team").status_code == 404
+
+def test_capabilities_never_expose_provider_secrets(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.get("/api/capabilities")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["safety"]["public_actions_require_approval"] is True
+    assert "OPENAI_API_KEY" not in str(body)
