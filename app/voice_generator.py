@@ -21,10 +21,13 @@ class VoiceGenerationFailed(Exception):
 def voice_status():
     enabled = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "false").strip().lower() == "true"
     configured = bool(os.getenv("OPENAI_API_KEY"))
+    token_configured = bool(os.getenv("MEDIA_GENERATION_TOKEN"))
     return {
-        "available": enabled and configured,
+        "available": enabled and configured and token_configured,
         "enabled_by_admin": enabled,
         "provider_configured": configured,
+        "access_token_required": True,
+        "access_token_configured": token_configured,
         "provider": "OpenAI",
         "model": os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
         "format": "MP3",
