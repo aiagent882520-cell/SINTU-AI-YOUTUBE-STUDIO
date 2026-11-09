@@ -148,3 +148,56 @@ $("renderButton").addEventListener("click", async () => {
   }
 });
 checkRenderer();
+
+
+async function checkVoiceService() {
+  try {
+    const info = await request("/api/voice/capabilities");
+    $("voiceNotice").textContent = info.available
+      ? "Ready: " + info.provider + " · " + info.model + " · MP3. Paid API usage."
+      : !info.enabled_by_admin
+        ? "Voiceover server administrator ke explicit paid-media enable karne ka wait kar raha hai."
+        : "OpenAI API key server par configured nahi hai.";
+    $("voiceButton").disabled = !info.available;
+  } catch (error) {
+    $("voiceNotice").textContent = "Voice service status unavailable.";
+    $("voiceButton").disabled = true;
+  }
+}
+$("voiceButton").addEventListener("click", async () => {
+  const text = $("voiceText").value.trim();
+  if (!text) { $("voiceNotice").textContent = "Pehle narration script likhein."; return; }
+  $("voiceButton").disabled = true;
+  $("voiceNotice").textContent = "AI voice generate ho rahi hai…";
+  $("voiceResult").hidden = true;
+  try {
+    const result = await request("/api/voice", {
+      method: "POST", body: JSON.stringify({text, voice: $("voiceChoice").value})
+    });
+    $("voiceAudio").src = result.url;
+    $("voiceDownload").href = result.url;
+    $("voiceNotice").textContent = result.format + " · " + result.voice + " · " + Math.ceil(result.size_bytes / 1024) + " KB";
+    $("voiceResult").hidden = false;
+  } catch (error) { $("voiceNotice").textContent = error.message; }
+  finally { $("voiceButton").disabled = false; }
+});
+$("subtitleButton").addEventListener("click", async () => {
+  const scenes = $("subtitleScenes").value.split("\n").map(x => x.trim()).filter(Boolean);
+  if (!scenes.length) { $("subtitleNotice").textContent = "Subtitle lines add karein."; return; }
+  $("subtitleButton").disabled = true;
+  $("subtitleNotice").textContent = "SRT subtitles prepare ho rahe hain…";
+  try {
+    const response = await fetch("/api/subtitles", {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({scenes, seconds_per_scene: Number($("subtitleSeconds").value || 4)})
+    });
+    if (!response.ok) { const error = await response.json(); throw new Error(error.detail || "Subtitle export failed"); }
+    const blob = await response.blob(), url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = "sintu-subtitles.srt"; link.click();
+    URL.revokeObjectURL(url);
+    $("subtitleNotice").textContent = "SRT subtitle file ready.";
+  } catch (error) { $("subtitleNotice").textContent = error.message; }
+  finally { $("subtitleButton").disabled = false; }
+});
+checkVoiceService();
