@@ -364,3 +364,48 @@ def test_renderer_builds_music_mix_and_fade_filter(tmp_path, monkeypatch):
     assert "fade=t=out" in video_filter and "fade=t=in" in video_filter
     assert result["audio"] == "voiceover+music"
     assert result["transition"] == "fade"
+
+
+def test_render_accepts_cinematic_motion_presets(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    captured = {}
+    def fake_render(title, scenes, seconds, **kwargs):
+        captured.update(kwargs)
+        return {"video_id": "2" * 32, "url": "/api/videos/" + "2" * 32,
+                "motion": kwargs.get("motion"), "transition": kwargs.get("transition")}
+    monkeypatch.setattr(main, "render_storyboard", fake_render)
+    response = client.post("/api/render", json={
+        "title": "Motion test", "scenes": ["Opening"],
+        "motion": "slow-zoom-in", "transition": "fade"
+    })
+    assert response.status_code == 200
+    assert captured["motion"] == "slow-zoom-in"
+    assert response.json()["motion"] == "slow-zoom-in"
+    invalid = client.post("/api/render", json={
+        "title": "Motion test", "scenes": ["Opening"], "motion": "3d-flight"
+    })
+    assert invalid.status_code == 400
+
+
+def test_renderer_builds_slow_zoom_filter(tmp_path, monkeypatch):
+    from app import video_renderer
+    from types import SimpleNamespace
+    from pathlib import Path
+    output_dir = tmp_path / "videos"
+    output_dir.mkdir()
+    captured = {}
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        Path(command[-1]).write_bytes(b"fake-mp4")
+        return SimpleNamespace(returncode=0, stderr="")
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(video_renderer.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(video_renderer.subprocess, "run", fake_run)
+    result = video_renderer.render_storyboard(
+        "Motion", ["Scene one"], 3, motion="slow-zoom-in"
+    )
+    command = captured["command"]
+    video_filter = command[command.index("-vf") + 1]
+    assert "zoompan=" in video_filter
+    assert "min(zoom+0.0008,1.12)" in video_filter
+    assert result["motion"] == "slow-zoom-in"
