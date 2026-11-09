@@ -126,10 +126,12 @@ def test_voiceover_is_disabled_by_default(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.delenv("ENABLE_PAID_MEDIA_GENERATION", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "test-token")
     info = client.get("/api/voice/capabilities")
     assert info.status_code == 200
     assert info.json()["available"] is False
-    result = client.post("/api/voice", json={"text": "Namaste", "voice": "alloy"})
+    result = client.post("/api/voice", json={"text": "Namaste", "voice": "alloy"},
+                         headers={"X-Media-Token": "test-token"})
     assert result.status_code == 503
 
 
@@ -149,7 +151,7 @@ def test_subtitle_srt_generation(tmp_path, monkeypatch):
         "scenes": ["Namaste dosto", "Aaj hum seekhenge"], "seconds_per_scene": 4
     })
     assert result.status_code == 200
-    assert "1\\n00:00:00,000 --> 00:00:04,000\\nNamaste dosto" in result.text
+    assert "1\n00:00:00,000 --> 00:00:04,000\\nNamaste dosto" in result.text
     assert "2\\n00:00:04,000 --> 00:00:08,000\\nAaj hum seekhenge" in result.text
 
 
