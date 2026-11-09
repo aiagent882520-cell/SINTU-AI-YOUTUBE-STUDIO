@@ -1,20 +1,21 @@
 from pathlib import Path
+import io
 import sqlite3
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .agents import list_agents
-from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status
+from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT.parent / "sintu_studio.db"
 STATIC = ROOT / "static"
 
-app = FastAPI(title="SINTU AI STUDIO", version="0.2.0")
+app = FastAPI(title="SINTU AI STUDIO", version="0.3.0")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 def db():
@@ -51,13 +52,19 @@ def home():
 def health():
     return {"status": "ok", "app": "SINTU AI STUDIO", "version": app.version}
 
+@app.get("/api/workflows")
+def workflows():
+    return {"total": len(WORKFLOW_GUIDES), "workflows": [
+        {"id": key, "name": key.replace("-", " ").title(), "description": value.splitlines()[0]}
+        for key, value in WORKFLOW_GUIDES.items()
+    ]}
+
 @app.get("/api/agents")
 def agents():
     return {"total": len(list_agents()), "agents": list_agents()}
 
 @app.get("/api/providers")
 def providers():
-    # Only safe configuration metadata is returned; never expose secret values.
     return provider_status()
 
 @app.post("/api/tasks")
@@ -112,16 +119,48 @@ def tasks():
         ).fetchall()
     return {"tasks": [dict(row) for row in rows]}
 
+@app.get("/api/tasks/{task_id}")
+def task_detail(task_id: int):
+    with db() as conn:
+        row = conn.execute(
+            "SELECT id, prompt, workflow, status, created_at, output FROM tasks WHERE id = ?",
+            (task_id,),
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return dict(row)
+
+@app.get("/api/export/{task_id}")
+def export_task(task_id: int):
+    item = task_detail(task_id)
+    if not item.get("output"):
+        raise HTTPException(status_code=409, detail="Is task ka generated output available nahi hai.")
+    content = (
+        f"SINTU AI STUDIO — {item['workflow']}\n"
+        f"Task: #{item['id']}\nCreated: {item['created_at']}\n"
+        f"Prompt: {item['prompt']}\n\n{'=' * 60}\n\n{item['output']}\n"
+    )
+    filename = f"sintu-task-{task_id}.txt"
+    return StreamingResponse(
+        io.BytesIO(content.encode("utf-8")),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
 @app.get("/api/status")
 def status():
     with db() as conn:
         count = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+        completed = conn.execute("SELECT COUNT(*) FROM tasks WHERE status = 'Completed'").fetchone()[0]
     providers = provider_status()
+    configured = providers["openai"]["configured"] or providers["gemini"]["configured"]
     return {
         "agents_total": len(list_agents()),
         "agents_implemented": 0,
+        "workflows_available": len(WORKFLOW_GUIDES),
         "tasks_saved": count,
-        "ai_provider_configured": providers["openai"]["configured"] or providers["gemini"]["configured"],
+        "tasks_completed": completed,
+        "ai_provider_configured": configured,
         "video_generation": "Not configured",
         "publishing": "Not configured",
     }
