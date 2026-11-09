@@ -5,7 +5,7 @@ import re
 import shutil
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -286,7 +286,11 @@ def voice_capabilities():
 
 
 @app.post("/api/voice")
-def create_voiceover(payload: VoiceInput):
+def create_voiceover(payload: VoiceInput, media_token: str = Header(default="", alias="X-Media-Token")):
+    import hmac, os
+    expected = os.getenv("MEDIA_GENERATION_TOKEN", "")
+    if not expected or not hmac.compare_digest(media_token, expected):
+        raise HTTPException(status_code=403, detail="Valid media access token required.")
     try:
         return generate_voiceover(payload.text, payload.voice)
     except VoiceUnavailable as exc:
