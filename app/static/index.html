@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101827">
+  <title>SINTU AI STUDIO</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="top">
+    <div><span class="mark">S</span><div><h1>SINTU AI STUDIO</h1><p>AI Creator Platform</p></div></div>
+    <span id="health" class="status">Checking…</span>
+  </header>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">YOUR CREATIVE WORKSPACE</p>
+      <h2>Apna idea likho.<br><em>Creation workflow shuru karo.</em></h2>
+      <p>Video planning, scripts, thumbnails aur creator workflows ek jagah.</p>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><div><h2>Create new task</h2><p>Topic, prompt ya script likhein</p></div></div>
+      <label for="workflow">Workflow</label>
+      <select id="workflow">
+        <option value="shorts">YouTube Shorts</option>
+        <option value="long-video">Long Video</option>
+        <option value="thumbnail">Thumbnail</option>
+        <option value="script">Script Writing</option>
+        <option value="research">Research & Trends</option>
+        <option value="course">Course / Lesson</option>
+        <option value="social">Social Media Content</option>
+      </select>
+      <label for="prompt">Aapka topic / prompt / script</label>
+      <textarea id="prompt" rows="5" placeholder="Example: Bharat ki 5 rahasyamayi jagahon par 60-second Hindi Short banao…"></textarea>
+      <button id="submit">Submit task</button>
+      <p id="notice" role="status"></p>
+    </section>
+    <section class="stats">
+      <article><strong id="agentCount">61</strong><span>Specialist agents planned</span></article>
+      <article><strong id="taskCount">0</strong><span>Saved tasks</span></article>
+      <article><strong>Phase 1</strong><span>Starter foundation</span></article>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><div><h2>61-agent team</h2><p>Implementation status — not yet active</p></div></div>
+      <div id="agents" class="agents">Loading agent registry…</div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><div><h2>Recent tasks</h2><p>Saved locally in the app database</p></div></div>
+      <div id="tasks">No tasks yet.</div>
+    </section>
+    <p class="foot">Video generation, external AI providers and publishing require separate API setup. No task is represented as a completed video until generation is actually integrated.</p>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
