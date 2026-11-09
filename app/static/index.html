@@ -4,53 +4,84 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101827">
-  <title>SINTU AI STUDIO</title>
+  <meta name="description" content="SINTU AI STUDIO — AI-powered creator workspace for scripts, videos, thumbnails, courses and social content.">
+  <title>SINTU AI STUDIO — Creator Workspace</title>
   <link rel="manifest" href="/static/manifest.json">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <header class="top">
-    <div><span class="mark">S</span><div><h1>SINTU AI STUDIO</h1><p>AI Creator Platform</p></div></div>
-    <span id="health" class="status">Checking…</span>
+    <div><span class="mark">S</span><div><h1>SINTU AI STUDIO</h1><p>Complete Creator Workspace</p></div></div>
+    <span id="health" class="status" role="status">Connecting…</span>
   </header>
   <main>
     <section class="hero">
-      <p class="eyebrow">YOUR CREATIVE WORKSPACE</p>
-      <h2>Apna idea likho.<br><em>AI se content taiyar karo.</em></h2>
-      <p>Har workflow ke liye alag production instructions ke saath script, scenes, visual prompts aur creator deliverables generate karein.</p>
-    </section>
-    <section class="panel">
-      <div class="panel-head"><div><h2>AI Creator Brain</h2><p id="providerStatus">Provider status check ho raha hai…</p></div></div>
-      <label for="workflow">Workflow</label>
-      <select id="workflow">
-        <option value="shorts">YouTube Shorts — scene-by-scene package</option>
-        <option value="long-video">Long Video — full production package</option>
-        <option value="thumbnail">Thumbnail — 3 concepts</option>
-        <option value="script">Script Writing</option>
-        <option value="research">Research brief & fact-check plan</option>
-        <option value="course">Course / Lesson — quiz & assignment</option>
-        <option value="social">Social Media Content</option>
-      </select>
-      <label for="prompt">Aapka topic / prompt / script</label>
-      <textarea id="prompt" rows="5" placeholder="Example: Bharat ki 5 rahasyamayi jagahon par 60-second Hindi Short ki script banao…"></textarea>
-      <button id="submit">Create production package</button>
-      <p id="notice" role="status"></p>
-      <div id="result" class="result" hidden></div>
+      <p class="eyebrow">YOUR AI CREATION COMMAND CENTER</p>
+      <h2>Idea se <em>production plan</em> tak.</h2>
+      <p>Ek hi workspace mein video scripts, research, thumbnails, courses aur social content.</p>
     </section>
     <section class="stats">
-      <article><strong id="agentCount">61</strong><span>Specialist agents planned</span></article>
+      <article><strong id="agentCount">61</strong><span>Agents planned</span></article>
+      <article><strong id="workflowCount">8</strong><span>AI workflows</span></article>
       <article><strong id="taskCount">0</strong><span>Saved tasks</span></article>
-      <article><strong>Phase 3</strong><span>Specialized production workflows</span></article>
+      <article><strong id="doneCount">0</strong><span>Completed outputs</span></article>
+    </section>
+    <section class="panel" id="create">
+      <div class="panel-head"><div><h2>AI Production Desk</h2><p>Workflow chunein, topic likhein aur Generate dabayein.</p></div></div>
+      <label for="workflow">Aap kya banana chahte hain?</label>
+      <select id="workflow">
+        <option value="shorts">YouTube Shorts — scene-by-scene</option>
+        <option value="long-video">Long Video — complete production pack</option>
+        <option value="thumbnail">High-CTR Thumbnail Concepts</option>
+        <option value="script">Script & Storytelling</option>
+        <option value="research">Research & Fact-check Plan</option>
+        <option value="course">Course / Lesson / Quiz</option>
+        <option value="social">Instagram / Facebook / Social Content</option>
+        <option value="content">General Content Plan</option>
+      </select>
+      <label for="prompt">Topic / Prompt / Script</label>
+      <textarea id="prompt" rows="6" maxlength="10000" placeholder="Example: Bharat ki 5 rahasyamayi jagahon par 60-second Hindi YouTube Short banao. Har scene ka visual prompt, voiceover aur sound cue bhi do."></textarea>
+      <div class="actions"><button id="submit">Generate Production Package</button><button id="clear" class="secondary" type="button">Clear</button></div>
+      <p id="notice" role="status" aria-live="polite"></p>
+      <div id="resultWrap" class="result-wrap" hidden>
+        <div class="result-head"><strong>Generated Output</strong><button id="download" class="secondary" type="button">Download TXT</button></div>
+        <div id="result" class="result"></div>
+      </div>
+      <p id="providerStatus" class="muted">AI provider status checking…</p>
     </section>
     <section class="panel">
-      <div class="panel-head"><div><h2>61-agent team</h2><p>Registry only — agents are not yet independently implemented</p></div></div>
+      <div class="panel-head"><div><h2>Creator Departments</h2><p>Har department ke liye dedicated workflow.</p></div></div>
+      <div class="departments">
+        <button class="dept" data-workflow="research"><b>Research & Trends</b><span>Topic discovery, fact-check planning, competitor and keyword research</span></button>
+        <button class="dept" data-workflow="script"><b>Script Studio</b><span>Hooks, storytelling, narration and scene breakdowns</span></button>
+        <button class="dept" data-workflow="shorts"><b>Shorts Factory</b><span>Vertical video script, timed scenes and visual prompts</span></button>
+        <button class="dept" data-workflow="long-video"><b>Documentary & Long Video</b><span>Chapters, full script, b-roll and production direction</span></button>
+        <button class="dept" data-workflow="thumbnail"><b>Thumbnail Lab</b><span>Three creative concepts and image-generation prompts</span></button>
+        <button class="dept" data-workflow="course"><b>Education & Courses</b><span>Lessons, practicals, quizzes and assignments</span></button>
+        <button class="dept" data-workflow="social"><b>Social Media Desk</b><span>Captions, reels direction, hashtags and CTAs</span></button>
+        <button class="dept" data-workflow="content"><b>Content Planner</b><span>Audience, content angle, calendar ideas and outlines</span></button>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><div><h2>61-Agent Team</h2><p>Registry view — agents are planned; individual autonomous agents are not yet implemented.</p></div></div>
       <div id="agents" class="agents">Loading agent registry…</div>
     </section>
     <section class="panel">
-      <div class="panel-head"><div><h2>Recent tasks</h2><p>Saved prompts and generated text</p></div></div>
+      <div class="panel-head"><div><h2>Task History</h2><p>Recent prompts and generated outputs.</p></div><button id="refresh" class="secondary" type="button">Refresh</button></div>
       <div id="tasks">No tasks yet.</div>
     </section>
-    <p class="foot">AI text generation requires your own provider API key and may incur provider charges. Keys must be set on the server, never in this page or in GitHub. Video rendering and publishing are separate integrations and are not active yet.</p>
+    <section class="panel roadmap">
+      <h2>Integration Status</h2>
+      <div class="status-grid">
+        <div><b>AI text generation</b><span>OpenAI / Gemini adapter ready; server key required</span></div>
+        <div><b>Video rendering</b><span>Not connected yet</span></div>
+        <div><b>Voice, images & music</b><span>Provider integrations pending</span></div>
+        <div><b>YouTube publishing</b><span>OAuth and channel connection pending</span></div>
+        <div><b>Analytics & monetization</b><span>Channel data integration pending</span></div>
+        <div><b>61-agent orchestration</b><span>Registry exists; autonomous agents pending</span></div>
+      </div>
+    </section>
+    <p class="foot">AI generation ke liye server par OpenAI ya Gemini API key zaroori hai. API usage par provider charges lag sakte hain. Keys ko GitHub ya chat mein share na karein. Text package generate hona video render, upload ya publish hone ke barabar nahi hai.</p>
   </main>
   <script src="/static/app.js"></script>
 </body>
