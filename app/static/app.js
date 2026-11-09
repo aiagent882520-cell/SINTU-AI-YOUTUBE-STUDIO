@@ -172,7 +172,7 @@ $("voiceButton").addEventListener("click", async () => {
   $("voiceResult").hidden = true;
   try {
     const result = await request("/api/voice", {
-      method: "POST", body: JSON.stringify({text, voice: $("voiceChoice").value})
+      method: "POST", headers: {"X-Media-Token": $("mediaToken").value}, body: JSON.stringify({text, voice: $("voiceChoice").value})
     });
     $("voiceAudio").src = result.url;
     $("voiceDownload").href = result.url;
