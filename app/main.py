@@ -126,7 +126,7 @@ def capabilities():
         "voiceover": voice_status(),
         "image_generation": image_status(),
         "requires_external_integration": [
-            "image_generation", "video_generation",
+            "video_generation",
             "licensed_music", "advanced_video_rendering", "youtube_oauth", "social_oauth",
             "channel_analytics", "managed_database"
         ],
