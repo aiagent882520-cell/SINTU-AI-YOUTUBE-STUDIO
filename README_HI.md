@@ -1,42 +1,51 @@
-# SINTU AI STUDIO — शुरुआती AI Brain संस्करण
+# SINTU AI STUDIO — Creator Workspace
 
-## चलाने का तरीका
+SINTU AI STUDIO is a responsive web/PWA creator workspace. It currently provides an AI text-production desk, specialized content workflows, task history, a 61-role registry, and export of generated text packages.
 
-1. Python 3.10+ इंस्टॉल करें।
+## Run locally
+
+1. Python 3.10+ install karein.
 2. `pip install -r requirements.txt`
-3. `.env.example` की कॉपी बनाकर उसका नाम `.env` रखें।
-4. अपनी API key केवल स्थानीय/server `.env` फाइल में डालें।
+3. `.env.example` ko copy karke `.env` banayein.
+4. API key sirf local/server `.env` ya hosting provider ke secret manager mein add karein.
 5. `uvicorn app.main:app --host 0.0.0.0 --port 8000`
-6. ब्राउज़र में `http://127.0.0.1:8000` खोलें।
+6. Browser mein `http://127.0.0.1:8000` kholein.
 
-## AI provider configuration
+## AI provider
 
-- `AI_PROVIDER=auto`: उपलब्ध provider में OpenAI को प्राथमिकता, अन्यथा Gemini।
-- `AI_PROVIDER=openai`: OpenAI Responses API।
-- `AI_PROVIDER=gemini`: Google Gemini generateContent API।
-- OpenAI model: `OPENAI_MODEL` (default `gpt-5.5`)।
-- Gemini model: `GEMINI_MODEL` (default `gemini-2.5-flash`)।
+- `AI_PROVIDER=auto`: OpenAI configured ho to OpenAI, warna Gemini.
+- `AI_PROVIDER=openai`: OpenAI Responses API.
+- `AI_PROVIDER=gemini`: Google Gemini generateContent API.
+- `OPENAI_MODEL` default `gpt-5.5`; `GEMINI_MODEL` default `gemini-2.5-flash`.
 
-API key बनाना और API billing, ChatGPT या Google AI Studio की सामान्य app subscription से अलग हो सकता है। Provider usage पर शुल्क लग सकता है। बिना key के generation endpoint साफ तौर पर Blocked/503 लौटाता है; नकली output नहीं बनाता।
+API keys and billing are separate from a ChatGPT or Google AI Studio consumer subscription. Provider use can incur charges. Without a configured key, generation is blocked clearly; no fake output is returned.
 
-## अभी क्या काम करता है
+## Included in this build
 
-- Responsive Hindi creator dashboard
-- FastAPI health/status endpoints
-- 61 विशेषज्ञ एजेंटों की registry (सभी Pending)
-- Prompt/topic को SQLite में task के रूप में सेव करना
-- OpenAI और Gemini के लिए server-side text generation adapters
-- Provider status में केवल configured true/false; कोई secret वापस नहीं भेजा जाता
-- Generated text और task status को SQLite में सेव करना
+- Responsive mobile-first Hindi creator dashboard / installable PWA foundation.
+- Dedicated AI workflows: Shorts, long video, thumbnail concepts, script/storytelling, research/fact-check plan, course/lesson/quiz, social content, general content.
+- Workflow-aware OpenAI and Gemini text generation adapters.
+- Task history, task detail retrieval, status counters and TXT export.
+- FastAPI health, provider, agent and workflow endpoints.
+- 61-role agent registry. The registry is a roadmap/catalog, not 61 independently running autonomous agents.
+- API tests for health, catalog, generation flow, task retrieval and export.
 
-## अभी क्या काम नहीं करता
+## Not yet integrated / not verified
 
-यह अभी text-generation slice है, पूर्ण AI video generator नहीं। Image/video generation, voice, rendering, YouTube OAuth/publishing, analytics, autonomous 61-agent orchestration और mobile store apps अभी implement/verify नहीं हुए हैं।
+This repository is not yet a complete autonomous video studio. Actual image/video generation, AI voice, music licensing/provider, FFmpeg rendering pipeline, YouTube/social OAuth publishing, analytics/revenue connectors, autonomous multi-agent execution, managed database and native Android/iOS apps require further integrations and testing. A generated script or production package is not a rendered video file. No publishing or external account action occurs automatically.
 
-## सुरक्षा
+## Production notes
 
-- असली API keys कभी GitHub या browser में न डालें।
-- `.env` Git से ignore है; `.env.example` में केवल खाली placeholders हैं।
-- Public publishing, destructive actions और financial actions के लिए human approval आवश्यक होगा।
-- Paid APIs default रूप से बंद रहेंगी।
-- Agent status को verified implementation के बिना Active/Passed न दिखाएँ।
+- Cloud deployment and live health check must be completed separately.
+- SQLite on an ephemeral cloud filesystem is not durable production storage; use managed PostgreSQL before relying on long-term task history.
+- Configure secrets in the hosting provider's secret manager. Never commit keys or paste them into chat.
+- Public publishing, destructive actions and financial actions must require human approval.
+- Paid APIs remain unused until explicitly configured; review provider pricing before enabling.
+- Agent statuses must not be marked active without verified implementation and tests.
+
+## Test
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
