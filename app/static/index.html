@@ -68,6 +68,16 @@
       <input id="renderImageIds" placeholder="AI image result se image ID paste karein">
       <label for="renderAudioId">Voiceover audio ID (optional)</label>
       <input id="renderAudioId" placeholder="AI voiceover result se audio ID paste karein">
+      <label for="musicFile">Background music upload (MP3 / WAV / M4A / AAC / OGG, max 15 MB)</label>
+      <input id="musicFile" type="file" accept="audio/mpeg,audio/wav,audio/mp4,audio/aac,audio/ogg,.mp3,.wav,.m4a,.aac,.ogg">
+      <div class="actions"><button id="musicUploadButton" type="button">Upload background music</button></div>
+      <p id="musicNotice" class="muted" role="status" aria-live="polite">Upload only music you own or have permission to use.</p>
+      <label for="renderMusicId">Background music ID</label>
+      <input id="renderMusicId" placeholder="Upload ke baad ID yahan aayegi">
+      <label for="musicVolume">Background music volume</label>
+      <input id="musicVolume" type="range" min="0" max="1" step="0.05" value="0.18">
+      <label for="renderTransition">Scene transition</label>
+      <select id="renderTransition"><option value="fade">Fade</option><option value="cut">Cut</option></select>
       <label for="renderSubtitles">Burn-in subtitles (har line ek scene; optional)</label>
       <textarea id="renderSubtitles" rows="3" placeholder="Scene 1 subtitle&#10;Scene 2 subtitle"></textarea>
       <div class="actions"><button id="renderButton" type="button">Create MP4</button></div>
