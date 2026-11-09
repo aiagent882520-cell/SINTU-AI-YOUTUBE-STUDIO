@@ -11,4 +11,5 @@ venv/
 
 generated_audio/
 generated_videos/
-generated_images/\n
+generated_images/
+generated_music/\n
