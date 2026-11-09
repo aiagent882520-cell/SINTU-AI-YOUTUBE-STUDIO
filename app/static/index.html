@@ -68,7 +68,24 @@
       <p id="renderNotice" class="muted" role="status" aria-live="polite">Renderer availability checking…</p>
       <div id="renderResult" hidden><video id="renderVideo" controls playsinline style="width:100%;max-height:520px;background:#000;border-radius:12px"></video><p><a id="renderDownload" download="sintu-storyboard.mp4">Download MP4</a></p></div>
     </section>
-    <section class="panel">
+        <section class="panel">
+      <div class="panel-head"><div><h2>AI Voiceover & Subtitles</h2><p>Hindi ya kisi bhi language ka narration audio aur scene-wise SRT subtitles banayein.</p></div></div>
+      <label for="voiceText">Voiceover script (max 4,000 characters)</label>
+      <textarea id="voiceText" rows="5" maxlength="4000" placeholder="Yahan apna final narration paste karein…"></textarea>
+      <label for="voiceChoice">AI voice</label>
+      <select id="voiceChoice"><option value="alloy">Alloy</option><option value="ash">Ash</option><option value="ballad">Ballad</option><option value="coral">Coral</option><option value="echo">Echo</option><option value="fable">Fable</option><option value="nova">Nova</option><option value="onyx">Onyx</option><option value="sage">Sage</option><option value="shimmer">Shimmer</option><option value="verse">Verse</option></select>
+      <div class="actions"><button id="voiceButton" type="button">Generate AI Voiceover</button></div>
+      <p id="voiceNotice" class="muted" role="status" aria-live="polite">Voice service status checking…</p>
+      <div id="voiceResult" hidden><audio id="voiceAudio" controls style="width:100%"></audio><p><a id="voiceDownload" download="sintu-voiceover.mp3">Download MP3</a></p></div>
+      <hr>
+      <label for="subtitleScenes">Subtitle lines (har line ek subtitle)</label>
+      <textarea id="subtitleScenes" rows="4" placeholder="Pehla dialogue&#10;Doosra dialogue&#10;Teesra dialogue"></textarea>
+      <label for="subtitleSeconds">Har subtitle ki duration (seconds)</label>
+      <input id="subtitleSeconds" type="number" min="1" max="60" value="4">
+      <div class="actions"><button id="subtitleButton" type="button">Download SRT Subtitles</button></div>
+      <p id="subtitleNotice" class="muted" role="status" aria-live="polite"></p>
+    </section>
+<section class="panel">
       <div class="panel-head"><div><h2>Creator Departments</h2><p>Har department ke liye dedicated workflow.</p></div></div>
       <div class="departments">
         <button class="dept" data-workflow="research"><b>Research & Trends</b><span>Topic discovery, fact-check planning, competitor and keyword research</span></button>
