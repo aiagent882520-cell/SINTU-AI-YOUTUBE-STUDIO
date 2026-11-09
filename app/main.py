@@ -69,6 +69,9 @@ class RenderInput(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     scenes: list[str] = Field(min_length=1, max_length=25)
     seconds_per_scene: int = Field(default=4, ge=2, le=12)
+    image_ids: list[str] = Field(default_factory=list, max_length=25)
+    audio_id: str | None = Field(default=None, max_length=32)
+    subtitles: list[str] = Field(default_factory=list, max_length=25)
 
 class ImageInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=3000)
@@ -256,8 +259,8 @@ def render_capabilities():
     return {
         "available": bool(shutil.which("ffmpeg")),
         "renderer": "FFmpeg + Pillow storyboard renderer",
-        "supported_output": "Silent 720x1280 portrait MP4 (H.264)",
-        "limitations": ["text scene cards only", "no generated images", "no voiceover", "no music"],
+        "supported_output": "720x1280 portrait MP4 (H.264) with optional saved scene images, MP3 narration and burned-in captions",
+        "limitations": ["no music track", "no transitions or advanced motion", "FFmpeg must be installed"],
     }
 
 
@@ -267,8 +270,31 @@ def render_video(payload: RenderInput):
     scenes = [scene.strip() for scene in payload.scenes]
     if not title or any(not scene or len(scene) > 500 for scene in scenes):
         raise HTTPException(status_code=400, detail="Title and all scenes must contain valid text (max 500 characters per scene).")
+    if payload.image_ids and len(payload.image_ids) != len(scenes):
+        raise HTTPException(status_code=400, detail="Har scene ke liye exactly ek image ID dein.")
+    if payload.subtitles and len(payload.subtitles) != len(scenes):
+        raise HTTPException(status_code=400, detail="Subtitle lines ki sankhya scenes ke barabar honi chahiye.")
+    if any(not line.strip() or len(line) > 1000 for line in payload.subtitles):
+        raise HTTPException(status_code=400, detail="Subtitle line 1 se 1000 characters ki honi chahiye.")
+    image_paths = []
+    for image_id in payload.image_ids:
+        if not re.fullmatch(r"[a-f0-9]{32}", image_id):
+            raise HTTPException(status_code=400, detail="Invalid scene image ID.")
+        path = IMAGE_DIR / f"{image_id}.jpg"
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="Scene image not found.")
+        image_paths.append(path)
+    audio_path = None
+    if payload.audio_id:
+        if not re.fullmatch(r"[a-f0-9]{32}", payload.audio_id):
+            raise HTTPException(status_code=400, detail="Invalid voiceover audio ID.")
+        audio_path = AUDIO_DIR / f"{payload.audio_id}.mp3"
+        if not audio_path.is_file():
+            raise HTTPException(status_code=404, detail="Voiceover audio not found.")
     try:
-        return render_storyboard(title, scenes, payload.seconds_per_scene)
+        return render_storyboard(title, scenes, payload.seconds_per_scene,
+                                 image_paths=image_paths, audio_path=audio_path,
+                                 subtitles=payload.subtitles)
     except RendererUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except RenderFailed as exc:
