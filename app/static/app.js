@@ -77,10 +77,13 @@ $("clear").addEventListener("click", () => {
   $("prompt").focus();
 });
 $("refresh").addEventListener("click", refresh);
-$("download").addEventListener("click", async () => {
+function downloadPackage(format) {
   if (!latestTaskId) return;
-  window.location.href = "/api/export/" + latestTaskId;
-});
+  window.location.href = "/api/export/" + latestTaskId + "?format=" + format;
+}
+$("download").addEventListener("click", () => downloadPackage("txt"));
+$("downloadMd").addEventListener("click", () => downloadPackage("md"));
+$("downloadJson").addEventListener("click", () => downloadPackage("json"));
 $("prompt").addEventListener("keydown", event => {
   if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) generate();
 });
