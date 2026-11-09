@@ -103,6 +103,8 @@ def generate_text(prompt: str, workflow: str) -> dict:
     user_input = (
         f"Selected workflow: {workflow_key}\n"
         f"Workflow production requirements:\n{guide}\n\n"
+        f"Assigned specialist roles and responsibilities:\n{json.dumps(workflow_team(workflow_key), ensure_ascii=False, indent=2)}\n\n"
+        f"Orchestration mode: {orchestration_summary()['execution_mode']}. This is one model request guided by specialist roles, not separate autonomous agents.\n\n"
         f"User topic / prompt / script:\n{prompt.strip()}\n\n"
         "Follow the workflow requirements while honoring the user's exact topic, "
         "language, audience, duration and constraints. If a detail is missing, "
