@@ -57,6 +57,18 @@
       <p id="providerStatus" class="muted">AI provider status checking…</p>
     </section>
     <section class="panel">
+      <div class="panel-head"><div><h2>MP4 Storyboard Renderer</h2><p>Scene text se silent vertical MP4 banayein. Is basic renderer mein AI visuals, voice aur music shamil nahi hain.</p></div></div>
+      <label for="renderTitle">Video title</label>
+      <input id="renderTitle" maxlength="100" placeholder="Video ka title">
+      <label for="renderScenes">Scenes (har line ek scene)</label>
+      <textarea id="renderScenes" rows="5" maxlength="12000" placeholder="Opening hook&#10;Main explanation&#10;Important example&#10;Ending and subscribe CTA"></textarea>
+      <label for="sceneSeconds">Har scene ki duration (seconds)</label>
+      <input id="sceneSeconds" type="number" min="2" max="12" value="4">
+      <div class="actions"><button id="renderButton" type="button">Create MP4</button></div>
+      <p id="renderNotice" class="muted" role="status" aria-live="polite">Renderer availability checking…</p>
+      <div id="renderResult" hidden><video id="renderVideo" controls playsinline style="width:100%;max-height:520px;background:#000;border-radius:12px"></video><p><a id="renderDownload" download="sintu-storyboard.mp4">Download MP4</a></p></div>
+    </section>
+    <section class="panel">
       <div class="panel-head"><div><h2>Creator Departments</h2><p>Har department ke liye dedicated workflow.</p></div></div>
       <div class="departments">
         <button class="dept" data-workflow="research"><b>Research & Trends</b><span>Topic discovery, fact-check planning, competitor and keyword research</span></button>
