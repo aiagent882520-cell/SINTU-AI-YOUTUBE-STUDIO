@@ -300,7 +300,6 @@ def upload_music(payload: MusicUploadInput, media_token: str = Header(default=""
     try:
         checked = shutil.which("ffprobe")
         if checked:
-            result = shutil.run if False else None
             import subprocess
             probe = subprocess.run([checked, "-v", "error", "-show_entries", "format=duration",
                                     "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
