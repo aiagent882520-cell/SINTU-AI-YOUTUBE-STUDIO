@@ -8,3 +8,6 @@ __pycache__/
 venv/
 .pytest_cache/
 .coverage
+
+generated_audio/
+generated_videos/
