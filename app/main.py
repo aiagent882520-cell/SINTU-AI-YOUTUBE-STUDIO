@@ -1,6 +1,8 @@
 from pathlib import Path
 import io
 import sqlite3
+import re
+import shutil
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException
@@ -11,6 +13,7 @@ from pydantic import BaseModel, Field
 from .agents import list_agents
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
+from .video_renderer import render_storyboard, RendererUnavailable, RenderFailed, OUTPUT_DIR
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT.parent / "sintu_studio.db"
@@ -59,6 +62,11 @@ init_db()
 class TaskInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=10000)
     workflow: str = Field(default="content", max_length=80)
+
+class RenderInput(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    scenes: list[str] = Field(min_length=1, max_length=25)
+    seconds_per_scene: int = Field(default=4, ge=2, le=12)
 
 @app.get("/")
 def home():
@@ -221,6 +229,42 @@ def export_task(task_id: int, format: str = "txt"):
         media_type=media_type,
         headers={"Content-Disposition": f"attachment; filename=sintu-task-{task_id}.{extension}"},
     )
+
+
+@app.get("/api/render/capabilities")
+def render_capabilities():
+    return {
+        "available": bool(shutil.which("ffmpeg")),
+        "renderer": "FFmpeg + Pillow storyboard renderer",
+        "supported_output": "Silent 720x1280 portrait MP4 (H.264)",
+        "limitations": ["text scene cards only", "no generated images", "no voiceover", "no music"],
+    }
+
+
+@app.post("/api/render")
+def render_video(payload: RenderInput):
+    title = payload.title.strip()
+    scenes = [scene.strip() for scene in payload.scenes]
+    if not title or any(not scene or len(scene) > 500 for scene in scenes):
+        raise HTTPException(status_code=400, detail="Title and all scenes must contain valid text (max 500 characters per scene).")
+    try:
+        return render_storyboard(title, scenes, payload.seconds_per_scene)
+    except RendererUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except RenderFailed as exc:
+        raise HTTPException(status_code=502, detail=f"Video render failed: {exc}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/videos/{video_id}")
+def get_video(video_id: str):
+    if not re.fullmatch(r"[a-f0-9]{32}", video_id):
+        raise HTTPException(status_code=400, detail="Invalid video ID")
+    path = OUTPUT_DIR / f"{video_id}.mp4"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Video not found")
+    return FileResponse(path, media_type="video/mp4", filename=f"sintu-{video_id}.mp4")
 
 
 @app.get("/api/status")
