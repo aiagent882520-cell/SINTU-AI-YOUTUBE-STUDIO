@@ -107,9 +107,10 @@ def capabilities():
             "openai": providers["openai"]["configured"],
             "gemini": providers["gemini"]["configured"],
         },
+        "storyboard_renderer": {"available": bool(shutil.which("ffmpeg")), "output": "silent 720x1280 MP4"},
         "requires_external_integration": [
             "image_generation", "video_generation", "voice_generation",
-            "licensed_music", "rendering", "youtube_oauth", "social_oauth",
+            "licensed_music", "advanced_video_rendering", "youtube_oauth", "social_oauth",
             "channel_analytics", "managed_database"
         ],
         "safety": {
@@ -135,6 +136,8 @@ def create_task(payload: TaskInput):
     prompt = payload.prompt.strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="Prompt cannot be empty")
+    if payload.workflow not in WORKFLOW_GUIDES:
+        raise HTTPException(status_code=400, detail="Unknown workflow. Choose an available workflow.")
     created = datetime.now(timezone.utc).isoformat()
     with db() as conn:
         cur = conn.execute(
