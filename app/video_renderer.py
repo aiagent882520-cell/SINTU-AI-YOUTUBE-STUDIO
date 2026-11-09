@@ -1,8 +1,4 @@
-"""Simple, honest storyboard-to-MP4 renderer.
-
-Creates silent portrait MP4 scene cards from text. It does not generate AI images,
-voice, music, or motion; those require separate providers.
-"""
+"""Assemble portrait MP4 videos from scene cards/images, narration and optional music."""
 from pathlib import Path
 import shutil
 import subprocess
