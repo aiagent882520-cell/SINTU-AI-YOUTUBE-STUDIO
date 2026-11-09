@@ -331,3 +331,36 @@ def test_music_upload_accepts_validated_audio(tmp_path, monkeypatch):
     body = response.json()
     assert body["format"] == "MP3"
     assert (music_dir / (body["music_id"] + ".mp3")).is_file()
+
+
+def test_renderer_builds_music_mix_and_fade_filter(tmp_path, monkeypatch):
+    from app import video_renderer
+    from types import SimpleNamespace
+    output_dir = tmp_path / "videos"
+    output_dir.mkdir()
+    voice = tmp_path / "voice.mp3"
+    music = tmp_path / "music.mp3"
+    voice.write_bytes(b"voice")
+    music.write_bytes(b"music")
+    captured = {}
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        Path(command[-1]).write_bytes(b"fake-mp4")
+        return SimpleNamespace(returncode=0, stderr="")
+    from pathlib import Path
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(video_renderer.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr(video_renderer.subprocess, "run", fake_run)
+    result = video_renderer.render_storyboard(
+        "Cinematic", ["Scene one", "Scene two"], 3,
+        audio_path=voice, music_path=music, music_volume=0.2, transition="fade"
+    )
+    command = captured["command"]
+    assert "-filter_complex" in command
+    filter_graph = command[command.index("-filter_complex") + 1]
+    assert "[1:a]volume=1[voice]" in filter_graph
+    assert "[2:a]volume=0.2" in filter_graph
+    video_filter = command[command.index("-vf") + 1]
+    assert "fade=t=out" in video_filter and "fade=t=in" in video_filter
+    assert result["audio"] == "voiceover+music"
+    assert result["transition"] == "fade"
