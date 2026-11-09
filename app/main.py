@@ -48,6 +48,14 @@ class TaskInput(BaseModel):
 def home():
     return FileResponse(STATIC / "index.html")
 
+@app.get("/sw.js", include_in_schema=False)
+def service_worker():
+    return FileResponse(
+        STATIC / "sw.js",
+        media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/"},
+    )
+
 @app.get("/api/health")
 def health():
     return {"status": "ok", "app": "SINTU AI STUDIO", "version": app.version}
