@@ -72,3 +72,10 @@ def test_capabilities_never_expose_provider_secrets(tmp_path, monkeypatch):
     body = response.json()
     assert body["safety"]["public_actions_require_approval"] is True
     assert "OPENAI_API_KEY" not in str(body)
+
+def test_security_headers_are_present(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.get("/api/health")
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert "default-src 'self'" in response.headers["content-security-policy"]
