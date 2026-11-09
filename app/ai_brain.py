@@ -7,6 +7,10 @@ import os
 import urllib.error
 import urllib.request
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 SYSTEM_INSTRUCTIONS = (
     "You are SINTU AI STUDIO's creator assistant. Produce useful, structured, "
     "fact-conscious creator deliverables. Match the user's language. For factual "
@@ -70,7 +74,7 @@ def generate_text(prompt: str, workflow: str) -> dict:
             output = response.output_text
         else:
             output = _generate_gemini(user_input)
-    except ProviderNotConfigured:
+    except (ProviderNotConfigured, ProviderRequestError):
         raise
     except Exception as exc:
         # Do not expose request headers, secrets, or raw provider payloads.
