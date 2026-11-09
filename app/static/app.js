@@ -1,7 +1,7 @@
 const $ = (id) => document.getElementById(id);
 let latestTaskId = null;
 async function request(path, options={}) {
-  const response = await fetch(path, {headers:{"Content-Type":"application/json"}, ...options});
+  const response = await fetch(path, {...options, headers:{"Content-Type":"application/json", ...(options.headers || {})}});
   const data = await response.json();
   if (!response.ok) throw new Error(data.detail || "Request failed");
   return data;
