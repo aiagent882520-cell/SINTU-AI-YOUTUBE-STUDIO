@@ -43,9 +43,11 @@ def test_installable_app_shell(tmp_path, monkeypatch):
     page = client.get("/")
     assert page.status_code == 200
     assert 'rel="manifest"' in page.text
-    assert 'navigator.serviceWorker.register("/static/sw.js")' in page.text
+    assert 'navigator.serviceWorker.register("/sw.js")' in page.text
     manifest = client.get("/static/manifest.json")
     assert manifest.status_code == 200
     assert manifest.json()["display"] == "standalone"
-    assert client.get("/static/sw.js").status_code == 200
+    worker = client.get("/sw.js")
+    assert worker.status_code == 200
+    assert worker.headers["Service-Worker-Allowed"] == "/"
     assert client.get("/static/icon.svg").status_code == 200
