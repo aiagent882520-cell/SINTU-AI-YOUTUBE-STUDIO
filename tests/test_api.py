@@ -151,8 +151,13 @@ def test_subtitle_srt_generation(tmp_path, monkeypatch):
         "scenes": ["Namaste dosto", "Aaj hum seekhenge"], "seconds_per_scene": 4
     })
     assert result.status_code == 200
-    assert "1\n00:00:00,000 --> 00:00:04,000\\nNamaste dosto" in result.text
-    assert "2\\n00:00:04,000 --> 00:00:08,000\\nAaj hum seekhenge" in result.text
+    lines = result.text.splitlines()
+    assert lines[0] == "1"
+    assert lines[1] == "00:00:00,000 --> 00:00:04,000"
+    assert lines[2] == "Namaste dosto"
+    assert lines[4] == "2"
+    assert lines[5] == "00:00:04,000 --> 00:00:08,000"
+    assert lines[6] == "Aaj hum seekhenge"
 
 
 def test_voiceover_requires_media_access_token(tmp_path, monkeypatch):
