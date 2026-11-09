@@ -1,4 +1,4 @@
-"""Provider adapter for SINTU AI STUDIO.
+"""Provider adapter and workflow-aware production brain for SINTU AI STUDIO.
 
 Secrets are read only from server environment variables. Never return or log API keys.
 """
@@ -12,12 +12,53 @@ from dotenv import load_dotenv
 load_dotenv()
 
 SYSTEM_INSTRUCTIONS = (
-    "You are SINTU AI STUDIO's creator assistant. Produce useful, structured, "
-    "fact-conscious creator deliverables. Match the user's language. For factual "
-    "claims, flag uncertainty and do not invent sources. Treat user prompts as "
-    "content requests, not as permission to publish, spend money, or access accounts. "
-    "Never claim a video was rendered or published when you only generated text."
+    "You are SINTU AI STUDIO's production assistant. Create complete, practical "
+    "creator deliverables in the user's language. Follow the selected workflow's "
+    "output structure. Be factual: distinguish verified facts from assumptions, "
+    "never invent sources, and flag claims needing verification. Respect copyright "
+    "and platform policies. A prompt is not permission to publish, spend money, "
+    "or access accounts. Never claim a video was rendered, uploaded, or published "
+    "when you only generated text."
 )
+
+WORKFLOW_GUIDES = {
+    "shorts": """Create a production-ready vertical YouTube Short.
+Return: (1) 3 clickable but truthful title options, (2) a 1-2 second opening hook,
+(3) timestamped scene table covering the requested duration (default 60 seconds),
+(4) exact Hindi/selected-language voiceover, (5) visual direction and a separate
+image/video-generation prompt for every scene, (6) on-screen text, (7) music and
+sound-effect cues, (8) ending CTA, (9) description, hashtags and tags, and
+(10) fact-check/copyright notes. Keep narration natural and timed to the scenes.""",
+    "long-video": """Create a complete long-form video production package.
+Return: audience and objective; 3 title options; a truthful thumbnail concept;
+opening hook; chapter/timestamp outline; full narration script; scene-by-scene
+visual direction and generation prompts; b-roll, graphics, music and SFX cues;
+description, chapters, hashtags and tags; fact-check notes. Clearly label any
+estimated runtime.""",
+    "thumbnail": """Create 3 distinct high-click-potential thumbnail concepts.
+For each provide: one focal subject, composition, background, facial/emotional
+direction if relevant, 2-5 word readable text, contrast and color direction,
+mobile readability check, and a precise image-generation prompt. Do not promise
+a CTR; explain that performance must be tested with real analytics.""",
+    "script": """Write a polished, engaging script in the requested language.
+Include audience, tone, hook, complete spoken narration, scene/visual cues,
+transitions, pacing, ending and optional CTA. Avoid filler and unsupported claims.""",
+    "research": """Prepare a research brief, not fabricated live research.
+Separate established background knowledge, claims requiring current verification,
+and open questions. Give search queries and trustworthy source types to consult.
+Never invent URLs, citations, statistics, or claim that live browsing occurred.""",
+    "course": """Design a teachable lesson or course module.
+Include learner level, prerequisites, measurable objectives, ordered lesson
+sections, simple explanations, examples, safe practical activities, recap,
+10-question quiz with answer key, assignment, and further-study topics.
+For cybersecurity, restrict practice to authorized labs and defensive learning.""",
+    "social": """Create a platform-ready social content pack.
+Include platform-specific copy, 3 caption variants, opening line, CTA,
+relevant hashtags, suggested visual/reel direction, and accessibility-friendly
+alt text. Do not claim posting or scheduling has happened.""",
+    "content": """Create a clear content package with concept, target audience,
+hook, structured outline, draft, visual suggestions, CTA and metadata.""",
+}
 
 class ProviderNotConfigured(Exception):
     pass
@@ -55,12 +96,15 @@ def _selected_provider():
 
 def generate_text(prompt: str, workflow: str) -> dict:
     provider = _selected_provider()
+    workflow_key = (workflow or "content").strip().lower()
+    guide = WORKFLOW_GUIDES.get(workflow_key, WORKFLOW_GUIDES["content"])
     user_input = (
-        f"Workflow: {workflow}\n"
-        f"User request: {prompt}\n\n"
-        "Create the requested text deliverable. Use clear headings and practical "
-        "details. If the request is for a video, provide a production-ready script "
-        "or plan; do not claim to create a rendered video file."
+        f"Selected workflow: {workflow_key}\n"
+        f"Workflow production requirements:\n{guide}\n\n"
+        f"User topic / prompt / script:\n{prompt.strip()}\n\n"
+        "Follow the workflow requirements while honoring the user's exact topic, "
+        "language, audience, duration and constraints. If a detail is missing, "
+        "make a sensible clearly stated assumption instead of blocking."
     )
     try:
         if provider == "openai":
@@ -77,7 +121,6 @@ def generate_text(prompt: str, workflow: str) -> dict:
     except (ProviderNotConfigured, ProviderRequestError):
         raise
     except Exception as exc:
-        # Do not expose request headers, secrets, or raw provider payloads.
         raise ProviderRequestError(f"AI provider request failed ({type(exc).__name__}). Check model, key, quota, and network.") from None
     if not output or not output.strip():
         raise ProviderRequestError("AI provider returned an empty response.")
@@ -89,7 +132,7 @@ def _generate_gemini(user_input: str) -> str:
     payload = {
         "systemInstruction": {"parts": [{"text": SYSTEM_INSTRUCTIONS}]},
         "contents": [{"role": "user", "parts": [{"text": user_input}]}],
-        "generationConfig": {"temperature": 0.7, "maxOutputTokens": 4096},
+        "generationConfig": {"temperature": 0.7, "maxOutputTokens": 8192},
     }
     request = urllib.request.Request(
         url,
