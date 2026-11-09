@@ -113,7 +113,7 @@ async function checkRenderer() {
   try {
     const info = await request("/api/render/capabilities");
     $("renderNotice").textContent = info.available
-      ? "Ready: " + info.supported_output + " · Scene images + narration + uploaded music + captions."
+      ? "Ready: " + info.supported_output + " · Scene images + narration + uploaded music + captions + slow zoom motion."
       : "Server par FFmpeg available nahi hai. Deployment par FFmpeg install hone ke baad MP4 rendering enable hogi.";
     $("renderButton").disabled = !info.available;
   } catch (error) {
@@ -142,12 +142,13 @@ $("renderButton").addEventListener("click", async () => {
         music_id: $("renderMusicId").value.trim() || null,
         music_volume: Number($("musicVolume").value || 0.18),
         transition: $("renderTransition").value,
+        motion: $("renderMotion").value,
         subtitles: $("renderSubtitles").value.split("\\n").map(x => x.trim()).filter(Boolean)
       })
     });
     $("renderVideo").src = result.url;
     $("renderDownload").href = result.url;
-    $("renderNotice").textContent = result.resolution + " · " + result.duration_seconds + " sec · " + result.format + " · Audio: " + result.audio + " · Transition: " + result.transition;
+    $("renderNotice").textContent = result.resolution + " · " + result.duration_seconds + " sec · " + result.format + " · Audio: " + result.audio + " · Transition: " + result.transition + " · Motion: " + (result.motion || "none");
     $("renderResult").hidden = false;
   } catch (error) {
     $("renderNotice").textContent = error.message;
