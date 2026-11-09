@@ -32,6 +32,14 @@ def test_generate_save_detail_and_export(tmp_path, monkeypatch):
     exported = client.get(f"/api/export/{body['id']}")
     assert exported.status_code == 200
     assert "Sample production script" in exported.text
+    markdown = client.get(f"/api/export/{body['id']}?format=md")
+    assert markdown.status_code == 200
+    assert "## Production package" in markdown.text
+    bundle = client.get(f"/api/export/{body['id']}?format=json")
+    assert bundle.status_code == 200
+    assert bundle.json()["task"]["output"] == "Sample production script"
+    assert "not a rendered" in bundle.json()["notice"]
+    assert client.get(f"/api/export/{body['id']}?format=exe").status_code == 400
 
 def test_invalid_prompt_is_rejected(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
@@ -79,3 +87,9 @@ def test_security_headers_are_present(tmp_path, monkeypatch):
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"
     assert "default-src 'self'" in response.headers["content-security-policy"]
+
+
+def test_unknown_workflow_is_rejected(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.post("/api/generate", json={"prompt": "Test", "workflow": "unknown-workflow"})
+    assert response.status_code == 400
