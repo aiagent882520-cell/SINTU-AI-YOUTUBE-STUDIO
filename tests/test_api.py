@@ -108,7 +108,7 @@ def test_storyboard_render_api_contract(tmp_path, monkeypatch):
 
 def test_storyboard_render_success_contract(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
-    monkeypatch.setattr(main, "render_storyboard", lambda title, scenes, seconds: {
+    monkeypatch.setattr(main, "render_storyboard", lambda title, scenes, seconds, **kwargs: {
         "video_id": "a" * 32, "url": "/api/videos/" + "a" * 32,
         "scenes": len(scenes), "duration_seconds": len(scenes) * seconds,
         "resolution": "720x1280", "format": "MP4 / H.264",
@@ -214,3 +214,50 @@ def test_image_generation_endpoint_contract(tmp_path, monkeypatch):
     assert response.json()["width"] == 1536
     assert client.get("/api/images/" + "b" * 32).status_code == 404
     assert client.get("/api/images/not-valid").status_code == 400
+
+
+def test_final_video_rejects_mismatched_image_ids(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.post("/api/render", json={
+        "title": "Test", "scenes": ["One", "Two"],
+        "image_ids": ["a" * 32]
+    })
+    assert response.status_code == 400
+
+
+def test_final_video_requires_existing_audio_and_images(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    missing_image = client.post("/api/render", json={
+        "title": "Test", "scenes": ["One"], "image_ids": ["a" * 32]
+    })
+    assert missing_image.status_code == 404
+    missing_audio = client.post("/api/render", json={
+        "title": "Test", "scenes": ["One"], "audio_id": "b" * 32
+    })
+    assert missing_audio.status_code == 404
+
+
+def test_final_video_passes_assets_to_renderer(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    image_dir = tmp_path / "images"
+    audio_dir = tmp_path / "audio"
+    image_dir.mkdir()
+    audio_dir.mkdir()
+    monkeypatch.setattr(main, "IMAGE_DIR", image_dir)
+    monkeypatch.setattr(main, "AUDIO_DIR", audio_dir)
+    image_id, audio_id = "c" * 32, "d" * 32
+    (image_dir / (image_id + ".jpg")).write_bytes(b"image-placeholder")
+    (audio_dir / (audio_id + ".mp3")).write_bytes(b"audio-placeholder")
+    captured = {}
+    def fake_render(title, scenes, seconds, **kwargs):
+        captured.update(kwargs)
+        return {"video_id": "e" * 32, "url": "/api/videos/" + "e" * 32}
+    monkeypatch.setattr(main, "render_storyboard", fake_render)
+    result = client.post("/api/render", json={
+        "title": "Final", "scenes": ["Hook"], "image_ids": [image_id],
+        "audio_id": audio_id, "subtitles": ["Namaste"]
+    })
+    assert result.status_code == 200
+    assert captured["image_paths"] == [image_dir / (image_id + ".jpg")]
+    assert captured["audio_path"] == audio_dir / (audio_id + ".mp3")
+    assert captured["subtitles"] == ["Namaste"]
