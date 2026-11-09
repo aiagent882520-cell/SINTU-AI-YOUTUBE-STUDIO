@@ -309,3 +309,25 @@ def test_render_passes_music_options(tmp_path, monkeypatch):
     assert captured["music_path"] == music_dir / (music_id + ".mp3")
     assert captured["music_volume"] == 0.25
     assert captured["transition"] == "fade"
+
+
+def test_music_upload_accepts_validated_audio(tmp_path, monkeypatch):
+    import base64
+    import subprocess
+    from types import SimpleNamespace
+    client = client_for_test(tmp_path, monkeypatch)
+    music_dir = tmp_path / "generated_music"
+    monkeypatch.setattr(main, "MUSIC_DIR", music_dir)
+    monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "secure-token")
+    monkeypatch.setattr(main.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: SimpleNamespace(
+        returncode=0, stdout="3.5\\n", stderr=""
+    ))
+    response = client.post("/api/music/upload", json={
+        "filename": "background.mp3",
+        "data_base64": base64.b64encode(b"test-audio").decode()
+    }, headers={"X-Media-Token": "secure-token"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["format"] == "MP3"
+    assert (music_dir / (body["music_id"] + ".mp3")).is_file()
