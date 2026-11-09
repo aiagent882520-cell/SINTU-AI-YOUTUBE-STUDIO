@@ -97,7 +97,7 @@ def _make_frame(path: Path, title: str, scene: str, index: int, total: int,
 def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                       image_paths: list[Path] | None = None, audio_path: Path | None = None,
                       subtitles: list[str] | None = None, music_path: Path | None = None,
-                      music_volume: float = 0.18, transition: str = "fade") -> dict:
+                      music_volume: float = 0.18, transition: str = "fade", motion: str = "none") -> dict:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RendererUnavailable("FFmpeg server par installed nahi hai. Video rendering filhaal unavailable hai.")
@@ -107,6 +107,8 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         raise ValueError("Har scene ki duration 2 se 12 seconds honi chahiye.")
     if transition not in {"cut", "fade"}:
         raise ValueError("Transition cut ya fade hona chahiye.")
+    if motion not in {"none", "slow-zoom-in", "slow-zoom-out"}:
+        raise ValueError("Motion none, slow-zoom-in ya slow-zoom-out hona chahiye.")
     if not 0.0 <= music_volume <= 1.0:
         raise ValueError("Music volume 0 se 1 ke beech hona chahiye.")
     if music_path and not music_path.is_file():
@@ -151,6 +153,10 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                     point = boundary * seconds_per_scene
                     filters.append(f"fade=t=out:st={point - 0.35}:d=0.35")
                     filters.append(f"fade=t=in:st={point}:d=0.35")
+            if motion == "slow-zoom-in":
+                filters.insert(0, "zoompan=z='min(zoom+0.0008,1.12)':d=1:s=720x1280:fps=30")
+            elif motion == "slow-zoom-out":
+                filters.insert(0, "zoompan=z='max(zoom-0.0008,1.0)':d=1:s=720x1280:fps=30")
             video_filter = ",".join(filters)
             command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
                        "-f", "concat", "-safe", "0", "-i", str(concat)]
@@ -199,8 +205,9 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         "music": bool(music_path),
         "music_volume": music_volume if music_path else None,
         "transition": transition,
+        "motion": motion,
         "scene_images": len(image_paths),
         "subtitles_burned_in": bool(subtitles),
         "format": "MP4 / H.264",
-        "note": "Scene images, optional narration, uploaded background music and burned-in captions are combined. Fade transitions are supported; advanced motion/VFX are not included.",
+        "note": "Scene images, optional narration, uploaded background music and burned-in captions are combined. Optional slow zoom motion is a basic Ken Burns effect; advanced 2D/3D animation and VFX are not included.",
     }
