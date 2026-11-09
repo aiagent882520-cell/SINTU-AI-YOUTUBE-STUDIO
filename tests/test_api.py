@@ -175,3 +175,42 @@ def test_voiceover_requires_media_access_token(tmp_path, monkeypatch):
                           headers={"X-Media-Token": "expected-token"})
     assert allowed.status_code == 200
     assert allowed.json()["format"] == "MP3"
+
+
+def test_image_generation_is_disabled_by_default(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.delenv("ENABLE_PAID_MEDIA_GENERATION", raising=False)
+    assert client.get("/api/images/capabilities").json()["available"] is False
+    monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "test-token")
+    response = client.post("/api/images", json={"prompt": "A cinematic mountain", "kind": "scene", "aspect": "portrait"},
+                           headers={"X-Media-Token": "test-token"})
+    assert response.status_code == 503
+
+
+def test_image_generation_requires_access_token(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "expected-token")
+    response = client.post("/api/images", json={"prompt": "A cinematic mountain"})
+    assert response.status_code == 403
+
+
+def test_image_generation_endpoint_contract(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "expected-token")
+    monkeypatch.setattr(main, "generate_image", lambda prompt, kind, aspect: {
+        "image_id": "b" * 32, "url": "/api/images/" + "b" * 32,
+        "kind": kind, "aspect": aspect, "width": 1536, "height": 1024,
+        "format": "JPEG", "size_bytes": 1234, "model": "test-image-model"
+    })
+    response = client.post("/api/images", json={
+        "prompt": "Cinematic mystery scene", "kind": "thumbnail", "aspect": "landscape"
+    }, headers={"X-Media-Token": "expected-token"})
+    assert response.status_code == 200
+    assert response.json()["kind"] == "thumbnail"
+    assert response.json()["width"] == 1536
+    assert client.get("/api/images/" + "b" * 32).status_code == 404
+    assert client.get("/api/images/not-valid").status_code == 400
