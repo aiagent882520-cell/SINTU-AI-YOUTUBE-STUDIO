@@ -135,7 +135,7 @@ def capabilities():
             "openai": providers["openai"]["configured"],
             "gemini": providers["gemini"]["configured"],
         },
-        "storyboard_renderer": {"available": bool(shutil.which("ffmpeg")), "output": "720x1280 MP4 with optional scene images, voiceover and captions"},
+        "storyboard_renderer": {"available": bool(shutil.which("ffmpeg")), "output": "720x1280 MP4 with optional scene images, narration, uploaded music and captions"},
         "voiceover": voice_status(),
         "image_generation": image_status(),
         "requires_external_integration": [
