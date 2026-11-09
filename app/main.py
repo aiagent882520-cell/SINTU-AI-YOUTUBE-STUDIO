@@ -15,6 +15,7 @@ from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
 from .video_renderer import render_storyboard, RendererUnavailable, RenderFailed, OUTPUT_DIR
 from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable, VoiceGenerationFailed, AUDIO_DIR
+from .image_generator import generate_image, image_status, ImageUnavailable, ImageGenerationFailed, IMAGE_DIR
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT.parent / "sintu_studio.db"
@@ -69,6 +70,11 @@ class RenderInput(BaseModel):
     scenes: list[str] = Field(min_length=1, max_length=25)
     seconds_per_scene: int = Field(default=4, ge=2, le=12)
 
+class ImageInput(BaseModel):
+    prompt: str = Field(min_length=1, max_length=3000)
+    kind: str = Field(default="scene", max_length=20)
+    aspect: str = Field(default="portrait", max_length=20)
+
 class VoiceInput(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
     voice: str = Field(default="alloy", max_length=20)
@@ -118,6 +124,7 @@ def capabilities():
         },
         "storyboard_renderer": {"available": bool(shutil.which("ffmpeg")), "output": "silent 720x1280 MP4"},
         "voiceover": voice_status(),
+        "image_generation": image_status(),
         "requires_external_integration": [
             "image_generation", "video_generation",
             "licensed_music", "advanced_video_rendering", "youtube_oauth", "social_oauth",
@@ -278,6 +285,37 @@ def get_video(video_id: str):
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Video not found")
     return FileResponse(path, media_type="video/mp4", filename=f"sintu-{video_id}.mp4")
+
+
+@app.get("/api/images/capabilities")
+def image_capabilities():
+    return image_status()
+
+
+@app.post("/api/images")
+def create_image(payload: ImageInput, media_token: str = Header(default="", alias="X-Media-Token")):
+    import hmac, os
+    expected = os.getenv("MEDIA_GENERATION_TOKEN", "")
+    if not expected or not hmac.compare_digest(media_token, expected):
+        raise HTTPException(status_code=403, detail="Valid media access token required.")
+    try:
+        return generate_image(payload.prompt, payload.kind, payload.aspect)
+    except ImageUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except ImageGenerationFailed as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/images/{image_id}")
+def get_image(image_id: str):
+    if not re.fullmatch(r"[a-f0-9]{32}", image_id):
+        raise HTTPException(status_code=400, detail="Invalid image ID")
+    path = IMAGE_DIR / f"{image_id}.jpg"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Image not found")
+    return FileResponse(path, media_type="image/jpeg", filename=f"sintu-image-{image_id}.jpg")
 
 
 @app.get("/api/voice/capabilities")
