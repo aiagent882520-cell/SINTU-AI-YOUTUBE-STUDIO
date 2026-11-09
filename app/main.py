@@ -4,7 +4,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -186,21 +186,40 @@ def task_detail(task_id: int):
     return dict(row)
 
 @app.get("/api/export/{task_id}")
-def export_task(task_id: int):
+def export_task(task_id: int, format: str = "txt"):
     item = task_detail(task_id)
     if not item.get("output"):
         raise HTTPException(status_code=409, detail="Is task ka generated output available nahi hai.")
-    content = (
-        f"SINTU AI STUDIO — {item['workflow']}\n"
-        f"Task: #{item['id']}\nCreated: {item['created_at']}\n"
-        f"Prompt: {item['prompt']}\n\n{'=' * 60}\n\n{item['output']}\n"
-    )
-    filename = f"sintu-task-{task_id}.txt"
+    if format not in {"txt", "md", "json"}:
+        raise HTTPException(status_code=400, detail="format must be txt, md, or json")
+    if format == "json":
+        return JSONResponse(content={
+            "product": "SINTU AI STUDIO",
+            "task": {key: item[key] for key in ("id", "workflow", "status", "created_at", "prompt", "output")},
+            "notice": "AI-generated production package; not a rendered or published video."
+        }, headers={"Content-Disposition": "attachment; filename=sintu-task-${task_id}.json"})
+    if format == "md":
+        content = (
+            f"# SINTU AI STUDIO — {item['workflow']}\n\n"
+            f"- Task: #{item['id']}\n- Created: {item['created_at']}\n"
+            f"- Status: {item['status']}\n\n## Prompt\n\n{item['prompt']}\n\n"
+            f"## Production package\n\n{item['output']}\n\n"
+            "> Note: AI-generated production package; not a rendered or published video.\n"
+        )
+        media_type, extension = "text/markdown; charset=utf-8", "md"
+    else:
+        content = (
+            f"SINTU AI STUDIO — {item['workflow']}\n"
+            f"Task: #{item['id']}\nCreated: {item['created_at']}\n"
+            f"Prompt: {item['prompt']}\n\n{'=' * 60}\n\n{item['output']}\n"
+        )
+        media_type, extension = "text/plain; charset=utf-8", "txt"
     return StreamingResponse(
         io.BytesIO(content.encode("utf-8")),
-        media_type="text/plain; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename=sintu-task-{task_id}.${extension}"},
     )
+
 
 @app.get("/api/status")
 def status():
