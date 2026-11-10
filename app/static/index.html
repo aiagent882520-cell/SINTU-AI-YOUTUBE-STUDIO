@@ -68,7 +68,7 @@
       <input id="renderImageIds" placeholder="AI image result se image ID paste karein">
       <label for="renderVideoIds">AI video clip IDs (comma-separated, optional; generated clips ko order mein join karein)</label>
       <input id="renderVideoIds" placeholder="AI Video ID yahan automatically add hogi">
-      <p class="muted">AI clips generate karne par IDs yahan automatically add hongi. Clip mode mein hard cuts use hote hain; source clip audio aur burned-in subtitles abhi preserve nahi hote. Voiceover/music ko alag soundtrack ke roop mein add kar sakte hain.</p>
+      <p class="muted">AI clips generate karne par IDs yahan automatically add hongi. Clip mode mein original clip audio preserve hoti hai; optional voiceover/music mix aur har clip ke liye timed subtitles bhi add kar sakte hain. Fade ya cut transition select karein.</p>
       <label for="renderAudioId">Voiceover audio ID (optional)</label>
       <input id="renderAudioId" placeholder="AI voiceover result se audio ID paste karein">
       <hr>
@@ -93,7 +93,7 @@
       <select id="renderTransition"><option value="fade">Fade</option><option value="cut">Cut</option></select>
       <label for="renderMotion">Cinematic motion effect</label>
       <select id="renderMotion"><option value="none">Static (no motion)</option><option value="slow-zoom-in">Slow cinematic zoom in</option><option value="slow-zoom-out">Slow cinematic zoom out</option></select>
-      <label for="renderSubtitles">Burn-in subtitles (har line ek scene; optional)</label>
+      <label for="renderSubtitles">Burn-in subtitles (AI clip mode: har line ek clip; storyboard mode: har line ek scene; optional)</label>
       <textarea id="renderSubtitles" rows="3" placeholder="Scene 1 subtitle&#10;Scene 2 subtitle"></textarea>
       <div class="actions"><button id="renderButton" type="button">Create MP4</button></div>
       <p id="renderNotice" class="muted" role="status" aria-live="polite">Renderer availability checking…</p>
