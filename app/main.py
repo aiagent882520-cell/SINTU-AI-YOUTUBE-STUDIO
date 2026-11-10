@@ -9,7 +9,12 @@ import io
 import sqlite3
 import re
 import shutil
+import secrets
+import urllib.parse
+import urllib.request
+import urllib.error
 from datetime import datetime, timezone
+from cryptography.fernet import Fernet, InvalidToken
 
 from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
@@ -200,6 +205,13 @@ def init_db():
             created_at TEXT NOT NULL, approved_at TEXT
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_content_calendar_date ON content_calendar(scheduled_at)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS youtube_oauth_states (
+            state TEXT PRIMARY KEY, admin_user_id INTEGER NOT NULL, expires_at INTEGER NOT NULL
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS youtube_connection (
+            id INTEGER PRIMARY KEY CHECK(id=1), channel_id TEXT NOT NULL, channel_title TEXT NOT NULL,
+            encrypted_tokens TEXT NOT NULL, token_expiry INTEGER NOT NULL, connected_at TEXT NOT NULL
+        )""")
     _ensure_bootstrap_admin()
 
 init_db()
@@ -424,7 +436,7 @@ def admin_integrations():
         "text_ai": {"status": "ready" if any(x["configured"] for x in providers["providers"].values()) else "needs_server_key", "selected": providers["selected_provider"], "providers": providers["providers"]},
         "video_rendering": {"status": "ready" if ffmpeg else "needs_ffmpeg"},
         "paid_media_generation": {"status": "enabled" if paid_media and media_token else "disabled", "provider_keys_present": {"openai": bool(os.getenv("OPENAI_API_KEY")), "gemini": bool(os.getenv("GEMINI_API_KEY")), "stability": bool(os.getenv("STABILITY_API_KEY"))}},
-        "youtube_publishing": {"status": "not_connected", "note": "Official OAuth connection not implemented."},
+        "youtube_publishing": {"status": "connected" if _youtube_connection() else ("needs_credentials" if not (_youtube_config()["client_id"] and _youtube_config()["client_secret"] and _youtube_config()["redirect_uri"] and _youtube_config()["encryption_key"]) else "not_connected"), "note": "Google OAuth channel connection and manual approved MP4 upload endpoints are available; server credentials required."},
         "social_publishing": {"status": "not_connected", "note": "Platform OAuth/API connection not implemented."},
         "analytics": {"status": "not_connected", "note": "Channel analytics connection not implemented."},
         "other_text_providers": {"status": "not_connected", "providers": ["Claude", "DeepSeek", "GLM", "Doubao", "Kimi"]}
@@ -556,6 +568,212 @@ def generate(payload: TaskInput):
         )
     return {"id": task_id, "status": "Completed", "provider": result["provider"],
             "model": result["model"], "output": result["output"]}
+
+
+def _youtube_config():
+    return {
+        "client_id": os.getenv("YOUTUBE_CLIENT_ID", "").strip(),
+        "client_secret": os.getenv("YOUTUBE_CLIENT_SECRET", "").strip(),
+        "redirect_uri": os.getenv("YOUTUBE_REDIRECT_URI", "").strip(),
+        "encryption_key": os.getenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", "").strip(),
+    }
+
+
+def _youtube_cipher():
+    key = _youtube_config()["encryption_key"]
+    if not key:
+        raise HTTPException(status_code=503, detail="YOUTUBE_TOKEN_ENCRYPTION_KEY server secret configure karein.")
+    try:
+        return Fernet(key.encode())
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=503, detail="YouTube token encryption key invalid hai.") from None
+
+
+def _youtube_request(url, data=None, headers=None, method=None):
+    request = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=45) as response:
+            return response.status, response.headers, response.read()
+    except urllib.error.HTTPError as exc:
+        body = exc.read(2000).decode("utf-8", errors="replace")
+        raise HTTPException(status_code=502, detail="Google API request failed (" + str(exc.code) + "). " + body[:500]) from None
+    except (urllib.error.URLError, TimeoutError):
+        raise HTTPException(status_code=502, detail="Google API se connection nahi ho paya.") from None
+
+
+def _youtube_connection():
+    with db() as conn:
+        row = conn.execute("SELECT channel_id,channel_title,token_expiry,connected_at FROM youtube_connection WHERE id=1").fetchone()
+    return dict(row) if row else None
+
+
+def _youtube_access_token():
+    config = _youtube_config()
+    if not config["client_id"] or not config["client_secret"]:
+        raise HTTPException(status_code=503, detail="YouTube OAuth client ID/secret server environment mein configure nahi hain.")
+    with db() as conn:
+        row = conn.execute("SELECT encrypted_tokens,token_expiry FROM youtube_connection WHERE id=1").fetchone()
+    if not row:
+        raise HTTPException(status_code=409, detail="Pehle YouTube channel connect karein.")
+    try:
+        tokens = json.loads(_youtube_cipher().decrypt(row["encrypted_tokens"].encode()).decode())
+    except (InvalidToken, ValueError, json.JSONDecodeError):
+        raise HTTPException(status_code=503, detail="Stored YouTube credentials decrypt nahi ho rahe; reconnect karein.") from None
+    if int(row["token_expiry"]) <= int(time.time()) + 90:
+        if not tokens.get("refresh_token"):
+            raise HTTPException(status_code=401, detail="YouTube session expire ho gayi; channel reconnect karein.")
+        payload = urllib.parse.urlencode({
+            "client_id": config["client_id"], "client_secret": config["client_secret"],
+            "refresh_token": tokens["refresh_token"], "grant_type": "refresh_token"
+        }).encode()
+        _, _, body = _youtube_request("https://oauth2.googleapis.com/token", payload,
+                                      {"Content-Type": "application/x-www-form-urlencoded"})
+        refreshed = json.loads(body.decode())
+        tokens.update(refreshed)
+        tokens["refresh_token"] = tokens.get("refresh_token") or refreshed.get("refresh_token")
+        expiry = int(time.time()) + int(refreshed.get("expires_in", 3600))
+        encrypted = _youtube_cipher().encrypt(json.dumps(tokens).encode()).decode()
+        with db() as conn:
+            conn.execute("UPDATE youtube_connection SET encrypted_tokens=?,token_expiry=? WHERE id=1",
+                         (encrypted, expiry))
+    return tokens["access_token"]
+
+
+@app.get("/api/admin/youtube/status")
+def youtube_admin_status():
+    config = _youtube_config()
+    connection = _youtube_connection()
+    return {
+        "oauth_configured": bool(config["client_id"] and config["client_secret"] and config["redirect_uri"]),
+        "encryption_configured": bool(config["encryption_key"]),
+        "connected": bool(connection),
+        "channel": {"id": connection["channel_id"], "title": connection["channel_title"]} if connection else None,
+        "connected_at": connection["connected_at"] if connection else None,
+        "upload_enabled": bool(connection),
+        "note": "OAuth credentials aur token encryption key server secrets mein configure karein. Upload ke liye approved calendar item aur rendered MP4 required hai."
+    }
+
+
+@app.post("/api/admin/youtube/oauth/start")
+def youtube_oauth_start(request: Request):
+    config = _youtube_config()
+    if not config["client_id"] or not config["client_secret"] or not config["redirect_uri"]:
+        raise HTTPException(status_code=503, detail="YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET aur YOUTUBE_REDIRECT_URI configure karein.")
+    _youtube_cipher()
+    actor = getattr(request.state, "user", {}) or {}
+    state = secrets.token_urlsafe(32)
+    expiry = int(time.time()) + 600
+    with db() as conn:
+        conn.execute("DELETE FROM youtube_oauth_states WHERE expires_at < ?", (int(time.time()),))
+        conn.execute("INSERT INTO youtube_oauth_states(state,admin_user_id,expires_at) VALUES(?,?,?)",
+                     (state, actor["id"], expiry))
+    params = urllib.parse.urlencode({
+        "client_id": config["client_id"], "redirect_uri": config["redirect_uri"],
+        "response_type": "code", "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
+        "access_type": "offline", "prompt": "consent", "include_granted_scopes": "true", "state": state
+    })
+    return {"authorization_url": "https://accounts.google.com/o/oauth2/v2/auth?" + params,
+            "expires_in": 600, "message": "Google consent ke baad isi admin session mein callback complete hoga."}
+
+
+@app.get("/api/admin/youtube/oauth/callback")
+def youtube_oauth_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+    from fastapi.responses import RedirectResponse
+    if error:
+        return RedirectResponse("/?youtube_oauth=denied", status_code=303)
+    actor = getattr(request.state, "user", {}) or {}
+    with db() as conn:
+        saved = conn.execute("SELECT admin_user_id,expires_at FROM youtube_oauth_states WHERE state=?", (state,)).fetchone()
+        conn.execute("DELETE FROM youtube_oauth_states WHERE state=?", (state,))
+    if not state or not saved or saved["admin_user_id"] != actor.get("id") or saved["expires_at"] < int(time.time()):
+        raise HTTPException(status_code=400, detail="OAuth state invalid/expired. Dobara Connect karein.")
+    if not code:
+        raise HTTPException(status_code=400, detail="Google authorization code missing.")
+    config = _youtube_config()
+    payload = urllib.parse.urlencode({
+        "code": code, "client_id": config["client_id"], "client_secret": config["client_secret"],
+        "redirect_uri": config["redirect_uri"], "grant_type": "authorization_code"
+    }).encode()
+    _, _, token_body = _youtube_request("https://oauth2.googleapis.com/token", payload,
+                                        {"Content-Type": "application/x-www-form-urlencoded"})
+    tokens = json.loads(token_body.decode())
+    access_token = tokens.get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=502, detail="Google ne access token return nahi kiya.")
+    _, _, channel_body = _youtube_request(
+        "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",
+        headers={"Authorization": "Bearer " + access_token})
+    channels = json.loads(channel_body.decode()).get("items", [])
+    if not channels:
+        raise HTTPException(status_code=404, detail="Is Google account par YouTube channel nahi mila.")
+    channel = channels[0]
+    with db() as conn:
+        old = conn.execute("SELECT encrypted_tokens FROM youtube_connection WHERE id=1").fetchone()
+    if not tokens.get("refresh_token") and old:
+        try:
+            previous = json.loads(_youtube_cipher().decrypt(old["encrypted_tokens"].encode()).decode())
+            tokens["refresh_token"] = previous.get("refresh_token")
+        except (InvalidToken, ValueError, json.JSONDecodeError):
+            pass
+    expiry = int(time.time()) + int(tokens.get("expires_in", 3600))
+    encrypted = _youtube_cipher().encrypt(json.dumps(tokens).encode()).decode()
+    with db() as conn:
+        conn.execute("""INSERT INTO youtube_connection(id,channel_id,channel_title,encrypted_tokens,token_expiry,connected_at)
+            VALUES(1,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET channel_id=excluded.channel_id,
+            channel_title=excluded.channel_title,encrypted_tokens=excluded.encrypted_tokens,
+            token_expiry=excluded.token_expiry,connected_at=excluded.connected_at""",
+            (channel["id"], channel.get("snippet", {}).get("title", "YouTube Channel"), encrypted, expiry,
+             datetime.now(timezone.utc).isoformat()))
+    return RedirectResponse("/?youtube_oauth=connected", status_code=303)
+
+
+@app.post("/api/admin/youtube/disconnect")
+def youtube_disconnect():
+    with db() as conn:
+        conn.execute("DELETE FROM youtube_connection WHERE id=1")
+    return {"connected": False, "message": "YouTube channel disconnected; encrypted tokens deleted."}
+
+
+@app.post("/api/admin/youtube/publish/{calendar_id}")
+def youtube_publish(calendar_id: int, video_id: str = Field(..., min_length=32, max_length=32),
+                    title: str = Field(..., min_length=1, max_length=100),
+                    description: str = Field(default="", max_length=5000),
+                    privacy_status: str = Field(default="private", pattern=r"^(private|unlisted|public)$")):
+    if not re.fullmatch(r"[a-f0-9]{32}", video_id):
+        raise HTTPException(status_code=400, detail="Invalid rendered video ID.")
+    with db() as conn:
+        item = conn.execute("SELECT id,title,status,platform FROM content_calendar WHERE id=?", (calendar_id,)).fetchone()
+    if not item:
+        raise HTTPException(status_code=404, detail="Calendar item not found.")
+    if item["status"] != "Approved" or item["platform"] not in {"youtube", "youtube_shorts"}:
+        raise HTTPException(status_code=409, detail="YouTube calendar item approved hona chahiye.")
+    path = OUTPUT_DIR / (video_id + ".mp4")
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Rendered MP4 file nahi mili.")
+    size = path.stat().st_size
+    if size <= 0 or size > 512 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="MP4 size 1 byte se 512 MB ke beech honi chahiye.")
+    access_token = _youtube_access_token()
+    metadata = json.dumps({"snippet": {"title": title.strip(), "description": description,
+        "categoryId": "22"}, "status": {"privacyStatus": privacy_status}}).encode()
+    _, headers, _ = _youtube_request("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+        metadata, {"Authorization": "Bearer " + access_token, "Content-Type": "application/json; charset=UTF-8",
+                   "X-Upload-Content-Type": "video/mp4", "X-Upload-Content-Length": str(size)}, "POST")
+    upload_url = headers.get("Location")
+    if not upload_url or not upload_url.startswith("https://www.googleapis.com/upload/youtube/"):
+        raise HTTPException(status_code=502, detail="Google resumable upload URL invalid hai.")
+    with path.open("rb") as video_file:
+        _, _, result_body = _youtube_request(upload_url, video_file.read(), {"Authorization": "Bearer " + access_token,
+            "Content-Type": "video/mp4", "Content-Length": str(size)}, "PUT")
+    uploaded = json.loads(result_body.decode())
+    youtube_id = uploaded.get("id")
+    if not youtube_id:
+        raise HTTPException(status_code=502, detail="YouTube ne video ID return nahi ki.")
+    with db() as conn:
+        conn.execute("UPDATE content_calendar SET status='Published' WHERE id=?", (calendar_id,))
+    return {"calendar_id": calendar_id, "youtube_video_id": youtube_id, "status": "Published",
+            "url": "https://www.youtube.com/watch?v=" + youtube_id, "privacy_status": privacy_status}
+
 
 @app.get("/api/calendar")
 def calendar_items():
