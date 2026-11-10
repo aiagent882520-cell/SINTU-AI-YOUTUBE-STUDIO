@@ -1261,6 +1261,39 @@ def publishing_history(platform: str = Query(default="", max_length=30),
         "note":"Actual platform responses aur processing states record hote hain; legacy events backfill nahi hue hain."}
 
 
+@app.get("/api/admin/scheduler/queue")
+def scheduler_queue(hours: int = Query(default=24, ge=1, le=168),
+                    limit: int = Query(default=100, ge=1, le=250)):
+    now = datetime.now(timezone.utc)
+    horizon = now + timedelta(hours=hours)
+    with db() as conn:
+        rows = conn.execute("""SELECT id,title,platform,prompt,scheduled_at,status,created_at,approved_at
+            FROM content_calendar WHERE status NOT IN ('Cancelled','Published')
+            ORDER BY scheduled_at ASC LIMIT ?""", (limit,)).fetchall()
+    items=[]
+    for row in rows:
+        item=dict(row)
+        try:
+            scheduled=datetime.fromisoformat(item["scheduled_at"].replace("Z","+00:00"))
+            if scheduled.tzinfo is None: scheduled=scheduled.replace(tzinfo=timezone.utc)
+            scheduled=scheduled.astimezone(timezone.utc)
+        except (ValueError,TypeError):
+            item["queue_state"]="invalid_schedule";items.append(item);continue
+        item["queue_state"]=("awaiting_approval" if item["status"]=="Needs approval" else
+            "overdue_awaiting_manual_publish" if item["status"]=="Approved" and scheduled<=now else
+            "approved_upcoming" if item["status"]=="Approved" and scheduled<=horizon else
+            "scheduled_later" if item["status"]=="Approved" else "not_approved")
+        item["scheduled_at_utc"]=scheduled.isoformat()
+        items.append(item)
+    return {"items":items,"summary":{
+        "awaiting_approval":sum(x["queue_state"]=="awaiting_approval" for x in items),
+        "due_for_manual_action":sum(x["queue_state"]=="overdue_awaiting_manual_publish" for x in items),
+        "approved_next_window":sum(x["queue_state"]=="approved_upcoming" for x in items),
+        "approved_later":sum(x["queue_state"]=="scheduled_later" for x in items)},
+        "window_hours":hours,"checked_at":now.isoformat(),
+        "notice":"Scheduler due items ko queue mein dikhata hai. Public publishing hamesha admin ke separate manual confirmation ke baad hoti hai."}
+
+
 @app.get("/api/calendar")
 def calendar_items():
     with db() as conn:
