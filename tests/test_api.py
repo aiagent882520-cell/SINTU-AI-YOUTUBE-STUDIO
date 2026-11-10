@@ -1271,3 +1271,39 @@ def test_publishing_history_records_and_filters_events(tmp_path, monkeypatch):
     assert response.json()["totals"]["published"]==1
     assert len(client.get("/api/admin/publishing/history?platform=youtube&status=Published").json()["items"])==1
     assert client.get("/api/admin/publishing/history?platform=tiktok").json()["items"]==[]
+
+
+def test_youtube_analytics_returns_official_metrics_and_top_videos(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    from app import main as app_main
+    monkeypatch.setattr(app_main, "_youtube_access_token", lambda: "test-access-token")
+    monkeypatch.setattr(app_main, "_youtube_connection", lambda: {"channel_title": "Test Channel"})
+    calls = []
+    def fake_request(url, data=None, headers=None, method=None):
+        calls.append(url)
+        if "dimensions=day" in url:
+            body = {"columnHeaders":[{"name":"day"},{"name":"views"},{"name":"estimatedMinutesWatched"},
+                {"name":"averageViewDuration"},{"name":"subscribersGained"},{"name":"subscribersLost"}],
+                "rows":[["2026-11-01",100,50,30,4,1],["2026-11-02",200,120,36,5,2]]}
+        else:
+            body = {"columnHeaders":[{"name":"video"},{"name":"views"},{"name":"estimatedMinutesWatched"},{"name":"averageViewDuration"}],
+                "rows":[["video123",250,140,34]]}
+        return 200, {}, json.dumps(body).encode()
+    monkeypatch.setattr(app_main, "_youtube_request", fake_request)
+    response = client.get("/api/admin/youtube/analytics?start_date=2026-11-01&end_date=2026-11-02")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["source"] == "YouTube Analytics API"
+    assert data["totals"]["views"] == 300
+    assert data["totals"]["subscribersGained"] == 9
+    assert data["totals"]["subscribersLost"] == 3
+    assert data["top_videos"][0]["video_id"] == "video123"
+    assert len(calls) == 2
+    assert all("youtubeanalytics.googleapis.com/v2/reports" in url for url in calls)
+
+
+def test_youtube_analytics_rejects_invalid_date_range(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    assert client.get("/api/admin/youtube/analytics?start_date=bad").status_code == 422
+    assert client.get("/api/admin/youtube/analytics?start_date=2026-11-03&end_date=2026-11-01").status_code == 422
+
