@@ -1308,3 +1308,50 @@ def test_youtube_analytics_rejects_invalid_date_range(tmp_path, monkeypatch):
     assert client.get("/api/admin/youtube/analytics?start_date=bad").status_code == 422
     assert client.get("/api/admin/youtube/analytics?start_date=2026-11-03&end_date=2026-11-01").status_code == 422
 
+
+
+def test_youtube_reach_returns_official_report_csv(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "_youtube_access_token", lambda: "test-token")
+    calls = []
+    def fake_request(url, data=None, headers=None, method=None):
+        calls.append((url, method))
+        if url.endswith("/jobs?includeSystemManaged=true"):
+            body = {"jobs":[{"id":"reach-job","reportTypeId":"channel_reach_basic_a1"}]}
+        elif "/reports?pageSize=50" in url:
+            body = {"reports":[{"startTime":"2026-11-01T00:00:00Z","downloadUrl":"https://youtubereporting.googleapis.com/v1/media/report.csv"}]}
+        elif url.endswith("/media/report.csv"):
+            body = b"date,channel_id,video_id,video_thumbnail_impressions,video_thumbnail_impressions_ctr\\n2026-11-01,UC123,vid1,100,0.05\\n"
+            return 200, {}, body
+        else:
+            raise AssertionError(url)
+        return 200, {}, json.dumps(body).encode()
+    monkeypatch.setattr(main, "_youtube_request", fake_request)
+    response = client.get("/api/admin/youtube/reach")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["totals"]["thumbnail_impressions"] == 100
+    assert data["totals"]["thumbnail_ctr"] == 0.05
+    assert data["top_videos"][0]["video_id"] == "vid1"
+
+
+def test_youtube_reach_setup_creates_job_once(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "_youtube_access_token", lambda: "test-token")
+    calls = []
+    def fake_request(url, data=None, headers=None, method=None):
+        calls.append((url, method))
+        if url.endswith("/jobs?includeSystemManaged=true"):
+            return 200, {}, json.dumps({"jobs":[]}).encode()
+        if url.endswith("/reportTypes?includeSystemManaged=true"):
+            return 200, {}, json.dumps({"reportTypes":[{"id":"channel_reach_basic_a1"}]}).encode()
+        if url.endswith("/jobs") and method=="POST":
+            return 200, {}, json.dumps({"id":"job-123","reportTypeId":"channel_reach_basic_a1"}).encode()
+        raise AssertionError(url)
+    monkeypatch.setattr(main, "_youtube_request", fake_request)
+    response = client.post("/api/admin/youtube/reach/setup")
+    assert response.status_code == 200
+    assert response.json()["job_id"] == "job-123"
+    assert response.json()["created"] is True
+
+
