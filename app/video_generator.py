@@ -150,7 +150,7 @@ def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "7
     }
     if style not in styles:
         raise ValueError("Unsupported video style.")
-    full_prompt = f"{styles[style]} {prompt}. Create one coherent short clip with intentional subject movement, camera movement, lighting and a clear visual composition. Do not add captions, logos or watermarks."
+    full_prompt = f"{styles[style]} {prompt}. Target duration: approximately {duration_seconds} seconds. Create one coherent short clip with intentional subject movement, camera movement, lighting and a clear visual composition. Do not add captions, logos or watermarks."
     user_input = [{"type": "text", "text": full_prompt}]
     if reference_image_id:
         if not re.fullmatch(r"[a-f0-9]{32}", reference_image_id):
@@ -175,7 +175,6 @@ def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "7
             "type": "video",
             "aspect_ratio": aspect_ratio,
             "resolution": resolution,
-            "duration": duration_seconds,
             "delivery": "uri",
         },
     }).encode("utf-8")
@@ -224,7 +223,7 @@ def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "7
         "model": MODEL,
         "aspect_ratio": aspect_ratio,
         "resolution": resolution,
-        "duration_seconds": duration_seconds,
+        "requested_duration_seconds": duration_seconds,
         "style": style,
         "task": task,
         "reference_image_used": bool(reference_image_id),
