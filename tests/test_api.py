@@ -1,4 +1,4 @@
-from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient\nimport pytest
 
 from app import main
 
@@ -409,3 +409,62 @@ def test_renderer_builds_slow_zoom_filter(tmp_path, monkeypatch):
     assert "zoompan=" in video_filter
     assert "min(zoom+0.0008,1.12)" in video_filter
     assert result["motion"] == "slow-zoom-in"
+
+
+def test_ai_music_generation_is_disabled_by_default(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.delenv("ENABLE_PAID_MEDIA_GENERATION", raising=False)
+    monkeypatch.delenv("STABILITY_API_KEY", raising=False)
+    assert client.get("/api/music/capabilities").json()["available"] is False
+    monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "media-secret")
+    response = client.post("/api/music/generate", json={
+        "prompt": "Cinematic orchestral mystery score", "duration_seconds": 20
+    }, headers={"X-Media-Token": "media-secret"})
+    assert response.status_code == 503
+
+
+def test_ai_music_generation_requires_media_token(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("STABILITY_API_KEY", "stability-test-key")
+    monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "media-secret")
+    response = client.post("/api/music/generate", json={"prompt": "Ambient score"})
+    assert response.status_code == 403
+
+
+def test_ai_music_generation_endpoint_contract(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("STABILITY_API_KEY", "stability-test-key")
+    monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "media-secret")
+    monkeypatch.setattr(main, "generate_music", lambda prompt, duration: {
+        "music_id": "9" * 32, "url": "/api/music/" + "9" * 32,
+        "format": "MP3", "size_bytes": 2048, "duration_seconds": duration,
+        "provider": "Stability AI", "model": "stable-audio-3"
+    })
+    response = client.post("/api/music/generate", json={
+        "prompt": "Mysterious cinematic score", "duration_seconds": 45
+    }, headers={"X-Media-Token": "media-secret"})
+    assert response.status_code == 200
+    assert response.json()["model"] == "stable-audio-3"
+    assert response.json()["duration_seconds"] == 45
+    assert client.get("/api/music/" + "9" * 32).status_code == 404
+    assert client.get("/api/music/not-valid").status_code == 400
+    invalid = client.post("/api/music/generate", json={
+        "prompt": "Ambient", "duration_seconds": 400
+    }, headers={"X-Media-Token": "media-secret"})
+    assert invalid.status_code == 422
+
+
+def test_music_generator_validates_configuration_and_prompt(monkeypatch):
+    from app import music_generator
+    monkeypatch.delenv("ENABLE_PAID_MEDIA_GENERATION", raising=False)
+    monkeypatch.delenv("STABILITY_API_KEY", raising=False)
+    with pytest.raises(music_generator.MusicUnavailable):
+        music_generator.generate_music("Ambient score", 30)
+    monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("STABILITY_API_KEY", "test-key")
+    with pytest.raises(ValueError):
+        music_generator.generate_music("", 30)
+    with pytest.raises(ValueError):
+        music_generator.generate_music("Ambient", 361)
