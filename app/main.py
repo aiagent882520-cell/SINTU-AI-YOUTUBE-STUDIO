@@ -18,6 +18,7 @@ from .video_renderer import render_storyboard, RendererUnavailable, RenderFailed
 from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable, VoiceGenerationFailed, AUDIO_DIR
 from .image_generator import generate_image, image_status, ImageUnavailable, ImageGenerationFailed, IMAGE_DIR
 from .music_generator import generate_music, music_status, MusicUnavailable, MusicGenerationFailed
+from .video_generator import generate_video, video_status, VideoUnavailable, VideoGenerationFailed, AI_VIDEO_DIR
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT.parent / "sintu_studio.db"
@@ -89,6 +90,13 @@ class MusicGenerateInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=2000)
     duration_seconds: int = Field(default=30, ge=5, le=360)
 
+class AIVideoInput(BaseModel):
+    prompt: str = Field(min_length=1, max_length=3000)
+    aspect_ratio: str = Field(default="9:16", max_length=5)
+    resolution: str = Field(default="720p", max_length=5)
+    style: str = Field(default="cinematic", max_length=20)
+    reference_image_id: str | None = Field(default=None, max_length=32)
+
 class ImageInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=3000)
     kind: str = Field(default="scene", max_length=20)
@@ -145,8 +153,8 @@ def capabilities():
         "voiceover": voice_status(),
         "image_generation": image_status(),
         "ai_music_generation": music_status(),
+        "ai_video_generation": video_status(),
         "requires_external_integration": [
-            "video_generation",
             "advanced_video_rendering", "youtube_oauth", "social_oauth",
             "channel_analytics", "managed_database"
         ],
@@ -405,6 +413,40 @@ def render_video(payload: RenderInput):
         raise HTTPException(status_code=502, detail=f"Video render failed: {exc}")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/video/capabilities")
+def ai_video_capabilities():
+    return video_status()
+
+
+@app.post("/api/video/generate")
+def create_ai_video(payload: AIVideoInput, media_token: str = Header(default="", alias="X-Media-Token")):
+    import hmac, os
+    expected = os.getenv("MEDIA_GENERATION_TOKEN", "")
+    if not expected or not hmac.compare_digest(media_token, expected):
+        raise HTTPException(status_code=403, detail="Valid media access token required.")
+    try:
+        return generate_video(payload.prompt, payload.aspect_ratio, payload.resolution,
+                              payload.style, payload.reference_image_id)
+    except VideoUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except VideoGenerationFailed as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/ai-videos/{video_id}")
+def get_ai_video(video_id: str):
+    if not re.fullmatch(r"[a-f0-9]{32}", video_id):
+        raise HTTPException(status_code=400, detail="Invalid AI video ID")
+    path = AI_VIDEO_DIR / f"{video_id}.mp4"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="AI video not found")
+    return FileResponse(path, media_type="video/mp4", filename=f"sintu-ai-{video_id}.mp4")
 
 
 @app.get("/api/videos/{video_id}")
