@@ -11,7 +11,7 @@ import re
 import shutil
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -180,7 +180,7 @@ class AdminLoginInput(BaseModel):
 
 
 @app.post("/api/auth/login")
-def admin_login(payload: AdminLoginInput, request):
+def admin_login(payload: AdminLoginInput, request: Request):
     username = os.getenv("SINTU_ADMIN_USERNAME", "admin")
     password = os.getenv("SINTU_ADMIN_PASSWORD", "")
     secret = _session_secret()
@@ -212,7 +212,7 @@ def admin_logout():
 
 
 @app.get("/api/auth/session")
-def admin_session(request):
+def admin_session(request: Request):
     valid = _valid_session(request.cookies.get(SESSION_COOKIE))
     return {"authenticated": valid, "username": os.getenv("SINTU_ADMIN_USERNAME", "admin") if valid else None}
 
