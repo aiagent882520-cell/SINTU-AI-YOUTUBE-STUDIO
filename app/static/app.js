@@ -220,7 +220,7 @@ $("renderButton").addEventListener("click", async () => {
         music_id: $("renderMusicId").value.trim() || null,
         music_volume: Number($("musicVolume").value || 0.18),
         transition: $("renderTransition").value,
-        motion: $("renderVideoIds").value.trim() ? "none" : $("renderMotion").value,
+        motion: $("renderTimeline").value.trim() || $("renderVideoIds").value.trim() ? "none" : $("renderMotion").value,
         subtitles: $("renderTimeline").value.trim() ? timelineRows().map(x => x.subtitle || "") : $("renderSubtitles").value.split("\n").map(x => x.trim()).filter(Boolean)
       })
     });
