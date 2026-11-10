@@ -198,7 +198,13 @@ def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "7
         raise VideoGenerationFailed("Gemini ne valid JSON response nahi diya.") from None
     if payload.get("status") in {"failed", "cancelled"}:
         raise VideoGenerationFailed("Gemini video generation status: " + str(payload.get("status")))
-    video_bytes = _extract_video(payload)
+    try:
+        video_bytes = _extract_video(payload)
+    except VideoGenerationFailed:
+        file_id = _extract_video_file_id(payload)
+        if not file_id:
+            raise
+        video_bytes = _download_video_file(file_id, os.environ["GEMINI_API_KEY"])
     AI_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
     video_id = uuid.uuid4().hex
     output = AI_VIDEO_DIR / f"{video_id}.mp4"
