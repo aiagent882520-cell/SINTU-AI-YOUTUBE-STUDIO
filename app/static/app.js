@@ -326,3 +326,48 @@ $("imageButton").addEventListener("click", async () => {
   finally { $("imageButton").disabled = false; }
 });
 checkImageService();
+
+
+async function checkAIVideoService() {
+  try {
+    const info = await request("/api/video/capabilities");
+    $("aiVideoStatus").textContent = info.available
+      ? "Ready: " + info.provider + " · " + info.model + " · text/image-to-video · paid API usage."
+      : "AI video disabled: server admin must set ENABLE_PAID_MEDIA_GENERATION=true and GEMINI_API_KEY. Paid provider charges apply.";
+    $("aiVideoButton").disabled = !info.available;
+  } catch (error) {
+    $("aiVideoStatus").textContent = "AI video provider status unavailable.";
+    $("aiVideoButton").disabled = true;
+  }
+}
+$("aiVideoButton").addEventListener("click", async () => {
+  const prompt = $("aiVideoPrompt").value.trim();
+  if (!prompt) { $("aiVideoNotice").textContent = "Video scene prompt likhein."; return; }
+  if (!$("mediaToken").value.trim()) { $("aiVideoNotice").textContent = "Media access token enter karein."; return; }
+  $("aiVideoButton").disabled = true;
+  $("aiVideoNotice").textContent = "Gemini AI video clip generate kar raha hai. Ismein kai minute lag sakte hain…";
+  $("aiVideoResult").hidden = true;
+  try {
+    const result = await request("/api/video/generate", {
+      method: "POST",
+      headers: {"X-Media-Token": $("mediaToken").value},
+      body: JSON.stringify({
+        prompt,
+        style: $("aiVideoStyle").value,
+        aspect_ratio: $("aiVideoAspect").value,
+        resolution: $("aiVideoResolution").value,
+        reference_image_id: $("aiVideoReference").value.trim() || null
+      })
+    });
+    $("aiVideoPreview").src = result.url;
+    $("aiVideoDownload").href = result.url;
+    $("aiVideoAssetId").textContent = "AI Video ID: " + result.video_id + " · " + result.style + " · " + result.aspect_ratio + " · " + result.resolution;
+    $("aiVideoNotice").textContent = result.provider + " · " + result.model + " · MP4 · " + Math.ceil(result.size_bytes / 1024) + " KB. " + result.notice;
+    $("aiVideoResult").hidden = false;
+  } catch (error) {
+    $("aiVideoNotice").textContent = error.message;
+  } finally {
+    $("aiVideoButton").disabled = false;
+  }
+});
+checkAIVideoService();
