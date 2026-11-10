@@ -356,12 +356,13 @@ $("aiVideoButton").addEventListener("click", async () => {
         style: $("aiVideoStyle").value,
         aspect_ratio: $("aiVideoAspect").value,
         resolution: $("aiVideoResolution").value,
+        duration_seconds: Number($("aiVideoDuration").value),
         reference_image_id: $("aiVideoReference").value.trim() || null
       })
     });
     $("aiVideoPreview").src = result.url;
     $("aiVideoDownload").href = result.url;
-    $("aiVideoAssetId").textContent = "AI Video ID: " + result.video_id + " · " + result.style + " · " + result.aspect_ratio + " · " + result.resolution;
+    $("aiVideoAssetId").textContent = "AI Video ID: " + result.video_id + " · " + result.style + " · " + result.aspect_ratio + " · " + result.resolution + " · " + result.duration_seconds + "s";
     $("aiVideoNotice").textContent = result.provider + " · " + result.model + " · MP4 · " + Math.ceil(result.size_bytes / 1024) + " KB. " + result.notice;
     $("aiVideoResult").hidden = false;
   } catch (error) {
