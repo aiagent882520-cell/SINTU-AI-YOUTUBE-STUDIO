@@ -6,7 +6,8 @@ import urllib.request
 import urllib.error
 
 ROOT = Path(__file__).resolve().parent.parent
-MUSIC_DIR = ROOT / "generated_music"
+DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT))).expanduser().resolve()
+MUSIC_DIR = DATA_DIR / "generated_music"
 ENDPOINT = "https://api.stability.ai/v2beta/audio/stable-audio/text-to-audio"
 MODEL = "stable-audio-3"
 MAX_AUDIO_BYTES = 30 * 1024 * 1024
