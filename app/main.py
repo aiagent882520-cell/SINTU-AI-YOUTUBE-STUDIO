@@ -49,37 +49,98 @@ def _session_secret():
     return os.getenv("SINTU_SESSION_SECRET", "")
 
 
-def _session_token(username: str, expires: int) -> str:
-    payload = base64.urlsafe_b64encode(json.dumps({"u": username, "e": expires}, separators=(",", ":")).encode()).decode().rstrip("=")
+def _hash_password(password: str) -> str:
+    salt = os.urandom(16).hex()
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), 310000).hex()
+    return "pbkdf2_sha256$310000$" + salt + "$" + digest
+
+
+def _verify_password(password: str, encoded: str) -> bool:
+    try:
+        algorithm, rounds, salt, expected = encoded.split("$", 3)
+        if algorithm != "pbkdf2_sha256" or int(rounds) < 100000:
+            return False
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), int(rounds)).hex()
+        return hmac.compare_digest(actual, expected)
+    except (ValueError, TypeError):
+        return False
+
+
+def _ensure_bootstrap_admin():
+    username = os.getenv("SINTU_ADMIN_USERNAME", "admin").strip()
+    password = os.getenv("SINTU_ADMIN_PASSWORD", "")
+    secret = _session_secret()
+    if not username or len(password) < 12 or len(secret) < 32 or password.startswith("CHANGE-THIS") or secret.startswith("CHANGE-THIS"):
+        return
+    with db() as conn:
+        exists = conn.execute("SELECT id FROM admin_users WHERE username = ?", (username,)).fetchone()
+        if not exists:
+            conn.execute("INSERT INTO admin_users(username,password_hash,role,is_active,created_at) VALUES(?,?,?,?,?)",
+                         (username, _hash_password(password), "admin", 1, datetime.now(timezone.utc).isoformat()))
+
+
+def _session_user(token: str | None):
+    if not token or not _session_secret():
+        return None
+    try:
+        payload, signature = token.rsplit(".", 1)
+        expected = hmac.new(_session_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            return None
+        decoded = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        if int(decoded.get("e", 0)) <= int(time.time()):
+            return None
+        with db() as conn:
+            row = conn.execute("SELECT id,username,role,is_active FROM admin_users WHERE id=?", (decoded.get("i"),)).fetchone()
+        if not row or not row["is_active"] or row["username"] != decoded.get("u"):
+            return None
+        return dict(row)
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return None
+
+
+def _session_token(user: dict, expires: int) -> str:
+    payload = base64.urlsafe_b64encode(json.dumps({"i": user["id"], "u": user["username"], "e": expires}, separators=(",", ":")).encode()).decode().rstrip("=")
     signature = hmac.new(_session_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()
     return payload + "." + signature
 
 
 def _valid_session(token: str | None) -> bool:
-    if not token or not _session_secret():
-        return False
+    return _session_user(token) is not None
+
+
+def _write_audit(user, action: str, method: str, path: str, status: int, ip: str):
     try:
-        payload, signature = token.rsplit(".", 1)
-        expected = hmac.new(_session_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(signature, expected):
-            return False
-        decoded = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
-        return decoded.get("u") == os.getenv("SINTU_ADMIN_USERNAME", "admin") and int(decoded.get("e", 0)) > int(time.time())
-    except (ValueError, TypeError, json.JSONDecodeError):
-        return False
+        actor = user or {}
+        with db() as conn:
+            conn.execute("INSERT INTO security_audit(actor_id,actor_username,actor_role,action,method,path,status_code,ip_address,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                         (actor.get("id"), actor.get("username", "anonymous"), actor.get("role", "guest"), action, method, path, status, ip[:64], datetime.now(timezone.utc).isoformat()))
+    except sqlite3.Error:
+        pass
 
 
 @app.middleware("http")
 async def admin_access_control(request, call_next):
+    path = request.url.path
+    user = _session_user(request.cookies.get(SESSION_COOKIE)) if _auth_required() else {"id": 0, "username": "local", "role": "admin", "is_active": 1}
+    request.state.user = user
     if _auth_required():
-        path = request.url.path
         public_paths = {"/login", "/api/auth/login", "/api/auth/logout", "/api/health"}
-        if path not in public_paths and not path.startswith("/static/") and not _valid_session(request.cookies.get(SESSION_COOKIE)):
+        if path not in public_paths and not path.startswith("/static/") and not user:
             if path == "/":
                 from fastapi.responses import RedirectResponse
                 return RedirectResponse("/login", status_code=303)
             return JSONResponse(status_code=401, content={"detail": "Admin login required."})
-    return await call_next(request)
+        if path.startswith("/api/admin/") and (not user or user.get("role") != "admin"):
+            return JSONResponse(status_code=403, content={"detail": "Admin role required."})
+        if request.method not in {"GET", "HEAD", "OPTIONS"} and path != "/api/auth/logout" and user and user.get("role") == "viewer":
+            return JSONResponse(status_code=403, content={"detail": "Viewer role is read-only."})
+    response = await call_next(request)
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and path != "/api/admin/audit":
+        actor = getattr(request.state, "user", None)
+        client_ip = request.client.host if request.client else "unknown"
+        _write_audit(actor, "http_request", request.method, path, response.status_code, client_ip)
+    return response
 
 
 @app.middleware("http")
@@ -116,6 +177,18 @@ def init_db():
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(tasks)")}
         if "output" not in columns:
             conn.execute("ALTER TABLE tasks ADD COLUMN output TEXT")
+        conn.execute("""CREATE TABLE IF NOT EXISTS admin_users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','editor','viewer')),
+            is_active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS security_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, actor_id INTEGER, actor_username TEXT NOT NULL,
+            actor_role TEXT NOT NULL, action TEXT NOT NULL, method TEXT NOT NULL, path TEXT NOT NULL,
+            status_code INTEGER NOT NULL, ip_address TEXT NOT NULL, created_at TEXT NOT NULL
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_security_audit_created ON security_audit(id DESC)")
+    _ensure_bootstrap_admin()
 
 init_db()
 
@@ -179,26 +252,37 @@ class AdminLoginInput(BaseModel):
     password: str = Field(min_length=1, max_length=256)
 
 
+class AdminUserCreate(BaseModel):
+    username: str = Field(min_length=3, max_length=40, pattern=r"^[A-Za-z0-9_.-]+$")
+    password: str = Field(min_length=12, max_length=256)
+    role: str = Field(default="viewer", pattern=r"^(admin|editor|viewer)$")
+
+
+class AdminUserUpdate(BaseModel):
+    role: str | None = Field(default=None, pattern=r"^(admin|editor|viewer)$")
+    is_active: bool | None = None
+    password: str | None = Field(default=None, min_length=12, max_length=256)
+
+
 @app.post("/api/auth/login")
 def admin_login(payload: AdminLoginInput, request: Request):
-    username = os.getenv("SINTU_ADMIN_USERNAME", "admin")
-    password = os.getenv("SINTU_ADMIN_PASSWORD", "")
-    secret = _session_secret()
-    if (not password or len(password) < 12 or len(secret) < 32
-            or password.startswith("CHANGE-THIS") or secret.startswith("CHANGE-THIS")):
-        raise HTTPException(status_code=503, detail="Admin credentials and a 32+ character session secret must be configured by the host administrator.")
+    _ensure_bootstrap_admin()
     client_ip = request.client.host if request.client else "unknown"
     now = time.time()
     attempts = [stamp for stamp in _LOGIN_ATTEMPTS.get(client_ip, []) if now - stamp < 900]
     if len(attempts) >= 10:
         raise HTTPException(status_code=429, detail="Too many login attempts. 15 minutes baad try karein.")
-    if not hmac.compare_digest(payload.username, username) or not hmac.compare_digest(payload.password, password):
+    with db() as conn:
+        user = conn.execute("SELECT id,username,password_hash,role,is_active FROM admin_users WHERE username=?", (payload.username,)).fetchone()
+    if not user or not user["is_active"] or not _verify_password(payload.password, user["password_hash"]):
         attempts.append(now)
         _LOGIN_ATTEMPTS[client_ip] = attempts
         raise HTTPException(status_code=401, detail="Username ya password galat hai.")
     _LOGIN_ATTEMPTS.pop(client_ip, None)
-    response = JSONResponse({"authenticated": True, "username": username, "expires_in": SESSION_TTL_SECONDS})
-    response.set_cookie(SESSION_COOKIE, _session_token(username, int(now + SESSION_TTL_SECONDS)),
+    actor = dict(user)
+    request.state.user = actor
+    response = JSONResponse({"authenticated": True, "username": actor["username"], "role": actor["role"], "expires_in": SESSION_TTL_SECONDS})
+    response.set_cookie(SESSION_COOKIE, _session_token(actor, int(now + SESSION_TTL_SECONDS)),
                         max_age=SESSION_TTL_SECONDS, httponly=True, secure=os.getenv("SINTU_COOKIE_SECURE", "true").lower() == "true",
                         samesite="strict", path="/")
     return response
@@ -214,8 +298,64 @@ def admin_logout():
 
 @app.get("/api/auth/session")
 def admin_session(request: Request):
-    valid = _valid_session(request.cookies.get(SESSION_COOKIE))
-    return {"authenticated": valid, "username": os.getenv("SINTU_ADMIN_USERNAME", "admin") if valid else None}
+    user = _session_user(request.cookies.get(SESSION_COOKIE))
+    return {"authenticated": bool(user), "username": user["username"] if user else None, "role": user["role"] if user else None}
+
+
+@app.get("/api/admin/users")
+def admin_list_users():
+    with db() as conn:
+        rows = conn.execute("SELECT id,username,role,is_active,created_at FROM admin_users ORDER BY id").fetchall()
+    return {"users": [dict(row) for row in rows]}
+
+
+@app.post("/api/admin/users")
+def admin_create_user(payload: AdminUserCreate):
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        with db() as conn:
+            cur = conn.execute("INSERT INTO admin_users(username,password_hash,role,is_active,created_at) VALUES(?,?,?,?,?)",
+                               (payload.username, _hash_password(payload.password), payload.role, 1, now))
+            user_id = cur.lastrowid
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="Username already exists.")
+    return {"id": user_id, "username": payload.username, "role": payload.role, "is_active": True}
+
+
+@app.patch("/api/admin/users/{user_id}")
+def admin_update_user(user_id: int, payload: AdminUserUpdate, request: Request):
+    changes = payload.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=400, detail="At least one user field is required.")
+    actor = getattr(request.state, "user", {}) or {}
+    with db() as conn:
+        target = conn.execute("SELECT id,username,role,is_active FROM admin_users WHERE id=?", (user_id,)).fetchone()
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found.")
+        if actor.get("id") == user_id and (changes.get("is_active") is False or changes.get("role", target["role"]) != "admin"):
+            raise HTTPException(status_code=400, detail="You cannot disable or demote your own active admin account.")
+        next_role = changes.get("role", target["role"])
+        next_active = changes.get("is_active", bool(target["is_active"]))
+        if target["role"] == "admin" and target["is_active"] and (next_role != "admin" or not next_active):
+            count = conn.execute("SELECT COUNT(*) AS n FROM admin_users WHERE role='admin' AND is_active=1").fetchone()["n"]
+            if count <= 1:
+                raise HTTPException(status_code=400, detail="At least one active admin account must remain.")
+        updates, values = [], []
+        if "role" in changes: updates.append("role=?"); values.append(changes["role"])
+        if "is_active" in changes: updates.append("is_active=?"); values.append(1 if changes["is_active"] else 0)
+        if changes.get("password"): updates.append("password_hash=?"); values.append(_hash_password(changes["password"]))
+        values.append(user_id)
+        conn.execute("UPDATE admin_users SET " + ", ".join(updates) + " WHERE id=?", values)
+        row = conn.execute("SELECT id,username,role,is_active,created_at FROM admin_users WHERE id=?", (user_id,)).fetchone()
+    return dict(row)
+
+
+@app.get("/api/admin/audit")
+def admin_audit(limit: int = 50):
+    limit = max(1, min(limit, 200))
+    with db() as conn:
+        rows = conn.execute("SELECT id,actor_username,actor_role,action,method,path,status_code,ip_address,created_at FROM security_audit ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    return {"events": [dict(row) for row in rows]}
 
 
 @app.get("/")
