@@ -650,3 +650,40 @@ def test_video_generator_uses_uri_delivery_for_large_clips(tmp_path, monkeypatch
     result = video_generator.generate_video("A cinematic sky")
     assert result["interaction_id"] == "uri-interaction"
     assert (output_dir / (result["video_id"] + ".mp4")).read_bytes() == mp4
+
+
+def test_ai_video_clip_assembly_contract(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    clips_dir = tmp_path / "generated_ai_videos"
+    clips_dir.mkdir()
+    clip_ids = ["a" * 32, "b" * 32]
+    for clip_id in clip_ids:
+        (clips_dir / f"{clip_id}.mp4").write_bytes(b"test")
+    monkeypatch.setattr(main, "AI_VIDEO_DIR", clips_dir)
+    called = {}
+    def fake_assembly(paths, audio_path=None, music_path=None, music_volume=0.18):
+        called["paths"] = paths
+        return {
+            "video_id": "c" * 32, "url": "/api/videos/" + "c" * 32,
+            "scenes": len(paths), "duration_seconds": None,
+            "resolution": "720x1280", "format": "MP4 / H.264",
+            "audio": "clip-audio-not-preserved", "note": "assembled"
+        }
+    monkeypatch.setattr(main, "render_ai_clips", fake_assembly)
+    result = client.post("/api/render", json={
+        "title": "AI Short", "scenes": ["Opening clip", "Ending clip"],
+        "video_ids": clip_ids, "transition": "cut"
+    })
+    assert result.status_code == 200
+    assert result.json()["scenes"] == 2
+    assert len(called["paths"]) == 2
+    invalid = client.post("/api/render", json={
+        "title": "AI Short", "scenes": ["Only one scene"],
+        "video_ids": clip_ids, "transition": "cut"
+    })
+    assert invalid.status_code == 400
+    missing = client.post("/api/render", json={
+        "title": "AI Short", "scenes": ["Missing clip"],
+        "video_ids": ["d" * 32], "transition": "cut"
+    })
+    assert missing.status_code == 404
