@@ -1152,3 +1152,36 @@ def test_youtube_oauth_start_requires_all_server_credentials(tmp_path, monkeypat
     assert response.status_code == 200
     assert response.json()["authorization_url"].startswith("https://accounts.google.com/o/oauth2/v2/auth?")
     assert "youtube.upload" in response.json()["authorization_url"]
+
+
+def test_meta_status_hides_app_secrets(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("META_APP_ID", "meta-app-id-private")
+    monkeypatch.setenv("META_APP_SECRET", "meta-app-secret-private")
+    monkeypatch.setenv("META_REDIRECT_URI", "https://example.test/api/admin/meta/oauth/callback")
+    response = client.get("/api/admin/meta/status")
+    assert response.status_code == 200
+    assert response.json()["oauth_configured"] is True
+    assert "meta-app-secret-private" not in response.text
+    assert "meta-app-id-private" not in response.text
+
+
+def test_meta_oauth_start_requires_credentials_and_encryption(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    assert client.post("/api/admin/meta/oauth/start").status_code == 503
+    monkeypatch.setenv("META_APP_ID", "app-id")
+    monkeypatch.setenv("META_APP_SECRET", "app-secret")
+    monkeypatch.setenv("META_REDIRECT_URI", "https://example.test/api/admin/meta/oauth/callback")
+    assert client.post("/api/admin/meta/oauth/start").status_code == 503
+    from cryptography.fernet import Fernet
+    monkeypatch.setenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    response = client.post("/api/admin/meta/oauth/start")
+    assert response.status_code == 200
+    assert "pages_manage_posts" in response.json()["authorization_url"]
+    assert "instagram_content_publish" in response.json()["authorization_url"]
+
+
+def test_meta_instagram_rejects_non_https_url(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.post("/api/admin/meta/instagram/publish/1?video_url=http://example.com/video.mp4")
+    assert response.status_code == 400
