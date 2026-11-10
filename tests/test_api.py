@@ -617,3 +617,33 @@ def test_video_generator_extracts_and_downloads_uri_delivery(monkeypatch):
     assert video_generator._download_video_file("abc-123", "test-key") == mp4
     assert len(calls) == 2
     assert calls[1].endswith("/files/abc-123:download?alt=media")
+
+
+def test_video_generator_uses_uri_delivery_for_large_clips(tmp_path, monkeypatch):
+    import json
+    from app import video_generator
+    mp4 = b"1234ftypmp42large-uri-mp4-content"
+    uri = "https://generativelanguage.googleapis.com/v1beta/files/large-123:download?alt=media"
+    creation = json.dumps({"id": "uri-interaction", "status": "completed", "steps": [
+        {"type": "model_output", "content": [{"type": "video", "uri": uri}]}
+    ]}).encode()
+    class FakeResponse:
+        def __init__(self, body): self.body = body
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self, limit): return self.body
+    def fake_urlopen(request, timeout):
+        if request.get_method() == "POST":
+            return FakeResponse(creation)
+        if request.full_url.endswith("/files/large-123"):
+            return FakeResponse(b'{"state":"ACTIVE"}')
+        return FakeResponse(mp4)
+    output_dir = tmp_path / "ai-videos"
+    monkeypatch.setattr(video_generator, "AI_VIDEO_DIR", output_dir)
+    monkeypatch.setattr(video_generator.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(video_generator.time, "sleep", lambda seconds: None)
+    monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    result = video_generator.generate_video("A cinematic sky")
+    assert result["interaction_id"] == "uri-interaction"
+    assert (output_dir / (result["video_id"] + ".mp4")).read_bytes() == mp4
