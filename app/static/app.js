@@ -150,6 +150,25 @@ $("refresh").addEventListener("click", refresh);
 function calendarEscape(value) {
  return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
 }
+async function loadSchedulerQueue(){
+ const panel=$("schedulerQueuePanel");if(!panel)return;
+ try{
+  const session=await request("/api/auth/session");
+  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  panel.hidden=false;
+  const data=await request("/api/admin/scheduler/queue?hours=24"),s=data.summary||{};
+  $("schedulerQueueTotals").innerHTML=[["Awaiting approval",s.awaiting_approval||0],["Due — manual action",s.due_for_manual_action||0],["Next 24 hours",s.approved_next_window||0],["Later",s.approved_later||0]]
+   .map(([label,value])=>'<div class="integration-card"><strong>'+calendarEscape(value)+'</strong><span>'+calendarEscape(label)+'</span></div>').join("");
+  $("schedulerQueueItems").innerHTML=data.items.length?data.items.map(item=>{
+   const when=new Date(item.scheduled_at_utc||item.scheduled_at).toLocaleString();
+   const labels={awaiting_approval:"Approval needed",overdue_awaiting_manual_publish:"Due — publish manually",approved_upcoming:"Upcoming in 24 hours",scheduled_later:"Approved — later",not_approved:"Not approved",invalid_schedule:"Invalid schedule"};
+   return '<article class="calendar-item"><div><strong>'+calendarEscape(item.title)+'</strong><span>'+calendarEscape(item.platform)+' · '+calendarEscape(labels[item.queue_state]||item.queue_state)+'</span><small>'+calendarEscape(when)+'</small></div></article>';
+  }).join(""):'<p class="muted">Queue mein koi pending item nahi hai.</p>';
+  $("schedulerQueueNotice").textContent=data.notice;
+ }catch(error){$("schedulerQueueNotice").textContent=error.message;}
+}
+$("schedulerQueueRefresh")?.addEventListener("click",loadSchedulerQueue);
+
 async function loadPublishingHistory(){
  const panel=$("publishingHistoryPanel");if(!panel)return;
  try{
@@ -296,6 +315,7 @@ $("calendarItems")?.addEventListener("click", async event => {
 $("calendarRefresh")?.addEventListener("click", loadCalendar);
 loadCalendar();
 loadPublishingHistory();
+loadSchedulerQueue();
 function downloadPackage(format) {
   if (!latestTaskId) return;
   window.location.href = "/api/export/" + latestTaskId + "?format=" + format;
