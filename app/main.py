@@ -219,6 +219,18 @@ def init_db():
             id INTEGER PRIMARY KEY CHECK(id=1), page_id TEXT NOT NULL, page_name TEXT NOT NULL,
             instagram_user_id TEXT, instagram_username TEXT, encrypted_tokens TEXT NOT NULL, connected_at TEXT NOT NULL
         )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS tiktok_oauth_states (
+            state TEXT PRIMARY KEY, admin_user_id INTEGER NOT NULL, session_hash TEXT NOT NULL, expires_at INTEGER NOT NULL
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS tiktok_connection (
+            id INTEGER PRIMARY KEY CHECK(id=1), open_id TEXT NOT NULL, display_name TEXT NOT NULL,
+            encrypted_tokens TEXT NOT NULL, token_expiry INTEGER NOT NULL, refresh_expiry INTEGER NOT NULL,
+            scopes TEXT NOT NULL, connected_at TEXT NOT NULL
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS tiktok_posts (
+            publish_id TEXT PRIMARY KEY, calendar_id INTEGER NOT NULL, status TEXT NOT NULL,
+            status_detail TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        )""")
     _ensure_bootstrap_admin()
 
 init_db()
@@ -690,7 +702,7 @@ def youtube_oauth_callback(request: Request, code: str = "", state: str = "", er
         return RedirectResponse("/?youtube_oauth=denied", status_code=303)
     actor = getattr(request.state, "user", {}) or {}
     with db() as conn:
-        saved = conn.execute("SELECT admin_user_id,expires_at FROM youtube_oauth_states WHERE state=?", (state,)).fetchone()
+        saved = conn.execute("SELECT admin_user_id,session_hash,expires_at FROM youtube_oauth_states WHERE state=?", (state,)).fetchone()
         conn.execute("DELETE FROM youtube_oauth_states WHERE state=?", (state,))
     session_hash = hashlib.sha256((request.cookies.get(SESSION_COOKIE) or "local-dev-session").encode()).hexdigest()
     if not state or not saved or saved["admin_user_id"] != actor.get("id") or saved["session_hash"] != session_hash or saved["expires_at"] < int(time.time()):
@@ -977,6 +989,221 @@ def meta_instagram_publish(calendar_id:int,video_url:str=Query(...,min_length=12
     if not media_id: raise HTTPException(status_code=502,detail="Instagram media ID missing.")
     with db() as conn: conn.execute("UPDATE content_calendar SET status='Published' WHERE id=?",(calendar_id,))
     return {"calendar_id":calendar_id,"instagram_media_id":media_id,"status":"Published","message":"Instagram Reel published."}
+
+
+
+def _tiktok_config():
+    return {"client_key":os.getenv("TIKTOK_CLIENT_KEY","").strip(),
+            "client_secret":os.getenv("TIKTOK_CLIENT_SECRET","").strip(),
+            "redirect_uri":os.getenv("TIKTOK_REDIRECT_URI","").strip(),
+            "encryption_key":os.getenv("YOUTUBE_TOKEN_ENCRYPTION_KEY","").strip()}
+
+
+def _tiktok_request(url, payload=None, headers=None, method="POST", timeout=60):
+    if not url.startswith("https://open.tiktokapis.com/") and not url.startswith("https://open-upload.tiktokapis.com/") and not url.startswith("https://www.tiktok.com/"):
+        raise HTTPException(status_code=400,detail="TikTok API URL rejected.")
+    request=urllib.request.Request(url,data=payload,headers=headers or {},method=method)
+    try:
+        with urllib.request.urlopen(request,timeout=timeout) as response:
+            raw=response.read()
+            return response.status,dict(response.headers.items()),json.loads(raw.decode()) if raw else {}
+    except urllib.error.HTTPError as exc:
+        detail=exc.read(3000).decode("utf-8",errors="replace")
+        raise HTTPException(status_code=502,detail="TikTok API error ("+str(exc.code)+"): "+detail[:700]) from None
+    except (urllib.error.URLError,TimeoutError):
+        raise HTTPException(status_code=502,detail="TikTok API connection failed.") from None
+    except (ValueError,UnicodeDecodeError):
+        raise HTTPException(status_code=502,detail="TikTok API response invalid.") from None
+
+
+def _tiktok_connection():
+    with db() as conn:
+        row=conn.execute("SELECT open_id,display_name,token_expiry,refresh_expiry,scopes,connected_at FROM tiktok_connection WHERE id=1").fetchone()
+    return dict(row) if row else None
+
+
+def _tiktok_tokens():
+    config=_tiktok_config()
+    if not config["client_key"] or not config["client_secret"]:
+        raise HTTPException(status_code=503,detail="TIKTOK_CLIENT_KEY aur TIKTOK_CLIENT_SECRET configure karein.")
+    with db() as conn:
+        row=conn.execute("SELECT encrypted_tokens,token_expiry,refresh_expiry FROM tiktok_connection WHERE id=1").fetchone()
+    if not row: raise HTTPException(status_code=409,detail="Pehle TikTok account connect karein.")
+    try: tokens=json.loads(_youtube_cipher().decrypt(row["encrypted_tokens"].encode()).decode())
+    except (InvalidToken,ValueError,json.JSONDecodeError):
+        raise HTTPException(status_code=503,detail="TikTok credentials decrypt nahi ho rahe; reconnect karein.") from None
+    if int(row["token_expiry"])<=int(time.time())+120:
+        if int(row["refresh_expiry"])<=int(time.time()) or not tokens.get("refresh_token"):
+            raise HTTPException(status_code=401,detail="TikTok refresh token expire ho gaya; account reconnect karein.")
+        payload=urllib.parse.urlencode({"client_key":config["client_key"],"client_secret":config["client_secret"],
+            "grant_type":"refresh_token","refresh_token":tokens["refresh_token"]}).encode()
+        _,_,refreshed=_tiktok_request("https://open.tiktokapis.com/v2/oauth/token/",payload,
+            {"Content-Type":"application/x-www-form-urlencoded"})
+        if refreshed.get("error") not in (None,"","ok") or not refreshed.get("access_token"):
+            raise HTTPException(status_code=401,detail="TikTok token refresh failed; reconnect karein.")
+        tokens.update(refreshed)
+        expiry=int(time.time())+int(refreshed.get("expires_in",86400))
+        refresh_expiry=int(time.time())+int(refreshed.get("refresh_expires_in",0))
+        encrypted=_youtube_cipher().encrypt(json.dumps(tokens).encode()).decode()
+        with db() as conn:
+            conn.execute("UPDATE tiktok_connection SET encrypted_tokens=?,token_expiry=?,refresh_expiry=?,scopes=? WHERE id=1",
+                (encrypted,expiry,refresh_expiry,str(tokens.get("scope",""))))
+    return tokens
+
+
+def _tiktok_creator_info(tokens):
+    _,_,body=_tiktok_request("https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
+        json.dumps({}).encode(),{"Authorization":"Bearer "+tokens["access_token"],"Content-Type":"application/json; charset=UTF-8"})
+    if body.get("error",{}).get("code")!="ok":
+        raise HTTPException(status_code=502,detail="TikTok creator info failed: "+str(body.get("error",{}).get("message","unknown error")))
+    return body.get("data",{})
+
+
+@app.get("/api/admin/tiktok/status")
+def tiktok_admin_status():
+    cfg=_tiktok_config(); connection=_tiktok_connection()
+    return {"oauth_configured":bool(cfg["client_key"] and cfg["client_secret"] and cfg["redirect_uri"]),
+        "encryption_configured":bool(cfg["encryption_key"]),"connected":bool(connection),
+        "creator":{"open_id":connection["open_id"],"display_name":connection["display_name"]} if connection else None,
+        "scopes":connection["scopes"].split(",") if connection and connection["scopes"] else [],
+        "note":"TikTok Content Posting API approval and video.publish scope required. Unaudited apps can only post privately."}
+
+
+@app.post("/api/admin/tiktok/oauth/start")
+def tiktok_oauth_start(request:Request):
+    cfg=_tiktok_config()
+    if not cfg["client_key"] or not cfg["client_secret"] or not cfg["redirect_uri"]:
+        raise HTTPException(status_code=503,detail="TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET aur TIKTOK_REDIRECT_URI configure karein.")
+    parsed=urllib.parse.urlparse(cfg["redirect_uri"])
+    if parsed.scheme!="https" or not parsed.netloc or parsed.query or parsed.fragment:
+        raise HTTPException(status_code=503,detail="TikTok web redirect URI registered HTTPS static URL hona chahiye.")
+    _youtube_cipher()
+    actor=getattr(request.state,"user",{}) or {}
+    state=secrets.token_urlsafe(32); expiry=int(time.time())+600
+    session_hash=hashlib.sha256((request.cookies.get(SESSION_COOKIE) or "local-dev-session").encode()).hexdigest()
+    with db() as conn:
+        conn.execute("DELETE FROM tiktok_oauth_states WHERE expires_at < ?",(int(time.time()),))
+        conn.execute("INSERT INTO tiktok_oauth_states(state,admin_user_id,session_hash,expires_at) VALUES(?,?,?,?)",
+            (state,actor["id"],session_hash,expiry))
+    params=urllib.parse.urlencode({"client_key":cfg["client_key"],"response_type":"code",
+        "scope":"user.info.basic,video.publish","redirect_uri":cfg["redirect_uri"],"state":state})
+    return {"authorization_url":"https://www.tiktok.com/v2/auth/authorize/?"+params,"expires_in":600}
+
+
+@app.get("/api/admin/tiktok/oauth/callback")
+def tiktok_oauth_callback(request:Request,code:str="",state:str="",error:str=""):
+    from fastapi.responses import RedirectResponse
+    if error: return RedirectResponse("/?tiktok_oauth=denied",status_code=303)
+    actor=getattr(request.state,"user",{}) or {}
+    with db() as conn:
+        saved=conn.execute("SELECT admin_user_id,session_hash,expires_at FROM tiktok_oauth_states WHERE state=?",(state,)).fetchone()
+        conn.execute("DELETE FROM tiktok_oauth_states WHERE state=?",(state,))
+    session_hash=hashlib.sha256((request.cookies.get(SESSION_COOKIE) or "local-dev-session").encode()).hexdigest()
+    if not state or not saved or saved["admin_user_id"]!=actor.get("id") or saved["session_hash"]!=session_hash or saved["expires_at"]<int(time.time()):
+        raise HTTPException(status_code=400,detail="TikTok OAuth state invalid/expired. Dobara connect karein.")
+    if not code: raise HTTPException(status_code=400,detail="TikTok authorization code missing.")
+    cfg=_tiktok_config()
+    payload=urllib.parse.urlencode({"client_key":cfg["client_key"],"client_secret":cfg["client_secret"],
+        "code":code,"grant_type":"authorization_code","redirect_uri":cfg["redirect_uri"]}).encode()
+    _,_,tokens=_tiktok_request("https://open.tiktokapis.com/v2/oauth/token/",payload,
+        {"Content-Type":"application/x-www-form-urlencoded"})
+    if tokens.get("error") not in (None,"","ok") or not tokens.get("access_token") or not tokens.get("open_id"):
+        raise HTTPException(status_code=502,detail="TikTok token exchange failed: "+str(tokens.get("error_description",tokens.get("error","missing token"))))
+    access=tokens["access_token"]
+    _,_,profile=_tiktok_request("https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name",
+        headers={"Authorization":"Bearer "+access})
+    if profile.get("error",{}).get("code")!="ok":
+        raise HTTPException(status_code=502,detail="TikTok profile fetch failed.")
+    user=profile.get("data",{}).get("user",{})
+    expiry=int(time.time())+int(tokens.get("expires_in",86400))
+    refresh_expiry=int(time.time())+int(tokens.get("refresh_expires_in",0))
+    encrypted=_youtube_cipher().encrypt(json.dumps(tokens).encode()).decode()
+    with db() as conn:
+        conn.execute("""INSERT INTO tiktok_connection(id,open_id,display_name,encrypted_tokens,token_expiry,refresh_expiry,scopes,connected_at)
+            VALUES(1,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET open_id=excluded.open_id,display_name=excluded.display_name,
+            encrypted_tokens=excluded.encrypted_tokens,token_expiry=excluded.token_expiry,refresh_expiry=excluded.refresh_expiry,
+            scopes=excluded.scopes,connected_at=excluded.connected_at""",
+            (tokens["open_id"],user.get("display_name","TikTok creator"),encrypted,expiry,refresh_expiry,
+             str(tokens.get("scope","")),datetime.now(timezone.utc).isoformat()))
+    return RedirectResponse("/?tiktok_oauth=connected",status_code=303)
+
+
+@app.get("/api/admin/tiktok/creator")
+def tiktok_creator():
+    tokens=_tiktok_tokens(); creator=_tiktok_creator_info(tokens)
+    return {"creator":creator}
+
+
+@app.post("/api/admin/tiktok/disconnect")
+def tiktok_disconnect():
+    with db() as conn:
+        conn.execute("DELETE FROM tiktok_connection WHERE id=1")
+        conn.execute("DELETE FROM tiktok_posts")
+    return {"connected":False,"message":"TikTok account disconnected; encrypted tokens deleted."}
+
+
+@app.post("/api/admin/tiktok/publish/{calendar_id}")
+def tiktok_publish(calendar_id:int,video_id:str=Query(...,min_length=32,max_length=32),
+                   title:str=Query(default="",max_length=2200),privacy_level:str=Query(default="SELF_ONLY"),
+                   is_aigc:bool=Query(default=False)):
+    if not re.fullmatch(r"[a-f0-9]{32}",video_id): raise HTTPException(status_code=400,detail="Invalid rendered video ID.")
+    with db() as conn:
+        item=conn.execute("SELECT id,status,platform FROM content_calendar WHERE id=?",(calendar_id,)).fetchone()
+    if not item or item["status"]!="Approved" or item["platform"]!="tiktok":
+        raise HTTPException(status_code=409,detail="TikTok calendar item approved hona chahiye.")
+    path=OUTPUT_DIR/(video_id+".mp4")
+    if not path.is_file() or path.stat().st_size<=0 or path.stat().st_size>512*1024*1024:
+        raise HTTPException(status_code=404,detail="Valid rendered MP4 (max 512 MB) nahi mili.")
+    tokens=_tiktok_tokens(); creator=_tiktok_creator_info(tokens)
+    allowed=creator.get("privacy_level_options",[])
+    if privacy_level not in allowed:
+        raise HTTPException(status_code=400,detail="Privacy option TikTok creator info ke mutabik valid nahi. Available: "+", ".join(allowed))
+    size=path.stat().st_size; chunk_size=10*1024*1024; chunks=(size+chunk_size-1)//chunk_size
+    body={"post_info":{"title":title,"privacy_level":privacy_level,"disable_duet":bool(creator.get("duet_disabled",False)),
+        "disable_comment":bool(creator.get("comment_disabled",False)),"disable_stitch":bool(creator.get("stitch_disabled",False)),
+        "brand_content_toggle":False,"brand_organic_toggle":False,"is_aigc":bool(is_aigc)},
+        "source_info":{"source":"FILE_UPLOAD","video_size":size,"chunk_size":chunk_size,"total_chunk_count":chunks}}
+    _,_,result=_tiktok_request("https://open.tiktokapis.com/v2/post/publish/video/init/",
+        json.dumps(body).encode(),{"Authorization":"Bearer "+tokens["access_token"],"Content-Type":"application/json; charset=UTF-8"})
+    if result.get("error",{}).get("code")!="ok":
+        raise HTTPException(status_code=502,detail="TikTok publish init failed: "+str(result.get("error",{}).get("message","unknown error")))
+    data=result.get("data",{}); publish_id=data.get("publish_id"); upload_url=data.get("upload_url")
+    parsed=urllib.parse.urlparse(upload_url or "")
+    if not publish_id or parsed.scheme!="https" or parsed.hostname!="open-upload.tiktokapis.com":
+        raise HTTPException(status_code=502,detail="TikTok upload endpoint invalid.")
+    with path.open("rb") as video:
+        for index in range(chunks):
+            start=index*chunk_size; block=video.read(chunk_size); end=start+len(block)-1
+            _,_,_= _tiktok_request(upload_url,block,{"Content-Type":"video/mp4","Content-Length":str(len(block)),
+                "Content-Range":f"bytes {start}-{end}/{size}"},method="PUT",timeout=180)
+    now=datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        conn.execute("INSERT OR REPLACE INTO tiktok_posts(publish_id,calendar_id,status,status_detail,created_at,updated_at) VALUES(?,?,?,?,?,?)",
+            (publish_id,calendar_id,"PROCESSING_UPLOAD","Video uploaded to TikTok; processing continues asynchronously.",now,now))
+    return {"calendar_id":calendar_id,"publish_id":publish_id,"status":"PROCESSING_UPLOAD",
+        "message":"Video TikTok par transfer ho gaya. TikTok processing status check karein; publish completion abhi pending hai."}
+
+
+@app.post("/api/admin/tiktok/status/{calendar_id}")
+def tiktok_publish_status(calendar_id:int):
+    with db() as conn:
+        row=conn.execute("SELECT publish_id,status,status_detail FROM tiktok_posts WHERE calendar_id=? ORDER BY created_at DESC LIMIT 1",(calendar_id,)).fetchone()
+    if not row: raise HTTPException(status_code=404,detail="TikTok publish job not found.")
+    tokens=_tiktok_tokens()
+    _,_,result=_tiktok_request("https://open.tiktokapis.com/v2/post/publish/status/fetch/",
+        json.dumps({"publish_id":row["publish_id"]}).encode(),{"Authorization":"Bearer "+tokens["access_token"],"Content-Type":"application/json; charset=UTF-8"})
+    if result.get("error",{}).get("code")!="ok":
+        raise HTTPException(status_code=502,detail="TikTok status fetch failed: "+str(result.get("error",{}).get("message","unknown error")))
+    data=result.get("data",{}); status=data.get("status","UNKNOWN")
+    detail=data.get("fail_reason") or data.get("publicaly_available_post_id") or ""
+    now=datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        conn.execute("UPDATE tiktok_posts SET status=?,status_detail=?,updated_at=? WHERE publish_id=?",
+            (status,str(detail),now,row["publish_id"]))
+        if status=="PUBLISH_COMPLETE":
+            conn.execute("UPDATE content_calendar SET status='Published' WHERE id=?",(calendar_id,))
+    return {"calendar_id":calendar_id,"publish_id":row["publish_id"],"status":status,
+        "detail":detail,"published":status=="PUBLISH_COMPLETE"}
 
 
 @app.get("/api/calendar")
