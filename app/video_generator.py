@@ -88,7 +88,7 @@ def _extract_video_file_id(payload: dict) -> str | None:
                 break
     if not isinstance(uri, str):
         return None
-    match = re.fullmatch(r"https://generativelanguage\\.googleapis\\.com/v1beta/files/([A-Za-z0-9_-]+):download(?:\\?alt=media)?", uri)
+    match = re.fullmatch(r"https://generativelanguage\.googleapis\.com/v1beta/files/([A-Za-z0-9_-]+):download(?:\?alt=media)?", uri)
     return match.group(1) if match else None
 
 
