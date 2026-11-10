@@ -199,6 +199,16 @@
     </section>
     <section class="panel">
       <div class="panel-head"><div><h2>Task History</h2><p>Recent prompts and generated outputs.</p></div><button id="refresh" class="secondary" type="button">Refresh</button></div>
+      <div class="task-filters">
+        <input id="taskSearch" type="search" maxlength="200" placeholder="Search prompts or task ID…" aria-label="Search task history">
+        <select id="taskStatusFilter" aria-label="Filter by task status">
+          <option value="">All statuses</option><option>Completed</option><option>Failed</option><option>Blocked</option><option>Pending</option><option>Generating</option>
+        </select>
+        <select id="taskWorkflowFilter" aria-label="Filter by workflow">
+          <option value="">All workflows</option><option value="shorts">Shorts</option><option value="long-video">Long video</option><option value="thumbnail">Thumbnail</option><option value="script">Script</option><option value="research">Research</option><option value="course">Course</option><option value="social">Social</option><option value="content">Content</option>
+        </select>
+      </div>
+      <div id="taskFilterSummary" class="muted" aria-live="polite"></div>
       <div id="tasks">No tasks yet.</div>
     </section>
     <section class="panel roadmap">
