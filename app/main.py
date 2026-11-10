@@ -96,6 +96,7 @@ class AIVideoInput(BaseModel):
     resolution: str = Field(default="720p", max_length=5)
     style: str = Field(default="cinematic", max_length=20)
     reference_image_id: str | None = Field(default=None, max_length=32)
+    duration_seconds: int = Field(default=8, ge=3, le=10)
 
 class ImageInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=3000)
@@ -430,11 +431,13 @@ def create_ai_video(payload: AIVideoInput, media_token: str = Header(default="",
         raise HTTPException(status_code=400, detail="Aspect ratio 9:16 ya 16:9 hona chahiye.")
     if payload.resolution not in {"360p", "720p", "1080p", "4k"}:
         raise HTTPException(status_code=400, detail="Unsupported video resolution.")
+    if payload.duration_seconds < 3 or payload.duration_seconds > 10:
+        raise HTTPException(status_code=400, detail="Clip duration 3 se 10 seconds ke beech honi chahiye.")
     if payload.style not in {"cinematic", "2d-animation", "3d-animation", "documentary", "anime", "motion-graphics"}:
         raise HTTPException(status_code=400, detail="Unsupported video style.")
     try:
         return generate_video(payload.prompt, payload.aspect_ratio, payload.resolution,
-                              payload.style, payload.reference_image_id)
+                              payload.style, payload.reference_image_id, payload.duration_seconds)
     except VideoUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except VideoGenerationFailed as exc:
