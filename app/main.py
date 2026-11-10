@@ -426,6 +426,12 @@ def create_ai_video(payload: AIVideoInput, media_token: str = Header(default="",
     expected = os.getenv("MEDIA_GENERATION_TOKEN", "")
     if not expected or not hmac.compare_digest(media_token, expected):
         raise HTTPException(status_code=403, detail="Valid media access token required.")
+    if payload.aspect_ratio not in {"9:16", "16:9"}:
+        raise HTTPException(status_code=400, detail="Aspect ratio 9:16 ya 16:9 hona chahiye.")
+    if payload.resolution not in {"360p", "720p", "1080p", "4k"}:
+        raise HTTPException(status_code=400, detail="Unsupported video resolution.")
+    if payload.style not in {"cinematic", "2d-animation", "3d-animation", "documentary", "anime", "motion-graphics"}:
+        raise HTTPException(status_code=400, detail="Unsupported video style.")
     try:
         return generate_video(payload.prompt, payload.aspect_ratio, payload.resolution,
                               payload.style, payload.reference_image_id)
