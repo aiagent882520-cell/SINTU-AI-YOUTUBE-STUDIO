@@ -11,6 +11,19 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = ROOT / "generated_videos"
 WIDTH, HEIGHT = 720, 1280
+OUTPUT_PROFILES = {"720x1280": (720,1280), "1080x1920": (1080,1920), "1080x1080": (1080,1080), "1280x720": (1280,720), "1920x1080": (1920,1080)}
+QUALITY_PROFILES = {"standard": 23, "high": 20, "maximum": 18}
+
+
+def _render_settings(resolution: str, fps: int, quality: str):
+    if resolution not in OUTPUT_PROFILES:
+        raise ValueError("Unsupported render resolution profile.")
+    if fps not in {24, 30, 60}:
+        raise ValueError("FPS 24, 30 ya 60 hona chahiye.")
+    if quality not in QUALITY_PROFILES:
+        raise ValueError("Quality standard, high ya maximum honi chahiye.")
+    width, height = OUTPUT_PROFILES[resolution]
+    return width, height, QUALITY_PROFILES[quality], "veryfast"
 
 
 class RendererUnavailable(Exception):
@@ -50,7 +63,9 @@ def _wrap(draw, text, font, max_width):
 
 
 def _make_frame(path: Path, title: str, scene: str, index: int, total: int,
-                source_image: Path | None = None, subtitle: str | None = None):
+                source_image: Path | None = None, subtitle: str | None = None,
+                width: int = WIDTH, height: int = HEIGHT):
+    WIDTH, HEIGHT = width, height
     if source_image:
         with Image.open(source_image) as source:
             source.load()
@@ -97,10 +112,12 @@ def _make_frame(path: Path, title: str, scene: str, index: int, total: int,
 def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                       image_paths: list[Path] | None = None, audio_path: Path | None = None,
                       subtitles: list[str] | None = None, music_path: Path | None = None,
-                      music_volume: float = 0.18, transition: str = "fade", motion: str = "none") -> dict:
+                      music_volume: float = 0.18, transition: str = "fade", motion: str = "none",
+                      resolution: str = "720x1280", fps: int = 30, quality: str = "high") -> dict:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RendererUnavailable("FFmpeg server par installed nahi hai. Video rendering filhaal unavailable hai.")
+    width, height, crf, preset = _render_settings(resolution, fps, quality)
     if not scenes or len(scenes) > 25:
         raise ValueError("1 se 25 scenes required hain.")
     if not 2 <= seconds_per_scene <= 12:
@@ -140,7 +157,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                 frame = work / f"frame-{index:03d}.png"
                 source_image = image_paths[index - 1] if image_paths else None
                 subtitle = subtitles[index - 1] if subtitles else None
-                _make_frame(frame, title, scene, index, len(scenes), source_image, subtitle)
+                _make_frame(frame, title, scene, index, len(scenes), source_image, subtitle, width, height)
                 lines.append(f"file '{frame.as_posix()}'")
                 lines.append(f"duration {seconds_per_scene}")
             lines.append(f"file '{(work / f'frame-{len(scenes):03d}.png').as_posix()}'")
@@ -154,9 +171,9 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                     filters.append(f"fade=t=out:st={point - 0.35}:d=0.35")
                     filters.append(f"fade=t=in:st={point}:d=0.35")
             if motion == "slow-zoom-in":
-                filters.insert(0, "zoompan=z='min(zoom+0.0008,1.12)':d=1:s=720x1280:fps=30")
+                filters.insert(0, f"zoompan=z='min(zoom+0.0008,1.12)':d=1:s={width}x{height}:fps={fps}")
             elif motion == "slow-zoom-out":
-                filters.insert(0, "zoompan=z='max(zoom-0.0008,1.0)':d=1:s=720x1280:fps=30")
+                filters.insert(0, f"zoompan=z='max(zoom-0.0008,1.0)':d=1:s={width}x{height}:fps={fps}")
             video_filter = ",".join(filters)
             command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
                        "-f", "concat", "-safe", "0", "-i", str(concat)]
@@ -182,8 +199,9 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                 command += ["-map", "0:v:0", "-an"]
             if video_filter:
                 command += ["-vf", video_filter]
-            command += ["-t", str(duration), "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                        "-r", "30", "-movflags", "+faststart", str(output_path)]
+            command += ["-t", str(duration), "-c:v", "libx264", "-preset", preset,
+                        "-crf", str(crf), "-pix_fmt", "yuv420p", "-r", str(fps),
+                        "-movflags", "+faststart", str(output_path)]
             completed = subprocess.run(command, capture_output=True, text=True, timeout=180, check=False)
             if completed.returncode != 0 or not output_path.exists():
                 detail = (completed.stderr or "FFmpeg render failed")[-1200:]
@@ -200,7 +218,10 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         "url": f"/api/videos/{video_id}",
         "scenes": len(scenes),
         "duration_seconds": len(scenes) * seconds_per_scene,
-        "resolution": f"{WIDTH}x{HEIGHT}",
+        "resolution": f"{width}x{height}",
+        "fps": fps,
+        "quality": quality,
+        "video_codec": "H.264 / libx264",
         "audio": "voiceover+music" if audio_path and music_path else "voiceover" if audio_path else "music" if music_path else "none",
         "music": bool(music_path),
         "music_volume": music_volume if music_path else None,
@@ -215,7 +236,9 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
 
 def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                     music_path: Path | None = None, music_volume: float = 0.18,
-                    subtitles: list[str] | None = None, transition: str = "cut", transitions: list[str] | None = None, clip_audio_volumes: list[float] | None = None) -> dict:
+                    subtitles: list[str] | None = None, transition: str = "cut", transitions: list[str] | None = None,
+                    clip_audio_volumes: list[float] | None = None, resolution: str = "720x1280",
+                    fps: int = 30, quality: str = "high") -> dict:
     """Join AI MP4 clips, preserving source audio and optionally mixing narration/music/captions."""
     import json
 
@@ -223,6 +246,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
     ffprobe = shutil.which("ffprobe")
     if not ffmpeg or not ffprobe:
         raise RendererUnavailable("FFmpeg aur FFprobe server par installed hone chahiye.")
+    width, height, crf, preset = _render_settings(resolution, fps, quality)
     if not video_paths or len(video_paths) > 25:
         raise ValueError("1 se 25 AI video clips required hain.")
     if not 0.0 <= music_volume <= 1.0:
@@ -311,8 +335,8 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                 video_labels.append(f"[{vlabel}]")
                 audio_labels.append(f"[{alabel}]")
                 vfilters = (
-                    f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,"
-                    f"crop={WIDTH}:{HEIGHT},fps=30,setsar=1,format=yuv420p,setpts=PTS-STARTPTS"
+                    f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+                    f"crop={width}:{height},fps={fps},setsar=1,format=yuv420p,setpts=PTS-STARTPTS"
                 )
                 if len(clip_info) > 1:
                     fade_duration = min(0.35, info["duration"] / 4)
@@ -370,7 +394,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                 video_map = "[vout]"
 
             command += ["-filter_complex", ";".join(filters), "-map", video_map, "-map", "[aout]",
-                        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+                        "-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
                         "-c:a", "aac", "-b:a", "192k", "-t", f"{total_duration:.3f}",
                         "-movflags", "+faststart", str(output_path)]
             completed = subprocess.run(command, capture_output=True, text=True, timeout=900, check=False)
@@ -390,7 +414,10 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         "url": f"/api/videos/{video_id}",
         "scenes": len(video_paths),
         "duration_seconds": round(total_duration, 2),
-        "resolution": f"{WIDTH}x{HEIGHT}",
+        "resolution": f"{width}x{height}",
+        "fps": fps,
+        "quality": quality,
+        "video_codec": "H.264 / libx264",
         "audio": "source+voiceover+music" if audio_path and music_path else "source+voiceover" if audio_path else "source+music" if music_path else "source-audio",
         "music": bool(music_path),
         "music_volume": music_volume if music_path else None,
@@ -407,11 +434,13 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                           seconds_per_scene: int = 4, audio_path: Path | None = None,
                           music_path: Path | None = None, music_volume: float = 0.18,
                           subtitles: list[str] | None = None, transition: str = "cut",
-                          transitions: list[str] | None = None) -> dict:
+                          transitions: list[str] | None = None, resolution: str = "720x1280",
+                          fps: int = 30, quality: str = "high") -> dict:
     """Create one ordered timeline from generated still images and AI video clips."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RendererUnavailable("FFmpeg server par installed nahi hai.")
+    width, height, _, _ = _render_settings(resolution, fps, quality)
     if not items or len(items) > 25 or len(items) != len(scenes):
         raise ValueError("Timeline mein 1 se 25 items hon aur har item ka scene text ho.")
     if not 2 <= seconds_per_scene <= 12:
@@ -458,7 +487,7 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                 if not isinstance(image_duration, int) or not 2 <= image_duration <= 12:
                     raise ValueError("Har still image ki duration 2 se 12 seconds honi chahiye.")
                 frame = work / f"still-{index:03d}.png"
-                _make_frame(frame, title, scenes[index - 1], index, len(items), path)
+                _make_frame(frame, title, scenes[index - 1], index, len(items), path, width=width, height=height)
                 segment = work / f"still-{index:03d}.mp4"
                 completed = subprocess.run(
                     [ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
@@ -477,7 +506,8 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
         result = render_ai_clips(
             clip_paths, audio_path=audio_path, music_path=music_path,
             music_volume=music_volume, subtitles=subtitles, transition=transition, transitions=transitions,
-            clip_audio_volumes=[float(item.get("audio_volume", 0.25)) if item["kind"] == "video" else 0.0 for item in items]
+            clip_audio_volumes=[float(item.get("audio_volume", 0.25)) if item["kind"] == "video" else 0.0 for item in items],
+            resolution=resolution, fps=fps, quality=quality
         )
         result["timeline_items"] = len(items)
         result["timeline_order"] = [item["kind"] for item in items]
