@@ -556,3 +556,37 @@ def test_video_generator_extracts_mp4_from_rest_steps():
         {"type": "video", "mime_type": "video/mp4", "data": base64.b64encode(mp4).decode()}
     ]}]}
     assert _extract_video(payload) == mp4
+
+
+def test_video_generator_calls_gemini_and_saves_mp4(tmp_path, monkeypatch):
+    import base64
+    import json
+    from app import video_generator
+    mp4 = b"1234ftypmp42valid-video-content"
+    response_body = json.dumps({"id": "interaction-test", "status": "completed", "steps": [
+        {"type": "model_output", "content": [
+            {"type": "video", "mime_type": "video/mp4", "data": base64.b64encode(mp4).decode()}
+        ]}
+    ]}).encode()
+    class FakeResponse:
+        headers = {}
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self, limit): return response_body
+    captured = {}
+    def fake_urlopen(request, timeout):
+        captured["request"] = request
+        captured["timeout"] = timeout
+        return FakeResponse()
+    output_dir = tmp_path / "ai-videos"
+    monkeypatch.setattr(video_generator, "AI_VIDEO_DIR", output_dir)
+    monkeypatch.setattr(video_generator.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-secret")
+    result = video_generator.generate_video("A cinematic forest", "9:16", "720p", "cinematic")
+    body = json.loads(captured["request"].data)
+    assert body["model"] == "gemini-omni-1.1-flash"
+    assert body["response_format"]["aspect_ratio"] == "9:16"
+    assert captured["timeout"] == 360
+    assert result["interaction_id"] == "interaction-test"
+    assert (output_dir / (result["video_id"] + ".mp4")).read_bytes() == mp4
