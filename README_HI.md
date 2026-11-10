@@ -26,7 +26,7 @@ API keys and billing are separate from a ChatGPT or Google AI Studio consumer su
 - Dedicated AI workflows: Shorts, long video, thumbnail concepts, script/storytelling, research/fact-check plan, course/lesson/quiz, social content, general content.
 - Workflow-aware OpenAI and Gemini text generation adapters.
 - Task history, task detail retrieval, status counters and TXT / Markdown / JSON exports.
-- MP4 assembly accepts saved scene-image IDs, optional generated MP3 narration, optional burn-in captions, and a user-uploaded licensed music track (MP3/WAV/M4A/AAC/OGG, 15 MB limit). Music uploads require the media access token; FFmpeg mixes narration and music with configurable music volume. Scene transitions support fade or cut. Music rights remain the user's responsibility. Optional Ken Burns slow-zoom-in/out motion is supported; this is not 2D/3D animation.
+- MP4 assembly accepts saved scene-image IDs, optional generated MP3 narration, optional burn-in captions, and a user-uploaded licensed music track (MP3/WAV/M4A/AAC/OGG, 15 MB limit). Music uploads require the media access token; FFmpeg mixes narration and music with configurable music volume and automatic music fade-in/fade-out. Scene transitions support fade or cut. Music rights remain the user's responsibility. Optional Ken Burns slow-zoom-in/out motion is supported; this is not 2D/3D animation.
 - Optional AI music generation via Stability AI Stable Audio 3.0 text-to-audio API (5–360 seconds, MP3). Requires `ENABLE_PAID_MEDIA_GENERATION=true`, `STABILITY_API_KEY`, and `MEDIA_GENERATION_TOKEN`; paid usage is disabled by default. Generated track can be selected for MP4 rendering.
 - SRT subtitle export with configurable per-line timing.\n- Optional OpenAI text-to-speech MP3 voiceover; disabled by default and requires `ENABLE_PAID_MEDIA_GENERATION=true` plus a server-side `OPENAI_API_KEY`. Paid provider usage may apply. The route also requires a server-side `MEDIA_GENERATION_TOKEN` and the same token in the dashboard field; do not reuse your OpenAI API key as this token.
 - FastAPI health, provider, agent and workflow endpoints.
@@ -38,7 +38,7 @@ API keys and billing are separate from a ChatGPT or Google AI Studio consumer su
 
 ## Not yet integrated / not verified
 
-This repository is not yet a complete autonomous video studio. AI video footage generation, licensed music, commercial music library integration and advanced FFmpeg editing/VFX beyond basic slow zoom, YouTube/social OAuth publishing, analytics/revenue connectors, autonomous multi-agent execution, managed database and native Android/iOS apps require further integrations and testing. Basic storyboard MP4 rendering is available only where FFmpeg is installed. A generated script or production package is not a rendered video file. No publishing or external account action occurs automatically.
+This repository is not yet a complete autonomous video studio. AI video footage generation, commercial music library integration and advanced FFmpeg editing/VFX beyond basic slow zoom, YouTube/social OAuth publishing, analytics/revenue connectors, autonomous multi-agent execution, managed database and native Android/iOS apps require further integrations and testing. Basic storyboard MP4 rendering is available only where FFmpeg is installed. A generated script or production package is not a rendered video file. No publishing or external account action occurs automatically.
 
 ## Production notes
 
