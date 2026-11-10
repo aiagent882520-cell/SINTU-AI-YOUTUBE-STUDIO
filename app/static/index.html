@@ -203,6 +203,12 @@
       <div class="actions"><button id="youtubeConnect" type="button">Connect YouTube Channel</button><button id="youtubeDisconnect" class="secondary" type="button" hidden>Disconnect</button></div>
       <p class="foot">Connect karne ke liye Google Cloud Console mein YouTube Data API v3 enable karein, OAuth Web Client banayein aur server secrets set karein. Upload default Private rahega; public/unlisted sirf admin ke explicit selection par. YouTube quota limits apply.</p>
     </section>
+    <section class="panel" id="metaAdminPanel" hidden>
+      <div class="panel-head"><div><h2>Instagram & Facebook Connection</h2><p>Meta OAuth, Facebook Page video aur Instagram Reels publishing.</p></div><button id="metaRefresh" class="secondary" type="button">Refresh</button></div>
+      <div id="metaConnectionStatus" class="muted" role="status" aria-live="polite">Checking Meta setup…</div>
+      <div class="actions"><button id="metaConnect" type="button">Connect Facebook Page</button><button id="metaDisconnect" class="secondary" type="button" hidden>Disconnect</button></div>
+      <p class="foot">Instagram ke liye linked Business/Creator account aur public HTTPS MP4 URL chahiye. Facebook upload connected Page par local rendered MP4 bhejta hai. Meta App Review/permissions aur API limits apply.</p>
+    </section>
     <section class="panel" id="calendarPanel">
       <div class="panel-head"><div><h2>Content Calendar & Scheduling</h2><p>Plan YouTube, Shorts, Instagram, Facebook, TikTok and website content.</p></div><button id="calendarRefresh" class="secondary" type="button">Refresh</button></div>
       <form id="calendarForm" class="calendar-form">
