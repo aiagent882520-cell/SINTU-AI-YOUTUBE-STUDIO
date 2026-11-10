@@ -192,6 +192,9 @@ $("renderButton").addEventListener("click", async () => {
         audio_id: $("renderAudioId").value.trim() || null,
         music_id: $("renderMusicId").value.trim() || null,
         music_volume: Number($("musicVolume").value || 0.18),
+        resolution: $("renderResolution").value,
+        fps: Number($("renderFps").value),
+        quality: $("renderQuality").value,
         transition: $("renderTransition").value,
         motion: $("renderTimeline").value.trim() || $("renderVideoIds").value.trim() ? "none" : $("renderMotion").value,
         subtitles: $("renderTimeline").value.trim() ? timelineRows().map(x => x.subtitle || "") : $("renderSubtitles").value.split("\n").map(x => x.trim()).filter(Boolean)
@@ -199,7 +202,7 @@ $("renderButton").addEventListener("click", async () => {
     });
     $("renderVideo").src = result.url;
     $("renderDownload").href = result.url;
-    $("renderNotice").textContent = result.resolution + " · " + result.duration_seconds + " sec · " + result.format + " · Audio: " + result.audio + " · Transition: " + result.transition + " · Motion: " + (result.motion || "none");
+    $("renderNotice").textContent = result.resolution + " · " + (result.fps || 30) + " FPS · " + (result.quality || "high") + " quality · " + result.duration_seconds + " sec · " + result.format + " · Audio: " + result.audio + " · Transition: " + result.transition + " · Motion: " + (result.motion || "none");
     $("renderResult").hidden = false;
   } catch (error) {
     $("renderNotice").textContent = error.message;
