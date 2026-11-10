@@ -1,5 +1,15 @@
 const $ = (id) => document.getElementById(id);
 let latestTaskId = null;
+
+function queueTimelineAsset(kind, id, sceneText) {
+  const timeline = $("renderTimeline").value.split("\\n").map(x => x.trim()).filter(Boolean);
+  timeline.push(kind + ":" + id);
+  $("renderTimeline").value = timeline.join("\\n");
+  const scenes = $("renderScenes").value.split("\\n").map(x => x.trim()).filter(Boolean);
+  scenes.push(sceneText || (kind === "image" ? "Generated image scene" : "Generated AI video scene"));
+  $("renderScenes").value = scenes.join("\\n");
+}
+
 async function request(path, options={}) {
   const response = await fetch(path, {...options, headers:{"Content-Type":"application/json", ...(options.headers || {})}});
   const data = await response.json();
@@ -137,8 +147,9 @@ $("renderButton").addEventListener("click", async () => {
       method: "POST",
       body: JSON.stringify({
         title, scenes, seconds_per_scene: seconds,
-        image_ids: $("renderImageIds").value.split(",").map(x => x.trim()).filter(Boolean),
-        video_ids: $("renderVideoIds").value.split(",").map(x => x.trim()).filter(Boolean),
+        timeline: $("renderTimeline").value.split("\\n").map(x => x.trim()).filter(Boolean),
+        image_ids: $("renderTimeline").value.trim() ? [] : $("renderImageIds").value.split(",").map(x => x.trim()).filter(Boolean),
+        video_ids: $("renderTimeline").value.trim() ? [] : $("renderVideoIds").value.split(",").map(x => x.trim()).filter(Boolean),
         audio_id: $("renderAudioId").value.trim() || null,
         music_id: $("renderMusicId").value.trim() || null,
         music_volume: Number($("musicVolume").value || 0.18),
@@ -320,6 +331,7 @@ $("imageButton").addEventListener("click", async () => {
     });
     $("generatedImage").src = result.url;
     $("imageAssetId").textContent = "Image ID: " + result.image_id + " · Har scene image ID ko comma-separated order mein paste karein.";
+    queueTimelineAsset("image", result.image_id, prompt);
     $("imageDownload").href = result.url;
     $("imageNotice").textContent = result.width + " × " + result.height + " · " + result.format + " · " + Math.ceil(result.size_bytes / 1024) + " KB";
     $("imageResult").hidden = false;
@@ -364,6 +376,7 @@ $("aiVideoButton").addEventListener("click", async () => {
     $("aiVideoPreview").src = result.url;
     $("aiVideoDownload").href = result.url;
     $("aiVideoAssetId").textContent = "AI Video ID: " + result.video_id + " · " + result.style + " · " + result.aspect_ratio + " · " + result.resolution + " · " + result.requested_duration_seconds + "s target";
+    queueTimelineAsset("video", result.video_id, prompt);
     const existingVideoIds = $("renderVideoIds").value.split(",").map(x => x.trim()).filter(Boolean);
     const isFirstQueuedClip = existingVideoIds.length === 0;
     existingVideoIds.push(result.video_id);
