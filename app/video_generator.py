@@ -12,7 +12,8 @@ import time
 from .image_generator import IMAGE_DIR
 
 ROOT = Path(__file__).resolve().parent.parent
-AI_VIDEO_DIR = ROOT / "generated_ai_videos"
+DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT))).expanduser().resolve()
+AI_VIDEO_DIR = DATA_DIR / "generated_ai_videos"
 ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions"
 MODEL = "gemini-omni-1.1-flash"
 MAX_VIDEO_BYTES = 100 * 1024 * 1024
