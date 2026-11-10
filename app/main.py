@@ -190,6 +190,9 @@ def init_db():
             status_code INTEGER NOT NULL, ip_address TEXT NOT NULL, created_at TEXT NOT NULL
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_security_audit_created ON security_audit(id DESC)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS app_settings (
+            setting_key TEXT PRIMARY KEY, setting_value TEXT NOT NULL, updated_at TEXT NOT NULL
+        )""")
     _ensure_bootstrap_admin()
 
 init_db()
@@ -358,6 +361,64 @@ def admin_update_user(user_id: int, payload: AdminUserUpdate, request: Request):
 
 
 @app.get("/api/admin/audit")
+def _get_app_setting(key: str, default: str = "") -> str:
+    with db() as conn:
+        row = conn.execute("SELECT setting_value FROM app_settings WHERE setting_key=?", (key,)).fetchone()
+    return row["setting_value"] if row else default
+
+
+def _set_app_setting(key: str, value: str):
+    with db() as conn:
+        conn.execute("""INSERT INTO app_settings(setting_key,setting_value,updated_at)
+            VALUES(?,?,?) ON CONFLICT(setting_key) DO UPDATE SET
+            setting_value=excluded.setting_value, updated_at=excluded.updated_at""",
+            (key, value, datetime.now(timezone.utc).isoformat()))
+
+
+class ProviderSettingsInput(BaseModel):
+    selected_provider: str = Field(pattern=r"^(auto|openai|gemini)$")
+
+
+@app.get("/api/admin/provider-settings")
+def admin_provider_settings():
+    selected = _get_app_setting("selected_provider", os.getenv("AI_PROVIDER", "auto").lower())
+    status = provider_status(selected)
+    return {
+        "selected_provider": status["selected"],
+        "providers": {
+            key: {"configured": value["configured"], "model": value["model"]}
+            for key, value in status.items() if key in {"openai", "gemini"}
+        },
+        "secret_policy": "API keys are read only from server environment variables and are never accepted or returned by this dashboard."
+    }
+
+
+@app.patch("/api/admin/provider-settings")
+def update_admin_provider_settings(payload: ProviderSettingsInput):
+    status = provider_status(payload.selected_provider)
+    if payload.selected_provider in {"openai", "gemini"} and not status[payload.selected_provider]["configured"]:
+        raise HTTPException(status_code=400, detail=f"{payload.selected_provider} API key server par configured nahi hai.")
+    _set_app_setting("selected_provider", payload.selected_provider)
+    return admin_provider_settings()
+
+
+@app.get("/api/admin/integrations")
+def admin_integrations():
+    providers = admin_provider_settings()
+    paid_media = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "false").lower() == "true"
+    media_token = bool(os.getenv("MEDIA_GENERATION_TOKEN"))
+    ffmpeg = bool(shutil.which("ffmpeg"))
+    return {
+        "text_ai": {"status": "ready" if any(x["configured"] for x in providers["providers"].values()) else "needs_server_key", "selected": providers["selected_provider"], "providers": providers["providers"]},
+        "video_rendering": {"status": "ready" if ffmpeg else "needs_ffmpeg"},
+        "paid_media_generation": {"status": "enabled" if paid_media and media_token else "disabled", "provider_keys_present": {"openai": bool(os.getenv("OPENAI_API_KEY")), "gemini": bool(os.getenv("GEMINI_API_KEY")), "stability": bool(os.getenv("STABILITY_API_KEY"))}},
+        "youtube_publishing": {"status": "not_connected", "note": "Official OAuth connection not implemented."},
+        "social_publishing": {"status": "not_connected", "note": "Platform OAuth/API connection not implemented."},
+        "analytics": {"status": "not_connected", "note": "Channel analytics connection not implemented."},
+        "other_text_providers": {"status": "not_connected", "providers": ["Claude", "DeepSeek", "GLM", "Doubao", "Kimi"]}
+    }
+
+
 def admin_audit(limit: int = 50):
     limit = max(1, min(limit, 200))
     with db() as conn:
@@ -394,7 +455,7 @@ def agents():
 
 @app.get("/api/capabilities")
 def capabilities():
-    providers = provider_status()
+    providers = provider_status(_get_app_setting("selected_provider", os.getenv("AI_PROVIDER", "auto").lower()))
     return {
         "product": "SINTU AI STUDIO",
         "workflows": list(WORKFLOW_GUIDES.keys()),
@@ -429,7 +490,7 @@ def workflow_team_detail(workflow_id: str):
 
 @app.get("/api/providers")
 def providers():
-    return provider_status()
+    return provider_status(_get_app_setting("selected_provider", os.getenv("AI_PROVIDER", "auto").lower()))
 
 @app.post("/api/tasks")
 def create_task(payload: TaskInput):
@@ -462,7 +523,7 @@ def generate(payload: TaskInput):
         )
         task_id = cur.lastrowid
     try:
-        result = generate_text(prompt, payload.workflow)
+        result = generate_text(prompt, payload.workflow, _get_app_setting("selected_provider", os.getenv("AI_PROVIDER", "auto").lower()))
     except ProviderNotConfigured as exc:
         with db() as conn:
             conn.execute("UPDATE tasks SET status = ? WHERE id = ?", ("Blocked", task_id))
