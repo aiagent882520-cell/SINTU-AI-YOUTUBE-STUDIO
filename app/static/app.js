@@ -1,14 +1,77 @@
 const $ = (id) => document.getElementById(id);
 let latestTaskId = null;
 
-function queueTimelineAsset(kind, id, sceneText) {
-  const timeline = $("renderTimeline").value.split("\n").map(x => x.trim()).filter(Boolean);
-  timeline.push(kind + ":" + id);
-  $("renderTimeline").value = timeline.join("\n");
-  const scenes = $("renderScenes").value.split("\n").map(x => x.trim()).filter(Boolean);
-  scenes.push(sceneText || (kind === "image" ? "Generated image scene" : "Generated AI video scene"));
-  $("renderScenes").value = scenes.join("\n");
+function parseTimelineEntry(entry) {
+  const match = /^(image|video):([a-f0-9]{32})(?::(\\d{1,2}))?(?::(cut|fade))?$/i.exec(entry.trim());
+  if (!match) return null;
+  const kind = match[1].toLowerCase();
+  return {kind, id: match[2].toLowerCase(), duration: kind === "image" ? Number(match[3] || $("sceneSeconds").value || 4) : 0, transition: match[4] || $("renderTransition").value || "fade"};
 }
+function timelineRows() {
+  return $("renderTimeline").value.split("\n").map(parseTimelineEntry).filter(Boolean);
+}
+function syncTimelineFields(rows) {
+  $("renderTimeline").value = rows.map(x => x.kind + ":" + x.id + ":" + (x.kind === "image" ? x.duration : 0) + ":" + x.transition).join("\n");
+  $("renderScenes").value = rows.map(x => x.scene || "").join("\n");
+  $("renderSubtitles").value = rows.map(x => x.subtitle || "").join("\n");
+  $("renderImageIds").value = rows.filter(x => x.kind === "image").map(x => x.id).join(", ");
+  $("renderVideoIds").value = rows.filter(x => x.kind === "video").map(x => x.id).join(", ");
+  renderTimelineEditor(rows);
+}
+function renderTimelineEditor(rows = timelineRows()) {
+  const editor = $("timelineEditor");
+  if (!rows.length) {
+    editor.innerHTML = '<p class="muted">Abhi timeline khaali hai. AI image ya AI video generate karein; assets yahan automatically add honge.</p>';
+    return;
+  }
+  editor.innerHTML = rows.map((item, index) => {
+    const preview = item.kind === "image"
+      ? '<img src="/api/images/' + item.id + '" alt="Scene ' + (index + 1) + ' preview" loading="lazy" style="width:100%;max-height:170px;object-fit:contain;background:#111;border-radius:8px">'
+      : '<video src="/api/videos/' + item.id + '" controls playsinline preload="metadata" style="width:100%;max-height:170px;background:#111;border-radius:8px"></video>';
+    return '<article class="panel timeline-row" data-index="' + index + '" style="margin:10px 0;padding:12px">' +
+      '<div class="actions"><strong>Scene ' + (index + 1) + ' · ' + item.kind.toUpperCase() + '</strong>' +
+      '<button type="button" data-action="up" data-index="' + index + '" ' + (index === 0 ? 'disabled' : '') + '>↑</button>' +
+      '<button type="button" data-action="down" data-index="' + index + '" ' + (index === rows.length - 1 ? 'disabled' : '') + '>↓</button>' +
+      '<button type="button" data-action="remove" data-index="' + index + '">Remove</button></div>' + preview +
+      '<label>Scene description</label><input data-field="scene" data-index="' + index + '" maxlength="1000" value="' + escapeHtml(item.scene || "") + '">' +
+      '<label>Subtitle (optional)</label><input data-field="subtitle" data-index="' + index + '" maxlength="1000" value="' + escapeHtml(item.subtitle || "") + '">' +
+      (item.kind === "image" ? '<label>Duration (seconds, 2–12)</label><input type="number" min="2" max="12" data-field="duration" data-index="' + index + '" value="' + item.duration + '">' : '<p class="muted">Video duration: original clip duration</p>') +
+      '<label>Transition after this scene</label><select data-field="transition" data-index="' + index + '"><option value="cut" ' + (item.transition === "cut" ? "selected" : "") + '>Cut</option><option value="fade" ' + (item.transition === "fade" ? "selected" : "") + '>Fade to/from black</option></select>' +
+      '</article>';
+  }).join("");
+}
+function queueTimelineAsset(kind, id, sceneText) {
+  const rows = timelineRows();
+  if (rows.some(x => x.kind === kind && x.id === id)) return;
+  rows.push({kind, id, duration: kind === "image" ? Number($("sceneSeconds").value || 4) : 0,
+    transition: $("renderTransition").value || "fade", scene: sceneText || "Generated " + kind + " scene", subtitle: ""});
+  syncTimelineFields(rows);
+}
+$("timelineEditor").addEventListener("click", event => {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  const rows = timelineRows();
+  const index = Number(button.dataset.index);
+  const action = button.dataset.action;
+  if (action === "remove") rows.splice(index, 1);
+  if (action === "up" && index > 0) [rows[index - 1], rows[index]] = [rows[index], rows[index - 1]];
+  if (action === "down" && index < rows.length - 1) [rows[index + 1], rows[index]] = [rows[index], rows[index + 1]];
+  syncTimelineFields(rows);
+});
+$("timelineEditor").addEventListener("change", event => {
+  const field = event.target.dataset.field;
+  if (!field) return;
+  const rows = timelineRows();
+  const item = rows[Number(event.target.dataset.index)];
+  if (!item) return;
+  if (field === "duration") {
+    const value = Number(event.target.value);
+    if (!Number.isInteger(value) || value < 2 || value > 12) { event.target.value = item.duration; return; }
+    item.duration = value;
+  } else item[field] = event.target.value;
+  syncTimelineFields(rows);
+});
+
 
 async function request(path, options={}) {
   const response = await fetch(path, {...options, headers:{"Content-Type":"application/json", ...(options.headers || {})}});
