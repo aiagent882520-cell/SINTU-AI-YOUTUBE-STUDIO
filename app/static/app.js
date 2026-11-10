@@ -331,7 +331,7 @@ $("imageButton").addEventListener("click", async () => {
     });
     $("generatedImage").src = result.url;
     $("imageAssetId").textContent = "Image ID: " + result.image_id + " · Har scene image ID ko comma-separated order mein paste karein.";
-    queueTimelineAsset("image", result.image_id, prompt);
+    if (kind !== "thumbnail") queueTimelineAsset("image", result.image_id, prompt);
     $("imageDownload").href = result.url;
     $("imageNotice").textContent = result.width + " × " + result.height + " · " + result.format + " · " + Math.ceil(result.size_bytes / 1024) + " KB";
     $("imageResult").hidden = false;
