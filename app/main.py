@@ -708,7 +708,7 @@ def youtube_oauth_start(request: Request):
                      (state, actor["id"], hashlib.sha256((request.cookies.get(SESSION_COOKIE) or "local-dev-session").encode()).hexdigest(), expiry))
     params = urllib.parse.urlencode({
         "client_id": config["client_id"], "redirect_uri": config["redirect_uri"],
-        "response_type": "code", "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
+        "response_type": "code", "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly",
         "access_type": "offline", "prompt": "consent", "include_granted_scopes": "true", "state": state
     })
     return {"authorization_url": "https://accounts.google.com/o/oauth2/v2/auth?" + params,
@@ -1235,6 +1235,105 @@ def tiktok_publish_status(calendar_id:int):
     _record_publish_event(calendar_id, "tiktok", status, row["publish_id"], str(detail or "TikTok processing status updated"))
     return {"calendar_id":calendar_id,"publish_id":row["publish_id"],"status":status,
         "detail":detail,"published":status=="PUBLISH_COMPLETE"}
+
+
+@app.get("/api/admin/youtube/analytics")
+def youtube_channel_analytics(
+    start_date: str = Query(default="", max_length=10),
+    end_date: str = Query(default="", max_length=10),
+):
+    """Return official YouTube Analytics API data for the connected channel."""
+    today = datetime.now(timezone.utc).date()
+    end = today - timedelta(days=1)
+    start = end - timedelta(days=27)
+    try:
+        start_value = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else start
+        end_value = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else end
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Dates YYYY-MM-DD format mein honi chahiye.") from None
+    if end_value < start_value:
+        raise HTTPException(status_code=422, detail="End date, start date ke baad honi chahiye.")
+    if (end_value - start_value).days > 364:
+        raise HTTPException(status_code=422, detail="Ek request mein maximum 365 din ka range allowed hai.")
+    access_token = _youtube_access_token()
+    headers = {"Authorization": "Bearer " + access_token}
+    base = {
+        "ids": "channel==MINE",
+        "startDate": start_value.isoformat(),
+        "endDate": end_value.isoformat(),
+        "metrics": "views,estimatedMinutesWatched,averageViewDuration,subscribersGained,subscribersLost",
+    }
+    try:
+        daily_url = "https://youtubeanalytics.googleapis.com/v2/reports?" + urllib.parse.urlencode(
+            {**base, "dimensions": "day", "sort": "day", "maxResults": "366"}
+        )
+        _, _, daily_body = _youtube_request(daily_url, headers=headers)
+        daily_report = json.loads(daily_body.decode("utf-8"))
+        video_url = "https://youtubeanalytics.googleapis.com/v2/reports?" + urllib.parse.urlencode(
+            {**base, "dimensions": "video", "sort": "-views", "maxResults": "10"}
+        )
+        _, _, video_body = _youtube_request(video_url, headers=headers)
+        video_report = json.loads(video_body.decode("utf-8"))
+    except HTTPException as exc:
+        if exc.status_code == 502:
+            raise HTTPException(status_code=424, detail="YouTube Analytics API data nahi de paaya. Google Cloud project mein YouTube Analytics API enable karein aur zarurat par YouTube account dobara connect karein.") from None
+        raise
+    except (ValueError, KeyError, TypeError):
+        raise HTTPException(status_code=502, detail="YouTube Analytics response samajh nahi aaya.") from None
+
+    def unpack(report):
+        headers_list = [column.get("name", "") for column in report.get("columnHeaders", [])]
+        return [dict(zip(headers_list, row)) for row in report.get("rows", [])]
+
+    daily_rows = unpack(daily_report)
+    video_rows = unpack(video_report)
+    totals = {"views": 0, "estimatedMinutesWatched": 0.0, "averageViewDuration": 0.0,
+              "subscribersGained": 0, "subscribersLost": 0}
+    views_for_average = 0
+    daily = []
+    for row in daily_rows:
+        views = int(row.get("views", 0) or 0)
+        watched = float(row.get("estimatedMinutesWatched", 0) or 0)
+        duration = float(row.get("averageViewDuration", 0) or 0)
+        gained = int(row.get("subscribersGained", 0) or 0)
+        lost = int(row.get("subscribersLost", 0) or 0)
+        totals["views"] += views
+        totals["estimatedMinutesWatched"] += watched
+        totals["subscribersGained"] += gained
+        totals["subscribersLost"] += lost
+        views_for_average += views
+        daily.append({"date": row.get("day"), "views": views, "watch_minutes": watched,
+                      "average_view_duration_seconds": duration, "subscribers_gained": gained,
+                      "subscribers_lost": lost})
+    if views_for_average:
+        totals["averageViewDuration"] = sum(
+            float(row.get("averageViewDuration", 0) or 0) * int(row.get("views", 0) or 0)
+            for row in daily_rows
+        ) / views_for_average
+    top_videos = []
+    for row in video_rows:
+        video_id = str(row.get("video", ""))
+        if not video_id:
+            continue
+        top_videos.append({
+            "video_id": video_id,
+            "url": "https://www.youtube.com/watch?v=" + urllib.parse.quote(video_id, safe=""),
+            "views": int(row.get("views", 0) or 0),
+            "watch_minutes": float(row.get("estimatedMinutesWatched", 0) or 0),
+            "average_view_duration_seconds": float(row.get("averageViewDuration", 0) or 0),
+        })
+    totals["estimatedMinutesWatched"] = round(totals["estimatedMinutesWatched"], 2)
+    totals["averageViewDuration"] = round(totals["averageViewDuration"], 2)
+    return {
+        "source": "YouTube Analytics API",
+        "channel": (_youtube_connection() or {}).get("channel_title"),
+        "start_date": start_value.isoformat(),
+        "end_date": end_value.isoformat(),
+        "totals": totals,
+        "daily": daily,
+        "top_videos": top_videos,
+        "note": "YouTube ke official reported metrics. Recent dates par data delay ho sakta hai; revenue aur thumbnail CTR is report mein shamil nahi hain.",
+    }
 
 
 @app.get("/api/admin/publishing/history")
