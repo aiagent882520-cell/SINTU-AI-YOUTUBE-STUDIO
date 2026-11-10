@@ -497,19 +497,20 @@ def test_ai_video_generation_endpoint_contract(tmp_path, monkeypatch):
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
     monkeypatch.setenv("GEMINI_API_KEY", "gemini-test-key")
     monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "media-secret")
-    monkeypatch.setattr(main, "generate_video", lambda prompt, aspect, resolution, style, reference: {
+    monkeypatch.setattr(main, "generate_video", lambda prompt, aspect, resolution, style, reference, duration: {
         "video_id": "7" * 32, "url": "/api/ai-videos/" + "7" * 32,
         "format": "MP4", "size_bytes": 4096, "provider": "Google Gemini API",
         "model": "gemini-omni-1.1-flash", "aspect_ratio": aspect,
-        "resolution": resolution, "style": style
+        "resolution": resolution, "style": style, "duration_seconds": duration
     })
     response = client.post("/api/video/generate", json={
         "prompt": "An animated ancient temple", "aspect_ratio": "9:16",
-        "resolution": "720p", "style": "3d-animation"
+        "resolution": "720p", "style": "3d-animation", "duration_seconds": 10
     }, headers={"X-Media-Token": "media-secret"})
     assert response.status_code == 200
     assert response.json()["model"] == "gemini-omni-1.1-flash"
     assert response.json()["style"] == "3d-animation"
+    assert response.json()["duration_seconds"] == 10
     assert client.get("/api/ai-videos/" + "7" * 32).status_code == 404
     assert client.get("/api/ai-videos/not-valid").status_code == 400
     invalid = client.post("/api/video/generate", json={
@@ -546,6 +547,8 @@ def test_video_generator_validates_config_and_prompt(monkeypatch):
         video_generator.generate_video("A city", aspect_ratio="1:1")
     with pytest.raises(ValueError):
         video_generator.generate_video("A city", style="unsupported")
+    with pytest.raises(ValueError):
+        video_generator.generate_video("A city", duration_seconds=11)
 
 
 def test_video_generator_extracts_mp4_from_rest_steps():
