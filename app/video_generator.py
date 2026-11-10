@@ -127,7 +127,7 @@ def _download_video_file(file_id: str, api_key: str) -> bytes:
 
 
 def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "720p",
-                   style: str = "cinematic", reference_image_id: str | None = None) -> dict:
+                   style: str = "cinematic", reference_image_id: str | None = None, duration_seconds: int = 8) -> dict:
     status = video_status()
     if not status["available"]:
         raise VideoUnavailable("AI video generation disabled hai. Server admin ko paid media enable karke GEMINI_API_KEY secure secret mein set karna hoga.")
@@ -138,6 +138,8 @@ def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "7
         raise ValueError("Aspect ratio 9:16 ya 16:9 hona chahiye.")
     if resolution not in {"360p", "720p", "1080p", "4k"}:
         raise ValueError("Resolution 360p, 720p, 1080p ya 4k hona chahiye.")
+    if not isinstance(duration_seconds, int) or isinstance(duration_seconds, bool) or not 3 <= duration_seconds <= 10:
+        raise ValueError("Clip duration 3 se 10 seconds ke beech honi chahiye.")
     styles = {
         "cinematic": "Photorealistic cinematic live-action style.",
         "2d-animation": "Polished 2D animated film style, expressive illustrated characters, smooth hand-drawn motion.",
@@ -164,13 +166,16 @@ def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "7
             "data": base64.b64encode(image_bytes).decode("ascii"),
             "mime_type": "image/jpeg",
         })
+    task = "image_to_video" if reference_image_id else "text_to_video"
     request_body = json.dumps({
         "model": MODEL,
         "input": user_input if reference_image_id else full_prompt,
+        "generation_config": {"video_config": {"task": task}},
         "response_format": {
             "type": "video",
             "aspect_ratio": aspect_ratio,
             "resolution": resolution,
+            "duration": duration_seconds,
             "delivery": "uri",
         },
     }).encode("utf-8")
@@ -219,7 +224,9 @@ def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "7
         "model": MODEL,
         "aspect_ratio": aspect_ratio,
         "resolution": resolution,
+        "duration_seconds": duration_seconds,
         "style": style,
+        "task": task,
         "reference_image_used": bool(reference_image_id),
         "interaction_id": payload.get("id"),
         "notice": "Short AI-generated video clip. 1080p/4K may be upscaled output; check provider terms and pricing before commercial use.",
