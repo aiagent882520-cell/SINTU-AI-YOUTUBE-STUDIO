@@ -1010,3 +1010,43 @@ def test_admin_cannot_disable_last_admin_or_self(tmp_path, monkeypatch):
     admin_id = client.get("/api/admin/users").json()["users"][0]["id"]
     assert client.patch(f"/api/admin/users/{admin_id}", json={"is_active":False}).status_code == 400
     assert client.patch(f"/api/admin/users/{admin_id}", json={"role":"viewer"}).status_code == 400
+
+
+def test_admin_provider_settings_persist_and_never_expose_secrets(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-secret")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-secret")
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    assert client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"}).status_code == 200
+    settings = client.get("/api/admin/provider-settings")
+    assert settings.status_code == 200
+    assert settings.json()["providers"]["openai"]["configured"] is True
+    assert "test-openai-secret" not in settings.text
+    assert "test-gemini-secret" not in settings.text
+    changed = client.patch("/api/admin/provider-settings", json={"selected_provider":"gemini"})
+    assert changed.status_code == 200
+    assert changed.json()["selected_provider"] == "gemini"
+    assert client.get("/api/providers").json()["selected"] == "gemini"
+    assert client.patch("/api/admin/provider-settings", json={"selected_provider":"claude"}).status_code == 422
+    assert client.get("/api/admin/integrations").status_code == 200
+    client.post("/api/auth/logout")
+    assert client.get("/api/admin/provider-settings").status_code == 401
+
+
+def test_admin_cannot_select_unconfigured_provider(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"})
+    assert client.patch("/api/admin/provider-settings", json={"selected_provider":"openai"}).status_code == 400
