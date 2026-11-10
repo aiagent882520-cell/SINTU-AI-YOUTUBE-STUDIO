@@ -1,6 +1,6 @@
-const CACHE_NAME = "sintu-studio-shell-v4";
+const CACHE_NAME = "sintu-studio-shell-v5";
 const APP_SHELL = [
-  "/",
+  "/login",
   "/static/manifest.json",
   "/static/style.css",
   "/static/app.js",
@@ -31,8 +31,7 @@ self.addEventListener("fetch", event => {
     event.respondWith(
       fetch(request).then(response => {
         if (response.ok) {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put("/", copy));
+          // Never cache the authenticated dashboard HTML.
         }
         return response;
       }).catch(() => caches.match("/"))
