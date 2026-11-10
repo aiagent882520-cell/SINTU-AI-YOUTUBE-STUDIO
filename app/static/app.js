@@ -161,7 +161,9 @@ async function loadCalendar() {
    const actions = item.status === "Needs approval"
     ? '<button class="secondary" data-calendar-approve="'+item.id+'">Approve</button> <button class="secondary" data-calendar-cancel="'+item.id+'">Cancel</button>'
     : (item.status === "Approved" ? '<button class="secondary" data-calendar-cancel="'+item.id+'">Cancel</button>' +
-       (canPublish && ["youtube","youtube_shorts"].includes(item.platform) ? ' <button data-youtube-publish="'+item.id+'">Upload rendered MP4</button>' : '') : "");
+       (canPublish && ["youtube","youtube_shorts"].includes(item.platform) ? ' <button data-youtube-publish="'+item.id+'">Upload rendered MP4</button>' : '') +
+       (session.authenticated && session.role==="admin" && yt.connected && item.platform==="facebook" ? ' <button data-meta-facebook="'+item.id+'">Publish Facebook video</button>' : '') +
+       (session.authenticated && session.role==="admin" && item.platform==="instagram" ? ' <button data-meta-instagram="'+item.id+'">Publish Instagram Reel</button>' : '') : "");
    return '<article class="calendar-item"><div><strong>'+calendarEscape(item.title)+'</strong><span>'+calendarEscape(item.platform.replace("_"," "))+' · '+calendarEscape(item.status)+'</span><small>'+calendarEscape(when)+'</small><p>'+calendarEscape(item.prompt)+'</p>'+actions+'</div></article>';
   }).join("") : '<p class="muted">Calendar abhi khaali hai. Pehla content schedule karein.</p>';
   $("calendarNotice").textContent = data.notice;
@@ -186,6 +188,29 @@ $("calendarItems")?.addEventListener("click", async event => {
  const approve = event.target.closest("[data-calendar-approve]");
  const cancel = event.target.closest("[data-calendar-cancel]");
  const publish = event.target.closest("[data-youtube-publish]");
+ const metaFacebook=event.target.closest("[data-meta-facebook]");
+ const metaInstagram=event.target.closest("[data-meta-instagram]");
+ if(metaFacebook||metaInstagram){
+  const id=Number((metaFacebook||metaInstagram).dataset[metaFacebook?"metaFacebook":"metaInstagram"]);
+  const videoId=window.prompt("Rendered MP4 Video ID (32-character ID):");if(!videoId)return;
+  if(!/^[a-f0-9]{32}$/i.test(videoId)){$("calendarNotice").textContent="Video ID format invalid.";return;}
+  let url,params;
+  if(metaFacebook){
+   const title=window.prompt("Facebook video title:");if(!title)return;
+   const description=window.prompt("Facebook description (optional):")||"";
+   url="/api/admin/meta/facebook/publish/"+id;params=new URLSearchParams({video_id:videoId.toLowerCase(),title,description});
+   if(!window.confirm("Approved MP4 connected Facebook Page par publish karein?"))return;
+  }else{
+   const videoUrl=window.prompt("Public HTTPS MP4 URL (Meta ko video fetch karna hoga):");if(!videoUrl)return;
+   const caption=window.prompt("Instagram Reel caption (optional):")||"";
+   url="/api/admin/meta/instagram/publish/"+id;params=new URLSearchParams({video_url:videoUrl,caption});
+   if(!window.confirm("Public video URL connected Instagram account par Reel ke roop mein publish karein?"))return;
+  }
+  const b=metaFacebook||metaInstagram;b.disabled=true;
+  try{const result=await request(url+"?"+params.toString(),{method:"POST"});
+   $("calendarNotice").textContent=(metaFacebook?"Facebook":"Instagram")+" publish successful. "+(result.url||result.message||"");await loadCalendar();}
+  catch(e){$("calendarNotice").textContent=e.message;b.disabled=false;}return;
+ }
  if (publish) {
   const calendarId = Number(publish.dataset.youtubePublish);
   const videoId = window.prompt("Rendered MP4 Video ID (32-character ID from SINTU render result):");
@@ -675,5 +700,32 @@ $("youtubeDisconnect")?.addEventListener("click", async () => {
 });
 $("youtubeRefresh")?.addEventListener("click",loadYouTubeAdminPanel);
 loadYouTubeAdminPanel();
+
+async function loadMetaAdminPanel(){
+ const panel=$("metaAdminPanel");if(!panel)return;
+ try{
+  const session=await request("/api/auth/session");
+  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  panel.hidden=false;
+  const data=await request("/api/admin/meta/status");
+  const ig=data.instagram?" · Instagram: @"+(data.instagram.username||data.instagram.id):" · Instagram Professional account not linked";
+  $("metaConnectionStatus").textContent=data.connected?"Facebook Page: "+data.page.name+" ("+data.page.id+")"+ig:
+   "Not connected · Meta App: "+(data.oauth_configured?"configured":"missing")+" · encryption: "+(data.encryption_configured?"ready":"missing");
+  $("metaConnect").disabled=!data.oauth_configured||!data.encryption_configured;
+  $("metaDisconnect").hidden=!data.connected;
+ }catch(e){$("metaConnectionStatus").textContent=e.message;}
+}
+$("metaConnect")?.addEventListener("click",async()=>{
+ const b=$("metaConnect");b.disabled=true;
+ try{const d=await request("/api/admin/meta/oauth/start");window.location.assign(d.authorization_url);}
+ catch(e){$("metaConnectionStatus").textContent=e.message;b.disabled=false;}
+});
+$("metaDisconnect")?.addEventListener("click",async()=>{
+ if(!window.confirm("Facebook Page aur Instagram connection disconnect karein?"))return;
+ try{await request("/api/admin/meta/disconnect",{method:"POST"});await loadMetaAdminPanel();}
+ catch(e){$("metaConnectionStatus").textContent=e.message;}
+});
+$("metaRefresh")?.addEventListener("click",loadMetaAdminPanel);
+loadMetaAdminPanel();
 loadAdminPanel();
 loadProviderAdminPanel();
