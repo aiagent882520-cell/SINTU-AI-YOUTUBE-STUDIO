@@ -7,6 +7,7 @@ import re
 import urllib.error
 import urllib.request
 import uuid
+import time
 
 from .image_generator import IMAGE_DIR
 
@@ -42,6 +43,12 @@ def video_status():
     }
 
 
+def _validate_video(raw: bytes) -> bytes:
+    if len(raw) < 16 or len(raw) > MAX_VIDEO_BYTES or raw[4:8] != b"ftyp":
+        raise VideoGenerationFailed("Generated video invalid hai ya 100 MB size limit se badi hai.")
+    return raw
+
+
 def _extract_video(payload: dict) -> bytes:
     direct = payload.get("output_video")
     if isinstance(direct, dict) and isinstance(direct.get("data"), str):
@@ -58,14 +65,61 @@ def _extract_video(payload: dict) -> bytes:
             if encoded:
                 break
     if not encoded:
-        raise VideoGenerationFailed("Gemini response mein downloadable MP4 video data nahi mila.")
+        raise VideoGenerationFailed("Gemini response mein inline MP4 data nahi mila.")
     try:
         raw = base64.b64decode(encoded, validate=True)
     except Exception:
         raise VideoGenerationFailed("Gemini ne invalid video data return kiya.") from None
-    if len(raw) < 16 or len(raw) > MAX_VIDEO_BYTES or raw[4:8] != b"ftyp":
-        raise VideoGenerationFailed("Generated video invalid hai ya 100 MB size limit se badi hai.")
-    return raw
+    return _validate_video(raw)
+
+
+def _extract_video_file_id(payload: dict) -> str | None:
+    direct = payload.get("output_video")
+    uri = direct.get("uri") if isinstance(direct, dict) else None
+    if not uri:
+        for step in payload.get("steps", []):
+            if not isinstance(step, dict):
+                continue
+            for item in step.get("content", []):
+                if isinstance(item, dict) and item.get("type") == "video" and item.get("uri"):
+                    uri = item["uri"]
+                    break
+            if uri:
+                break
+    if not isinstance(uri, str):
+        return None
+    match = re.fullmatch(r"https://generativelanguage\\.googleapis\\.com/v1beta/files/([A-Za-z0-9_-]+):download(?:\\?alt=media)?", uri)
+    return match.group(1) if match else None
+
+
+def _download_video_file(file_id: str, api_key: str) -> bytes:
+    status_url = f"https://generativelanguage.googleapis.com/v1beta/files/{file_id}"
+    for _ in range(120):
+        status_request = urllib.request.Request(status_url, headers={"x-goog-api-key": api_key})
+        try:
+            with urllib.request.urlopen(status_request, timeout=30) as response:
+                file_info = json.loads(response.read(64 * 1024).decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read(1000).decode("utf-8", "replace")
+            raise VideoGenerationFailed(f"Gemini video file status failed ({exc.code}): {detail[:400]}") from None
+        state = file_info.get("state")
+        if state == "ACTIVE":
+            break
+        if state == "FAILED":
+            raise VideoGenerationFailed("Gemini video file processing failed.")
+        time.sleep(5)
+    else:
+        raise VideoGenerationFailed("Gemini video file processing timeout (10 minutes).")
+
+    download_url = f"https://generativelanguage.googleapis.com/v1beta/files/{file_id}:download?alt=media"
+    download_request = urllib.request.Request(download_url, headers={"x-goog-api-key": api_key})
+    try:
+        with urllib.request.urlopen(download_request, timeout=120) as response:
+            raw = response.read(MAX_VIDEO_BYTES + 1)
+    except urllib.error.HTTPError as exc:
+        detail = exc.read(1000).decode("utf-8", "replace")
+        raise VideoGenerationFailed(f"Gemini video download failed ({exc.code}): {detail[:400]}") from None
+    return _validate_video(raw)
 
 
 def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "720p",
