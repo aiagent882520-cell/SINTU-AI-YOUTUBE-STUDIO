@@ -454,6 +454,7 @@ async function loadAdminPanel() {
           <option value="admin" ${user.role==="admin"?"selected":""}>Admin</option>
         </select>
         <span class="role-state">${user.is_active?"Active":"Disabled"}</span>
+        <button class="secondary user-reset" data-user-id="${user.id}" type="button">Reset password</button>
         <button class="secondary user-toggle" data-user-id="${user.id}" data-active="${user.is_active?0:1}" type="button">${user.is_active?"Disable":"Enable"}</button>
       </div>`).join("") || "No users.";
     $("adminAudit").innerHTML = auditData.events.map(event => `
@@ -465,6 +466,15 @@ async function loadAdminPanel() {
     document.querySelectorAll("[data-user-role]").forEach(select => select.addEventListener("change", async () => {
       try { await request("/api/admin/users/" + select.dataset.userRole, {method:"PATCH",body:JSON.stringify({role:select.value})}); await loadAdminPanel(); }
       catch(error) { $("adminNotice").textContent = error.message; }
+    }));
+    document.querySelectorAll(".user-reset").forEach(button => button.addEventListener("click", async () => {
+      const password = window.prompt("Naya temporary password (minimum 12 characters):");
+      if (password === null) return;
+      if (password.length < 12) { $("adminNotice").textContent = "Password kam se kam 12 characters ka hona chahiye."; return; }
+      try {
+        await request("/api/admin/users/" + button.dataset.userId, {method:"PATCH",body:JSON.stringify({password})});
+        $("adminNotice").textContent = "Password reset ho gaya. Naya password secure channel se user ko share karein.";
+      } catch(error) { $("adminNotice").textContent = error.message; }
     }));
     document.querySelectorAll(".user-toggle").forEach(button => button.addEventListener("click", async () => {
       try { await request("/api/admin/users/" + button.dataset.userId, {method:"PATCH",body:JSON.stringify({is_active:button.dataset.active==="1"})}); await loadAdminPanel(); }
