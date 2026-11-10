@@ -101,3 +101,7 @@ Meta OAuth se Facebook Page connect karne ke baad approved calendar item ka rend
 
 ### TikTok Direct Post
 TikTok Login Kit OAuth, encrypted server-side tokens, creator privacy options, approved calendar items se MP4 Direct Post upload aur publish-status polling add kiya gaya. TikTok Developer App, Login Kit, Content Posting API, `video.publish` approval, user consent aur app audit required ho sakte hain. Unaudited app posts private-only rehte hain. Video transfer aur final TikTok publishing alag states hain.
+
+
+### Unified Publishing Dashboard & History
+Admin dashboard mein YouTube, YouTube Shorts, Facebook, Instagram aur TikTok ke platform publish events ek jagah dekh sakte hain. Platform/status filters, event totals, timestamps, external post IDs aur available post links dikhte hain. History ab se record hoti hai; pehle ke publish records automatically reconstruct/backfill nahi kiye ja sakte. TikTok transfer aur final processing states alag events hain.
