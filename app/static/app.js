@@ -434,6 +434,36 @@ $("aiVideoButton").addEventListener("click", async () => {
 checkAIVideoService();
 
 
+function integrationStatusLabel(status) {
+  return ({ready:"Ready",needs_server_key:"Server API key required",needs_ffmpeg:"FFmpeg required",enabled:"Enabled (paid)",disabled:"Disabled",not_connected:"Not connected"})[status] || status;
+}
+async function loadProviderAdminPanel() {
+  const panel = $("providerAdminPanel");
+  if (!panel) return;
+  try {
+    const session = await request("/api/auth/session");
+    if (!session.authenticated || session.role !== "admin") { panel.hidden = true; return; }
+    panel.hidden = false;
+    const [settings, integrations] = await Promise.all([
+      request("/api/admin/provider-settings"), request("/api/admin/integrations")
+    ]);
+    $("selectedProvider").value = settings.selected_provider;
+    $("providerCards").innerHTML = Object.entries(settings.providers).map(([key,value]) => `
+      <div class="integration-card"><strong>${key==="openai"?"OpenAI":"Google Gemini"}</strong><span>${value.configured?"API key configured":"API key missing"}</span><small>Model: ${adminEscape(value.model)}</small></div>`).join("");
+    const rows = [
+      ["Text AI", integrations.text_ai.status, integrations.text_ai.selected],
+      ["MP4 rendering", integrations.video_rendering.status, "FFmpeg server dependency"],
+      ["Paid media generation", integrations.paid_media_generation.status, "Paid usage; requires server toggle and media token"],
+      ["YouTube publishing", integrations.youtube_publishing.status, integrations.youtube_publishing.note],
+      ["Social publishing", integrations.social_publishing.status, integrations.social_publishing.note],
+      ["Channel analytics", integrations.analytics.status, integrations.analytics.note],
+      ["Claude / DeepSeek / GLM / Doubao / Kimi", integrations.other_text_providers.status, "Not integrated in current adapter"]
+    ];
+    $("integrationCards").innerHTML = rows.map(([name,status,detail]) => `
+      <div class="integration-card"><strong>${adminEscape(name)}</strong><span>${adminEscape(integrationStatusLabel(status))}</span><small>${adminEscape(detail)}</small></div>`).join("");
+    $("providerAdminNotice").textContent = "Provider settings refreshed. Keys are never displayed.";
+  } catch(error) { panel.hidden = true; }
+}
 function adminEscape(value) {
   return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
 }
@@ -498,4 +528,18 @@ $("adminUserForm")?.addEventListener("submit", async event => {
   finally { button.disabled = false; }
 });
 $("adminRefresh")?.addEventListener("click", loadAdminPanel);
+$("providerSettingsForm")?.addEventListener("submit", async event => {
+  event.preventDefault();
+  const button = event.submitter;
+  button.disabled = true;
+  $("providerAdminNotice").textContent = "Saving provider preference…";
+  try {
+    const result = await request("/api/admin/provider-settings", {method:"PATCH",body:JSON.stringify({selected_provider:$("selectedProvider").value})});
+    $("providerAdminNotice").textContent = "Saved: " + result.selected_provider + ". New AI generation will use this preference.";
+    await loadProviderAdminPanel();
+  } catch(error) { $("providerAdminNotice").textContent = error.message; }
+  finally { button.disabled = false; }
+});
+$("providerRefresh")?.addEventListener("click", loadProviderAdminPanel);
 loadAdminPanel();
+loadProviderAdminPanel();
