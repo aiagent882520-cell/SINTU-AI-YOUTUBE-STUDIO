@@ -426,22 +426,36 @@ def render_video(payload: RenderInput):
             timeline_items = []
             scene_transitions = []
             for entry in payload.timeline:
-                match = re.fullmatch(r"(image|video):([a-f0-9]{32})(?::(\d{1,2}))?(?::(cut|fade))?", entry.strip())
-                if not match:
-                    raise HTTPException(status_code=400, detail="Timeline format image:ID:duration:transition ya video:ID:0:transition hona chahiye.")
-                kind, asset_id, duration_text, transition_mode = match.groups()
-                duration = int(duration_text) if duration_text else payload.seconds_per_scene
-                if kind == "image" and not 2 <= duration <= 12:
-                    raise HTTPException(status_code=400, detail="Image scene duration 2 se 12 seconds honi chahiye.")
-                if kind == "video" and duration_text and duration != 0:
-                    raise HTTPException(status_code=400, detail="AI video clip ki duration source file se li jaati hai; duration 0 rakhein.")
-                if kind == "image":
-                    asset_path = IMAGE_DIR / f"{asset_id}.jpg"
+                match = re.fullmatch(r"(image|video):([a-f0-9]{32}):([^:]+):([^:]+):(cut|fade)", entry.strip())
+                legacy = re.fullmatch(r"(image|video):([a-f0-9]{32}):(\d{1,2}):(cut|fade)", entry.strip())
+                if match:
+                    kind, asset_id, first_value, second_value, transition_mode = match.groups()
+                elif legacy:
+                    kind, asset_id, first_value, transition_mode = legacy.groups()
+                    second_value = ""
+                    if kind == "video" and int(first_value) != 0:
+                        raise HTTPException(status_code=400, detail="Legacy video duration must be 0; use video:ID:start:end:transition for trimming.")
                 else:
-                    asset_path = AI_VIDEO_DIR / f"{asset_id}.mp4"
-                if not asset_path.is_file():
+                    raise HTTPException(status_code=400, detail="Timeline format image:ID:duration:0:transition ya video:ID:start:end:transition hona chahiye.")
+                if kind == "image":
+                    try: duration = int(first_value)
+                    except ValueError: raise HTTPException(status_code=400, detail="Image duration integer honi chahiye.") from None
+                    if not 2 <= duration <= 12:
+                        raise HTTPException(status_code=400, detail="Image scene duration 2 se 12 seconds honi chahiye.")
+                    item = {"kind": kind, "path": IMAGE_DIR / f"{asset_id}.jpg", "duration": duration}
+                else:
+                    try:
+                        trim_start = float(first_value or 0)
+                        trim_end = float(second_value) if second_value else None
+                    except ValueError:
+                        raise HTTPException(status_code=400, detail="Video trim time valid number hona chahiye.") from None
+                    if trim_start < 0 or (trim_end is not None and trim_end <= trim_start):
+                        raise HTTPException(status_code=400, detail="Video trim end, start se bada hona chahiye.")
+                    item = {"kind": kind, "path": AI_VIDEO_DIR / f"{asset_id}.mp4", "duration": 0,
+                            "trim_start": trim_start, "trim_end": trim_end}
+                if not item["path"].is_file():
                     raise HTTPException(status_code=404, detail=f"Timeline {kind} asset not found.")
-                timeline_items.append({"kind": kind, "path": asset_path, "duration": duration})
+                timeline_items.append(item)
                 scene_transitions.append(transition_mode or payload.transition)
             if payload.motion != "none":
                 raise HTTPException(status_code=400, detail="Mixed timeline mein abhi source clip motion use hota hai; extra zoom unsupported hai.")
