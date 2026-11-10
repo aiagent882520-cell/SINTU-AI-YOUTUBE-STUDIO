@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from .agents import list_agents
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
-from .video_renderer import render_storyboard, RendererUnavailable, RenderFailed, OUTPUT_DIR
+from .video_renderer import render_storyboard, render_ai_clips, RendererUnavailable, RenderFailed, OUTPUT_DIR
 from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable, VoiceGenerationFailed, AUDIO_DIR
 from .image_generator import generate_image, image_status, ImageUnavailable, ImageGenerationFailed, IMAGE_DIR
 from .music_generator import generate_music, music_status, MusicUnavailable, MusicGenerationFailed
@@ -75,6 +75,7 @@ class RenderInput(BaseModel):
     scenes: list[str] = Field(min_length=1, max_length=25)
     seconds_per_scene: int = Field(default=4, ge=2, le=12)
     image_ids: list[str] = Field(default_factory=list, max_length=25)
+    video_ids: list[str] = Field(default_factory=list, max_length=25)
     audio_id: str | None = Field(default=None, max_length=32)
     subtitles: list[str] = Field(default_factory=list, max_length=25)
     music_id: str | None = Field(default=None, max_length=32)
@@ -371,6 +372,10 @@ def render_video(payload: RenderInput):
         raise HTTPException(status_code=400, detail="Title and all scenes must contain valid text (max 500 characters per scene).")
     if payload.image_ids and len(payload.image_ids) != len(scenes):
         raise HTTPException(status_code=400, detail="Har scene ke liye exactly ek image ID dein.")
+    if payload.video_ids and len(payload.video_ids) != len(scenes):
+        raise HTTPException(status_code=400, detail="Har scene ke liye exactly ek AI video ID dein.")
+    if payload.video_ids and payload.image_ids:
+        raise HTTPException(status_code=400, detail="AI video clips aur still-image storyboard ko ek render mein mix karna abhi supported nahi hai.")
     if payload.subtitles and len(payload.subtitles) != len(scenes):
         raise HTTPException(status_code=400, detail="Subtitle lines ki sankhya scenes ke barabar honi chahiye.")
     if any(not line.strip() or len(line) > 1000 for line in payload.subtitles):
@@ -383,6 +388,14 @@ def render_video(payload: RenderInput):
         if not path.is_file():
             raise HTTPException(status_code=404, detail="Scene image not found.")
         image_paths.append(path)
+    video_paths = []
+    for video_id in payload.video_ids:
+        if not re.fullmatch(r"[a-f0-9]{32}", video_id):
+            raise HTTPException(status_code=400, detail="Invalid AI video ID.")
+        path = AI_VIDEO_DIR / f"{video_id}.mp4"
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="AI video clip not found.")
+        video_paths.append(path)
     audio_path = None
     if payload.transition not in {"cut", "fade"}:
         raise HTTPException(status_code=400, detail="Transition cut ya fade hona chahiye.")
