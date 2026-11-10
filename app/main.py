@@ -83,6 +83,9 @@ class RenderInput(BaseModel):
     music_volume: float = Field(default=0.18, ge=0, le=1)
     transition: str = Field(default="fade", max_length=10)
     motion: str = Field(default="none", max_length=20)
+    resolution: str = Field(default="720x1280", max_length=12)
+    fps: int = Field(default=30, ge=24, le=60)
+    quality: str = Field(default="high", max_length=12)
 
 class MusicUploadInput(BaseModel):
     filename: str = Field(min_length=1, max_length=120)
@@ -287,7 +290,8 @@ def render_capabilities():
     return {
         "available": bool(shutil.which("ffmpeg")),
         "renderer": "FFmpeg + Pillow storyboard renderer",
-        "supported_output": "720x1280 portrait MP4 (H.264) with optional saved scene images, MP3 narration and burned-in captions",
+        "supported_output": "MP4 / H.264; selectable 720x1280, 1080x1920, 1080x1080, 1280x720, 1920x1080; 24/30/60 FPS; standard/high/maximum CRF quality",
+        "profiles": {"resolutions": ["720x1280", "1080x1920", "1080x1080", "1280x720", "1920x1080"], "fps": [24, 30, 60], "quality": ["standard", "high", "maximum"]},
         "limitations": ["background music is user-uploaded; music licensing remains user's responsibility", "basic slow zoom motion only; no advanced 2D/3D VFX", "FFmpeg must be installed"],
     }
 
@@ -406,6 +410,12 @@ def render_video(payload: RenderInput):
         raise HTTPException(status_code=400, detail="Transition cut ya fade hona chahiye.")
     if payload.motion not in {"none", "slow-zoom-in", "slow-zoom-out"}:
         raise HTTPException(status_code=400, detail="Unsupported motion preset.")
+    if payload.resolution not in {"720x1280", "1080x1920", "1080x1080", "1280x720", "1920x1080"}:
+        raise HTTPException(status_code=400, detail="Unsupported output resolution profile.")
+    if payload.fps not in {24, 30, 60}:
+        raise HTTPException(status_code=400, detail="FPS 24, 30 ya 60 hona chahiye.")
+    if payload.quality not in {"standard", "high", "maximum"}:
+        raise HTTPException(status_code=400, detail="Quality standard, high ya maximum honi chahiye.")
     music_path = None
     if payload.music_id:
         if not re.fullmatch(r"[a-f0-9]{32}", payload.music_id):
@@ -478,17 +488,20 @@ def render_video(payload: RenderInput):
                                          seconds_per_scene=payload.seconds_per_scene,
                                          audio_path=audio_path, music_path=music_path,
                                          music_volume=payload.music_volume,
-                                         subtitles=payload.subtitles, transition=payload.transition, transitions=scene_transitions)
+                                         subtitles=payload.subtitles, transition=payload.transition, transitions=scene_transitions,
+                                         resolution=payload.resolution, fps=payload.fps, quality=payload.quality)
         if video_paths:
             if payload.motion != "none":
                 raise HTTPException(status_code=400, detail="AI clip assembly mode mein source clips ka original motion use hota hai; extra zoom effects abhi supported nahi hain.")
             return render_ai_clips(video_paths, audio_path=audio_path, music_path=music_path,
                                    music_volume=payload.music_volume, subtitles=payload.subtitles,
-                                   transition=payload.transition)
+                                   transition=payload.transition, resolution=payload.resolution,
+                                   fps=payload.fps, quality=payload.quality)
         return render_storyboard(title, scenes, payload.seconds_per_scene,
                                  image_paths=image_paths, audio_path=audio_path,
                                  subtitles=payload.subtitles, music_path=music_path,
-                                 music_volume=payload.music_volume, transition=payload.transition, motion=payload.motion)
+                                 music_volume=payload.music_volume, transition=payload.transition, motion=payload.motion,
+                                 resolution=payload.resolution, fps=payload.fps, quality=payload.quality)
     except RendererUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except RenderFailed as exc:
