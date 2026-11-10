@@ -107,5 +107,8 @@ TikTok Login Kit OAuth, encrypted server-side tokens, creator privacy options, a
 Admin dashboard mein YouTube, YouTube Shorts, Facebook, Instagram aur TikTok ke platform publish events ek jagah dekh sakte hain. Platform/status filters, event totals, timestamps, external post IDs aur available post links dikhte hain. History ab se record hoti hai; pehle ke publish records automatically reconstruct/backfill nahi kiye ja sakte. TikTok transfer aur final processing states alag events hain.
 
 
+### Social Publishing Control Center
+Admin dashboard mein YouTube, Facebook/Instagram aur TikTok ke connection status, server OAuth credentials aur token encryption readiness ek combined panel mein dikhte hain. Connected account ka status actual OAuth connection se aata hai; "Ready to connect" ka matlab credentials configured hain, account connected nahi. Public publishing ke liye har post par admin approval aur platform permissions phir bhi required hain.
+
 ### Scheduled Publishing Queue
 Admin dashboard mein approval-pending, agle 24 ghante ke approved posts, due posts aur future schedule alag counters ke saath dikhte hain. Queue UTC timestamps ko browser ke local timezone mein display karti hai. Yeh scheduler abhi reminder/queue mode mein hai; public publishing apne-aap nahi hoti. Har platform par publish karne ke liye admin ka separate confirmation aur connected official account zaroori hai.
