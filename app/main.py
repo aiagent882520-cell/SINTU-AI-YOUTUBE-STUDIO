@@ -266,6 +266,11 @@ class AdminUserUpdate(BaseModel):
 
 @app.post("/api/auth/login")
 def admin_login(payload: AdminLoginInput, request: Request):
+    if (len(os.getenv("SINTU_ADMIN_PASSWORD", "")) < 12
+            or len(_session_secret()) < 32
+            or os.getenv("SINTU_ADMIN_PASSWORD", "").startswith("CHANGE-THIS")
+            or _session_secret().startswith("CHANGE-THIS")):
+        raise HTTPException(status_code=503, detail="Admin credentials and a 32+ character session secret must be configured by the host administrator.")
     _ensure_bootstrap_admin()
     client_ip = request.client.host if request.client else "unknown"
     now = time.time()
