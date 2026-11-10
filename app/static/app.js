@@ -363,7 +363,7 @@ $("aiVideoButton").addEventListener("click", async () => {
     });
     $("aiVideoPreview").src = result.url;
     $("aiVideoDownload").href = result.url;
-    $("aiVideoAssetId").textContent = "AI Video ID: " + result.video_id + " · " + result.style + " · " + result.aspect_ratio + " · " + result.resolution + " · " + result.duration_seconds + "s";
+    $("aiVideoAssetId").textContent = "AI Video ID: " + result.video_id + " · " + result.style + " · " + result.aspect_ratio + " · " + result.resolution + " · " + result.requested_duration_seconds + "s target";
     const existingVideoIds = $("renderVideoIds").value.split(",").map(x => x.trim()).filter(Boolean);
     existingVideoIds.push(result.video_id);
     $("renderVideoIds").value = [...new Set(existingVideoIds)].join(", ");
