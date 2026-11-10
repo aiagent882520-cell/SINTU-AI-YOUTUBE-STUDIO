@@ -197,6 +197,11 @@
       <h3>External Integrations</h3><div id="integrationCards" class="integration-cards">Loading integrations…</div>
       <p class="foot">Security: API keys yahan enter nahi hoti, browser ko kabhi return nahi hoti. Hosting/server ke Secret Environment mein key add karni hogi. Paid APIs ka charge lag sakta hai.</p>
     </section>
+    <section class="panel" id="publishingConnectionsPanel" hidden>
+      <div class="panel-head"><div><h2>Social Publishing Control Center</h2><p>Sabhi social platform connections aur publishing readiness ek jagah.</p></div><button id="publishingConnectionsRefresh" class="secondary" type="button">Refresh all</button></div>
+      <div id="publishingConnectionsCards" class="integration-cards" aria-live="polite"></div>
+      <p id="publishingConnectionsNotice" class="muted" role="status" aria-live="polite">Checking connections…</p>
+    </section>
     <section class="panel" id="youtubeAdminPanel" hidden>
       <div class="panel-head"><div><h2>YouTube Channel Connection</h2><p>Official Google OAuth, channel status aur approved MP4 upload.</p></div><button id="youtubeRefresh" class="secondary" type="button">Refresh</button></div>
       <div id="youtubeConnectionStatus" class="muted" role="status" aria-live="polite">Checking YouTube setup…</div>
