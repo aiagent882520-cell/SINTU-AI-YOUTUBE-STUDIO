@@ -661,8 +661,10 @@ def test_ai_video_clip_assembly_contract(tmp_path, monkeypatch):
         (clips_dir / f"{clip_id}.mp4").write_bytes(b"test")
     monkeypatch.setattr(main, "AI_VIDEO_DIR", clips_dir)
     called = {}
-    def fake_assembly(paths, audio_path=None, music_path=None, music_volume=0.18):
+    def fake_assembly(paths, audio_path=None, music_path=None, music_volume=0.18, subtitles=None, transition="cut"):
         called["paths"] = paths
+        called["subtitles"] = subtitles
+        called["transition"] = transition
         return {
             "video_id": "c" * 32, "url": "/api/videos/" + "c" * 32,
             "scenes": len(paths), "duration_seconds": None,
@@ -672,11 +674,13 @@ def test_ai_video_clip_assembly_contract(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "render_ai_clips", fake_assembly)
     result = client.post("/api/render", json={
         "title": "AI Short", "scenes": ["Opening clip", "Ending clip"],
-        "video_ids": clip_ids
+        "video_ids": clip_ids, "subtitles": ["Caption one", "Caption two"], "transition": "fade"
     })
     assert result.status_code == 200
     assert result.json()["scenes"] == 2
     assert len(called["paths"]) == 2
+    assert called["subtitles"] == ["Caption one", "Caption two"]
+    assert called["transition"] == "fade"
     invalid = client.post("/api/render", json={
         "title": "AI Short", "scenes": ["Only one scene"],
         "video_ids": clip_ids, "transition": "cut"
