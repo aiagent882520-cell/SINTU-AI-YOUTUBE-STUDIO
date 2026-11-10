@@ -470,3 +470,89 @@ def test_music_generator_validates_configuration_and_prompt(monkeypatch):
         music_generator.generate_music("", 30)
     with pytest.raises(ValueError):
         music_generator.generate_music("Ambient", 361)
+
+
+def test_ai_video_generation_is_disabled_by_default(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.delenv("ENABLE_PAID_MEDIA_GENERATION", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert client.get("/api/video/capabilities").json()["available"] is False
+    monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "media-secret")
+    response = client.post("/api/video/generate", json={"prompt": "A cinematic mountain"},
+                           headers={"X-Media-Token": "media-secret"})
+    assert response.status_code == 503
+
+
+def test_ai_video_generation_requires_media_token(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-test-key")
+    monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "media-secret")
+    response = client.post("/api/video/generate", json={"prompt": "A cinematic mountain"})
+    assert response.status_code == 403
+
+
+def test_ai_video_generation_endpoint_contract(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-test-key")
+    monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "media-secret")
+    monkeypatch.setattr(main, "generate_video", lambda prompt, aspect, resolution, style, reference: {
+        "video_id": "7" * 32, "url": "/api/ai-videos/" + "7" * 32,
+        "format": "MP4", "size_bytes": 4096, "provider": "Google Gemini API",
+        "model": "gemini-omni-1.1-flash", "aspect_ratio": aspect,
+        "resolution": resolution, "style": style
+    })
+    response = client.post("/api/video/generate", json={
+        "prompt": "An animated ancient temple", "aspect_ratio": "9:16",
+        "resolution": "720p", "style": "3d-animation"
+    }, headers={"X-Media-Token": "media-secret"})
+    assert response.status_code == 200
+    assert response.json()["model"] == "gemini-omni-1.1-flash"
+    assert response.json()["style"] == "3d-animation"
+    assert client.get("/api/ai-videos/" + "7" * 32).status_code == 404
+    assert client.get("/api/ai-videos/not-valid").status_code == 400
+    invalid = client.post("/api/video/generate", json={
+        "prompt": "Test", "aspect_ratio": "1:1"
+    }, headers={"X-Media-Token": "media-secret"})
+    assert invalid.status_code == 400
+
+
+def test_ai_video_file_download(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    video_dir = tmp_path / "generated_ai_videos"
+    video_dir.mkdir()
+    monkeypatch.setattr(main, "AI_VIDEO_DIR", video_dir)
+    video_id = "8" * 32
+    path = video_dir / (video_id + ".mp4")
+    path.write_bytes(b"fake-mp4")
+    response = client.get("/api/ai-videos/" + video_id)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "video/mp4"
+    assert response.content == b"fake-mp4"
+
+
+def test_video_generator_validates_config_and_prompt(monkeypatch):
+    from app import video_generator
+    monkeypatch.delenv("ENABLE_PAID_MEDIA_GENERATION", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    with pytest.raises(video_generator.VideoUnavailable):
+        video_generator.generate_video("A cinematic city")
+    monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    with pytest.raises(ValueError):
+        video_generator.generate_video("")
+    with pytest.raises(ValueError):
+        video_generator.generate_video("A city", aspect_ratio="1:1")
+    with pytest.raises(ValueError):
+        video_generator.generate_video("A city", style="unsupported")
+
+
+def test_video_generator_extracts_mp4_from_rest_steps():
+    import base64
+    from app.video_generator import _extract_video
+    mp4 = b"\\x00\\x00\\x00\\x18ftypmp42fake-mp4-video-data"
+    payload = {"steps": [{"type": "model_output", "content": [
+        {"type": "video", "mime_type": "video/mp4", "data": base64.b64encode(mp4).decode()}
+    ]}]}
+    assert _extract_video(payload) == mp4
