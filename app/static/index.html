@@ -174,6 +174,18 @@
       <div class="panel-head"><div><h2>61-Agent Team</h2><p>Registry view — agents are planned; individual autonomous agents are not yet implemented.</p></div></div>
       <div id="agents" class="agents">Loading agent registry…</div>
     </section>
+    <section class="panel" id="adminPanel" hidden>
+      <div class="panel-head"><div><h2>Security & User Management</h2><p>Admin-only: team accounts, access roles aur security activity.</p></div><button id="adminRefresh" class="secondary" type="button">Refresh</button></div>
+      <form id="adminUserForm" class="admin-user-form">
+        <div><label for="newUsername">New username</label><input id="newUsername" minlength="3" maxlength="40" pattern="[A-Za-z0-9_.-]+" required placeholder="team_member"></div>
+        <div><label for="newPassword">Temporary password (12+ characters)</label><input id="newPassword" type="password" minlength="12" maxlength="256" required autocomplete="new-password"></div>
+        <div><label for="newRole">Access role</label><select id="newRole"><option value="viewer">Viewer — read only</option><option value="editor">Editor — create and edit</option><option value="admin">Admin — full access</option></select></div>
+        <button type="submit">Create User</button>
+      </form>
+      <p id="adminNotice" class="muted" role="status" aria-live="polite"></p>
+      <h3>Team Accounts</h3><div id="adminUsers" class="admin-list">Loading…</div>
+      <h3>Security Activity Log</h3><div id="adminAudit" class="admin-list">Loading…</div>
+    </section>
     <section class="panel">
       <div class="panel-head"><div><h2>Task History</h2><p>Recent prompts and generated outputs.</p></div><button id="refresh" class="secondary" type="button">Refresh</button></div>
       <div id="tasks">No tasks yet.</div>
