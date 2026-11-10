@@ -181,6 +181,52 @@ $("musicUploadButton").addEventListener("click", async () => {
 checkRenderer();
 
 
+
+async function checkAIMusicService() {
+  try {
+    const info = await request("/api/music/capabilities");
+    $("aiMusicStatus").textContent = info.available
+      ? "Ready: " + info.provider + " · max " + info.max_duration_seconds + " sec · paid generation; check provider pricing."
+      : "AI music disabled: server admin must set ENABLE_PAID_MEDIA_GENERATION=true and STABILITY_API_KEY. API charges may apply.";
+    $("aiMusicButton").disabled = !info.available;
+  } catch (error) {
+    $("aiMusicStatus").textContent = "AI music provider status unavailable.";
+    $("aiMusicButton").disabled = true;
+  }
+}
+$("aiMusicButton").addEventListener("click", async () => {
+  const prompt = $("aiMusicPrompt").value.trim();
+  const duration_seconds = Number($("aiMusicDuration").value || 30);
+  if (!prompt) { $("aiMusicNotice").textContent = "Music prompt likhein."; return; }
+  if (duration_seconds < 5 || duration_seconds > 360) {
+    $("aiMusicNotice").textContent = "Duration 5 se 360 seconds honi chahiye."; return;
+  }
+  if (!$("mediaToken").value.trim()) {
+    $("aiMusicNotice").textContent = "Media access token enter karein."; return;
+  }
+  $("aiMusicButton").disabled = true;
+  $("aiMusicNotice").textContent = "Stable Audio music generate kar raha hai. Ismein kuch minute lag sakte hain…";
+  $("aiMusicResult").hidden = true;
+  try {
+    const result = await request("/api/music/generate", {
+      method: "POST",
+      headers: {"X-Media-Token": $("mediaToken").value},
+      body: JSON.stringify({prompt, duration_seconds})
+    });
+    $("renderMusicId").value = result.music_id;
+    $("aiMusicPreview").src = result.url;
+    $("aiMusicDownload").href = result.url;
+    $("aiMusicAssetId").textContent = "Music ID: " + result.music_id + " · MP4 renderer ke liye automatically selected.";
+    $("aiMusicNotice").textContent = result.provider + " · " + result.model + " · " + result.duration_seconds + " sec · " + Math.ceil(result.size_bytes / 1024) + " KB. " + result.notice;
+    $("aiMusicResult").hidden = false;
+  } catch (error) {
+    $("aiMusicNotice").textContent = error.message;
+  } finally {
+    $("aiMusicButton").disabled = false;
+  }
+});
+checkAIMusicService();
+
 async function checkVoiceService() {
   try {
     const info = await request("/api/voice/capabilities");
