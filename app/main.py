@@ -135,6 +135,8 @@ async def admin_access_control(request, call_next):
             return JSONResponse(status_code=403, content={"detail": "Admin role required."})
         if request.method not in {"GET", "HEAD", "OPTIONS"} and path != "/api/auth/logout" and user and user.get("role") == "viewer":
             return JSONResponse(status_code=403, content={"detail": "Viewer role is read-only."})
+        if request.method in {"PUT", "PATCH", "DELETE"} and user and user.get("role") == "editor":
+            return JSONResponse(status_code=403, content={"detail": "Editor role cannot perform destructive or administrative changes."})
     response = await call_next(request)
     if request.method in {"POST", "PUT", "PATCH", "DELETE"} and path != "/api/admin/audit":
         actor = getattr(request.state, "user", None)
