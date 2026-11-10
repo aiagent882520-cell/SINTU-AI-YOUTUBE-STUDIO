@@ -86,3 +86,10 @@ pytest -q
 - Dashboard sirf key configured hai ya nahi aur model ka naam dikhata hai; secret key kabhi read, accept, display, ya browser mein store nahi hoti.
 - Paid media, FFmpeg, YouTube/social publishing aur analytics readiness clearly show hoti hai. YouTube/social/analytics OAuth abhi connected nahi hai.
 - Claude, DeepSeek, GLM, Doubao aur Kimi current text adapter mein implemented nahi hain; unko connected/available nahi dikhaya jata.
+
+
+## Content Calendar & Scheduling
+- Content ideas/prompts ko YouTube, Shorts, Instagram, Facebook, TikTok aur website ke liye date/time ke saath save karein.
+- Date/time ISO-8601 timezone ke saath store hota hai; dashboard mein local time dikhaya jata hai.
+- Naye calendar items default **Needs approval** status mein rehte hain. Admin/editor approval ya cancellation action alag se hota hai.
+- Yeh calendar/planning workflow hai, automatic publisher nahi. OAuth/platform APIs, account authorization, upload processing aur explicit publish action abhi alag integration work hai. Approved item apne aap publish nahi hota.
