@@ -365,10 +365,11 @@ $("aiVideoButton").addEventListener("click", async () => {
     $("aiVideoDownload").href = result.url;
     $("aiVideoAssetId").textContent = "AI Video ID: " + result.video_id + " · " + result.style + " · " + result.aspect_ratio + " · " + result.resolution + " · " + result.requested_duration_seconds + "s target";
     const existingVideoIds = $("renderVideoIds").value.split(",").map(x => x.trim()).filter(Boolean);
+    const isFirstQueuedClip = existingVideoIds.length === 0;
     existingVideoIds.push(result.video_id);
     $("renderVideoIds").value = [...new Set(existingVideoIds)].join(", ");
     const existingScenes = $("renderScenes").value.trim();
-    $("renderScenes").value = existingScenes ? existingScenes + "\n" + prompt : prompt;
+    $("renderScenes").value = isFirstQueuedClip || !existingScenes ? prompt : existingScenes + "\n" + prompt;
     $("aiVideoNotice").textContent = result.provider + " · " + result.model + " · MP4 · " + Math.ceil(result.size_bytes / 1024) + " KB. " + result.notice;
     $("aiVideoResult").hidden = false;
   } catch (error) {
