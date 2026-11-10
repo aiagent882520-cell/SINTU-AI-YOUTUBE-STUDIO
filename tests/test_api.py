@@ -896,7 +896,8 @@ def test_mixed_timeline_ffmpeg_integration(tmp_path, monkeypatch):
     result = video_renderer.render_mixed_timeline(
         [{"kind": "image", "path": still, "duration": 3}, {"kind": "video", "path": first_video, "duration": 0}],
         "Mixed timeline", ["Image intro", "Video scene"], seconds_per_scene=2,
-        subtitles=["Still caption", "Video caption"], transition="cut", transitions=["fade", "cut"]
+        subtitles=["Still caption", "Video caption"], transition="cut", transitions=["fade", "cut"],
+        resolution="1080x1080", fps=24, quality="maximum"
     )
     output = tmp_path / "mixed-renders" / f'{result["video_id"]}.mp4'
     assert output.is_file()
@@ -906,9 +907,16 @@ def test_mixed_timeline_ffmpeg_integration(tmp_path, monkeypatch):
     assert result["scene_durations"] == [3, None]
     assert result["subtitles_burned_in"] is True
     assert 3.8 <= result["duration_seconds"] <= 4.2
-    probe = subprocess.run([ffprobe, "-v", "error", "-show_entries", "stream=codec_type",
+    probe = subprocess.run([ffprobe, "-v", "error", "-show_entries", "stream=codec_type,width,height,r_frame_rate",
                             "-of", "json", str(output)], capture_output=True, text=True,
                            check=True, timeout=30)
     import json
-    types = [x["codec_type"] for x in json.loads(probe.stdout)["streams"]]
+    streams = json.loads(probe.stdout)["streams"]
+    video = next(x for x in streams if x["codec_type"] == "video")
+    types = [x["codec_type"] for x in streams]
     assert "video" in types and "audio" in types
+    assert (video["width"], video["height"]) == (1080, 1080)
+    assert video["r_frame_rate"] == "24/1"
+    assert result["resolution"] == "1080x1080"
+    assert result["fps"] == 24
+    assert result["quality"] == "maximum"
