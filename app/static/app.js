@@ -2,79 +2,44 @@ const $ = (id) => document.getElementById(id);
 let latestTaskId = null;
 
 function parseTimelineEntry(entry) {
-  const match = /^(image|video):([a-f0-9]{32})(?::(\\d{1,2}))?(?::(cut|fade))?$/i.exec(entry.trim());
-  if (!match) return null;
-  const kind = match[1].toLowerCase();
-  return {kind, id: match[2].toLowerCase(), duration: kind === "image" ? Number(match[3] || $("sceneSeconds").value || 4) : 0, transition: match[4] || $("renderTransition").value || "fade"};
+  const p=entry.trim().split(":");
+  if(p[0]==="image"&&p.length===4&&/^[a-f0-9]{32}$/i.test(p[1]))return {kind:"image",id:p[1].toLowerCase(),duration:Number(p[2]),transition:p[3]};
+  if(p[0]==="video"&&p.length===5&&/^[a-f0-9]{32}$/i.test(p[1]))return {kind:"video",id:p[1].toLowerCase(),trimStart:Number(p[2]),trimEnd:p[3]===""?null:Number(p[3]),transition:p[4]};
+  const legacy=/^(image|video):([a-f0-9]{32}):(\d{1,2}):(cut|fade)$/i.exec(entry.trim());if(!legacy)return null;
+  return {kind:legacy[1].toLowerCase(),id:legacy[2].toLowerCase(),duration:legacy[1].toLowerCase()==="image"?Number(legacy[3]):0,trimStart:0,trimEnd:null,transition:legacy[4]};
 }
-function timelineRows() {
-  const entries = $("renderTimeline").value.split("\n").map(parseTimelineEntry).filter(Boolean);
-  const scenes = $("renderScenes").value.split("\n");
-  const subtitles = $("renderSubtitles").value.split("\n");
-  return entries.map((item, index) => ({...item, scene: scenes[index] || "", subtitle: subtitles[index] || ""}));
+function timelineRows(){const entries=$("renderTimeline").value.split("\n").map(parseTimelineEntry).filter(Boolean),scenes=$("renderScenes").value.split("\n"),subs=$("renderSubtitles").value.split("\n");return entries.map((x,i)=>({...x,scene:scenes[i]||"",subtitle:subs[i]||""}));}
+function syncTimelineFields(rows){
+  $("renderTimeline").value=rows.map(x=>x.kind==="image"?"image:"+x.id+":"+x.duration+":"+x.transition:"video:"+x.id+":"+(x.trimStart||0)+":"+(x.trimEnd??"")+":"+x.transition).join("\n");
+  $("renderScenes").value=rows.map(x=>x.scene||"").join("\n");$("renderSubtitles").value=rows.map(x=>x.subtitle||"").join("\n");
+  $("renderImageIds").value=rows.filter(x=>x.kind==="image").map(x=>x.id).join(", ");$("renderVideoIds").value=rows.filter(x=>x.kind==="video").map(x=>x.id).join(", ");renderTimelineEditor(rows);
 }
-function syncTimelineFields(rows) {
-  $("renderTimeline").value = rows.map(x => x.kind + ":" + x.id + ":" + (x.kind === "image" ? x.duration : 0) + ":" + x.transition).join("\n");
-  $("renderScenes").value = rows.map(x => x.scene || "").join("\n");
-  $("renderSubtitles").value = rows.map(x => x.subtitle || "").join("\n");
-  $("renderImageIds").value = rows.filter(x => x.kind === "image").map(x => x.id).join(", ");
-  $("renderVideoIds").value = rows.filter(x => x.kind === "video").map(x => x.id).join(", ");
-  renderTimelineEditor(rows);
+function renderTimelineEditor(rows=timelineRows()){
+ const e=$("timelineEditor");if(!rows.length){e.innerHTML='<p class="muted">Abhi timeline khaali hai. AI image ya AI video generate karein.</p>';return;}
+ e.innerHTML=rows.map((x,i)=>{
+  const preview=x.kind==="image"?'<img src="/api/images/'+x.id+'" alt="Scene '+(i+1)+' preview" loading="lazy" style="width:100%;max-height:170px;object-fit:contain;background:#111;border-radius:8px">':'<video src="/api/ai-videos/'+x.id+'" controls playsinline preload="metadata" style="width:100%;max-height:170px;background:#111"></video>';
+  const edit=x.kind==="image"?'<label>Duration (seconds, 2–12)</label><input type="number" min="2" max="12" data-field="duration" data-index="'+i+'" value="'+x.duration+'">':'<div class="actions"><label>Start (sec)<input type="number" min="0" step="0.1" data-field="trimStart" data-index="'+i+'" value="'+(x.trimStart||0)+'"></label><label>End (sec; blank = full end)<input type="number" min="0.1" step="0.1" data-field="trimEnd" data-index="'+i+'" value="'+(x.trimEnd??"")+'"></label></div><p class="muted">Original clip safe rahegi; sirf selected segment render hoga.</p>';
+  return '<article class="panel timeline-row" style="margin:10px 0;padding:12px"><div class="actions"><strong>Scene '+(i+1)+' · '+x.kind.toUpperCase()+'</strong><button type="button" data-action="up" data-index="'+i+'" '+(i===0?'disabled':'')+'>↑</button><button type="button" data-action="down" data-index="'+i+'" '+(i===rows.length-1?'disabled':'')+'>↓</button><button type="button" data-action="remove" data-index="'+i+'">Remove</button></div>'+preview+'<label>Scene description</label><input data-field="scene" data-index="'+i+'" maxlength="1000" value="'+escapeHtml(x.scene||"")+'"><label>Subtitle (optional)</label><input data-field="subtitle" data-index="'+i+'" maxlength="1000" value="'+escapeHtml(x.subtitle||"")+'">'+edit+'<label>Transition after this scene</label><select data-field="transition" data-index="'+i+'"><option value="cut" '+(x.transition==="cut"?"selected":"")+'>Cut</option><option value="fade" '+(x.transition==="fade"?"selected":"")+'>Fade to/from black</option></select></article>';
+ }).join("");
 }
-function renderTimelineEditor(rows = timelineRows()) {
-  const editor = $("timelineEditor");
-  if (!rows.length) {
-    editor.innerHTML = '<p class="muted">Abhi timeline khaali hai. AI image ya AI video generate karein; assets yahan automatically add honge.</p>';
-    return;
-  }
-  editor.innerHTML = rows.map((item, index) => {
-    const preview = item.kind === "image"
-      ? '<img src="/api/images/' + item.id + '" alt="Scene ' + (index + 1) + ' preview" loading="lazy" style="width:100%;max-height:170px;object-fit:contain;background:#111;border-radius:8px">'
-      : '<video src="/api/ai-videos/' + item.id + '" controls playsinline preload="metadata" style="width:100%;max-height:170px;background:#111;border-radius:8px"></video>';
-    return '<article class="panel timeline-row" data-index="' + index + '" style="margin:10px 0;padding:12px">' +
-      '<div class="actions"><strong>Scene ' + (index + 1) + ' · ' + item.kind.toUpperCase() + '</strong>' +
-      '<button type="button" data-action="up" data-index="' + index + '" ' + (index === 0 ? 'disabled' : '') + '>↑</button>' +
-      '<button type="button" data-action="down" data-index="' + index + '" ' + (index === rows.length - 1 ? 'disabled' : '') + '>↓</button>' +
-      '<button type="button" data-action="remove" data-index="' + index + '">Remove</button></div>' + preview +
-      '<label>Scene description</label><input data-field="scene" data-index="' + index + '" maxlength="1000" value="' + escapeHtml(item.scene || "") + '">' +
-      '<label>Subtitle (optional)</label><input data-field="subtitle" data-index="' + index + '" maxlength="1000" value="' + escapeHtml(item.subtitle || "") + '">' +
-      (item.kind === "image" ? '<label>Duration (seconds, 2–12)</label><input type="number" min="2" max="12" data-field="duration" data-index="' + index + '" value="' + item.duration + '">' : '<p class="muted">Video duration: original clip duration</p>') +
-      '<label>Transition after this scene</label><select data-field="transition" data-index="' + index + '"><option value="cut" ' + (item.transition === "cut" ? "selected" : "") + '>Cut</option><option value="fade" ' + (item.transition === "fade" ? "selected" : "") + '>Fade to/from black</option></select>' +
-      '</article>';
-  }).join("");
-}
-function queueTimelineAsset(kind, id, sceneText) {
-  const rows = timelineRows();
-  if (rows.some(x => x.kind === kind && x.id === id)) return;
-  rows.push({kind, id, duration: kind === "image" ? Number($("sceneSeconds").value || 4) : 0,
-    transition: $("renderTransition").value || "fade", scene: sceneText || "Generated " + kind + " scene", subtitle: ""});
-  syncTimelineFields(rows);
-}
-$("timelineEditor").addEventListener("click", event => {
-  const button = event.target.closest("button[data-action]");
-  if (!button) return;
-  const rows = timelineRows();
-  const index = Number(button.dataset.index);
-  const action = button.dataset.action;
-  if (action === "remove") rows.splice(index, 1);
-  if (action === "up" && index > 0) [rows[index - 1], rows[index]] = [rows[index], rows[index - 1]];
-  if (action === "down" && index < rows.length - 1) [rows[index + 1], rows[index]] = [rows[index], rows[index + 1]];
-  syncTimelineFields(rows);
+function queueTimelineAsset(kind,id,sceneText){const rows=timelineRows();if(rows.some(x=>x.kind===kind&&x.id===id))return;rows.push({kind,id,duration:kind==="image"?Number($("sceneSeconds").value||4):0,trimStart:0,trimEnd:null,transition:$("renderTransition").value||"fade",scene:sceneText||"Generated "+kind+" scene",subtitle:""});syncTimelineFields(rows);}
+$("timelineEditor").addEventListener("click",event=>{const b=event.target.closest("button[data-action]");if(!b)return;const rows=timelineRows(),i=Number(b.dataset.index);if(b.dataset.action==="remove")rows.splice(i,1);if(b.dataset.action==="up"&&i>0)[rows[i-1],rows[i]]=[rows[i],rows[i-1]];if(b.dataset.action==="down"&&i<rows.length-1)[rows[i+1],rows[i]]=[rows[i],rows[i+1]];syncTimelineFields(rows);});
+$("timelineEditor").addEventListener("change",event=>{
+ const field=event.target.dataset.field;if(!field)return;const rows=timelineRows(),x=rows[Number(event.target.dataset.index)];if(!x)return;
+ if(field==="duration"){const n=Number(event.target.value);if(!Number.isInteger(n)||n<2||n>12){event.target.value=x.duration;return;}x.duration=n;}
+ else if(field==="trimStart"||field==="trimEnd"){const n=event.target.value===""&&field==="trimEnd"?null:Number(event.target.value);if(n!==null&&(!Number.isFinite(n)||n<0)){event.target.value=x[field]??"";return;}if(field==="trimStart")x.trimStart=n;else x.trimEnd=n;if(x.trimEnd!==null&&x.trimEnd<=x.trimStart){event.target.value=x[field]??"";return;}}
+ else x[field]=event.target.value;syncTimelineFields(rows);
 });
-$("timelineEditor").addEventListener("change", event => {
-  const field = event.target.dataset.field;
-  if (!field) return;
-  const rows = timelineRows();
-  const item = rows[Number(event.target.dataset.index)];
-  if (!item) return;
-  if (field === "duration") {
-    const value = Number(event.target.value);
-    if (!Number.isInteger(value) || value < 2 || value > 12) { event.target.value = item.duration; return; }
-    item.duration = value;
-  } else item[field] = event.target.value;
-  syncTimelineFields(rows);
-});
-
+function playTimelinePreview(){
+ const rows=timelineRows(),stage=$("timelinePreviewStage"),notice=$("timelinePreviewNotice");if(!rows.length){notice.textContent="Preview ke liye scenes add karein.";return;}let i=0,timer=null;
+ const stop=()=>{if(timer)clearTimeout(timer);const v=stage.querySelector("video");if(v)v.pause();};
+ $("timelinePreviewStop").onclick=()=>{stop();notice.textContent="Preview stopped.";};
+ const next=()=>{stop();if(i>=rows.length){notice.textContent="Sequence preview complete.";return;}const x=rows[i];notice.textContent="Preview scene "+(i+1)+" / "+rows.length;
+  if(x.kind==="image"){stage.innerHTML='<img alt="Timeline scene" style="width:100%;max-height:420px;object-fit:contain" src="/api/images/'+x.id+'">';timer=setTimeout(()=>{i++;next();},x.duration*1000);}
+  else{stage.innerHTML='<video controls autoplay playsinline style="width:100%;max-height:420px" src="/api/ai-videos/'+x.id+'"></video>';const v=stage.querySelector("video");v.addEventListener("loadedmetadata",()=>{v.currentTime=x.trimStart||0;});v.addEventListener("timeupdate",()=>{if(x.trimEnd!==null&&v.currentTime>=x.trimEnd){v.pause();i++;next();}});v.addEventListener("ended",()=>{i++;next();});}
+ };next();
+}
+$("timelinePreviewPlay").addEventListener("click",playTimelinePreview);
 
 async function request(path, options={}) {
   const response = await fetch(path, {...options, headers:{"Content-Type":"application/json", ...(options.headers || {})}});
