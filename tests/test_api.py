@@ -551,7 +551,7 @@ def test_video_generator_validates_config_and_prompt(monkeypatch):
 def test_video_generator_extracts_mp4_from_rest_steps():
     import base64
     from app.video_generator import _extract_video
-    mp4 = b"\\x00\\x00\\x00\\x18ftypmp42fake-mp4-video-data"
+    mp4 = b"1234ftypmp42fake-mp4-video-data"
     payload = {"steps": [{"type": "model_output", "content": [
         {"type": "video", "mime_type": "video/mp4", "data": base64.b64encode(mp4).decode()}
     ]}]}
