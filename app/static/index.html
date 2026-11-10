@@ -197,6 +197,12 @@
       <h3>External Integrations</h3><div id="integrationCards" class="integration-cards">Loading integrations…</div>
       <p class="foot">Security: API keys yahan enter nahi hoti, browser ko kabhi return nahi hoti. Hosting/server ke Secret Environment mein key add karni hogi. Paid APIs ka charge lag sakta hai.</p>
     </section>
+    <section class="panel" id="youtubeAdminPanel" hidden>
+      <div class="panel-head"><div><h2>YouTube Channel Connection</h2><p>Official Google OAuth, channel status aur approved MP4 upload.</p></div><button id="youtubeRefresh" class="secondary" type="button">Refresh</button></div>
+      <div id="youtubeConnectionStatus" class="muted" role="status" aria-live="polite">Checking YouTube setup…</div>
+      <div class="actions"><button id="youtubeConnect" type="button">Connect YouTube Channel</button><button id="youtubeDisconnect" class="secondary" type="button" hidden>Disconnect</button></div>
+      <p class="foot">Connect karne ke liye Google Cloud Console mein YouTube Data API v3 enable karein, OAuth Web Client banayein aur server secrets set karein. Upload default Private rahega; public/unlisted sirf admin ke explicit selection par. YouTube quota limits apply.</p>
+    </section>
     <section class="panel" id="calendarPanel">
       <div class="panel-head"><div><h2>Content Calendar & Scheduling</h2><p>Plan YouTube, Shorts, Instagram, Facebook, TikTok and website content.</p></div><button id="calendarRefresh" class="secondary" type="button">Refresh</button></div>
       <form id="calendarForm" class="calendar-form">
