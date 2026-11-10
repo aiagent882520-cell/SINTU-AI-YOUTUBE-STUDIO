@@ -193,6 +193,13 @@ def init_db():
         conn.execute("""CREATE TABLE IF NOT EXISTS app_settings (
             setting_key TEXT PRIMARY KEY, setting_value TEXT NOT NULL, updated_at TEXT NOT NULL
         )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS content_calendar (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL, platform TEXT NOT NULL, prompt TEXT NOT NULL,
+            scheduled_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'Needs approval',
+            created_at TEXT NOT NULL, approved_at TEXT
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_content_calendar_date ON content_calendar(scheduled_at)")
     _ensure_bootstrap_admin()
 
 init_db()
@@ -200,6 +207,12 @@ init_db()
 class TaskInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=10000)
     workflow: str = Field(default="content", max_length=80)
+
+class CalendarItemInput(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    platform: str = Field(pattern=r"^(youtube|youtube_shorts|instagram|facebook|tiktok|website)$")
+    prompt: str = Field(min_length=1, max_length=10000)
+    scheduled_at: str = Field(min_length=20, max_length=40)
 
 class RenderInput(BaseModel):
     title: str = Field(min_length=1, max_length=100)
@@ -543,6 +556,68 @@ def generate(payload: TaskInput):
         )
     return {"id": task_id, "status": "Completed", "provider": result["provider"],
             "model": result["model"], "output": result["output"]}
+
+@app.get("/api/calendar")
+def calendar_items():
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT id,title,platform,prompt,scheduled_at,status,created_at,approved_at FROM content_calendar ORDER BY scheduled_at ASC LIMIT 200"
+        ).fetchall()
+    return {"items": [dict(row) for row in rows],
+            "publishing_mode": "manual_approval_only",
+            "notice": "Calendar reminders and approvals only; automatic publishing is not connected."}
+
+
+@app.post("/api/calendar")
+def create_calendar_item(payload: CalendarItemInput):
+    title, prompt = payload.title.strip(), payload.prompt.strip()
+    if not title or not prompt:
+        raise HTTPException(status_code=400, detail="Title and content prompt are required.")
+    try:
+        scheduled = datetime.fromisoformat(payload.scheduled_at.replace("Z", "+00:00"))
+        if scheduled.tzinfo is None:
+            raise ValueError("Timezone offset required")
+        scheduled = scheduled.astimezone(timezone.utc)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="scheduled_at must be an ISO-8601 datetime with timezone.")
+    if scheduled <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Choose a future date and time.")
+    created = datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        cur = conn.execute(
+            "INSERT INTO content_calendar(title,platform,prompt,scheduled_at,status,created_at) VALUES(?,?,?,?,?,?)",
+            (title, payload.platform, prompt, scheduled.isoformat(), "Needs approval", created)
+        )
+        item_id = cur.lastrowid
+    return {"id": item_id, "status": "Needs approval", "scheduled_at": scheduled.isoformat(),
+            "message": "Saved to calendar. Admin/editor approval is required; nothing will publish automatically."}
+
+
+@app.post("/api/calendar/{item_id}/approve")
+def approve_calendar_item(item_id: int):
+    with db() as conn:
+        row = conn.execute("SELECT id,status FROM content_calendar WHERE id=?", (item_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Calendar item not found.")
+        if row["status"] != "Needs approval":
+            raise HTTPException(status_code=409, detail="Only items awaiting approval can be approved.")
+        approved = datetime.now(timezone.utc).isoformat()
+        conn.execute("UPDATE content_calendar SET status='Approved',approved_at=? WHERE id=?", (approved,item_id))
+    return {"id": item_id, "status": "Approved", "approved_at": approved,
+            "message": "Approved in calendar. Publishing still requires a connected official platform integration and a separate publish action."}
+
+
+@app.post("/api/calendar/{item_id}/cancel")
+def cancel_calendar_item(item_id: int):
+    with db() as conn:
+        row = conn.execute("SELECT id,status FROM content_calendar WHERE id=?", (item_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Calendar item not found.")
+        if row["status"] in {"Cancelled", "Published"}:
+            raise HTTPException(status_code=409, detail="This calendar item cannot be cancelled.")
+        conn.execute("UPDATE content_calendar SET status='Cancelled' WHERE id=?", (item_id,))
+    return {"id": item_id, "status": "Cancelled"}
+
 
 @app.get("/api/tasks")
 def tasks():
