@@ -426,7 +426,7 @@ def render_video(payload: RenderInput):
             timeline_items = []
             scene_transitions = []
             for entry in payload.timeline:
-                match = re.fullmatch(r"(image|video):([a-f0-9]{32})(?::(\\d{1,2}))?(?::(cut|fade))?", entry.strip())
+                match = re.fullmatch(r"(image|video):([a-f0-9]{32})(?::(\d{1,2}))?(?::(cut|fade))?", entry.strip())
                 if not match:
                     raise HTTPException(status_code=400, detail="Timeline format image:ID:duration:transition ya video:ID:0:transition hona chahiye.")
                 kind, asset_id, duration_text, transition_mode = match.groups()
