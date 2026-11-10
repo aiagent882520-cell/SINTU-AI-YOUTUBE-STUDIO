@@ -215,6 +215,16 @@
       <div class="actions"><button id="tiktokConnect" type="button">Connect TikTok</button><button id="tiktokDisconnect" class="secondary" type="button" hidden>Disconnect</button></div>
       <p class="foot">Direct Post API approval aur video.publish scope required. Unaudited apps ke posts private-only hote hain. Publish ke baad TikTok processing status check karna zaroori hai.</p>
     </section>
+    <section class="panel" id="publishingHistoryPanel" hidden>
+      <div class="panel-head"><div><h2>Unified Publishing Dashboard</h2><p>YouTube, Facebook, Instagram aur TikTok ke publish events.</p></div><button id="publishingHistoryRefresh" class="secondary" type="button">Refresh</button></div>
+      <div class="task-filters">
+        <select id="publishingPlatformFilter" aria-label="Filter platform"><option value="">All platforms</option><option value="youtube">YouTube</option><option value="youtube_shorts">YouTube Shorts</option><option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option></select>
+        <select id="publishingStatusFilter" aria-label="Filter status"><option value="">All statuses</option><option value="Published">Published</option><option value="PROCESSING_UPLOAD">Processing upload</option><option value="PUBLISH_COMPLETE">TikTok complete</option><option value="FAILED">Failed</option><option value="PUBLISH_FAILED">Publish failed</option></select>
+      </div>
+      <div id="publishingTotals" class="integration-cards" aria-live="polite"></div>
+      <p id="publishingHistoryNotice" class="muted" role="status" aria-live="polite">Loading publishing history…</p>
+      <div id="publishingHistoryItems" class="calendar-list"></div>
+    </section>
     <section class="panel" id="calendarPanel">
       <div class="panel-head"><div><h2>Content Calendar & Scheduling</h2><p>Plan YouTube, Shorts, Instagram, Facebook, TikTok and website content.</p></div><button id="calendarRefresh" class="secondary" type="button">Refresh</button></div>
       <form id="calendarForm" class="calendar-form">
