@@ -220,6 +220,17 @@
       <div class="actions"><button id="tiktokConnect" type="button">Connect TikTok</button><button id="tiktokDisconnect" class="secondary" type="button" hidden>Disconnect</button></div>
       <p class="foot">Direct Post API approval aur video.publish scope required. Unaudited apps ke posts private-only hote hain. Publish ke baad TikTok processing status check karna zaroori hai.</p>
     </section>
+    <section class="panel" id="youtubeAnalyticsPanel" hidden>
+      <div class="panel-head"><div><h2>YouTube Channel Analytics</h2><p>Official YouTube Analytics API · actual channel data</p></div><button id="youtubeAnalyticsRefresh" class="secondary" type="button">Load analytics</button></div>
+      <div class="task-filters">
+        <label for="youtubeAnalyticsStart">From</label><input id="youtubeAnalyticsStart" type="date">
+        <label for="youtubeAnalyticsEnd">To</label><input id="youtubeAnalyticsEnd" type="date">
+      </div>
+      <div id="youtubeAnalyticsTotals" class="integration-cards" aria-live="polite"></div>
+      <h3>Daily performance</h3><div id="youtubeAnalyticsDaily" class="calendar-list"></div>
+      <h3>Top videos by views</h3><div id="youtubeAnalyticsVideos" class="calendar-list"></div>
+      <p id="youtubeAnalyticsNotice" class="muted" role="status" aria-live="polite">Connect YouTube and load analytics.</p>
+    </section>
     <section class="panel" id="analyticsOverviewPanel" hidden>
       <div class="panel-head"><div><h2>Publishing Performance Overview</h2><p>Recorded SINTU publishing events only; platform views and revenue are not fabricated.</p></div><button id="analyticsRefresh" class="secondary" type="button">Refresh</button></div>
       <div id="analyticsTotals" class="integration-cards" aria-live="polite"></div>
