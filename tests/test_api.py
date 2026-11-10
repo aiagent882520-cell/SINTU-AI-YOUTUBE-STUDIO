@@ -125,6 +125,45 @@ def test_storyboard_render_success_contract(tmp_path, monkeypatch):
     assert result.json()["resolution"] == "720x1280"
 
 
+def test_render_export_profile_validation_and_forwarding(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    captured = {}
+    def fake_render(title, scenes, seconds, **kwargs):
+        captured.update(kwargs)
+        return {"video_id": "f" * 32, "url": "/api/videos/" + "f" * 32,
+                "resolution": kwargs["resolution"], "fps": kwargs["fps"],
+                "quality": kwargs["quality"], "format": "MP4 / H.264"}
+    monkeypatch.setattr(main, "render_storyboard", fake_render)
+    response = client.post("/api/render", json={
+        "title": "Landscape test", "scenes": ["Opening"],
+        "resolution": "1920x1080", "fps": 60, "quality": "maximum"
+    })
+    assert response.status_code == 200
+    assert response.json()["resolution"] == "1920x1080"
+    assert response.json()["fps"] == 60
+    assert response.json()["quality"] == "maximum"
+    assert captured["resolution"] == "1920x1080"
+    assert captured["fps"] == 60
+    assert captured["quality"] == "maximum"
+    assert client.post("/api/render", json={
+        "title": "Bad", "scenes": ["Opening"], "resolution": "7680x4320"
+    }).status_code == 400
+    assert client.post("/api/render", json={
+        "title": "Bad", "scenes": ["Opening"], "fps": 48
+    }).status_code == 400
+    assert client.post("/api/render", json={
+        "title": "Bad", "scenes": ["Opening"], "quality": "ultra"
+    }).status_code == 400
+
+
+def test_render_capabilities_list_export_profiles(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    profiles = client.get("/api/render/capabilities").json()["profiles"]
+    assert "1080x1920" in profiles["resolutions"]
+    assert profiles["fps"] == [24, 30, 60]
+    assert profiles["quality"] == ["standard", "high", "maximum"]
+
+
 def test_voiceover_is_disabled_by_default(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.delenv("ENABLE_PAID_MEDIA_GENERATION", raising=False)
