@@ -150,6 +150,26 @@ $("refresh").addEventListener("click", refresh);
 function calendarEscape(value) {
  return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
 }
+async function loadAnalyticsOverview(){
+ const panel=$("analyticsOverviewPanel");if(!panel)return;
+ try{
+  const session=await request("/api/auth/session");
+  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  panel.hidden=false;
+  const data=await request("/api/admin/publishing/history?limit=250");
+  const items=data.items||[];
+  const published=items.filter(x=>["Published","PUBLISH_COMPLETE"].includes(x.status)).length;
+  const processing=items.filter(x=>["PROCESSING_UPLOAD","PROCESSING","PUBLISHING"].includes(x.status)).length;
+  const failed=items.filter(x=>["FAILED","PUBLISH_FAILED","ERROR"].includes(x.status)).length;
+  const cards=[["Recorded events",items.length],["Published",published],["Processing",processing],["Failed",failed]];
+  $("analyticsTotals").innerHTML=cards.map(([name,value])=>'<div class="integration-card"><strong>'+adminEscape(name)+'</strong><span>'+value+'</span></div>').join("");
+  const platforms={};items.forEach(x=>{platforms[x.platform]=(platforms[x.platform]||0)+1;});
+  $("analyticsPlatforms").innerHTML=Object.entries(platforms).map(([name,count])=>'<div class="admin-row"><strong>'+adminEscape(name)+'</strong><span>'+count+' recorded events</span></div>').join("")||"No publishing events recorded yet.";
+  $("analyticsNotice").textContent="Latest 250 recorded events. Views, impressions, CTR, watch time, subscribers and revenue are not yet available from platform analytics APIs.";
+ }catch(error){$("analyticsNotice").textContent=error.message;}
+}
+$("analyticsRefresh")?.addEventListener("click",loadAnalyticsOverview);
+
 async function loadSchedulerQueue(){
  const panel=$("schedulerQueuePanel");if(!panel)return;
  try{
@@ -316,6 +336,7 @@ $("calendarRefresh")?.addEventListener("click", loadCalendar);
 loadCalendar();
 loadPublishingHistory();
 loadSchedulerQueue();
+loadAnalyticsOverview();
 function downloadPackage(format) {
   if (!latestTaskId) return;
   window.location.href = "/api/export/" + latestTaskId + "?format=" + format;
