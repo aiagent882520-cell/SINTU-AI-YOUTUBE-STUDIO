@@ -360,7 +360,6 @@ def admin_update_user(user_id: int, payload: AdminUserUpdate, request: Request):
     return dict(row)
 
 
-@app.get("/api/admin/audit")
 def _get_app_setting(key: str, default: str = "") -> str:
     with db() as conn:
         row = conn.execute("SELECT setting_value FROM app_settings WHERE setting_key=?", (key,)).fetchone()
@@ -403,6 +402,14 @@ def update_admin_provider_settings(payload: ProviderSettingsInput):
 
 
 @app.get("/api/admin/integrations")
+@app.get("/api/admin/audit")
+def admin_audit(limit: int = 50):
+    limit = max(1, min(limit, 200))
+    with db() as conn:
+        rows = conn.execute("SELECT id,actor_username,actor_role,action,method,path,status_code,ip_address,created_at FROM security_audit ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    return {"events": [dict(row) for row in rows]}
+
+
 def admin_integrations():
     providers = admin_provider_settings()
     paid_media = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "false").lower() == "true"
