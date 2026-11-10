@@ -432,3 +432,60 @@ $("aiVideoButton").addEventListener("click", async () => {
   }
 });
 checkAIVideoService();
+
+
+function adminEscape(value) {
+  return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+}
+async function loadAdminPanel() {
+  const panel = $("adminPanel");
+  if (!panel) return;
+  try {
+    const session = await request("/api/auth/session");
+    if (!session.authenticated || session.role !== "admin") { panel.hidden = true; return; }
+    panel.hidden = false;
+    const [usersData, auditData] = await Promise.all([request("/api/admin/users"), request("/api/admin/audit?limit=40")]);
+    $("adminUsers").innerHTML = usersData.users.map(user => `
+      <div class="admin-row">
+        <div><strong>${adminEscape(user.username)}</strong><small>#${user.id} · ${adminEscape(user.created_at)}</small></div>
+        <select data-user-role="${user.id}" aria-label="Role for ${adminEscape(user.username)}">
+          <option value="viewer" ${user.role==="viewer"?"selected":""}>Viewer</option>
+          <option value="editor" ${user.role==="editor"?"selected":""}>Editor</option>
+          <option value="admin" ${user.role==="admin"?"selected":""}>Admin</option>
+        </select>
+        <span class="role-state">${user.is_active?"Active":"Disabled"}</span>
+        <button class="secondary user-toggle" data-user-id="${user.id}" data-active="${user.is_active?0:1}" type="button">${user.is_active?"Disable":"Enable"}</button>
+      </div>`).join("") || "No users.";
+    $("adminAudit").innerHTML = auditData.events.map(event => `
+      <div class="admin-row audit-row">
+        <div><strong>${adminEscape(event.actor_username)} · ${adminEscape(event.actor_role)}</strong><small>${adminEscape(event.created_at)} · ${adminEscape(event.ip_address)}</small></div>
+        <div><b>${adminEscape(event.method)} ${adminEscape(event.path)}</b><small>HTTP ${event.status_code}</small></div>
+      </div>`).join("") || "No security events yet.";
+    $("adminNotice").textContent = "Users: " + usersData.users.length + " · Recent security events: " + auditData.events.length;
+    document.querySelectorAll("[data-user-role]").forEach(select => select.addEventListener("change", async () => {
+      try { await request("/api/admin/users/" + select.dataset.userRole, {method:"PATCH",body:JSON.stringify({role:select.value})}); await loadAdminPanel(); }
+      catch(error) { $("adminNotice").textContent = error.message; }
+    }));
+    document.querySelectorAll(".user-toggle").forEach(button => button.addEventListener("click", async () => {
+      try { await request("/api/admin/users/" + button.dataset.userId, {method:"PATCH",body:JSON.stringify({is_active:button.dataset.active==="1"})}); await loadAdminPanel(); }
+      catch(error) { $("adminNotice").textContent = error.message; }
+    }));
+  } catch(error) { panel.hidden = true; }
+}
+$("adminUserForm")?.addEventListener("submit", async event => {
+  event.preventDefault();
+  const button = event.submitter;
+  button.disabled = true;
+  $("adminNotice").textContent = "Creating account…";
+  try {
+    await request("/api/admin/users", {method:"POST",body:JSON.stringify({
+      username:$("newUsername").value.trim(), password:$("newPassword").value, role:$("newRole").value
+    })});
+    $("adminUserForm").reset();
+    $("adminNotice").textContent = "New user created. Password user ko secure channel se share karein.";
+    await loadAdminPanel();
+  } catch(error) { $("adminNotice").textContent = error.message; }
+  finally { button.disabled = false; }
+});
+$("adminRefresh")?.addEventListener("click", loadAdminPanel);
+loadAdminPanel();
