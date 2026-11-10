@@ -165,14 +165,43 @@ async function loadYouTubeAnalytics(){
   const data=await request("/api/admin/youtube/analytics?"+params.toString());
   const t=data.totals||{};
   const cards=[["Views",Number(t.views||0).toLocaleString()],["Watch time",Number(t.estimatedMinutesWatched||0).toLocaleString()+" min"],["Average view",formatAnalyticsDuration(t.averageViewDuration)],["Subscribers gained",Number(t.subscribersGained||0).toLocaleString()],["Subscribers lost",Number(t.subscribersLost||0).toLocaleString()]];
+  if(data.revenue?.available){cards.push(["Estimated revenue","₹"+Number(data.revenue.estimated_revenue||0).toFixed(2)]);cards.push(["Ad impressions",Number(data.revenue.ad_impressions||0).toLocaleString()]);cards.push(["Playback CPM","₹"+Number(data.revenue.playback_based_cpm||0).toFixed(2)]);}
   $("youtubeAnalyticsTotals").innerHTML=cards.map(([label,value])=>'<div class="integration-card"><strong>'+analyticsEscape(value)+'</strong><span>'+analyticsEscape(label)+'</span></div>').join("");
   $("youtubeAnalyticsDaily").innerHTML=(data.daily||[]).slice(-31).reverse().map(row=>'<div class="admin-row"><strong>'+analyticsEscape(row.date||"")+'</strong><span>'+Number(row.views||0).toLocaleString()+' views · '+Number(row.watch_minutes||0).toLocaleString()+' min · +'+Number(row.subscribers_gained||0)+' / -'+Number(row.subscribers_lost||0)+' subs</span></div>').join("")||'<p class="muted">Is date range mein daily data nahi mila.</p>';
   $("youtubeAnalyticsVideos").innerHTML=(data.top_videos||[]).map((video,i)=>'<div class="admin-row"><strong>#'+(i+1)+' · '+analyticsEscape(video.video_id)+'</strong><span>'+Number(video.views||0).toLocaleString()+' views · '+Number(video.watch_minutes||0).toLocaleString()+' min · <a href="'+analyticsEscape(video.url)+'" target="_blank" rel="noopener noreferrer">Open video</a></span></div>').join("")||'<p class="muted">Is range mein video report nahi mili.</p>';
-  notice.textContent=data.channel+" · "+data.start_date+" to "+data.end_date+" · "+data.note;
+  notice.textContent=data.channel+" · "+data.start_date+" to "+data.end_date+" · "+data.note+" · "+(data.revenue?.note||"");
  }catch(error){notice.textContent=error.message;}
  finally{button.disabled=false;}
 }
 $("youtubeAnalyticsRefresh")?.addEventListener("click",loadYouTubeAnalytics);
+async function loadYouTubeReach(){
+ const panel=$("youtubeReachPanel");if(!panel)return;
+ const notice=$("youtubeReachNotice");
+ try{
+  const session=await request("/api/auth/session");
+  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  panel.hidden=false;
+  const data=await request("/api/admin/youtube/reach");
+  const setup=$("youtubeReachSetup");setup.hidden=!!data.configured;
+  if(data.available){
+   const totals=data.totals||{};
+   $("youtubeReachTotals").innerHTML=[["Thumbnail impressions",Number(totals.thumbnail_impressions||0).toLocaleString()],["Thumbnail CTR",(Number(totals.thumbnail_ctr||0)*100).toFixed(2)+"%"]]
+    .map(([label,value])=>'<div class="integration-card"><strong>'+analyticsEscape(value)+'</strong><span>'+analyticsEscape(label)+'</span></div>').join("");
+   $("youtubeReachDaily").innerHTML=(data.daily||[]).slice().reverse().map(x=>'<div class="admin-row"><strong>'+analyticsEscape(x.date)+'</strong><span>'+Number(x.impressions).toLocaleString()+' impressions · '+(Number(x.ctr||0)*100).toFixed(2)+'% CTR</span></div>').join("");
+   $("youtubeReachVideos").innerHTML=(data.top_videos||[]).map((x,i)=>'<div class="admin-row"><strong>#'+(i+1)+' · '+analyticsEscape(x.video_id)+'</strong><span>'+Number(x.impressions).toLocaleString()+' impressions · '+(Number(x.ctr||0)*100).toFixed(2)+'% CTR · <a href="'+analyticsEscape(x.url)+'" target="_blank" rel="noopener noreferrer">Open video</a></span></div>').join("");
+  }else{
+   $("youtubeReachTotals").innerHTML="";$("youtubeReachDaily").innerHTML="";$("youtubeReachVideos").innerHTML="";
+  }
+  notice.textContent=data.note;
+ }catch(e){notice.textContent=e.message;}
+}
+$("youtubeReachRefresh")?.addEventListener("click",loadYouTubeReach);
+$("youtubeReachSetup")?.addEventListener("click",async()=>{
+ const button=$("youtubeReachSetup");button.disabled=true;
+ try{const result=await request("/api/admin/youtube/reach/setup",{method:"POST"});$("youtubeReachNotice").textContent=result.note;await loadYouTubeReach();}
+ catch(e){$("youtubeReachNotice").textContent=e.message;}
+ finally{button.disabled=false;}
+});
 async function loadAnalyticsOverview(){
  const panel=$("analyticsOverviewPanel");if(!panel)return;
  try{
@@ -361,6 +390,7 @@ loadPublishingHistory();
 loadSchedulerQueue();
 loadAnalyticsOverview();
 loadYouTubeAnalytics();
+loadYouTubeReach();
 function downloadPackage(format) {
   if (!latestTaskId) return;
   window.location.href = "/api/export/" + latestTaskId + "?format=" + format;
