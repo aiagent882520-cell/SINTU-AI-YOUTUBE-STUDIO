@@ -102,6 +102,8 @@ def _download_video_file(file_id: str, api_key: str) -> bytes:
         except urllib.error.HTTPError as exc:
             detail = exc.read(1000).decode("utf-8", "replace")
             raise VideoGenerationFailed(f"Gemini video file status failed ({exc.code}): {detail[:400]}") from None
+        except (urllib.error.URLError, TimeoutError) as exc:
+            raise VideoGenerationFailed(f"Gemini video status connection failed: {str(exc)[:250]}") from None
         state = file_info.get("state")
         if state == "ACTIVE":
             break
@@ -119,6 +121,8 @@ def _download_video_file(file_id: str, api_key: str) -> bytes:
     except urllib.error.HTTPError as exc:
         detail = exc.read(1000).decode("utf-8", "replace")
         raise VideoGenerationFailed(f"Gemini video download failed ({exc.code}): {detail[:400]}") from None
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise VideoGenerationFailed(f"Gemini video download connection failed: {str(exc)[:250]}") from None
     return _validate_video(raw)
 
 
