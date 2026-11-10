@@ -1,4 +1,6 @@
 from fastapi.testclient import TestClient
+import shutil
+import subprocess
 import pytest
 
 from app import main
@@ -691,3 +693,45 @@ def test_ai_video_clip_assembly_contract(tmp_path, monkeypatch):
         "video_ids": ["d" * 32]
     })
     assert missing.status_code == 404
+
+
+def test_ai_clip_assembly_ffmpeg_integration(tmp_path, monkeypatch):
+    ffmpeg = shutil.which("ffmpeg")
+    ffprobe = shutil.which("ffprobe")
+    if not ffmpeg or not ffprobe:
+        pytest.skip("FFmpeg/FFprobe not installed on this runner")
+    filters = subprocess.run([ffmpeg, "-filters"], capture_output=True, text=True, check=False)
+    if "subtitles" not in (filters.stdout + filters.stderr):
+        pytest.skip("FFmpeg subtitles filter unavailable")
+
+    first = tmp_path / "clip-one.mp4"
+    second = tmp_path / "clip-two.mp4"
+    subprocess.run([
+        ffmpeg, "-y", "-v", "error", "-f", "lavfi", "-i",
+        "color=c=red:s=320x240:r=24:d=1", "-f", "lavfi", "-i",
+        "sine=frequency=440:duration=1", "-shortest", "-c:v", "libx264",
+        "-pix_fmt", "yuv420p", "-c:a", "aac", str(first)
+    ], check=True, timeout=30)
+    subprocess.run([
+        ffmpeg, "-y", "-v", "error", "-f", "lavfi", "-i",
+        "color=c=blue:s=320x240:r=24:d=1", "-t", "1", "-c:v", "libx264",
+        "-pix_fmt", "yuv420p", str(second)
+    ], check=True, timeout=30)
+
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path / "renders")
+    result = video_renderer.render_ai_clips(
+        [first, second], subtitles=["First caption", "Second caption"], transition="fade"
+    )
+    output = tmp_path / "renders" / f'{result["video_id"]}.mp4'
+    assert output.is_file()
+    assert result["subtitles_burned_in"] is True
+    assert result["transition"] == "fade"
+    probe = subprocess.run([
+        ffprobe, "-v", "error", "-show_entries", "stream=codec_type",
+        "-of", "json", str(output)
+    ], capture_output=True, text=True, check=True, timeout=30)
+    import json
+    stream_types = [item["codec_type"] for item in json.loads(probe.stdout)["streams"]]
+    assert "video" in stream_types
+    assert "audio" in stream_types
+    assert 1.8 <= result["duration_seconds"] <= 2.2
