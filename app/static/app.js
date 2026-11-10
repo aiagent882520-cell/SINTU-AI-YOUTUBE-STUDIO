@@ -8,7 +8,10 @@ function parseTimelineEntry(entry) {
   return {kind, id: match[2].toLowerCase(), duration: kind === "image" ? Number(match[3] || $("sceneSeconds").value || 4) : 0, transition: match[4] || $("renderTransition").value || "fade"};
 }
 function timelineRows() {
-  return $("renderTimeline").value.split("\n").map(parseTimelineEntry).filter(Boolean);
+  const entries = $("renderTimeline").value.split("\n").map(parseTimelineEntry).filter(Boolean);
+  const scenes = $("renderScenes").value.split("\n");
+  const subtitles = $("renderSubtitles").value.split("\n");
+  return entries.map((item, index) => ({...item, scene: scenes[index] || "", subtitle: subtitles[index] || ""}));
 }
 function syncTimelineFields(rows) {
   $("renderTimeline").value = rows.map(x => x.kind + ":" + x.id + ":" + (x.kind === "image" ? x.duration : 0) + ":" + x.transition).join("\n");
