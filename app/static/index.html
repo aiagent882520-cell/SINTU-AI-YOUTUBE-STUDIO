@@ -186,6 +186,17 @@
       <h3>Team Accounts</h3><div id="adminUsers" class="admin-list">Loading…</div>
       <h3>Security Activity Log</h3><div id="adminAudit" class="admin-list">Loading…</div>
     </section>
+    <section class="panel" id="providerAdminPanel" hidden>
+      <div class="panel-head"><div><h2>AI Provider Settings</h2><p>Text AI provider choose karein. API keys server ke secure environment mein hi rahengi.</p></div><button id="providerRefresh" class="secondary" type="button">Refresh</button></div>
+      <form id="providerSettingsForm" class="provider-settings-form">
+        <div><label for="selectedProvider">Preferred text AI provider</label><select id="selectedProvider"><option value="auto">Automatic (configured provider)</option><option value="openai">OpenAI</option><option value="gemini">Google Gemini</option></select></div>
+        <button type="submit">Save Provider</button>
+      </form>
+      <p id="providerAdminNotice" class="muted" role="status" aria-live="polite"></p>
+      <div id="providerCards" class="integration-cards">Loading provider status…</div>
+      <h3>External Integrations</h3><div id="integrationCards" class="integration-cards">Loading integrations…</div>
+      <p class="foot">Security: API keys yahan enter nahi hoti, browser ko kabhi return nahi hoti. Hosting/server ke Secret Environment mein key add karni hogi. Paid APIs ka charge lag sakta hai.</p>
+    </section>
     <section class="panel">
       <div class="panel-head"><div><h2>Task History</h2><p>Recent prompts and generated outputs.</p></div><button id="refresh" class="secondary" type="button">Refresh</button></div>
       <div id="tasks">No tasks yet.</div>
