@@ -97,6 +97,23 @@
       <div id="renderResult" hidden><video id="renderVideo" controls playsinline style="width:100%;max-height:520px;background:#000;border-radius:12px"></video><p><a id="renderDownload" download="sintu-storyboard.mp4">Download MP4</a></p></div>
     </section>
         <section class="panel">
+      <div class="panel-head"><div><h2>AI Video & Animation Studio</h2><p>Gemini Omni Flash se text-to-video ya reference image-to-video short clips banayein.</p></div></div>
+      <p id="aiVideoStatus" class="muted" role="status">AI video provider status checking…</p>
+      <label for="aiVideoPrompt">Video scene prompt</label>
+      <textarea id="aiVideoPrompt" rows="4" maxlength="3000" placeholder="A cinematic aerial shot of an ancient Indian stepwell at blue hour, camera slowly descends, soft fog moves through the architecture, mysterious documentary mood."></textarea>
+      <label for="aiVideoStyle">Visual style</label>
+      <select id="aiVideoStyle"><option value="cinematic">Cinematic live action</option><option value="documentary">Documentary</option><option value="2d-animation">2D animation style</option><option value="3d-animation">3D animation style</option><option value="anime">Anime style</option><option value="motion-graphics">Motion graphics style</option></select>
+      <label for="aiVideoAspect">Video format</label>
+      <select id="aiVideoAspect"><option value="9:16">Vertical 9:16 (Shorts / Reels)</option><option value="16:9">Landscape 16:9 (YouTube)</option></select>
+      <label for="aiVideoResolution">Output resolution</label>
+      <select id="aiVideoResolution"><option value="720p">720p (default)</option><option value="1080p">1080p (upscaled)</option><option value="4k">4K (upscaled)</option><option value="360p">360p</option></select>
+      <label for="aiVideoReference">Reference image ID (optional; create an image above first)</label>
+      <input id="aiVideoReference" maxlength="32" placeholder="Optional saved AI image ID">
+      <div class="actions"><button id="aiVideoButton" type="button">Generate AI Video Clip</button></div>
+      <p id="aiVideoNotice" class="muted" role="status" aria-live="polite">Paid generation disabled until configured by server admin. Short clip generation may take several minutes.</p>
+      <div id="aiVideoResult" hidden><video id="aiVideoPreview" controls playsinline style="width:100%;max-height:520px;background:#000;border-radius:12px"></video><p><a id="aiVideoDownload" download="sintu-ai-video.mp4">Download AI video MP4</a></p><p id="aiVideoAssetId" class="muted"></p></div>
+    </section>
+    <section class="panel">
       <div class="panel-head"><div><h2>AI Voiceover & Subtitles</h2><p>Hindi ya kisi bhi language ka narration audio aur scene-wise SRT subtitles banayein.</p></div></div>
       <label for="voiceText">Voiceover script (max 4,000 characters)</label>
       <textarea id="voiceText" rows="5" maxlength="4000" placeholder="Yahan apna final narration paste karein…"></textarea>
