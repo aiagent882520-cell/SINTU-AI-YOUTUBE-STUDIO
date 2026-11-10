@@ -212,6 +212,13 @@ def init_db():
             id INTEGER PRIMARY KEY CHECK(id=1), channel_id TEXT NOT NULL, channel_title TEXT NOT NULL,
             encrypted_tokens TEXT NOT NULL, token_expiry INTEGER NOT NULL, connected_at TEXT NOT NULL
         )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS meta_oauth_states (
+            state TEXT PRIMARY KEY, admin_user_id INTEGER NOT NULL, session_hash TEXT NOT NULL, expires_at INTEGER NOT NULL
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS meta_connection (
+            id INTEGER PRIMARY KEY CHECK(id=1), page_id TEXT NOT NULL, page_name TEXT NOT NULL,
+            instagram_user_id TEXT, instagram_username TEXT, encrypted_tokens TEXT NOT NULL, connected_at TEXT NOT NULL
+        )""")
     _ensure_bootstrap_admin()
 
 init_db()
@@ -774,6 +781,202 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
         conn.execute("UPDATE content_calendar SET status='Published' WHERE id=?", (calendar_id,))
     return {"calendar_id": calendar_id, "youtube_video_id": youtube_id, "status": "Published",
             "url": "https://www.youtube.com/watch?v=" + youtube_id, "privacy_status": privacy_status}
+
+
+
+def _meta_config():
+    return {"app_id": os.getenv("META_APP_ID", "").strip(),
+            "app_secret": os.getenv("META_APP_SECRET", "").strip(),
+            "redirect_uri": os.getenv("META_REDIRECT_URI", "").strip(),
+            "version": os.getenv("META_GRAPH_API_VERSION", "v26.0").strip()}
+
+
+def _meta_graph_request(path, data=None, access_token=None, method="POST"):
+    config = _meta_config()
+    if not path.startswith("/") or ".." in path:
+        raise HTTPException(status_code=400, detail="Invalid Meta Graph API path.")
+    params = dict(data or {})
+    if access_token:
+        params["access_token"] = access_token
+    url = "https://graph.facebook.com/" + config["version"] + path
+    payload = urllib.parse.urlencode(params).encode() if params else None
+    if method == "GET" and payload:
+        url += "?" + payload.decode()
+        payload = None
+    request = urllib.request.Request(url, data=payload,
+        headers={"Content-Type": "application/x-www-form-urlencoded"}, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return json.loads(response.read().decode())
+    except urllib.error.HTTPError as exc:
+        detail = exc.read(2500).decode("utf-8", errors="replace")
+        raise HTTPException(status_code=502, detail="Meta Graph API error ("+str(exc.code)+"): "+detail[:600]) from None
+    except (urllib.error.URLError, TimeoutError):
+        raise HTTPException(status_code=502, detail="Meta Graph API connection failed.") from None
+    except (ValueError, UnicodeDecodeError):
+        raise HTTPException(status_code=502, detail="Meta API response invalid.") from None
+
+
+def _meta_connection():
+    with db() as conn:
+        row = conn.execute("SELECT page_id,page_name,instagram_user_id,instagram_username,connected_at FROM meta_connection WHERE id=1").fetchone()
+    return dict(row) if row else None
+
+
+def _meta_tokens():
+    config = _meta_config()
+    if not config["app_id"] or not config["app_secret"]:
+        raise HTTPException(status_code=503, detail="META_APP_ID aur META_APP_SECRET configure karein.")
+    with db() as conn:
+        row = conn.execute("SELECT encrypted_tokens FROM meta_connection WHERE id=1").fetchone()
+    if not row:
+        raise HTTPException(status_code=409, detail="Pehle Facebook Page connect karein.")
+    try:
+        return json.loads(_youtube_cipher().decrypt(row["encrypted_tokens"].encode()).decode())
+    except (InvalidToken, ValueError, json.JSONDecodeError):
+        raise HTTPException(status_code=503, detail="Meta credentials decrypt nahi ho rahe; reconnect karein.") from None
+
+
+@app.get("/api/admin/meta/status")
+def meta_admin_status():
+    config, connection = _meta_config(), _meta_connection()
+    return {"oauth_configured": bool(config["app_id"] and config["app_secret"] and config["redirect_uri"]),
+            "encryption_configured": bool(config["encryption_key"] if "encryption_key" in config else os.getenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", "").strip()),
+            "connected": bool(connection),
+            "page": {"id": connection["page_id"], "name": connection["page_name"]} if connection else None,
+            "instagram": {"id": connection["instagram_user_id"], "username": connection["instagram_username"]} if connection and connection["instagram_user_id"] else None,
+            "note": "Facebook Page upload local MP4 se hota hai. Instagram Reels ke liye Professional account aur public HTTPS video URL required hai."}
+
+
+@app.post("/api/admin/meta/oauth/start")
+def meta_oauth_start(request: Request):
+    config = _meta_config()
+    if not config["app_id"] or not config["app_secret"] or not config["redirect_uri"]:
+        raise HTTPException(status_code=503, detail="META_APP_ID, META_APP_SECRET aur META_REDIRECT_URI configure karein.")
+    _youtube_cipher()
+    actor = getattr(request.state, "user", {}) or {}
+    state, expiry = secrets.token_urlsafe(32), int(time.time()) + 600
+    session_hash = hashlib.sha256((request.cookies.get(SESSION_COOKIE) or "local-dev-session").encode()).hexdigest()
+    with db() as conn:
+        conn.execute("DELETE FROM meta_oauth_states WHERE expires_at < ?", (int(time.time()),))
+        conn.execute("INSERT INTO meta_oauth_states(state,admin_user_id,session_hash,expires_at) VALUES(?,?,?,?)",
+                     (state, actor["id"], session_hash, expiry))
+    params = urllib.parse.urlencode({"client_id": config["app_id"], "redirect_uri": config["redirect_uri"],
+        "response_type": "code", "scope": "pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish", "state": state})
+    return {"authorization_url": "https://www.facebook.com/"+config["version"]+"/dialog/oauth?"+params, "expires_in": 600}
+
+
+@app.get("/api/admin/meta/oauth/callback")
+def meta_oauth_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+    from fastapi.responses import RedirectResponse
+    if error:
+        return RedirectResponse("/?meta_oauth=denied", status_code=303)
+    actor = getattr(request.state, "user", {}) or {}
+    with db() as conn:
+        saved = conn.execute("SELECT admin_user_id,session_hash,expires_at FROM meta_oauth_states WHERE state=?", (state,)).fetchone()
+        conn.execute("DELETE FROM meta_oauth_states WHERE state=?", (state,))
+    session_hash = hashlib.sha256((request.cookies.get(SESSION_COOKIE) or "local-dev-session").encode()).hexdigest()
+    if not state or not saved or saved["admin_user_id"] != actor.get("id") or saved["session_hash"] != session_hash or saved["expires_at"] < int(time.time()):
+        raise HTTPException(status_code=400, detail="Meta OAuth state invalid/expired. Dobara connect karein.")
+    if not code:
+        raise HTTPException(status_code=400, detail="Meta authorization code missing.")
+    cfg = _meta_config()
+    short = _meta_graph_request("/oauth/access_token", {"client_id":cfg["app_id"],"client_secret":cfg["app_secret"],"redirect_uri":cfg["redirect_uri"],"code":code}, method="GET")
+    if not short.get("access_token"):
+        raise HTTPException(status_code=502, detail="Meta access token missing.")
+    long = _meta_graph_request("/oauth/access_token", {"grant_type":"fb_exchange_token","client_id":cfg["app_id"],"client_secret":cfg["app_secret"],"fb_exchange_token":short["access_token"]}, method="GET")
+    user_token = long.get("access_token", short["access_token"])
+    pages = _meta_graph_request("/me/accounts", {"fields":"id,name,access_token,instagram_business_account{id,username}","limit":100}, user_token, method="GET").get("data",[])
+    page = next((p for p in pages if p.get("access_token")), None)
+    if not page:
+        raise HTTPException(status_code=404, detail="Manageable Facebook Page/access token nahi mila. Page roles aur permissions check karein.")
+    ig = page.get("instagram_business_account") or {}
+    encrypted = _youtube_cipher().encrypt(json.dumps({"page_access_token":page["access_token"],"user_access_token":user_token}).encode()).decode()
+    with db() as conn:
+        conn.execute("""INSERT INTO meta_connection(id,page_id,page_name,instagram_user_id,instagram_username,encrypted_tokens,connected_at)
+            VALUES(1,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET page_id=excluded.page_id,page_name=excluded.page_name,
+            instagram_user_id=excluded.instagram_user_id,instagram_username=excluded.instagram_username,
+            encrypted_tokens=excluded.encrypted_tokens,connected_at=excluded.connected_at""",
+            (page["id"],page.get("name","Facebook Page"),ig.get("id"),ig.get("username"),encrypted,datetime.now(timezone.utc).isoformat()))
+    return RedirectResponse("/?meta_oauth=connected", status_code=303)
+
+
+@app.post("/api/admin/meta/disconnect")
+def meta_disconnect():
+    with db() as conn:
+        conn.execute("DELETE FROM meta_connection WHERE id=1")
+    return {"connected":False,"message":"Meta Page disconnected; encrypted tokens deleted."}
+
+
+@app.post("/api/admin/meta/facebook/publish/{calendar_id}")
+def meta_facebook_publish(calendar_id:int, video_id:str=Query(...,min_length=32,max_length=32),
+                          title:str=Query(...,min_length=1,max_length=255), description:str=Query(default="",max_length=5000)):
+    if not re.fullmatch(r"[a-f0-9]{32}",video_id):
+        raise HTTPException(status_code=400,detail="Invalid rendered video ID.")
+    with db() as conn:
+        item=conn.execute("SELECT id,status,platform FROM content_calendar WHERE id=?",(calendar_id,)).fetchone()
+    if not item or item["status"]!="Approved" or item["platform"]!="facebook":
+        raise HTTPException(status_code=409,detail="Facebook calendar item approved hona chahiye.")
+    path=OUTPUT_DIR/(video_id+".mp4")
+    if not path.is_file() or path.stat().st_size<=0 or path.stat().st_size>512*1024*1024:
+        raise HTTPException(status_code=404,detail="Valid rendered MP4 (max 512 MB) nahi mili.")
+    connection=_meta_connection()
+    if not connection: raise HTTPException(status_code=409,detail="Meta Facebook Page connect nahi hai.")
+    tokens=_meta_tokens()
+    boundary="----SINTU"+secrets.token_hex(16)
+    body=bytearray()
+    for key,value in {"title":title.strip(),"description":description,"access_token":tokens["page_access_token"]}.items():
+        body.extend(("--"+boundary+"\\r\\n").encode())
+        body.extend(('Content-Disposition: form-data; name="'+key+'"\\r\\n\\r\\n'+str(value)+"\\r\\n").encode())
+    body.extend(("--"+boundary+"\\r\\n").encode())
+    body.extend(('Content-Disposition: form-data; name="source"; filename="sintu.mp4"\\r\\nContent-Type: video/mp4\\r\\n\\r\\n').encode())
+    body.extend(path.read_bytes()); body.extend(("\\r\\n--"+boundary+"--\\r\\n").encode())
+    url="https://graph.facebook.com/"+_meta_config()["version"]+"/"+connection["page_id"]+"/videos"
+    req=urllib.request.Request(url,data=bytes(body),headers={"Content-Type":"multipart/form-data; boundary="+boundary},method="POST")
+    try:
+        with urllib.request.urlopen(req,timeout=180) as response: uploaded=json.loads(response.read().decode())
+    except urllib.error.HTTPError as exc:
+        detail=exc.read(2500).decode("utf-8",errors="replace")
+        raise HTTPException(status_code=502,detail="Facebook upload failed ("+str(exc.code)+"): "+detail[:600]) from None
+    except (urllib.error.URLError,TimeoutError):
+        raise HTTPException(status_code=502,detail="Facebook upload connection failed.") from None
+    post_id=uploaded.get("id")
+    if not post_id: raise HTTPException(status_code=502,detail="Facebook video ID missing in API response.")
+    with db() as conn: conn.execute("UPDATE content_calendar SET status='Published' WHERE id=?",(calendar_id,))
+    return {"calendar_id":calendar_id,"facebook_video_id":post_id,"status":"Published","url":"https://www.facebook.com/"+post_id}
+
+
+@app.post("/api/admin/meta/instagram/publish/{calendar_id}")
+def meta_instagram_publish(calendar_id:int,video_url:str=Query(...,min_length=12,max_length=2048),caption:str=Query(default="",max_length=2200)):
+    parsed=urllib.parse.urlparse(video_url)
+    if parsed.scheme!="https" or not parsed.hostname or parsed.username or parsed.password or parsed.hostname.lower() in {"localhost","127.0.0.1","::1"} or parsed.hostname.lower().endswith(".local"):
+        raise HTTPException(status_code=400,detail="Valid public HTTPS MP4 URL required; localhost/private URLs not supported.")
+    with db() as conn:
+        item=conn.execute("SELECT id,status,platform FROM content_calendar WHERE id=?",(calendar_id,)).fetchone()
+    if not item or item["status"]!="Approved" or item["platform"]!="instagram":
+        raise HTTPException(status_code=409,detail="Instagram calendar item approved hona chahiye.")
+    connection=_meta_connection()
+    if not connection or not connection["instagram_user_id"]:
+        raise HTTPException(status_code=409,detail="Linked Instagram Professional (Business/Creator) account nahi mila.")
+    token=_meta_tokens()["page_access_token"]
+    ig=connection["instagram_user_id"]
+    container=_meta_graph_request("/"+ig+"/media",{"media_type":"REELS","video_url":video_url,"caption":caption,"share_to_feed":"true"},token)
+    creation_id=container.get("id")
+    if not creation_id: raise HTTPException(status_code=502,detail="Instagram media container create nahi hua.")
+    deadline=time.time()+150; status={}
+    while time.time()<deadline:
+        status=_meta_graph_request("/"+creation_id,{"fields":"status_code,status"},token,method="GET")
+        if status.get("status_code")=="FINISHED": break
+        if status.get("status_code") in {"ERROR","EXPIRED"}:
+            raise HTTPException(status_code=502,detail="Instagram processing failed: "+str(status.get("status",status.get("status_code"))))
+        time.sleep(3)
+    if status.get("status_code")!="FINISHED":
+        raise HTTPException(status_code=504,detail="Instagram processing pending; container ID: "+creation_id)
+    published=_meta_graph_request("/"+ig+"/media_publish",{"creation_id":creation_id},token)
+    media_id=published.get("id")
+    if not media_id: raise HTTPException(status_code=502,detail="Instagram media ID missing.")
+    with db() as conn: conn.execute("UPDATE content_calendar SET status='Published' WHERE id=?",(calendar_id,))
+    return {"calendar_id":calendar_id,"instagram_media_id":media_id,"status":"Published","message":"Instagram Reel published."}
 
 
 @app.get("/api/calendar")
