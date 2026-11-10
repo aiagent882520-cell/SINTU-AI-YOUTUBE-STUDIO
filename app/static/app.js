@@ -146,6 +146,52 @@ $("clear").addEventListener("click", () => {
   $("prompt").focus();
 });
 $("refresh").addEventListener("click", refresh);
+
+function calendarEscape(value) {
+ return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+}
+async function loadCalendar() {
+ try {
+  const data = await request("/api/calendar");
+  $("calendarItems").innerHTML = data.items.length ? data.items.map(item => {
+   const when = new Date(item.scheduled_at).toLocaleString();
+   const actions = item.status === "Needs approval"
+    ? '<button class="secondary" data-calendar-approve="'+item.id+'">Approve</button> <button class="secondary" data-calendar-cancel="'+item.id+'">Cancel</button>'
+    : (item.status === "Approved" ? '<button class="secondary" data-calendar-cancel="'+item.id+'">Cancel</button>' : "");
+   return '<article class="calendar-item"><div><strong>'+calendarEscape(item.title)+'</strong><span>'+calendarEscape(item.platform.replace("_"," "))+' · '+calendarEscape(item.status)+'</span><small>'+calendarEscape(when)+'</small><p>'+calendarEscape(item.prompt)+'</p>'+actions+'</div></article>';
+  }).join("") : '<p class="muted">Calendar abhi khaali hai. Pehla content schedule karein.</p>';
+  $("calendarNotice").textContent = data.notice;
+ } catch(error) { $("calendarNotice").textContent = error.message; }
+}
+$("calendarForm")?.addEventListener("submit", async event => {
+ event.preventDefault();
+ const button = event.submitter; button.disabled = true;
+ try {
+  const localDate = new Date($("calendarDate").value);
+  if (!Number.isFinite(localDate.getTime())) throw new Error("Valid date and time choose karein.");
+  const result = await request("/api/calendar", {method:"POST",body:JSON.stringify({
+   title:$("calendarTitle").value.trim(), platform:$("calendarPlatform").value,
+   prompt:$("calendarPrompt").value.trim(), scheduled_at:localDate.toISOString()
+  })});
+  $("calendarNotice").textContent = "Calendar item #"+result.id+" save ho gaya. Approval required.";
+  $("calendarForm").reset(); await loadCalendar();
+ } catch(error) { $("calendarNotice").textContent = error.message; }
+ finally { button.disabled = false; }
+});
+$("calendarItems")?.addEventListener("click", async event => {
+ const approve = event.target.closest("[data-calendar-approve]");
+ const cancel = event.target.closest("[data-calendar-cancel]");
+ if (!approve && !cancel) return;
+ const id = Number((approve || cancel).dataset[approve ? "calendarApprove" : "calendarCancel"]);
+ const action = approve ? "approve" : "cancel";
+ try {
+  const result = await request("/api/calendar/"+id+"/"+action,{method:"POST"});
+  $("calendarNotice").textContent = "Calendar #"+id+": "+result.status;
+  await loadCalendar();
+ } catch(error) { $("calendarNotice").textContent = error.message; }
+});
+$("calendarRefresh")?.addEventListener("click", loadCalendar);
+loadCalendar();
 function downloadPackage(format) {
   if (!latestTaskId) return;
   window.location.href = "/api/export/" + latestTaskId + "?format=" + format;
