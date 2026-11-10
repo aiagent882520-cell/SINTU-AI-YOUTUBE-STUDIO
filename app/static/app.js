@@ -27,7 +27,7 @@ function renderTimelineEditor(rows = timelineRows()) {
   editor.innerHTML = rows.map((item, index) => {
     const preview = item.kind === "image"
       ? '<img src="/api/images/' + item.id + '" alt="Scene ' + (index + 1) + ' preview" loading="lazy" style="width:100%;max-height:170px;object-fit:contain;background:#111;border-radius:8px">'
-      : '<video src="/api/videos/' + item.id + '" controls playsinline preload="metadata" style="width:100%;max-height:170px;background:#111;border-radius:8px"></video>';
+      : '<video src="/api/ai-videos/' + item.id + '" controls playsinline preload="metadata" style="width:100%;max-height:170px;background:#111;border-radius:8px"></video>';
     return '<article class="panel timeline-row" data-index="' + index + '" style="margin:10px 0;padding:12px">' +
       '<div class="actions"><strong>Scene ' + (index + 1) + ' · ' + item.kind.toUpperCase() + '</strong>' +
       '<button type="button" data-action="up" data-index="' + index + '" ' + (index === 0 ? 'disabled' : '') + '>↑</button>' +
