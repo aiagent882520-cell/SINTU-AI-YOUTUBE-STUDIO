@@ -702,7 +702,7 @@ def test_ai_video_clip_assembly_contract(tmp_path, monkeypatch):
         (clips_dir / f"{clip_id}.mp4").write_bytes(b"test")
     monkeypatch.setattr(main, "AI_VIDEO_DIR", clips_dir)
     called = {}
-    def fake_assembly(paths, audio_path=None, music_path=None, music_volume=0.18, subtitles=None, transition="cut"):
+    def fake_assembly(paths, audio_path=None, music_path=None, music_volume=0.18, subtitles=None, transition="cut", resolution="720x1280", fps=30, quality="high"):
         called["paths"] = paths
         called["subtitles"] = subtitles
         called["transition"] = transition
