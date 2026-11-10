@@ -65,8 +65,9 @@
       <label for="sceneSeconds">Har scene ki duration (seconds)</label>
       <input id="sceneSeconds" type="number" min="2" max="12" value="4">
       <label for="renderTimeline">Mixed timeline order (optional; one item per line)</label>
-      <textarea id="renderTimeline" rows="4" placeholder="image:32-character-image-ID&#10;video:32-character-video-ID"></textarea>
-      <p class="muted">Image aur AI video ko ek hi final MP4 mein isi order mein milayein. AI-generated images/videos yahan automatically add hongi. Manual format: image:ID ya video:ID. Har item ke liye Scenes aur subtitles ki ek matching line dein. Still image duration seconds field se control hoti hai.</p>
+      <textarea id="renderTimeline" hidden></textarea>
+      <div id="timelineEditor" class="timeline-editor" aria-live="polite"><p class="muted">Generated image/video assets yahan ordered timeline mein dikhenge.</p></div>
+      <p class="muted">Generated images aur AI video clips yahan preview honge. Move buttons se order badlein, remove karein, still image duration aur har scene ke baad transition chunein. Video clips ki duration source file se aati hai. Har item ke liye scene description aur subtitle line matching rakhein.</p>
       <label for="renderImageIds">Scene image IDs (comma-separated, har scene ke liye ek; optional)</label>
       <input id="renderImageIds" placeholder="AI image result se image ID paste karein">
       <label for="renderVideoIds">AI video clip IDs (comma-separated, optional; generated clips ko order mein join karein)</label>
