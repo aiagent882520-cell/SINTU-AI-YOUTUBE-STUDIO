@@ -108,7 +108,7 @@ Admin dashboard mein YouTube, YouTube Shorts, Facebook, Instagram aur TikTok ke 
 
 
 ### YouTube Channel Analytics
-Admin-only dashboard reads official YouTube Analytics API reports for the connected channel: daily views, estimated watch minutes, average view duration, subscribers gained/lost, and top videos by views. Date range is selectable (up to 365 days). Google Cloud must have YouTube Analytics API enabled, and the connected Google account must own or manage the channel. Recent metrics can be delayed. This initial report does not include revenue or thumbnail impressions CTR; those require separate supported reports and, for monetary metrics, additional OAuth consent.
+Admin-only dashboard reads official YouTube Analytics API reports for the connected channel: daily views, estimated watch minutes, average view duration, subscribers gained/lost, and top videos by views. Date range is selectable (up to 365 days). Google Cloud must have YouTube Analytics API enabled, and the connected Google account must own or manage the channel. Recent metrics can be delayed. This initial report also requests estimated revenue, estimated ad revenue, Premium revenue, gross ad revenue, ad impressions and playback-based CPM when the channel is in YPP and monetary OAuth permission is granted. Revenue is estimated and may be adjusted at month end. Thumbnail impressions and CTR use the YouTube Reporting API channel_reach_basic_a1 daily report; an admin must enable the report job, and the first report may take 24 hours or longer.
 
 ### Publishing Performance Overview
 Admin-only dashboard summarizes up to 250 actual recorded publishing events, grouped by platform and status. These internal event counts are separate from YouTube channel analytics.
