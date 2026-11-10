@@ -781,6 +781,38 @@ def test_mixed_image_video_timeline_api_contract(tmp_path, monkeypatch):
     assert bad.status_code == 400
 
 
+def test_mixed_timeline_video_trim_api_contract(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    videos_dir = tmp_path / "generated_ai_videos"
+    videos_dir.mkdir()
+    video_id = "4" * 32
+    (videos_dir / f"{video_id}.mp4").write_bytes(b"video")
+    monkeypatch.setattr(main, "AI_VIDEO_DIR", videos_dir)
+    captured = {}
+    def fake_mixed(items, title, scenes, **kwargs):
+        captured["item"] = items[0]
+        return {"video_id": "5" * 32, "url": "/api/videos/" + "5" * 32,
+                "timeline_items": 1, "duration_seconds": 2.5}
+    monkeypatch.setattr(main, "render_mixed_timeline", fake_mixed)
+    response = client.post("/api/render", json={
+        "title": "Trim test", "scenes": ["Trimmed scene"],
+        "timeline": [f"video:{video_id}:1.5:4.0:cut"]
+    })
+    assert response.status_code == 200
+    assert captured["item"]["trim_start"] == 1.5
+    assert captured["item"]["trim_end"] == 4.0
+    invalid = client.post("/api/render", json={
+        "title": "Invalid trim", "scenes": ["Bad range"],
+        "timeline": [f"video:{video_id}:5:2:cut"]
+    })
+    assert invalid.status_code == 400
+    legacy_invalid = client.post("/api/render", json={
+        "title": "Legacy invalid", "scenes": ["Bad old duration"],
+        "timeline": [f"video:{video_id}:5:cut"]
+    })
+    assert legacy_invalid.status_code == 400
+
+
 def test_mixed_timeline_ffmpeg_integration(tmp_path, monkeypatch):
     ffmpeg = shutil.which("ffmpeg")
     ffprobe = shutil.which("ffprobe")
