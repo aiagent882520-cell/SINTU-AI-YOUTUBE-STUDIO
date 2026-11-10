@@ -383,8 +383,8 @@ def render_video(payload: RenderInput):
         raise HTTPException(status_code=400, detail="Har timeline item ke liye ek scene description dein.")
     if payload.subtitles and len(payload.subtitles) != len(scenes):
         raise HTTPException(status_code=400, detail="Subtitle lines ki sankhya scenes ke barabar honi chahiye.")
-    if any(not line.strip() or len(line) > 1000 for line in payload.subtitles):
-        raise HTTPException(status_code=400, detail="Subtitle line 1 se 1000 characters ki honi chahiye.")
+    if any((not line.strip() and not payload.timeline) or len(line) > 1000 for line in payload.subtitles):
+        raise HTTPException(status_code=400, detail="Subtitle line 1000 characters se chhoti honi chahiye; mixed timeline mein blank captions allowed hain.")
     image_paths = []
     for image_id in payload.image_ids:
         if not re.fullmatch(r"[a-f0-9]{32}", image_id):
