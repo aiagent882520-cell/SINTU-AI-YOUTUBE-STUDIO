@@ -1083,3 +1083,40 @@ def test_retry_rejects_missing_or_non_retryable_tasks(tmp_path, monkeypatch):
         )
         task_id = cur.lastrowid
     assert client.post(f"/api/tasks/{task_id}/retry").status_code == 409
+
+
+
+def test_content_calendar_create_approve_cancel_and_timezone(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    client = client_for_test(tmp_path, monkeypatch)
+    future = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+    created = client.post("/api/calendar", json={
+        "title": "Hindi science short", "platform": "youtube_shorts",
+        "prompt": "Create a 45-second science short", "scheduled_at": future
+    })
+    assert created.status_code == 200
+    item_id = created.json()["id"]
+    assert created.json()["status"] == "Needs approval"
+    listed = client.get("/api/calendar")
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["id"] == item_id
+    assert listed.json()["publishing_mode"] == "manual_approval_only"
+    approved = client.post(f"/api/calendar/{item_id}/approve")
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "Approved"
+    assert client.post(f"/api/calendar/{item_id}/approve").status_code == 409
+    cancelled = client.post(f"/api/calendar/{item_id}/cancel")
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "Cancelled"
+
+
+def test_content_calendar_rejects_past_naive_and_invalid_platform(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    client = client_for_test(tmp_path, monkeypatch)
+    base = {"title":"Post","platform":"youtube","prompt":"Content"}
+    past = (datetime.now(timezone.utc)-timedelta(days=1)).isoformat()
+    assert client.post("/api/calendar", json={**base,"scheduled_at":past}).status_code == 400
+    future_naive = (datetime.now()+timedelta(days=2)).isoformat(timespec="seconds")
+    assert client.post("/api/calendar", json={**base,"scheduled_at":future_naive}).status_code == 422
+    future = (datetime.now(timezone.utc)+timedelta(days=2)).isoformat()
+    assert client.post("/api/calendar", json={**base,"platform":"unsupported","scheduled_at":future}).status_code == 422
