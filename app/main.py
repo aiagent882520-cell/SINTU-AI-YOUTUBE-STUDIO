@@ -552,6 +552,35 @@ def tasks():
         ).fetchall()
     return {"tasks": [dict(row) for row in rows]}
 
+@app.post("/api/tasks/{task_id}/retry")
+def retry_task(task_id: int):
+    with db() as conn:
+        row = conn.execute("SELECT id, prompt, workflow, status FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        if row["status"] not in {"Failed", "Blocked"}:
+            raise HTTPException(status_code=409, detail="Only Failed or Blocked tasks can be retried.")
+        conn.execute("UPDATE tasks SET status='Generating', output=NULL WHERE id=?", (task_id,))
+    try:
+        selected_provider = _get_app_setting("selected_provider", os.getenv("AI_PROVIDER", "auto").lower())
+        if selected_provider == os.getenv("AI_PROVIDER", "auto").lower():
+            result = generate_text(row["prompt"], row["workflow"])
+        else:
+            result = generate_text(row["prompt"], row["workflow"], selected_provider)
+    except ProviderNotConfigured as exc:
+        with db() as conn:
+            conn.execute("UPDATE tasks SET status='Blocked' WHERE id=?", (task_id,))
+        raise HTTPException(status_code=503, detail=str(exc))
+    except ProviderRequestError as exc:
+        with db() as conn:
+            conn.execute("UPDATE tasks SET status='Failed' WHERE id=?", (task_id,))
+        raise HTTPException(status_code=502, detail=str(exc))
+    with db() as conn:
+        conn.execute("UPDATE tasks SET status='Completed', output=? WHERE id=?", (result["output"], task_id))
+    return {"id": task_id, "status": "Completed", "provider": result["provider"],
+            "model": result["model"], "output": result["output"]}
+
+
 @app.get("/api/tasks/{task_id}")
 def task_detail(task_id: int):
     with db() as conn:
