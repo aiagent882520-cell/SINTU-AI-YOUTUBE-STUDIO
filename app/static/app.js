@@ -218,7 +218,7 @@ $("renderButton").addEventListener("click", async () => {
         music_volume: Number($("musicVolume").value || 0.18),
         transition: $("renderTransition").value,
         motion: $("renderVideoIds").value.trim() ? "none" : $("renderMotion").value,
-        subtitles: $("renderSubtitles").value.split("\n").map(x => x.trim()).filter(Boolean)
+        subtitles: $("renderTimeline").value.trim() ? timelineRows().map(x => x.subtitle || "") : $("renderSubtitles").value.split("\n").map(x => x.trim()).filter(Boolean)
       })
     });
     $("renderVideo").src = result.url;
