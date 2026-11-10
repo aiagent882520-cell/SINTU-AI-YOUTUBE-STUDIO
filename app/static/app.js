@@ -113,7 +113,7 @@ async function checkRenderer() {
   try {
     const info = await request("/api/render/capabilities");
     $("renderNotice").textContent = info.available
-      ? "Ready: " + info.supported_output + " · Scene images + narration + uploaded music + captions + slow zoom motion."
+      ? "Ready: " + info.supported_output + " · AI clip assembly with original clip audio, optional narration/music, timed captions and cut/fade transitions; storyboard mode also supports scene images and slow zoom."
       : "Server par FFmpeg available nahi hai. Deployment par FFmpeg install hone ke baad MP4 rendering enable hogi.";
     $("renderButton").disabled = !info.available;
   } catch (error) {
@@ -143,8 +143,8 @@ $("renderButton").addEventListener("click", async () => {
         music_id: $("renderMusicId").value.trim() || null,
         music_volume: Number($("musicVolume").value || 0.18),
         transition: $("renderTransition").value,
-        motion: $("renderMotion").value,
-        subtitles: $("renderSubtitles").value.split("\\n").map(x => x.trim()).filter(Boolean)
+        motion: $("renderVideoIds").value.trim() ? "none" : $("renderMotion").value,
+        subtitles: $("renderSubtitles").value.split("\n").map(x => x.trim()).filter(Boolean)
       })
     });
     $("renderVideo").src = result.url;
