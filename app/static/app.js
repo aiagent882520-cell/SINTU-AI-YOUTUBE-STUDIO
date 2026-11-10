@@ -163,7 +163,9 @@ async function loadCalendar() {
     : (item.status === "Approved" ? '<button class="secondary" data-calendar-cancel="'+item.id+'">Cancel</button>' +
        (canPublish && ["youtube","youtube_shorts"].includes(item.platform) ? ' <button data-youtube-publish="'+item.id+'">Upload rendered MP4</button>' : '') +
        (session.authenticated && session.role==="admin" && meta.connected && item.platform==="facebook" ? ' <button data-meta-facebook="'+item.id+'">Publish Facebook video</button>' : '') +
-       (session.authenticated && session.role==="admin" && meta.connected && !!meta.instagram && item.platform==="instagram" ? ' <button data-meta-instagram="'+item.id+'">Publish Instagram Reel</button>' : '') : "");
+       (session.authenticated && session.role==="admin" && meta.connected && !!meta.instagram && item.platform==="instagram" ? ' <button data-meta-instagram="'+item.id+'">Publish Instagram Reel</button>' : '') +
+       (session.authenticated && session.role==="admin" && item.platform==="tiktok" ? ' <button data-tiktok-publish="'+item.id+'">Publish TikTok</button>' : '') +
+       (session.authenticated && session.role==="admin" && item.platform==="tiktok" ? ' <button class="secondary" data-tiktok-status="'+item.id+'">Check TikTok status</button>' : '') : "");
    return '<article class="calendar-item"><div><strong>'+calendarEscape(item.title)+'</strong><span>'+calendarEscape(item.platform.replace("_"," "))+' · '+calendarEscape(item.status)+'</span><small>'+calendarEscape(when)+'</small><p>'+calendarEscape(item.prompt)+'</p>'+actions+'</div></article>';
   }).join("") : '<p class="muted">Calendar abhi khaali hai. Pehla content schedule karein.</p>';
   $("calendarNotice").textContent = data.notice;
@@ -190,6 +192,36 @@ $("calendarItems")?.addEventListener("click", async event => {
  const publish = event.target.closest("[data-youtube-publish]");
  const metaFacebook=event.target.closest("[data-meta-facebook]");
  const metaInstagram=event.target.closest("[data-meta-instagram]");
+ const tiktokPublish=event.target.closest("[data-tiktok-publish]");
+ const tiktokStatus=event.target.closest("[data-tiktok-status]");
+ if(tiktokPublish){
+  const id=Number(tiktokPublish.dataset.tiktokPublish);
+  const videoId=window.prompt("Rendered MP4 Video ID (32-character ID):");if(!videoId)return;
+  if(!/^[a-f0-9]{32}$/i.test(videoId)){$("calendarNotice").textContent="Video ID format invalid.";return;}
+  let creator;
+  try{creator=await request("/api/admin/tiktok/creator");}catch(e){$("calendarNotice").textContent=e.message;return;}
+  const info=creator.creator||{};
+  const options=info.privacy_level_options||[];
+  if(!options.length){$("calendarNotice").textContent="TikTok privacy options unavailable.";return;}
+  const privacy=window.prompt("TikTok privacy options: "+options.join(", "),options.includes("SELF_ONLY")?"SELF_ONLY":options[0]);
+  if(!options.includes(privacy)){$("calendarNotice").textContent="Choose one of the available privacy options.";return;}
+  const title=window.prompt("TikTok caption (max 2200 characters):","")||"";
+  if(title.length>2200){$("calendarNotice").textContent="Caption is too long.";return;}
+  const aigc=window.confirm("Kya yeh video AI-generated hai? OK = AI-generated label, Cancel = not AI-generated.");
+  if(!window.confirm("TikTok account @"+(info.creator_username||"creator")+" par video "+privacy+" visibility ke saath bhejna hai?"))return;
+  const params=new URLSearchParams({video_id:videoId.toLowerCase(),title,privacy_level:privacy,is_aigc:String(aigc)});
+  tiktokPublish.disabled=true;
+  try{const result=await request("/api/admin/tiktok/publish/"+id+"?"+params.toString(),{method:"POST"});
+   $("calendarNotice").textContent="TikTok transfer complete; processing pending. Publish ID: "+result.publish_id+" · Status button se result check karein.";
+   await loadCalendar();
+  }catch(e){$("calendarNotice").textContent=e.message;tiktokPublish.disabled=false;}return;
+ }
+ if(tiktokStatus){
+  const id=Number(tiktokStatus.dataset.tiktokStatus);tiktokStatus.disabled=true;
+  try{const result=await request("/api/admin/tiktok/status/"+id,{method:"POST"});
+   $("calendarNotice").textContent="TikTok status: "+result.status+(result.detail?" · "+result.detail:"");await loadCalendar();}
+  catch(e){$("calendarNotice").textContent=e.message;tiktokStatus.disabled=false;}return;
+ }
  if(metaFacebook||metaInstagram){
   const id=Number((metaFacebook||metaInstagram).dataset[metaFacebook?"metaFacebook":"metaInstagram"]);
   const videoId=window.prompt("Rendered MP4 Video ID (32-character ID):");if(!videoId)return;
@@ -727,5 +759,32 @@ $("metaDisconnect")?.addEventListener("click",async()=>{
 });
 $("metaRefresh")?.addEventListener("click",loadMetaAdminPanel);
 loadMetaAdminPanel();
+
+async function loadTikTokAdminPanel(){
+ const panel=$("tiktokAdminPanel");if(!panel)return;
+ try{
+  const session=await request("/api/auth/session");
+  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  panel.hidden=false;
+  const data=await request("/api/admin/tiktok/status");
+  $("tiktokConnectionStatus").textContent=data.connected
+   ?"Connected: "+data.creator.display_name+" · Open ID "+data.creator.open_id+" · Scopes: "+data.scopes.join(", ")
+   :"Not connected · TikTok App: "+(data.oauth_configured?"configured":"missing")+" · encryption: "+(data.encryption_configured?"ready":"missing");
+  $("tiktokConnect").disabled=!data.oauth_configured||!data.encryption_configured;
+  $("tiktokDisconnect").hidden=!data.connected;
+ }catch(e){$("tiktokConnectionStatus").textContent=e.message;}
+}
+$("tiktokConnect")?.addEventListener("click",async()=>{
+ const b=$("tiktokConnect");b.disabled=true;
+ try{const d=await request("/api/admin/tiktok/oauth/start");window.location.assign(d.authorization_url);}
+ catch(e){$("tiktokConnectionStatus").textContent=e.message;b.disabled=false;}
+});
+$("tiktokDisconnect")?.addEventListener("click",async()=>{
+ if(!window.confirm("TikTok account disconnect karein?"))return;
+ try{await request("/api/admin/tiktok/disconnect",{method:"POST"});await loadTikTokAdminPanel();}
+ catch(e){$("tiktokConnectionStatus").textContent=e.message;}
+});
+$("tiktokRefresh")?.addEventListener("click",loadTikTokAdminPanel);
+loadTikTokAdminPanel();
 loadAdminPanel();
 loadProviderAdminPanel();
