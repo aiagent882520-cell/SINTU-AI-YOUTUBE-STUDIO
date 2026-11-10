@@ -418,12 +418,11 @@ def render_video(payload: RenderInput):
             raise HTTPException(status_code=404, detail="Voiceover audio not found.")
     try:
         if video_paths:
-            if payload.subtitles:
-                raise HTTPException(status_code=400, detail="AI clip assembly mode mein burned-in subtitles abhi supported nahi hain.")
             if payload.motion != "none":
                 raise HTTPException(status_code=400, detail="AI clip assembly mode mein source clips ka original motion use hota hai; extra zoom effects abhi supported nahi hain.")
             return render_ai_clips(video_paths, audio_path=audio_path, music_path=music_path,
-                                   music_volume=payload.music_volume)
+                                   music_volume=payload.music_volume, subtitles=payload.subtitles,
+                                   transition=payload.transition)
         return render_storyboard(title, scenes, payload.seconds_per_scene,
                                  image_paths=image_paths, audio_path=audio_path,
                                  subtitles=payload.subtitles, music_path=music_path,
