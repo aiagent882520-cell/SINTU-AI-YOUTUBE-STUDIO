@@ -2,32 +2,40 @@ const $ = (id) => document.getElementById(id);
 let latestTaskId = null;
 
 function parseTimelineEntry(entry) {
-  const p=entry.trim().split(":");
-  if(p[0]==="image"&&p.length===4&&/^[a-f0-9]{32}$/i.test(p[1]))return {kind:"image",id:p[1].toLowerCase(),duration:Number(p[2]),transition:p[3]};
-  if(p[0]==="video"&&p.length===5&&/^[a-f0-9]{32}$/i.test(p[1]))return {kind:"video",id:p[1].toLowerCase(),trimStart:Number(p[2]),trimEnd:p[3]===""?null:Number(p[3]),transition:p[4]};
-  const legacy=/^(image|video):([a-f0-9]{32}):(\d{1,2}):(cut|fade)$/i.exec(entry.trim());if(!legacy)return null;
-  return {kind:legacy[1].toLowerCase(),id:legacy[2].toLowerCase(),duration:legacy[1].toLowerCase()==="image"?Number(legacy[3]):0,trimStart:0,trimEnd:null,transition:legacy[4]};
+ const p=entry.trim().split(":");
+ if(p[0]==="image"&&p.length===4&&/^[a-f0-9]{32}$/i.test(p[1]))return {kind:"image",id:p[1].toLowerCase(),duration:Number(p[2]),transition:p[3]};
+ if(p[0]==="video"&&p.length===6&&/^[a-f0-9]{32}$/i.test(p[1]))return {kind:"video",id:p[1].toLowerCase(),trimStart:Number(p[2]),trimEnd:p[3]===""?null:Number(p[3]),audioVolume:Number(p[4]),transition:p[5]};
+ if(p[0]==="video"&&p.length===5&&/^[a-f0-9]{32}$/i.test(p[1]))return {kind:"video",id:p[1].toLowerCase(),trimStart:Number(p[2]),trimEnd:p[3]===""?null:Number(p[3]),audioVolume:.25,transition:p[4]};
+ const legacy=/^(image|video):([a-f0-9]{32}):(\d{1,2}):(cut|fade)$/i.exec(entry.trim());if(!legacy)return null;
+ return {kind:legacy[1].toLowerCase(),id:legacy[2].toLowerCase(),duration:legacy[1].toLowerCase()==="image"?Number(legacy[3]):0,trimStart:0,trimEnd:null,audioVolume:.25,transition:legacy[4]};
 }
 function timelineRows(){const entries=$("renderTimeline").value.split("\n").map(parseTimelineEntry).filter(Boolean),scenes=$("renderScenes").value.split("\n"),subs=$("renderSubtitles").value.split("\n");return entries.map((x,i)=>({...x,scene:scenes[i]||"",subtitle:subs[i]||""}));}
 function syncTimelineFields(rows){
-  $("renderTimeline").value=rows.map(x=>x.kind==="image"?"image:"+x.id+":"+x.duration+":"+x.transition:"video:"+x.id+":"+(x.trimStart||0)+":"+(x.trimEnd??"")+":"+x.transition).join("\n");
-  $("renderScenes").value=rows.map(x=>x.scene||"").join("\n");$("renderSubtitles").value=rows.map(x=>x.subtitle||"").join("\n");
-  $("renderImageIds").value=rows.filter(x=>x.kind==="image").map(x=>x.id).join(", ");$("renderVideoIds").value=rows.filter(x=>x.kind==="video").map(x=>x.id).join(", ");renderTimelineEditor(rows);
+ $("renderTimeline").value=rows.map(x=>x.kind==="image"?"image:"+x.id+":"+x.duration+":"+x.transition:"video:"+x.id+":"+(x.trimStart||0)+":"+(x.trimEnd??"")+":"+(x.audioVolume??.25)+":"+x.transition).join("\n");
+ $("renderScenes").value=rows.map(x=>x.scene||"").join("\n");$("renderSubtitles").value=rows.map(x=>x.subtitle||"").join("\n");
+ $("renderImageIds").value=rows.filter(x=>x.kind==="image").map(x=>x.id).join(", ");$("renderVideoIds").value=rows.filter(x=>x.kind==="video").map(x=>x.id).join(", ");renderTimelineEditor(rows);
 }
 function renderTimelineEditor(rows=timelineRows()){
  const e=$("timelineEditor");if(!rows.length){e.innerHTML='<p class="muted">Abhi timeline khaali hai. AI image ya AI video generate karein.</p>';return;}
  e.innerHTML=rows.map((x,i)=>{
   const preview=x.kind==="image"?'<img src="/api/images/'+x.id+'" alt="Scene '+(i+1)+' preview" loading="lazy" style="width:100%;max-height:170px;object-fit:contain;background:#111;border-radius:8px">':'<video src="/api/ai-videos/'+x.id+'" controls playsinline preload="metadata" style="width:100%;max-height:170px;background:#111"></video>';
-  const edit=x.kind==="image"?'<label>Duration (seconds, 2–12)</label><input type="number" min="2" max="12" data-field="duration" data-index="'+i+'" value="'+x.duration+'">':'<div class="actions"><label>Start (sec)<input type="number" min="0" step="0.1" data-field="trimStart" data-index="'+i+'" value="'+(x.trimStart||0)+'"></label><label>End (sec; blank = full end)<input type="number" min="0.1" step="0.1" data-field="trimEnd" data-index="'+i+'" value="'+(x.trimEnd??"")+'"></label></div><p class="muted">Original clip safe rahegi; sirf selected segment render hoga.</p>';
+  const edit=x.kind==="image"?'<label>Duration (seconds, 2–12)</label><input type="number" min="2" max="12" data-field="duration" data-index="'+i+'" value="'+x.duration+'">':'<div class="actions"><label>Start (sec)<input type="number" min="0" step="0.1" data-field="trimStart" data-index="'+i+'" value="'+(x.trimStart||0)+'"></label><label>End (sec; blank = full end)<input type="number" min="0.1" step="0.1" data-field="trimEnd" data-index="'+i+'" value="'+(x.trimEnd??"")+'"></label></div><label>Original clip audio: <span data-volume-label="'+i+'">'+Math.round((x.audioVolume??.25)*100)+'%</span></label><input type="range" min="0" max="200" step="5" data-field="audioVolume" data-index="'+i+'" value="'+Math.round((x.audioVolume??.25)*100)+'"><p class="muted">0% = mute, 100% = normal, 200% = double gain. Voiceover/music separately mix honge.</p>';
   return '<article class="panel timeline-row" style="margin:10px 0;padding:12px"><div class="actions"><strong>Scene '+(i+1)+' · '+x.kind.toUpperCase()+'</strong><button type="button" data-action="up" data-index="'+i+'" '+(i===0?'disabled':'')+'>↑</button><button type="button" data-action="down" data-index="'+i+'" '+(i===rows.length-1?'disabled':'')+'>↓</button><button type="button" data-action="remove" data-index="'+i+'">Remove</button></div>'+preview+'<label>Scene description</label><input data-field="scene" data-index="'+i+'" maxlength="1000" value="'+escapeHtml(x.scene||"")+'"><label>Subtitle (optional)</label><input data-field="subtitle" data-index="'+i+'" maxlength="1000" value="'+escapeHtml(x.subtitle||"")+'">'+edit+'<label>Transition after this scene</label><select data-field="transition" data-index="'+i+'"><option value="cut" '+(x.transition==="cut"?"selected":"")+'>Cut</option><option value="fade" '+(x.transition==="fade"?"selected":"")+'>Fade to/from black</option></select></article>';
  }).join("");
 }
-function queueTimelineAsset(kind,id,sceneText){const rows=timelineRows();if(rows.some(x=>x.kind===kind&&x.id===id))return;rows.push({kind,id,duration:kind==="image"?Number($("sceneSeconds").value||4):0,trimStart:0,trimEnd:null,transition:$("renderTransition").value||"fade",scene:sceneText||"Generated "+kind+" scene",subtitle:""});syncTimelineFields(rows);}
+function queueTimelineAsset(kind,id,sceneText){const rows=timelineRows();if(rows.some(x=>x.kind===kind&&x.id===id))return;rows.push({kind,id,duration:kind==="image"?Number($("sceneSeconds").value||4):0,trimStart:0,trimEnd:null,audioVolume:.25,transition:$("renderTransition").value||"fade",scene:sceneText||"Generated "+kind+" scene",subtitle:""});syncTimelineFields(rows);}
 $("timelineEditor").addEventListener("click",event=>{const b=event.target.closest("button[data-action]");if(!b)return;const rows=timelineRows(),i=Number(b.dataset.index);if(b.dataset.action==="remove")rows.splice(i,1);if(b.dataset.action==="up"&&i>0)[rows[i-1],rows[i]]=[rows[i],rows[i-1]];if(b.dataset.action==="down"&&i<rows.length-1)[rows[i+1],rows[i]]=[rows[i],rows[i+1]];syncTimelineFields(rows);});
+$("timelineEditor").addEventListener("input",event=>{
+ if(event.target.dataset.field!=="audioVolume")return;
+ const i=Number(event.target.dataset.index),label=$("timelineEditor").querySelector('[data-volume-label="'+i+'"]');
+ if(label)label.textContent=event.target.value+"%";
+ const video=$("timelineEditor").querySelector('video');if(video)video.volume=Math.min(1,Number(event.target.value)/100);
+});
 $("timelineEditor").addEventListener("change",event=>{
  const field=event.target.dataset.field;if(!field)return;const rows=timelineRows(),x=rows[Number(event.target.dataset.index)];if(!x)return;
  if(field==="duration"){const n=Number(event.target.value);if(!Number.isInteger(n)||n<2||n>12){event.target.value=x.duration;return;}x.duration=n;}
  else if(field==="trimStart"||field==="trimEnd"){const n=event.target.value===""&&field==="trimEnd"?null:Number(event.target.value);if(n!==null&&(!Number.isFinite(n)||n<0)){event.target.value=x[field]??"";return;}if(field==="trimStart")x.trimStart=n;else x.trimEnd=n;if(x.trimEnd!==null&&x.trimEnd<=x.trimStart){event.target.value=x[field]??"";return;}}
+ else if(field==="audioVolume")x.audioVolume=Number(event.target.value)/100;
  else x[field]=event.target.value;syncTimelineFields(rows);
 });
 function playTimelinePreview(){
@@ -36,7 +44,7 @@ function playTimelinePreview(){
  $("timelinePreviewStop").onclick=()=>{stop();notice.textContent="Preview stopped.";};
  const next=()=>{stop();if(i>=rows.length){notice.textContent="Sequence preview complete.";return;}const x=rows[i];notice.textContent="Preview scene "+(i+1)+" / "+rows.length;
   if(x.kind==="image"){stage.innerHTML='<img alt="Timeline scene" style="width:100%;max-height:420px;object-fit:contain" src="/api/images/'+x.id+'">';timer=setTimeout(()=>{i++;next();},x.duration*1000);}
-  else{stage.innerHTML='<video controls autoplay playsinline style="width:100%;max-height:420px" src="/api/ai-videos/'+x.id+'"></video>';const v=stage.querySelector("video");v.addEventListener("loadedmetadata",()=>{v.currentTime=x.trimStart||0;});v.addEventListener("timeupdate",()=>{if(x.trimEnd!==null&&v.currentTime>=x.trimEnd){v.pause();i++;next();}});v.addEventListener("ended",()=>{i++;next();});}
+  else{stage.innerHTML='<video controls autoplay playsinline style="width:100%;max-height:420px" src="/api/ai-videos/'+x.id+'"></video>';const v=stage.querySelector("video");v.volume=Math.min(1,x.audioVolume??.25);v.addEventListener("loadedmetadata",()=>{v.currentTime=x.trimStart||0;});v.addEventListener("timeupdate",()=>{if(x.trimEnd!==null&&v.currentTime>=x.trimEnd){v.pause();i++;next();}});v.addEventListener("ended",()=>{i++;next();});}
  };next();
 }
 $("timelinePreviewPlay").addEventListener("click",playTimelinePreview);
