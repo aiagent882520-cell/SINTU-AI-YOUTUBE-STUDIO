@@ -937,6 +937,7 @@ def test_admin_auth_requires_credentials_and_protects_dashboard(tmp_path, monkey
     monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
     monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
     client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
     protected = client.get("/", follow_redirects=False)
     assert protected.status_code == 303
     assert protected.headers["location"] == "/login"
@@ -958,5 +959,6 @@ def test_admin_auth_fails_closed_without_host_secrets(tmp_path, monkeypatch):
     monkeypatch.delenv("SINTU_ADMIN_PASSWORD", raising=False)
     monkeypatch.delenv("SINTU_SESSION_SECRET", raising=False)
     client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
     response = client.post("/api/auth/login", json={"username": "admin", "password": "not-configured"})
     assert response.status_code == 503
