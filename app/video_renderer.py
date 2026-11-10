@@ -169,7 +169,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                 audio_inputs.append("music")
             if audio_inputs == ["voice", "music"]:
                 command += ["-filter_complex",
-                    f"[1:a]volume=1[voice];[2:a]volume={music_volume},atrim=duration={duration}[music];"
+                    f"[1:a]volume=1[voice];[2:a]volume={music_volume},afade=t=in:st=0:d=1.5,afade=t=out:st={max(0, duration - 2)}:d=2,atrim=duration={duration}[music];"
                     "[voice][music]amix=inputs=2:duration=longest:dropout_transition=2,apad,atrim=duration="
                     f"{duration}[aout]", "-map", "0:v:0", "-map", "[aout]", "-c:a", "aac", "-b:a", "192k"]
             elif audio_inputs == ["voice"]:
