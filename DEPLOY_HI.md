@@ -60,3 +60,6 @@ FastAPI Cloud was considered earlier but no deployment was completed. This Docke
 - Security audit records write requests with actor, role, HTTP method/path, status, IP address, and timestamp. It intentionally does not store request bodies or passwords.
 - User deactivation takes effect on the next request because each signed session is checked against the current user record.
 - Audit storage is in the same SQLite database volume; protect and back it up as operational/security data.
+
+- Editors can create content and use generation workflows, but cannot perform update/delete operations or administer accounts. Viewers remain read-only.
+- Admins can reset an existing account password from the user list; use a unique 12+ character temporary password and share it securely.
