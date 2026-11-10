@@ -107,9 +107,6 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         raise ValueError("Har scene ki duration 2 se 12 seconds honi chahiye.")
     if transition not in {"cut", "fade"}:
         raise ValueError("Transition cut ya fade hona chahiye.")
-    transitions = transitions or [transition] * len(video_paths)
-    if len(transitions) != len(video_paths) or any(x not in {"cut", "fade"} for x in transitions):
-        raise ValueError("Har clip ke liye cut ya fade transition required hai.")
     if motion not in {"none", "slow-zoom-in", "slow-zoom-out"}:
         raise ValueError("Motion none, slow-zoom-in ya slow-zoom-out hona chahiye.")
     if not 0.0 <= music_volume <= 1.0:
@@ -232,6 +229,9 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         raise ValueError("Music volume 0 se 1 ke beech hona chahiye.")
     if transition not in {"cut", "fade"}:
         raise ValueError("Transition cut ya fade hona chahiye.")
+    transitions = transitions or [transition] * len(video_paths)
+    if len(transitions) != len(video_paths) or any(x not in {"cut", "fade"} for x in transitions):
+        raise ValueError("Har clip ke liye cut ya fade transition required hai.")
     subtitles = subtitles or []
     if subtitles and len(subtitles) != len(video_paths):
         raise ValueError("Subtitle lines ki sankhya AI clips ke barabar honi chahiye.")
