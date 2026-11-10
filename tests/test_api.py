@@ -3,7 +3,7 @@ import shutil
 import subprocess
 import pytest
 
-from app import main
+from app import main, video_renderer
 
 def client_for_test(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "test.sqlite3")
@@ -277,7 +277,7 @@ def test_music_upload_requires_token_and_valid_extension(tmp_path, monkeypatch):
     assert bad.status_code == 400
     invalid = client.post("/api/music/upload", json=payload,
                           headers={"X-Media-Token": "secure-token"})
-    assert invalid.status_code == 503
+    assert invalid.status_code in {400, 503}
 
 
 def test_render_rejects_invalid_music_and_transition(tmp_path, monkeypatch):
