@@ -209,6 +209,12 @@
       <div class="actions"><button id="metaConnect" type="button">Connect Facebook Page</button><button id="metaDisconnect" class="secondary" type="button" hidden>Disconnect</button></div>
       <p class="foot">Instagram ke liye linked Business/Creator account aur public HTTPS MP4 URL chahiye. Facebook upload connected Page par local rendered MP4 bhejta hai. Meta App Review/permissions aur API limits apply.</p>
     </section>
+    <section class="panel" id="tiktokAdminPanel" hidden>
+      <div class="panel-head"><div><h2>TikTok Connection</h2><p>Login Kit + Content Posting API direct publishing.</p></div><button id="tiktokRefresh" class="secondary" type="button">Refresh</button></div>
+      <div id="tiktokConnectionStatus" class="muted" role="status" aria-live="polite">Checking TikTok setup…</div>
+      <div class="actions"><button id="tiktokConnect" type="button">Connect TikTok</button><button id="tiktokDisconnect" class="secondary" type="button" hidden>Disconnect</button></div>
+      <p class="foot">Direct Post API approval aur video.publish scope required. Unaudited apps ke posts private-only hote hain. Publish ke baad TikTok processing status check karna zaroori hai.</p>
+    </section>
     <section class="panel" id="calendarPanel">
       <div class="panel-head"><div><h2>Content Calendar & Scheduling</h2><p>Plan YouTube, Shorts, Instagram, Facebook, TikTok and website content.</p></div><button id="calendarRefresh" class="secondary" type="button">Refresh</button></div>
       <form id="calendarForm" class="calendar-form">
