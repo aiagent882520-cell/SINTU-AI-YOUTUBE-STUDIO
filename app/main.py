@@ -426,17 +426,23 @@ def render_video(payload: RenderInput):
             timeline_items = []
             scene_transitions = []
             for entry in payload.timeline:
-                match = re.fullmatch(r"(image|video):([a-f0-9]{32}):([^:]+):([^:]+):(cut|fade)", entry.strip())
-                legacy = re.fullmatch(r"(image|video):([a-f0-9]{32}):(\d{1,2}):(cut|fade)", entry.strip())
-                if match:
-                    kind, asset_id, first_value, second_value, transition_mode = match.groups()
-                elif legacy:
-                    kind, asset_id, first_value, transition_mode = legacy.groups()
-                    second_value = ""
-                    if kind == "video" and int(first_value) != 0:
-                        raise HTTPException(status_code=400, detail="Legacy video duration must be 0; use video:ID:start:end:transition for trimming.")
+                video_with_volume = re.fullmatch(r"video:([a-f0-9]{32}):([^:]+):([^:]*):([^:]+):(cut|fade)", entry.strip())
+                video_trim = re.fullmatch(r"video:([a-f0-9]{32}):([^:]+):([^:]*):(cut|fade)", entry.strip())
+                image_match = re.fullmatch(r"image:([a-f0-9]{32}):(\d{1,2}):(cut|fade)", entry.strip())
+                if video_with_volume:
+                    asset_id, first_value, second_value, volume_text, transition_mode = video_with_volume.groups()
+                    kind = "video"
+                elif video_trim:
+                    asset_id, first_value, second_value, transition_mode = video_trim.groups()
+                    volume_text = "0.25"
+                    kind = "video"
+                elif image_match:
+                    asset_id, first_value, transition_mode = image_match.groups()
+                    second_value = "0"
+                    volume_text = "0"
+                    kind = "image"
                 else:
-                    raise HTTPException(status_code=400, detail="Timeline format image:ID:duration:0:transition ya video:ID:start:end:transition hona chahiye.")
+                    raise HTTPException(status_code=400, detail="Timeline format image:ID:duration:transition ya video:ID:start:end:volume:transition hona chahiye.")
                 if kind == "image":
                     try: duration = int(first_value)
                     except ValueError: raise HTTPException(status_code=400, detail="Image duration integer honi chahiye.") from None
@@ -447,12 +453,16 @@ def render_video(payload: RenderInput):
                     try:
                         trim_start = float(first_value or 0)
                         trim_end = float(second_value) if second_value else None
+                        audio_volume = float(volume_text)
                     except ValueError:
-                        raise HTTPException(status_code=400, detail="Video trim time valid number hona chahiye.") from None
+                        raise HTTPException(status_code=400, detail="Video trim time aur audio volume valid number hone chahiye.") from None
                     if trim_start < 0 or (trim_end is not None and trim_end <= trim_start):
                         raise HTTPException(status_code=400, detail="Video trim end, start se bada hona chahiye.")
+                    if not 0 <= audio_volume <= 2:
+                        raise HTTPException(status_code=400, detail="Clip audio volume 0 se 200 percent ke beech hona chahiye.")
                     item = {"kind": kind, "path": AI_VIDEO_DIR / f"{asset_id}.mp4", "duration": 0,
-                            "trim_start": trim_start, "trim_end": trim_end}
+                            "trim_start": trim_start, "trim_end": trim_end,
+                            "audio_volume": audio_volume}
                 if not item["path"].is_file():
                     raise HTTPException(status_code=404, detail=f"Timeline {kind} asset not found.")
                 timeline_items.append(item)
