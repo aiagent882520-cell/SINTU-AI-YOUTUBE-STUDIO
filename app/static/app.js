@@ -1,6 +1,27 @@
 const $ = (id) => document.getElementById(id);
 $("logout")?.addEventListener("click",async()=>{try{await fetch("/api/auth/logout",{method:"POST"});}finally{location.replace("/login");}});
 let latestTaskId = null;
+let taskHistoryItems = [];
+function renderTaskHistory() {
+ const query = $("taskSearch").value.trim().toLowerCase();
+ const status = $("taskStatusFilter").value;
+ const workflow = $("taskWorkflowFilter").value;
+ const filtered = taskHistoryItems.filter(t =>
+   (!query || String(t.id).includes(query) || t.prompt.toLowerCase().includes(query)) &&
+   (!status || t.status === status) && (!workflow || t.workflow === workflow)
+ );
+ $("taskFilterSummary").textContent = filtered.length + " of " + taskHistoryItems.length + " recent tasks";
+ $("tasks").innerHTML = filtered.length ? filtered.map(t =>
+   '<div class="task"><div><b>#'+t.id+' · '+escapeHtml(t.workflow)+'</b><span class="task-status">'+escapeHtml(t.status)+'</span></div>'+
+   '<small>'+escapeHtml(t.prompt)+'</small>'+
+   (t.output ? '<button class="task-open secondary" data-id="'+t.id+'">View / Download output</button>' : '')+
+   (["Failed","Blocked"].includes(t.status) ? ' <button class="task-open secondary" data-retry="'+t.id+'">Retry generation</button>' : '')+
+   '</div>'
+ ).join("") : '<p class="muted">No tasks match these filters.</p>';
+}
+$("taskSearch")?.addEventListener("input", renderTaskHistory);
+$("taskStatusFilter")?.addEventListener("change", renderTaskHistory);
+$("taskWorkflowFilter")?.addEventListener("change", renderTaskHistory);
 
 function parseTimelineEntry(entry) {
  const p=entry.trim().split(":");
@@ -79,10 +100,8 @@ async function refresh() {
     $("agents").innerHTML = agents.agents.map(a =>
       '<div class="agent"><span>'+a.id+'. '+escapeHtml(a.name)+'</span><small>'+escapeHtml(a.status)+'</small></div>'
     ).join("");
-    $("tasks").innerHTML = tasks.tasks.length ? tasks.tasks.map(t =>
-      '<div class="task"><div><b>#'+t.id+' · '+escapeHtml(t.workflow)+'</b><span class="task-status">'+escapeHtml(t.status)+'</span></div>'+
-      '<small>'+escapeHtml(t.prompt)+'</small>'+(t.output ? '<button class="task-open secondary" data-id="'+t.id+'">View / Download output</button>' : '')+'</div>'
-    ).join("") : "No tasks yet.";
+    taskHistoryItems = tasks.tasks;
+    renderTaskHistory();
   } catch (error) { $("health").textContent = "API unavailable"; }
 }
 async function loadTeam() {
@@ -144,6 +163,24 @@ document.querySelectorAll("[data-workflow]").forEach(button => button.addEventLi
   document.querySelector("#create").scrollIntoView({behavior:"smooth"});
 }));
 $("tasks").addEventListener("click", async event => {
+  const retryButton = event.target.closest("[data-retry]");
+  if (retryButton) {
+    const id = Number(retryButton.dataset.retry);
+    retryButton.disabled = true;
+    retryButton.textContent = "Retrying…";
+    try {
+      const result = await request("/api/tasks/" + id + "/retry", {method:"POST"});
+      $("notice").textContent = "Task #" + id + " completed successfully.";
+      $("result").textContent = result.output || "";
+      $("resultWrap").hidden = !result.output;
+      latestTaskId = id;
+    } catch (error) {
+      $("notice").textContent = error.message;
+    } finally {
+      await refresh();
+    }
+    return;
+  }
   const button = event.target.closest("[data-id]");
   if (!button) return;
   latestTaskId = Number(button.dataset.id);
