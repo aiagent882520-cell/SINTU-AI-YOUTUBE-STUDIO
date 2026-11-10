@@ -152,12 +152,16 @@ function calendarEscape(value) {
 }
 async function loadCalendar() {
  try {
-  const data = await request("/api/calendar");
+  const [data, session, yt] = await Promise.all([
+   request("/api/calendar"), request("/api/auth/session"), request("/api/admin/youtube/status").catch(()=>({connected:false}))
+  ]);
+  const canPublish = session.authenticated && session.role === "admin" && yt.connected;
   $("calendarItems").innerHTML = data.items.length ? data.items.map(item => {
    const when = new Date(item.scheduled_at).toLocaleString();
    const actions = item.status === "Needs approval"
     ? '<button class="secondary" data-calendar-approve="'+item.id+'">Approve</button> <button class="secondary" data-calendar-cancel="'+item.id+'">Cancel</button>'
-    : (item.status === "Approved" ? '<button class="secondary" data-calendar-cancel="'+item.id+'">Cancel</button>' : "");
+    : (item.status === "Approved" ? '<button class="secondary" data-calendar-cancel="'+item.id+'">Cancel</button>' +
+       (canPublish && ["youtube","youtube_shorts"].includes(item.platform) ? ' <button data-youtube-publish="'+item.id+'">Upload rendered MP4</button>' : '') : "");
    return '<article class="calendar-item"><div><strong>'+calendarEscape(item.title)+'</strong><span>'+calendarEscape(item.platform.replace("_"," "))+' · '+calendarEscape(item.status)+'</span><small>'+calendarEscape(when)+'</small><p>'+calendarEscape(item.prompt)+'</p>'+actions+'</div></article>';
   }).join("") : '<p class="muted">Calendar abhi khaali hai. Pehla content schedule karein.</p>';
   $("calendarNotice").textContent = data.notice;
@@ -181,6 +185,26 @@ $("calendarForm")?.addEventListener("submit", async event => {
 $("calendarItems")?.addEventListener("click", async event => {
  const approve = event.target.closest("[data-calendar-approve]");
  const cancel = event.target.closest("[data-calendar-cancel]");
+ const publish = event.target.closest("[data-youtube-publish]");
+ if (publish) {
+  const calendarId = Number(publish.dataset.youtubePublish);
+  const videoId = window.prompt("Rendered MP4 Video ID (32-character ID from SINTU render result):");
+  if (!videoId) return;
+  if (!/^[a-f0-9]{32}$/i.test(videoId)) { $("calendarNotice").textContent="Video ID format invalid."; return; }
+  const title = window.prompt("YouTube video title (100 characters max):");
+  if (!title || title.length > 100) { $("calendarNotice").textContent="Valid YouTube title required."; return; }
+  const privacy = window.prompt("Privacy: private, unlisted, or public", "private");
+  if (!["private","unlisted","public"].includes(privacy)) { $("calendarNotice").textContent="Privacy value invalid."; return; }
+  if (privacy !== "private" && !window.confirm("Video "+privacy+" hoga. Kya aap confirm karte hain?")) return;
+  const params = new URLSearchParams({video_id:videoId.toLowerCase(),title,privacy_status:privacy});
+  publish.disabled=true;
+  try {
+   const result=await request("/api/admin/youtube/publish/"+calendarId+"?"+params.toString(),{method:"POST"});
+   $("calendarNotice").textContent="YouTube par upload ho gaya: "+result.url;
+   await loadCalendar();
+  } catch(error) { $("calendarNotice").textContent=error.message; publish.disabled=false; }
+  return;
+ }
  if (!approve && !cancel) return;
  const id = Number((approve || cancel).dataset[approve ? "calendarApprove" : "calendarCancel"]);
  const action = approve ? "approve" : "cancel";
