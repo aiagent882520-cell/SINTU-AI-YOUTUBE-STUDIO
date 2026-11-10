@@ -1,6 +1,10 @@
 from pathlib import Path
 import os
 import base64
+import hashlib
+import hmac
+import json
+import time
 import io
 import sqlite3
 import re
@@ -31,6 +35,52 @@ ALLOWED_MUSIC_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".ogg"}
 
 app = FastAPI(title="SINTU AI STUDIO", version="0.3.0")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
+
+SESSION_COOKIE = "sintu_admin_session"
+SESSION_TTL_SECONDS = 12 * 60 * 60
+_LOGIN_ATTEMPTS = {}
+
+
+def _auth_required():
+    return os.getenv("SINTU_AUTH_REQUIRED", "true").strip().lower() == "true"
+
+
+def _session_secret():
+    return os.getenv("SINTU_SESSION_SECRET", "")
+
+
+def _session_token(username: str, expires: int) -> str:
+    payload = base64.urlsafe_b64encode(json.dumps({"u": username, "e": expires}, separators=(",", ":")).encode()).decode().rstrip("=")
+    signature = hmac.new(_session_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return payload + "." + signature
+
+
+def _valid_session(token: str | None) -> bool:
+    if not token or not _session_secret():
+        return False
+    try:
+        payload, signature = token.rsplit(".", 1)
+        expected = hmac.new(_session_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            return False
+        decoded = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        return decoded.get("u") == os.getenv("SINTU_ADMIN_USERNAME", "admin") and int(decoded.get("e", 0)) > int(time.time())
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return False
+
+
+@app.middleware("http")
+async def admin_access_control(request, call_next):
+    if _auth_required():
+        path = request.url.path
+        public_paths = {"/login", "/api/auth/login", "/api/auth/logout", "/api/health"}
+        if path not in public_paths and not path.startswith("/static/") and not _valid_session(request.cookies.get(SESSION_COOKIE)):
+            if path == "/":
+                from fastapi.responses import RedirectResponse
+                return RedirectResponse("/login", status_code=303)
+            return JSONResponse(status_code=401, content={"detail": "Admin login required."})
+    return await call_next(request)
+
 
 @app.middleware("http")
 async def security_headers(request, call_next):
@@ -118,6 +168,54 @@ class VoiceInput(BaseModel):
 class SubtitleInput(BaseModel):
     scenes: list[str] = Field(min_length=1, max_length=100)
     seconds_per_scene: int = Field(default=4, ge=1, le=60)
+
+@app.get("/login", include_in_schema=False)
+def login_page():
+    return FileResponse(STATIC / "login.html")
+
+
+class AdminLoginInput(BaseModel):
+    username: str = Field(min_length=1, max_length=80)
+    password: str = Field(min_length=1, max_length=256)
+
+
+@app.post("/api/auth/login")
+def admin_login(payload: AdminLoginInput, request):
+    username = os.getenv("SINTU_ADMIN_USERNAME", "admin")
+    password = os.getenv("SINTU_ADMIN_PASSWORD", "")
+    secret = _session_secret()
+    if not password or len(password) < 12 or len(secret) < 32:
+        raise HTTPException(status_code=503, detail="Admin credentials and a 32+ character session secret must be configured by the host administrator.")
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    attempts = [stamp for stamp in _LOGIN_ATTEMPTS.get(client_ip, []) if now - stamp < 900]
+    if len(attempts) >= 10:
+        raise HTTPException(status_code=429, detail="Too many login attempts. 15 minutes baad try karein.")
+    if not hmac.compare_digest(payload.username, username) or not hmac.compare_digest(payload.password, password):
+        attempts.append(now)
+        _LOGIN_ATTEMPTS[client_ip] = attempts
+        raise HTTPException(status_code=401, detail="Username ya password galat hai.")
+    _LOGIN_ATTEMPTS.pop(client_ip, None)
+    response = JSONResponse({"authenticated": True, "username": username, "expires_in": SESSION_TTL_SECONDS})
+    response.set_cookie(SESSION_COOKIE, _session_token(username, int(now + SESSION_TTL_SECONDS)),
+                        max_age=SESSION_TTL_SECONDS, httponly=True, secure=os.getenv("SINTU_COOKIE_SECURE", "true").lower() == "true",
+                        samesite="strict", path="/")
+    return response
+
+
+@app.post("/api/auth/logout")
+def admin_logout():
+    response = JSONResponse({"authenticated": False})
+    response.delete_cookie(SESSION_COOKIE, path="/", httponly=True,
+                           secure=os.getenv("SINTU_COOKIE_SECURE", "true").lower() == "true", samesite="strict")
+    return response
+
+
+@app.get("/api/auth/session")
+def admin_session(request):
+    valid = _valid_session(request.cookies.get(SESSION_COOKIE))
+    return {"authenticated": valid, "username": os.getenv("SINTU_ADMIN_USERNAME", "admin") if valid else None}
+
 
 @app.get("/")
 def home():
