@@ -523,7 +523,11 @@ def generate(payload: TaskInput):
         )
         task_id = cur.lastrowid
     try:
-        result = generate_text(prompt, payload.workflow, _get_app_setting("selected_provider", os.getenv("AI_PROVIDER", "auto").lower()))
+        selected_provider = _get_app_setting("selected_provider", os.getenv("AI_PROVIDER", "auto").lower())
+        if selected_provider == os.getenv("AI_PROVIDER", "auto").lower():
+            result = generate_text(prompt, payload.workflow)
+        else:
+            result = generate_text(prompt, payload.workflow, selected_provider)
     except ProviderNotConfigured as exc:
         with db() as conn:
             conn.execute("UPDATE tasks SET status = ? WHERE id = ?", ("Blocked", task_id))
