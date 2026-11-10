@@ -177,7 +177,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                             "-c:a", "aac", "-b:a", "192k"]
             elif audio_inputs == ["music"]:
                 command += ["-map", "0:v:0", "-map", "1:a:0", "-af",
-                            f"volume={music_volume},atrim=duration={duration}", "-c:a", "aac", "-b:a", "192k"]
+                            f"volume={music_volume},afade=t=in:st=0:d=1.5,afade=t=out:st={max(0, duration - 2)}:d=2,atrim=duration={duration}", "-c:a", "aac", "-b:a", "192k"]
             else:
                 command += ["-map", "0:v:0", "-an"]
             if video_filter:
@@ -209,5 +209,5 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         "scene_images": len(image_paths),
         "subtitles_burned_in": bool(subtitles),
         "format": "MP4 / H.264",
-        "note": "Scene images, optional narration, uploaded background music and burned-in captions are combined. Optional slow zoom motion is a basic Ken Burns effect; advanced 2D/3D animation and VFX are not included.",
+        "note": "Scene images, optional narration, background music with automatic fade-in/fade-out, and burned-in captions are combined. Optional slow zoom motion is a basic Ken Burns effect; advanced 2D/3D animation and VFX are not included.",
     }
