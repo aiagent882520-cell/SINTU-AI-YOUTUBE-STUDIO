@@ -749,6 +749,30 @@ $("providerSettingsForm")?.addEventListener("submit", async event => {
 });
 $("providerRefresh")?.addEventListener("click", loadProviderAdminPanel);
 
+async function loadPublishingConnections(){
+ const panel=$("publishingConnectionsPanel");if(!panel)return;
+ try{
+  const session=await request("/api/auth/session");
+  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  panel.hidden=false;
+  const [youtube,meta,tiktok]=await Promise.all([
+   request("/api/admin/youtube/status"),request("/api/admin/meta/status"),request("/api/admin/tiktok/status")
+  ]);
+  const rows=[
+   ["YouTube",youtube.connected,"Connected channel: "+(youtube.channel?.title||""),youtube.oauth_configured,youtube.encryption_configured],
+   ["Facebook / Instagram",meta.connected,"Facebook Page: "+(meta.page?.name||"")+(meta.instagram?" · Instagram @"+(meta.instagram.username||"linked"):""),meta.oauth_configured,meta.encryption_configured],
+   ["TikTok",tiktok.connected,"Creator: "+(tiktok.creator?.display_name||""),tiktok.oauth_configured,tiktok.encryption_configured]
+  ];
+  $("publishingConnectionsCards").innerHTML=rows.map(([name,connected,detail,oauth,encrypted])=>{
+   const state=connected?"Connected":oauth&&encrypted?"Ready to connect":"Setup required";
+   const hint=connected?detail:(!oauth?"Developer app credentials missing":!encrypted?"Token encryption key missing":"Account authorization required");
+   return '<div class="integration-card"><strong>'+adminEscape(name)+'</strong><span>'+adminEscape(state)+'</span><small>'+adminEscape(hint)+'</small></div>';
+  }).join("");
+  $("publishingConnectionsNotice").textContent=rows.filter(x=>x[1]).length+" platform group(s) connected. Har post par admin approval aur supported permissions required hain.";
+ }catch(error){$("publishingConnectionsNotice").textContent=error.message;}
+}
+$("publishingConnectionsRefresh")?.addEventListener("click",loadPublishingConnections);
+
 async function loadYouTubeAdminPanel() {
  const panel = $("youtubeAdminPanel"); if (!panel) return;
  try {
@@ -775,6 +799,7 @@ $("youtubeDisconnect")?.addEventListener("click", async () => {
 });
 $("youtubeRefresh")?.addEventListener("click",loadYouTubeAdminPanel);
 loadYouTubeAdminPanel();
+loadPublishingConnections();
 
 async function loadMetaAdminPanel(){
  const panel=$("metaAdminPanel");if(!panel)return;
