@@ -79,3 +79,14 @@ Admin dashboard ke **AI Provider Settings** section mein `auto`, `openai`, ya `g
 5. Calendar mein YouTube/Shorts item add karke approve karein, MP4 render karein, phir explicit admin upload action se video bhejein. Default privacy **private** hai; public/unlisted ke liye admin ka explicit selection zaroori hai.
 6. Upload ke liye YouTube Data API quota apply hota hai. Google OAuth verification/testing-user restrictions bhi apply ho sakti hain. App automatic scheduled uploads nahi chalata; publish ek explicit manual action hai.
 7. Token encryption key ko securely backup karein. Key lost/change hone par stored refresh tokens decrypt nahi honge aur channel ko reconnect karna padega.
+
+
+## Instagram aur Facebook Page connection
+1. Meta for Developers mein app create karein; Facebook Login aur Instagram Graph API products add karein.
+2. Valid OAuth Redirect URI exact set karein: `https://YOUR-DOMAIN/api/admin/meta/oauth/callback`.
+3. Server secrets set karein: `META_APP_ID`, `META_APP_SECRET`, `META_REDIRECT_URI`, aur pehle se generated `YOUTUBE_TOKEN_ENCRYPTION_KEY`.
+4. SINTU Admin panel mein **Connect Facebook Page** karke Page permissions approve karein.
+5. Approved Facebook calendar item par rendered MP4 ID se **Publish Facebook video** karein.
+6. Instagram ke liye Page se linked Instagram **Business/Creator** account chahiye. Approved Instagram item par public HTTPS MP4 URL aur caption dein; Meta URL se video fetch karke Reel publish karega. Local-only MP4 URL supported nahi.
+7. Meta App Review/Advanced Access, Business Verification, Page role, account eligibility aur Graph API rate limits apply. Public users ke launch se pehle Meta approval complete karein.
+8. Publishing hamesha manual admin confirmation se hoti hai; scheduled auto-publishing abhi enabled nahi.
