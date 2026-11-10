@@ -215,7 +215,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
 
 def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                     music_path: Path | None = None, music_volume: float = 0.18,
-                    subtitles: list[str] | None = None, transition: str = "cut", transitions: list[str] | None = None) -> dict:
+                    subtitles: list[str] | None = None, transition: str = "cut", transitions: list[str] | None = None, clip_audio_volumes: list[float] | None = None) -> dict:
     """Join AI MP4 clips, preserving source audio and optionally mixing narration/music/captions."""
     import json
 
@@ -232,6 +232,9 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
     transitions = transitions or [transition] * len(video_paths)
     if len(transitions) != len(video_paths) or any(x not in {"cut", "fade"} for x in transitions):
         raise ValueError("Har clip ke liye cut ya fade transition required hai.")
+    clip_audio_volumes = clip_audio_volumes or [0.25] * len(video_paths)
+    if len(clip_audio_volumes) != len(video_paths) or any(not isinstance(v, (int, float)) or not 0 <= v <= 2 for v in clip_audio_volumes):
+        raise ValueError("Har clip ka source audio volume 0 se 2 (0–200%) hona chahiye.")
     subtitles = subtitles or []
     if subtitles and len(subtitles) != len(video_paths):
         raise ValueError("Subtitle lines ki sankhya AI clips ke barabar honi chahiye.")
@@ -322,13 +325,13 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                     f"aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
                     f"atrim=duration={info['duration']:.3f},asetpts=PTS-STARTPTS"
                 )
-                filters.append(f"[{audio_input_indexes[index]}:a:0]{audio_filters}[{alabel}]")
+                filters.append(f"[{audio_input_indexes[index]}:a:0]{audio_filters},volume={float(clip_audio_volumes[index]):.3f}[{alabel}]")
 
             filters.append("".join(video_labels) + f"concat=n={len(video_paths)}:v=1:a=0[vout]")
             filters.append("".join(audio_labels) + f"concat=n={len(video_paths)}:v=0:a=1[clipaudio]")
 
             mix_labels = []
-            filters.append("[clipaudio]volume=0.25[ambient]")
+            filters.append("[clipaudio]anull[ambient]")
             mix_labels.append("[ambient]")
             if voice_index is not None:
                 filters.append(f"[{voice_index}:a:0]volume=1,aresample=48000,apad,atrim=duration={total_duration:.3f}[voice]")
@@ -473,11 +476,13 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                 raise ValueError("Timeline item kind image ya video hona chahiye.")
         result = render_ai_clips(
             clip_paths, audio_path=audio_path, music_path=music_path,
-            music_volume=music_volume, subtitles=subtitles, transition=transition, transitions=transitions
+            music_volume=music_volume, subtitles=subtitles, transition=transition, transitions=transitions,
+            clip_audio_volumes=[float(item.get("audio_volume", 0.25)) if item["kind"] == "video" else 0.0 for item in items]
         )
         result["timeline_items"] = len(items)
         result["timeline_order"] = [item["kind"] for item in items]
         result["scene_transitions"] = transitions
+        result["clip_audio_volumes"] = [item.get("audio_volume", 0.25) if item["kind"] == "video" else 0.0 for item in items]
         result["scene_durations"] = [item.get("duration") if item["kind"] == "image" else (round(float(item["trim_end"])-float(item.get("trim_start",0)),2) if item.get("trim_end") is not None else None) for item in items]
         result["note"] = "Still images and AI video clips are joined in order. Still-image duration is configurable; video clips can be trimmed by start/end seconds without modifying original source files. Source video audio, optional voiceover/music, per-item subtitles and cut/fade transitions are supported."
         return result
