@@ -214,15 +214,26 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
 
 
 def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
-                    music_path: Path | None = None, music_volume: float = 0.18) -> dict:
-    """Join generated MP4 clips into one portrait MP4 with optional narration/music."""
+                    music_path: Path | None = None, music_volume: float = 0.18,
+                    subtitles: list[str] | None = None, transition: str = "cut") -> dict:
+    """Join AI MP4 clips, preserving source audio and optionally mixing narration/music/captions."""
+    import json
+
     ffmpeg = shutil.which("ffmpeg")
-    if not ffmpeg:
-        raise RendererUnavailable("FFmpeg server par installed nahi hai. Video rendering filhaal unavailable hai.")
+    ffprobe = shutil.which("ffprobe")
+    if not ffmpeg or not ffprobe:
+        raise RendererUnavailable("FFmpeg aur FFprobe server par installed hone chahiye.")
     if not video_paths or len(video_paths) > 25:
         raise ValueError("1 se 25 AI video clips required hain.")
     if not 0.0 <= music_volume <= 1.0:
         raise ValueError("Music volume 0 se 1 ke beech hona chahiye.")
+    if transition not in {"cut", "fade"}:
+        raise ValueError("Transition cut ya fade hona chahiye.")
+    subtitles = subtitles or []
+    if subtitles and len(subtitles) != len(video_paths):
+        raise ValueError("Subtitle lines ki sankhya AI clips ke barabar honi chahiye.")
+    if any(not line.strip() or len(line) > 1000 for line in subtitles):
+        raise ValueError("Subtitle line 1 se 1000 characters ki honi chahiye.")
     for path in video_paths:
         if not path.is_file() or path.suffix.lower() != ".mp4":
             raise ValueError("Selected AI video clip file nahi mili ya MP4 nahi hai.")
@@ -231,68 +242,137 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
     if music_path and not music_path.is_file():
         raise ValueError("Background music file nahi mili.")
 
+    clip_info = []
+    total_duration = 0.0
+    for path in video_paths:
+        probe = subprocess.run(
+            [ffprobe, "-v", "error", "-show_entries", "format=duration:stream=codec_type",
+             "-of", "json", str(path)], capture_output=True, text=True, timeout=30, check=False
+        )
+        if probe.returncode != 0:
+            raise RenderFailed("AI clip metadata read nahi ho saka.")
+        try:
+            metadata = json.loads(probe.stdout)
+            duration = float(metadata["format"]["duration"])
+            has_audio = any(stream.get("codec_type") == "audio" for stream in metadata.get("streams", []))
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+            raise RenderFailed("AI clip duration ya audio metadata invalid hai.") from None
+        if duration <= 0 or duration > 600:
+            raise ValueError("AI clip duration 0 se 600 seconds ke beech honi chahiye.")
+        clip_info.append({"duration": duration, "has_audio": has_audio})
+        total_duration += duration
+    if total_duration > 1800:
+        raise ValueError("Combined AI video 30 minutes se lambi nahi ho sakti.")
+
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     video_id = uuid.uuid4().hex
     output_path = OUTPUT_DIR / f"{video_id}.mp4"
     try:
-        command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
-        for path in video_paths:
-            command += ["-i", str(path)]
-        audio_index = len(video_paths)
-        if audio_path:
-            command += ["-i", str(audio_path)]
-        music_index = audio_index + (1 if audio_path else 0)
-        if music_path:
-            command += ["-stream_loop", "-1", "-i", str(music_path)]
+        with tempfile.TemporaryDirectory(prefix="sintu-ai-join-") as temp:
+            work = Path(temp)
+            command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
+            for path in video_paths:
+                command += ["-i", str(path)]
 
-        filters = []
-        video_labels = []
-        for index in range(len(video_paths)):
-            label = f"v{index}"
-            video_labels.append(f"[{label}]")
-            filters.append(
-                f"[{index}:v:0]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,"
-                f"crop={WIDTH}:{HEIGHT},fps=30,setsar=1,format=yuv420p,setpts=PTS-STARTPTS[{label}]"
-            )
-        filters.append(
-            "".join(video_labels) + f"concat=n={len(video_paths)}:v=1:a=0[vout]"
-        )
+            audio_input_indexes = []
+            next_index = len(video_paths)
+            for index, info in enumerate(clip_info):
+                if info["has_audio"]:
+                    audio_input_indexes.append(index)
+                else:
+                    command += ["-f", "lavfi", "-t", f'{info["duration"]:.3f}',
+                                "-i", "anullsrc=r=48000:cl=stereo"]
+                    audio_input_indexes.append(next_index)
+                    next_index += 1
 
-        audio_inputs = []
-        if audio_path:
-            filters.append(
-                f"[{audio_index}:a:0]volume=1,aresample=48000,apad[voice]"
-            )
-            audio_inputs.append("[voice]")
-        if music_path:
-            filters.append(
-                f"[{music_index}:a:0]volume={music_volume},aresample=48000,"
-                f"afade=t=in:st=0:d=1.5[music]"
-            )
-            audio_inputs.append("[music]")
-        if len(audio_inputs) == 2:
-            filters.append(
-                "".join(audio_inputs) + "amix=inputs=2:duration=longest:dropout_transition=2[aout]"
-            )
-        elif len(audio_inputs) == 1:
-            filters.append(audio_inputs[0] + "anull[aout]")
+            voice_index = None
+            if audio_path:
+                command += ["-i", str(audio_path)]
+                voice_index = next_index
+                next_index += 1
+            music_index = None
+            if music_path:
+                command += ["-stream_loop", "-1", "-i", str(music_path)]
+                music_index = next_index
+                next_index += 1
 
-        command += ["-filter_complex", ";".join(filters), "-map", "[vout]"]
-        if audio_inputs:
-            command += ["-map", "[aout]", "-c:a", "aac", "-b:a", "192k"]
-        else:
-            command += ["-an"]
-        command += [
-            "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30",
-            "-movflags", "+faststart", str(output_path)
-        ]
-        completed = subprocess.run(command, capture_output=True, text=True, timeout=600, check=False)
-        if completed.returncode != 0 or not output_path.exists():
-            detail = (completed.stderr or "FFmpeg AI clip assembly failed")[-1200:]
-            raise RenderFailed(detail)
+            filters = []
+            video_labels = []
+            audio_labels = []
+            for index, info in enumerate(clip_info):
+                vlabel = f"v{index}"
+                alabel = f"clipa{index}"
+                video_labels.append(f"[{vlabel}]")
+                audio_labels.append(f"[{alabel}]")
+                vfilters = (
+                    f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,"
+                    f"crop={WIDTH}:{HEIGHT},fps=30,setsar=1,format=yuv420p,setpts=PTS-STARTPTS"
+                )
+                if transition == "fade" and len(clip_info) > 1:
+                    fade_duration = min(0.35, info["duration"] / 4)
+                    if index > 0:
+                        vfilters += f",fade=t=in:st=0:d={fade_duration:.3f}"
+                    if index < len(clip_info) - 1:
+                        vfilters += f",fade=t=out:st={max(0, info['duration']-fade_duration):.3f}:d={fade_duration:.3f}"
+                filters.append(f"[{index}:v:0]{vfilters}[{vlabel}]")
+                audio_filters = (
+                    f"aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
+                    f"atrim=duration={info['duration']:.3f},asetpts=PTS-STARTPTS"
+                )
+                filters.append(f"[{audio_input_indexes[index]}:a:0]{audio_filters}[{alabel}]")
+
+            filters.append("".join(video_labels) + f"concat=n={len(video_paths)}:v=1:a=0[vout]")
+            filters.append("".join(audio_labels) + f"concat=n={len(video_paths)}:v=0:a=1[clipaudio]")
+
+            mix_labels = []
+            filters.append("[clipaudio]volume=0.25[ambient]")
+            mix_labels.append("[ambient]")
+            if voice_index is not None:
+                filters.append(f"[{voice_index}:a:0]volume=1,aresample=48000,apad,atrim=duration={total_duration:.3f}[voice]")
+                mix_labels.append("[voice]")
+            if music_index is not None:
+                filters.append(
+                    f"[{music_index}:a:0]volume={music_volume},aresample=48000,"
+                    f"afade=t=in:st=0:d=1.5,afade=t=out:st={max(0,total_duration-2):.3f}:d=2,"
+                    f"atrim=duration={total_duration:.3f}[music]"
+                )
+                mix_labels.append("[music]")
+            filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,atrim=duration={total_duration:.3f}[aout]")
+
+            if subtitles:
+                srt_path = work / "captions.srt"
+                def stamp(seconds):
+                    millis = int(round(seconds * 1000))
+                    hours, millis = divmod(millis, 3600000)
+                    minutes, millis = divmod(millis, 60000)
+                    secs, millis = divmod(millis, 1000)
+                    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+                entries = []
+                elapsed = 0.0
+                for line, info in zip(subtitles, clip_info):
+                    entries.append(f"{len(entries)+1}\n{stamp(elapsed)} --> {stamp(elapsed+info['duration'])}\n{line.replace(chr(13), ' ').replace(chr(10), ' ')}\n")
+                    elapsed += info["duration"]
+                srt_path.write_text("\n".join(entries), encoding="utf-8")
+                filter_check = subprocess.run([ffmpeg, "-filters"], capture_output=True, text=True, timeout=20, check=False)
+                if " subtitles " not in (filter_check.stdout + filter_check.stderr):
+                    raise RendererUnavailable("Is FFmpeg build mein subtitles filter available nahi hai.")
+                safe_srt = str(srt_path).replace("\\", "/").replace(":", r"\:")
+                filters.append(f"[vout]subtitles=filename='{safe_srt}':force_style='FontSize=22,Outline=2,Shadow=0,MarginV=70'[vcaption]")
+                video_map = "[vcaption]"
+            else:
+                video_map = "[vout]"
+
+            command += ["-filter_complex", ";".join(filters), "-map", video_map, "-map", "[aout]",
+                        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+                        "-c:a", "aac", "-b:a", "192k", "-t", f"{total_duration:.3f}",
+                        "-movflags", "+faststart", str(output_path)]
+            completed = subprocess.run(command, capture_output=True, text=True, timeout=900, check=False)
+            if completed.returncode != 0 or not output_path.exists():
+                detail = (completed.stderr or "FFmpeg AI clip assembly failed")[-1600:]
+                raise RenderFailed(detail)
     except subprocess.TimeoutExpired:
         output_path.unlink(missing_ok=True)
-        raise RenderFailed("AI clips assemble karne mein timeout ho gaya. Clips kam karke dobara try karein.") from None
+        raise RenderFailed("AI clips assemble karne mein timeout ho gaya.") from None
     except Exception:
         output_path.unlink(missing_ok=True)
         raise
@@ -302,15 +382,15 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         "filename": output_path.name,
         "url": f"/api/videos/{video_id}",
         "scenes": len(video_paths),
-        "duration_seconds": None,
+        "duration_seconds": round(total_duration, 2),
         "resolution": f"{WIDTH}x{HEIGHT}",
-        "audio": "voiceover+music" if audio_path and music_path else "voiceover" if audio_path else "music" if music_path else "clip-audio-not-preserved",
+        "audio": "source+voiceover+music" if audio_path and music_path else "source+voiceover" if audio_path else "source+music" if music_path else "source-audio",
         "music": bool(music_path),
         "music_volume": music_volume if music_path else None,
-        "transition": "cut",
+        "transition": transition,
         "motion": "source AI clip motion",
         "scene_images": 0,
-        "subtitles_burned_in": False,
+        "subtitles_burned_in": bool(subtitles),
         "format": "MP4 / H.264",
-        "note": "AI clips joined in order and normalized to 720x1280 portrait. Original audio embedded inside source clips is not preserved in this version; add narration or music as the final soundtrack. Captions and advanced transitions are not applied to this clip-assembly mode."
+        "note": "Original clip audio is retained at reduced ambient level and mixed with optional voiceover/music. Captions are timed to each clip. Fade mode fades each clip at its boundaries; it is not a cross-dissolve."
     }
