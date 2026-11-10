@@ -184,7 +184,8 @@ def admin_login(payload: AdminLoginInput, request: Request):
     username = os.getenv("SINTU_ADMIN_USERNAME", "admin")
     password = os.getenv("SINTU_ADMIN_PASSWORD", "")
     secret = _session_secret()
-    if not password or len(password) < 12 or len(secret) < 32:
+    if (not password or len(password) < 12 or len(secret) < 32
+            or password.startswith("CHANGE-THIS") or secret.startswith("CHANGE-THIS")):
         raise HTTPException(status_code=503, detail="Admin credentials and a 32+ character session secret must be configured by the host administrator.")
     client_ip = request.client.host if request.client else "unknown"
     now = time.time()
