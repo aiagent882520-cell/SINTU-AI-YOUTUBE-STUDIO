@@ -1,5 +1,5 @@
-$("logout")?.addEventListener("click",async()=>{try{await fetch("/api/auth/logout",{method:"POST"});}finally{location.replace("/login");}});
 const $ = (id) => document.getElementById(id);
+$("logout")?.addEventListener("click",async()=>{try{await fetch("/api/auth/logout",{method:"POST"});}finally{location.replace("/login");}});
 let latestTaskId = null;
 
 function parseTimelineEntry(entry) {
