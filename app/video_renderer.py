@@ -235,8 +235,8 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
     subtitles = subtitles or []
     if subtitles and len(subtitles) != len(video_paths):
         raise ValueError("Subtitle lines ki sankhya AI clips ke barabar honi chahiye.")
-    if any(not line.strip() or len(line) > 1000 for line in subtitles):
-        raise ValueError("Subtitle line 1 se 1000 characters ki honi chahiye.")
+    if any(len(line) > 1000 for line in subtitles):
+        raise ValueError("Subtitle line 1000 characters se chhoti honi chahiye.")
     for path in video_paths:
         if not path.is_file() or path.suffix.lower() != ".mp4":
             raise ValueError("Selected AI video clip file nahi mili ya MP4 nahi hai.")
@@ -353,7 +353,8 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                 entries = []
                 elapsed = 0.0
                 for line, info in zip(subtitles, clip_info):
-                    entries.append(f"{len(entries)+1}\n{stamp(elapsed)} --> {stamp(elapsed+info['duration'])}\n{line.replace(chr(13), ' ').replace(chr(10), ' ')}\n")
+                    if line.strip():
+                        entries.append(f"{len(entries)+1}\n{stamp(elapsed)} --> {stamp(elapsed+info['duration'])}\n{line.replace(chr(13), ' ').replace(chr(10), ' ')}\n")
                     elapsed += info["duration"]
                 srt_path.write_text("\n".join(entries), encoding="utf-8")
                 filter_check = subprocess.run([ffmpeg, "-filters"], capture_output=True, text=True, timeout=20, check=False)
