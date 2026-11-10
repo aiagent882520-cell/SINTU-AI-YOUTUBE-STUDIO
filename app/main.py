@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import base64
 import io
 import sqlite3
@@ -21,9 +22,11 @@ from .music_generator import generate_music, music_status, MusicUnavailable, Mus
 from .video_generator import generate_video, video_status, VideoUnavailable, VideoGenerationFailed, AI_VIDEO_DIR
 
 ROOT = Path(__file__).resolve().parent
-DB_PATH = ROOT.parent / "sintu_studio.db"
+DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT.parent))).expanduser().resolve()
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = DATA_DIR / "sintu_studio.db"
 STATIC = ROOT / "static"
-MUSIC_DIR = ROOT.parent / "generated_music"
+MUSIC_DIR = DATA_DIR / "generated_music"
 ALLOWED_MUSIC_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".ogg"}
 
 app = FastAPI(title="SINTU AI STUDIO", version="0.3.0")
