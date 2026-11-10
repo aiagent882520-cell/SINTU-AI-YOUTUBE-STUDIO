@@ -1282,7 +1282,10 @@ def test_youtube_analytics_returns_official_metrics_and_top_videos(tmp_path, mon
     calls = []
     def fake_request(url, data=None, headers=None, method=None):
         calls.append(url)
-        if "dimensions=day" in url:
+        if "currency=INR" in url:
+            body = {"columnHeaders":[{"name":"estimatedRevenue"},{"name":"estimatedAdRevenue"},{"name":"estimatedRedPartnerRevenue"},{"name":"grossRevenue"},{"name":"adImpressions"},{"name":"playbackBasedCpm"}],
+                "rows":[[123.45,100.0,23.45,150.0,2000,75.0]]}
+        elif "dimensions=day" in url:
             body = {"columnHeaders":[{"name":"day"},{"name":"views"},{"name":"estimatedMinutesWatched"},
                 {"name":"averageViewDuration"},{"name":"subscribersGained"},{"name":"subscribersLost"}],
                 "rows":[["2026-11-01",100,50,30,4,1],["2026-11-02",200,120,36,5,2]]}
@@ -1299,7 +1302,10 @@ def test_youtube_analytics_returns_official_metrics_and_top_videos(tmp_path, mon
     assert data["totals"]["subscribersGained"] == 9
     assert data["totals"]["subscribersLost"] == 3
     assert data["top_videos"][0]["video_id"] == "video123"
-    assert len(calls) == 2
+    assert len(calls) == 3
+    assert data["revenue"]["available"] is True
+    assert data["revenue"]["estimated_revenue"] == 123.45
+    assert data["revenue"]["ad_impressions"] == 2000
     assert all("youtubeanalytics.googleapis.com/v2/reports" in url for url in calls)
 
 
