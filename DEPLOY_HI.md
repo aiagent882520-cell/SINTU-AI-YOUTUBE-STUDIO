@@ -27,6 +27,7 @@ Set secrets in the host's secret manager or a protected `.env` file (never commi
 - `OPENAI_API_KEY`, `OPENAI_MODEL`
 - `GEMINI_API_KEY`, `GEMINI_MODEL`
 - `STABILITY_API_KEY`
+- `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REDIRECT_URI`, `YOUTUBE_TOKEN_ENCRYPTION_KEY`
 - `MEDIA_GENERATION_TOKEN`
 - `ENABLE_PAID_MEDIA_GENERATION=false` (keep false until paid provider costs and credentials are intentionally configured)
 - `SINTU_AUTH_REQUIRED=true`, `SINTU_ADMIN_USERNAME`, `SINTU_ADMIN_PASSWORD`, `SINTU_SESSION_SECRET` (minimum 32 random characters)
@@ -68,3 +69,13 @@ FastAPI Cloud was considered earlier but no deployment was completed. This Docke
 ## AI provider control panel
 
 Admin dashboard ke **AI Provider Settings** section mein `auto`, `openai`, ya `gemini` provider preference choose karein. Selection persistent SQLite settings mein save hota hai aur new AI text generation requests par apply hota hai. Selected provider ki key server environment mein configured honi chahiye. Dashboard API keys ko kabhi accept/display/store nahi karta; unhe hosting secret manager mein hi set karein. Integration cards readiness aur missing OAuth integrations dikhate hain. Paid media setting environment-controlled rehti hai; dashboard se paid generation enable nahi hota.
+
+
+## YouTube channel OAuth and upload
+1. Google Cloud Console mein project banayein, **YouTube Data API v3** enable karein aur OAuth consent screen configure karein.
+2. OAuth Client ID type **Web application** banayein. Authorized redirect URI ko deployed domain ke saath exact set karein: `https://YOUR-DOMAIN/api/admin/youtube/oauth/callback`.
+3. Hosting secret manager mein `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REDIRECT_URI` aur stable `YOUTUBE_TOKEN_ENCRYPTION_KEY` set karein. Fernet key generate karne ke liye Python: `from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())`.
+4. HTTPS par admin login karein aur YouTube Channel Connection panel se Google consent complete karein. OAuth state 10 minute ka, single-use aur current admin session se bound hai. Tokens Fernet encryption ke saath SQLite mein store hote hain; browser ko kabhi nahi bheje jate.
+5. Calendar mein YouTube/Shorts item add karke approve karein, MP4 render karein, phir explicit admin upload action se video bhejein. Default privacy **private** hai; public/unlisted ke liye admin ka explicit selection zaroori hai.
+6. Upload ke liye YouTube Data API quota apply hota hai. Google OAuth verification/testing-user restrictions bhi apply ho sakti hain. App automatic scheduled uploads nahi chalata; publish ek explicit manual action hai.
+7. Token encryption key ko securely backup karein. Key lost/change hone par stored refresh tokens decrypt nahi honge aur channel ko reconnect karna padega.
