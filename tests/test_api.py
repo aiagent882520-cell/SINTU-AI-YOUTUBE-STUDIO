@@ -610,7 +610,7 @@ def test_video_generator_extracts_and_downloads_uri_delivery(monkeypatch):
     calls = []
     def fake_urlopen(request, timeout):
         calls.append(request.full_url)
-        if "/files/abc-123?" in request.full_url:
+        if request.full_url.endswith("/files/abc-123"):
             return FakeResponse(json.dumps({"state": "ACTIVE"}).encode())
         return FakeResponse(mp4)
     monkeypatch.setattr(video_generator.urllib.request, "urlopen", fake_urlopen)
