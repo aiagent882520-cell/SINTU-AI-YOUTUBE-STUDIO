@@ -424,25 +424,32 @@ def render_video(payload: RenderInput):
     try:
         if payload.timeline:
             timeline_items = []
+            scene_transitions = []
             for entry in payload.timeline:
-                match = re.fullmatch(r"(image|video):([a-f0-9]{32})", entry.strip())
+                match = re.fullmatch(r"(image|video):([a-f0-9]{32})(?::(\\d{1,2}))?(?::(cut|fade))?", entry.strip())
                 if not match:
-                    raise HTTPException(status_code=400, detail="Timeline format image:ID ya video:ID hona chahiye.")
-                kind, asset_id = match.groups()
+                    raise HTTPException(status_code=400, detail="Timeline format image:ID:duration:transition ya video:ID:0:transition hona chahiye.")
+                kind, asset_id, duration_text, transition_mode = match.groups()
+                duration = int(duration_text) if duration_text else payload.seconds_per_scene
+                if kind == "image" and not 2 <= duration <= 12:
+                    raise HTTPException(status_code=400, detail="Image scene duration 2 se 12 seconds honi chahiye.")
+                if kind == "video" and duration_text and duration != 0:
+                    raise HTTPException(status_code=400, detail="AI video clip ki duration source file se li jaati hai; duration 0 rakhein.")
                 if kind == "image":
                     asset_path = IMAGE_DIR / f"{asset_id}.jpg"
                 else:
                     asset_path = AI_VIDEO_DIR / f"{asset_id}.mp4"
                 if not asset_path.is_file():
                     raise HTTPException(status_code=404, detail=f"Timeline {kind} asset not found.")
-                timeline_items.append({"kind": kind, "path": asset_path})
+                timeline_items.append({"kind": kind, "path": asset_path, "duration": duration})
+                scene_transitions.append(transition_mode or payload.transition)
             if payload.motion != "none":
                 raise HTTPException(status_code=400, detail="Mixed timeline mein abhi source clip motion use hota hai; extra zoom unsupported hai.")
             return render_mixed_timeline(timeline_items, title, scenes,
                                          seconds_per_scene=payload.seconds_per_scene,
                                          audio_path=audio_path, music_path=music_path,
                                          music_volume=payload.music_volume,
-                                         subtitles=payload.subtitles, transition=payload.transition)
+                                         subtitles=payload.subtitles, transition=payload.transition, transitions=scene_transitions)
         if video_paths:
             if payload.motion != "none":
                 raise HTTPException(status_code=400, detail="AI clip assembly mode mein source clips ka original motion use hota hai; extra zoom effects abhi supported nahi hain.")
