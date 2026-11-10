@@ -1,5 +1,6 @@
 """Assemble portrait MP4 videos from scene cards/images, narration and optional music."""
 from pathlib import Path
+import os
 import shutil
 import subprocess
 import tempfile
@@ -9,7 +10,8 @@ import uuid
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parent.parent
-OUTPUT_DIR = ROOT / "generated_videos"
+DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT))).expanduser().resolve()
+OUTPUT_DIR = DATA_DIR / "generated_videos"
 WIDTH, HEIGHT = 720, 1280
 OUTPUT_PROFILES = {"720x1280": (720,1280), "1080x1920": (1080,1920), "1080x1080": (1080,1080), "1280x720": (1280,720), "1920x1080": (1920,1080)}
 QUALITY_PROFILES = {"standard": 23, "high": 20, "maximum": 18}
