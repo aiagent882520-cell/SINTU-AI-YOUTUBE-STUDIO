@@ -735,3 +735,73 @@ def test_ai_clip_assembly_ffmpeg_integration(tmp_path, monkeypatch):
     assert "video" in stream_types
     assert "audio" in stream_types
     assert 1.8 <= result["duration_seconds"] <= 2.2
+
+
+def test_mixed_image_video_timeline_api_contract(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    images_dir = tmp_path / "generated_images"
+    videos_dir = tmp_path / "generated_ai_videos"
+    images_dir.mkdir()
+    videos_dir.mkdir()
+    image_id = "1" * 32
+    video_id = "2" * 32
+    (images_dir / f"{image_id}.jpg").write_bytes(b"image")
+    (videos_dir / f"{video_id}.mp4").write_bytes(b"video")
+    monkeypatch.setattr(main, "IMAGE_DIR", images_dir)
+    monkeypatch.setattr(main, "AI_VIDEO_DIR", videos_dir)
+    captured = {}
+    def fake_mixed(items, title, scenes, **kwargs):
+        captured["items"] = [(item["kind"], item["path"].name) for item in items]
+        captured["scenes"] = scenes
+        return {"video_id": "3" * 32, "url": "/api/videos/" + "3" * 32,
+                "timeline_items": len(items), "timeline_order": [x["kind"] for x in items],
+                "duration_seconds": 8, "format": "MP4 / H.264"}
+    monkeypatch.setattr(main, "render_mixed_timeline", fake_mixed)
+    response = client.post("/api/render", json={
+        "title": "Mixed timeline", "scenes": ["Image intro", "Moving clip"],
+        "timeline": [f"image:{image_id}", f"video:{video_id}"],
+        "seconds_per_scene": 4, "subtitles": ["Intro caption", "Clip caption"]
+    })
+    assert response.status_code == 200
+    assert captured["items"] == [("image", f"{image_id}.jpg"), ("video", f"{video_id}.mp4")]
+    assert captured["scenes"] == ["Image intro", "Moving clip"]
+    bad = client.post("/api/render", json={
+        "title": "Bad timeline", "scenes": ["One"],
+        "timeline": [f"image:{image_id}", f"video:{video_id}"]
+    })
+    assert bad.status_code == 400
+
+
+def test_mixed_timeline_ffmpeg_integration(tmp_path, monkeypatch):
+    ffmpeg = shutil.which("ffmpeg")
+    ffprobe = shutil.which("ffprobe")
+    if not ffmpeg or not ffprobe:
+        pytest.skip("FFmpeg/FFprobe not installed")
+    first_video = tmp_path / "moving.mp4"
+    subprocess.run([
+        ffmpeg, "-y", "-v", "error", "-f", "lavfi", "-i",
+        "color=c=blue:s=320x240:r=24:d=1", "-f", "lavfi", "-i",
+        "sine=frequency=440:duration=1", "-shortest", "-c:v", "libx264",
+        "-pix_fmt", "yuv420p", "-c:a", "aac", str(first_video)
+    ], check=True, timeout=30)
+    from PIL import Image
+    still = tmp_path / "still.jpg"
+    Image.new("RGB", (320, 240), (220, 30, 30)).save(still, format="JPEG")
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path / "mixed-renders")
+    result = video_renderer.render_mixed_timeline(
+        [{"kind": "image", "path": still}, {"kind": "video", "path": first_video}],
+        "Mixed timeline", ["Image intro", "Video scene"], seconds_per_scene=2,
+        subtitles=["Still caption", "Video caption"], transition="cut"
+    )
+    output = tmp_path / "mixed-renders" / f'{result["video_id"]}.mp4'
+    assert output.is_file()
+    assert result["timeline_order"] == ["image", "video"]
+    assert result["timeline_items"] == 2
+    assert result["subtitles_burned_in"] is True
+    assert 2.8 <= result["duration_seconds"] <= 3.2
+    probe = subprocess.run([ffprobe, "-v", "error", "-show_entries", "stream=codec_type",
+                            "-of", "json", str(output)], capture_output=True, text=True,
+                           check=True, timeout=30)
+    import json
+    types = [x["codec_type"] for x in json.loads(probe.stdout)["streams"]]
+    assert "video" in types and "audio" in types
