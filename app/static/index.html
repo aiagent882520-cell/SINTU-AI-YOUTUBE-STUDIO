@@ -231,6 +231,13 @@
       <h3>Top videos by views</h3><div id="youtubeAnalyticsVideos" class="calendar-list"></div>
       <p id="youtubeAnalyticsNotice" class="muted" role="status" aria-live="polite">Connect YouTube and load analytics.</p>
     </section>
+    <section class="panel" id="youtubeReachPanel" hidden>
+      <div class="panel-head"><div><h2>Thumbnail Impressions & CTR</h2><p>YouTube Reporting API · official daily reach report</p></div><div><button id="youtubeReachSetup" class="secondary" type="button">Enable reports</button> <button id="youtubeReachRefresh" class="secondary" type="button">Refresh reach</button></div></div>
+      <div id="youtubeReachTotals" class="integration-cards" aria-live="polite"></div>
+      <h3>Daily thumbnail reach</h3><div id="youtubeReachDaily" class="calendar-list"></div>
+      <h3>Top videos by impressions</h3><div id="youtubeReachVideos" class="calendar-list"></div>
+      <p id="youtubeReachNotice" class="muted" role="status" aria-live="polite">Enable daily reports to start collecting official thumbnail impressions and CTR.</p>
+    </section>
     <section class="panel" id="analyticsOverviewPanel" hidden>
       <div class="panel-head"><div><h2>Publishing Performance Overview</h2><p>Recorded SINTU publishing events only; platform views and revenue are not fabricated.</p></div><button id="analyticsRefresh" class="secondary" type="button">Refresh</button></div>
       <div id="analyticsTotals" class="integration-cards" aria-live="polite"></div>
