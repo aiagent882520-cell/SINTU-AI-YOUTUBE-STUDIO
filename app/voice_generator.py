@@ -6,7 +6,8 @@ from pathlib import Path
 import os
 import uuid
 
-AUDIO_DIR = Path(__file__).resolve().parent.parent / "generated_audio"
+DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(Path(__file__).resolve().parent.parent))).expanduser().resolve()
+AUDIO_DIR = DATA_DIR / "generated_audio"
 ALLOWED_VOICES = {"alloy", "ash", "ballad", "coral", "echo", "fable", "onyx", "nova", "sage", "shimmer", "verse"}
 
 
