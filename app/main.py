@@ -444,7 +444,7 @@ def admin_integrations():
         "video_rendering": {"status": "ready" if ffmpeg else "needs_ffmpeg"},
         "paid_media_generation": {"status": "enabled" if paid_media and media_token else "disabled", "provider_keys_present": {"openai": bool(os.getenv("OPENAI_API_KEY")), "gemini": bool(os.getenv("GEMINI_API_KEY")), "stability": bool(os.getenv("STABILITY_API_KEY"))}},
         "youtube_publishing": {"status": "connected" if _youtube_connection() else ("needs_credentials" if not (_youtube_config()["client_id"] and _youtube_config()["client_secret"] and _youtube_config()["redirect_uri"] and _youtube_config()["encryption_key"]) else "not_connected"), "note": "Google OAuth channel connection and manual approved MP4 upload endpoints are available; server credentials required."},
-        "social_publishing": {"status": "not_connected", "note": "Platform OAuth/API connection not implemented."},
+        "social_publishing": {"status": "connected" if _meta_connection() else ("needs_credentials" if not (_meta_config()["app_id"] and _meta_config()["app_secret"] and _meta_config()["redirect_uri"] and _meta_config()["encryption_key"]) else "not_connected"), "note": "Meta OAuth: Facebook Page video upload and Instagram Reels (public HTTPS video URL) are available; server app credentials and Meta permissions required."},
         "analytics": {"status": "not_connected", "note": "Channel analytics connection not implemented."},
         "other_text_providers": {"status": "not_connected", "providers": ["Claude", "DeepSeek", "GLM", "Doubao", "Kimi"]}
     }
@@ -788,7 +788,7 @@ def _meta_config():
     return {"app_id": os.getenv("META_APP_ID", "").strip(),
             "app_secret": os.getenv("META_APP_SECRET", "").strip(),
             "redirect_uri": os.getenv("META_REDIRECT_URI", "").strip(),
-            "version": os.getenv("META_GRAPH_API_VERSION", "v26.0").strip()}
+            "version": os.getenv("META_GRAPH_API_VERSION", "v26.0").strip(), "encryption_key": os.getenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", "").strip()}
 
 
 def _meta_graph_request(path, data=None, access_token=None, method="POST"):
@@ -841,7 +841,7 @@ def _meta_tokens():
 def meta_admin_status():
     config, connection = _meta_config(), _meta_connection()
     return {"oauth_configured": bool(config["app_id"] and config["app_secret"] and config["redirect_uri"]),
-            "encryption_configured": bool(config["encryption_key"] if "encryption_key" in config else os.getenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", "").strip()),
+            "encryption_configured": bool(config["encryption_key"]),
             "connected": bool(connection),
             "page": {"id": connection["page_id"], "name": connection["page_name"]} if connection else None,
             "instagram": {"id": connection["instagram_user_id"], "username": connection["instagram_username"]} if connection and connection["instagram_user_id"] else None,
@@ -926,7 +926,7 @@ def meta_facebook_publish(calendar_id:int, video_id:str=Query(...,min_length=32,
     boundary="----SINTU"+secrets.token_hex(16)
     body=bytearray()
     for key,value in {"title":title.strip(),"description":description,"access_token":tokens["page_access_token"]}.items():
-        body.extend(("--"+boundary+"\\r\\n").encode())
+        body.extend(("--"+boundary+"\r\\n").encode())
         body.extend(('Content-Disposition: form-data; name="'+key+'"\\r\\n\\r\\n'+str(value)+"\\r\\n").encode())
     body.extend(("--"+boundary+"\\r\\n").encode())
     body.extend(('Content-Disposition: form-data; name="source"; filename="sintu.mp4"\\r\\nContent-Type: video/mp4\\r\\n\\r\\n').encode())
