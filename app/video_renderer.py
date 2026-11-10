@@ -211,3 +211,106 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         "format": "MP4 / H.264",
         "note": "Scene images, optional narration, background music with automatic fade-in/fade-out, and burned-in captions are combined. Optional slow zoom motion is a basic Ken Burns effect; advanced 2D/3D animation and VFX are not included.",
     }
+
+
+def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
+                    music_path: Path | None = None, music_volume: float = 0.18) -> dict:
+    """Join generated MP4 clips into one portrait MP4 with optional narration/music."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RendererUnavailable("FFmpeg server par installed nahi hai. Video rendering filhaal unavailable hai.")
+    if not video_paths or len(video_paths) > 25:
+        raise ValueError("1 se 25 AI video clips required hain.")
+    if not 0.0 <= music_volume <= 1.0:
+        raise ValueError("Music volume 0 se 1 ke beech hona chahiye.")
+    for path in video_paths:
+        if not path.is_file() or path.suffix.lower() != ".mp4":
+            raise ValueError("Selected AI video clip file nahi mili ya MP4 nahi hai.")
+    if audio_path and not audio_path.is_file():
+        raise ValueError("Voiceover audio file nahi mili.")
+    if music_path and not music_path.is_file():
+        raise ValueError("Background music file nahi mili.")
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    video_id = uuid.uuid4().hex
+    output_path = OUTPUT_DIR / f"{video_id}.mp4"
+    try:
+        command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
+        for path in video_paths:
+            command += ["-i", str(path)]
+        audio_index = len(video_paths)
+        if audio_path:
+            command += ["-i", str(audio_path)]
+        music_index = audio_index + (1 if audio_path else 0)
+        if music_path:
+            command += ["-stream_loop", "-1", "-i", str(music_path)]
+
+        filters = []
+        video_labels = []
+        for index in range(len(video_paths)):
+            label = f"v{index}"
+            video_labels.append(f"[{label}]")
+            filters.append(
+                f"[{index}:v:0]scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,"
+                f"crop={WIDTH}:{HEIGHT},fps=30,setsar=1,format=yuv420p,setpts=PTS-STARTPTS[{label}]"
+            )
+        filters.append(
+            "".join(video_labels) + f"concat=n={len(video_paths)}:v=1:a=0[vout]"
+        )
+
+        audio_inputs = []
+        if audio_path:
+            filters.append(
+                f"[{audio_index}:a:0]volume=1,aresample=48000,apad[voice]"
+            )
+            audio_inputs.append("[voice]")
+        if music_path:
+            filters.append(
+                f"[{music_index}:a:0]volume={music_volume},aresample=48000,"
+                f"afade=t=in:st=0:d=1.5[music]"
+            )
+            audio_inputs.append("[music]")
+        if len(audio_inputs) == 2:
+            filters.append(
+                "".join(audio_inputs) + "amix=inputs=2:duration=longest:dropout_transition=2[aout]"
+            )
+        elif len(audio_inputs) == 1:
+            filters.append(audio_inputs[0] + "anull[aout]")
+
+        command += ["-filter_complex", ";".join(filters), "-map", "[vout]"]
+        if audio_inputs:
+            command += ["-map", "[aout]", "-c:a", "aac", "-b:a", "192k"]
+        else:
+            command += ["-an"]
+        command += [
+            "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30",
+            "-movflags", "+faststart", str(output_path)
+        ]
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=600, check=False)
+        if completed.returncode != 0 or not output_path.exists():
+            detail = (completed.stderr or "FFmpeg AI clip assembly failed")[-1200:]
+            raise RenderFailed(detail)
+    except subprocess.TimeoutExpired:
+        output_path.unlink(missing_ok=True)
+        raise RenderFailed("AI clips assemble karne mein timeout ho gaya. Clips kam karke dobara try karein.") from None
+    except Exception:
+        output_path.unlink(missing_ok=True)
+        raise
+
+    return {
+        "video_id": video_id,
+        "filename": output_path.name,
+        "url": f"/api/videos/{video_id}",
+        "scenes": len(video_paths),
+        "duration_seconds": None,
+        "resolution": f"{WIDTH}x{HEIGHT}",
+        "audio": "voiceover+music" if audio_path and music_path else "voiceover" if audio_path else "music" if music_path else "clip-audio-not-preserved",
+        "music": bool(music_path),
+        "music_volume": music_volume if music_path else None,
+        "transition": "cut",
+        "motion": "source AI clip motion",
+        "scene_images": 0,
+        "subtitles_burned_in": False,
+        "format": "MP4 / H.264",
+        "note": "AI clips joined in order and normalized to 720x1280 portrait. Original audio embedded inside source clips is not preserved in this version; add narration or music as the final soundtrack. Captions and advanced transitions are not applied to this clip-assembly mode."
+    }
