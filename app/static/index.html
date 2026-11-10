@@ -215,6 +215,12 @@
       <div class="actions"><button id="tiktokConnect" type="button">Connect TikTok</button><button id="tiktokDisconnect" class="secondary" type="button" hidden>Disconnect</button></div>
       <p class="foot">Direct Post API approval aur video.publish scope required. Unaudited apps ke posts private-only hote hain. Publish ke baad TikTok processing status check karna zaroori hai.</p>
     </section>
+    <section class="panel" id="schedulerQueuePanel" hidden>
+      <div class="panel-head"><div><h2>Scheduled Publishing Queue</h2><p>Due, upcoming aur approval-pending posts ka live overview.</p></div><button id="schedulerQueueRefresh" class="secondary" type="button">Refresh queue</button></div>
+      <div id="schedulerQueueTotals" class="integration-cards" aria-live="polite"></div>
+      <p id="schedulerQueueNotice" class="muted" role="status" aria-live="polite">Loading schedule queue…</p>
+      <div id="schedulerQueueItems" class="calendar-list"></div>
+    </section>
     <section class="panel" id="publishingHistoryPanel" hidden>
       <div class="panel-head"><div><h2>Unified Publishing Dashboard</h2><p>YouTube, Facebook, Instagram aur TikTok ke publish events.</p></div><button id="publishingHistoryRefresh" class="secondary" type="button">Refresh</button></div>
       <div class="task-filters">
