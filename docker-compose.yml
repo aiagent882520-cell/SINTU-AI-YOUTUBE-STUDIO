@@ -1,0 +1,23 @@
+services:
+  sintu-ai-studio:
+    build: .
+    container_name: sintu-ai-studio
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: "8000"
+      SINTU_DATA_DIR: /data
+      AI_PROVIDER: ${AI_PROVIDER:-auto}
+      ENABLE_PAID_MEDIA_GENERATION: ${ENABLE_PAID_MEDIA_GENERATION:-false}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
+      STABILITY_API_KEY: ${STABILITY_API_KEY:-}
+      MEDIA_GENERATION_TOKEN: ${MEDIA_GENERATION_TOKEN:-}
+    volumes:
+      - sintu-data:/data
+    restart: unless-stopped
+
+volumes:
+  sintu-data:
