@@ -97,3 +97,7 @@ pytest -q
 
 ### Instagram aur Facebook publishing
 Meta OAuth se Facebook Page connect karne ke baad approved calendar item ka rendered MP4 Facebook Page par manually upload ho sakta hai. Instagram Reels ke liye linked Professional (Business/Creator) account aur Meta ke liye publicly accessible HTTPS MP4 URL required hai. Meta App Review/permissions aur rate limits apply; automatic scheduled publishing enabled nahi hai.
+
+
+### TikTok Direct Post
+TikTok Login Kit OAuth, encrypted server-side tokens, creator privacy options, approved calendar items se MP4 Direct Post upload aur publish-status polling add kiya gaya. TikTok Developer App, Login Kit, Content Posting API, `video.publish` approval, user consent aur app audit required ho sakte hain. Unaudited app posts private-only rehte hain. Video transfer aur final TikTok publishing alag states hain.
