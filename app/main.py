@@ -170,6 +170,19 @@ def db():
     conn.row_factory = sqlite3.Row
     return conn
 
+
+def _record_publish_event(calendar_id: int, platform: str, status: str,
+                          external_id: str | None = None, detail: str = "", post_url: str = ""):
+    now = datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        latest = conn.execute("SELECT status,external_id FROM publishing_history WHERE calendar_id=? ORDER BY id DESC LIMIT 1",
+                              (calendar_id,)).fetchone()
+        if latest and latest["status"] == status and latest["external_id"] == external_id:
+            return
+        conn.execute("""INSERT INTO publishing_history(calendar_id,platform,status,external_id,detail,post_url,created_at)
+            VALUES(?,?,?,?,?,?,?)""",
+            (calendar_id, platform, status, external_id, str(detail or "")[:1000], str(post_url or "")[:2048], now))
+
 def init_db():
     with db() as conn:
         conn.execute("""
@@ -231,6 +244,13 @@ def init_db():
             publish_id TEXT PRIMARY KEY, calendar_id INTEGER NOT NULL, status TEXT NOT NULL,
             status_detail TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
         )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS publishing_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, calendar_id INTEGER NOT NULL, platform TEXT NOT NULL,
+            status TEXT NOT NULL, external_id TEXT, detail TEXT NOT NULL DEFAULT '', post_url TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_publishing_history_created ON publishing_history(id DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_publishing_history_platform_status ON publishing_history(platform,status)")
     _ensure_bootstrap_admin()
 
 init_db()
@@ -789,10 +809,12 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
     youtube_id = uploaded.get("id")
     if not youtube_id:
         raise HTTPException(status_code=502, detail="YouTube ne video ID return nahi ki.")
+    post_url = "https://www.youtube.com/watch?v=" + youtube_id
     with db() as conn:
         conn.execute("UPDATE content_calendar SET status='Published' WHERE id=?", (calendar_id,))
+    _record_publish_event(calendar_id, item["platform"], "Published", youtube_id, "YouTube video uploaded", post_url)
     return {"calendar_id": calendar_id, "youtube_video_id": youtube_id, "status": "Published",
-            "url": "https://www.youtube.com/watch?v=" + youtube_id, "privacy_status": privacy_status}
+            "url": post_url, "privacy_status": privacy_status}
 
 
 
@@ -954,8 +976,10 @@ def meta_facebook_publish(calendar_id:int, video_id:str=Query(...,min_length=32,
         raise HTTPException(status_code=502,detail="Facebook upload connection failed.") from None
     post_id=uploaded.get("id")
     if not post_id: raise HTTPException(status_code=502,detail="Facebook video ID missing in API response.")
+    post_url = "https://www.facebook.com/"+post_id
     with db() as conn: conn.execute("UPDATE content_calendar SET status='Published' WHERE id=?",(calendar_id,))
-    return {"calendar_id":calendar_id,"facebook_video_id":post_id,"status":"Published","url":"https://www.facebook.com/"+post_id}
+    _record_publish_event(calendar_id, "facebook", "Published", post_id, "Facebook Page video published", post_url)
+    return {"calendar_id":calendar_id,"facebook_video_id":post_id,"status":"Published","url":post_url}
 
 
 @app.post("/api/admin/meta/instagram/publish/{calendar_id}")
@@ -988,6 +1012,7 @@ def meta_instagram_publish(calendar_id:int,video_url:str=Query(...,min_length=12
     media_id=published.get("id")
     if not media_id: raise HTTPException(status_code=502,detail="Instagram media ID missing.")
     with db() as conn: conn.execute("UPDATE content_calendar SET status='Published' WHERE id=?",(calendar_id,))
+    _record_publish_event(calendar_id, "instagram", "Published", media_id, "Instagram Reel published")
     return {"calendar_id":calendar_id,"instagram_media_id":media_id,"status":"Published","message":"Instagram Reel published."}
 
 
@@ -1184,6 +1209,7 @@ def tiktok_publish(calendar_id:int,video_id:str=Query(...,min_length=32,max_leng
     with db() as conn:
         conn.execute("INSERT OR REPLACE INTO tiktok_posts(publish_id,calendar_id,status,status_detail,created_at,updated_at) VALUES(?,?,?,?,?,?)",
             (publish_id,calendar_id,"PROCESSING_UPLOAD","Video uploaded to TikTok; processing continues asynchronously.",now,now))
+    _record_publish_event(calendar_id, "tiktok", "PROCESSING_UPLOAD", publish_id, "Video transferred; TikTok processing pending")
     return {"calendar_id":calendar_id,"publish_id":publish_id,"status":"PROCESSING_UPLOAD",
         "message":"Video TikTok par transfer ho gaya. TikTok processing status check karein; publish completion abhi pending hai."}
 
@@ -1206,8 +1232,33 @@ def tiktok_publish_status(calendar_id:int):
             (status,str(detail),now,row["publish_id"]))
         if status=="PUBLISH_COMPLETE":
             conn.execute("UPDATE content_calendar SET status='Published' WHERE id=?",(calendar_id,))
+    _record_publish_event(calendar_id, "tiktok", status, row["publish_id"], str(detail or "TikTok processing status updated"))
     return {"calendar_id":calendar_id,"publish_id":row["publish_id"],"status":status,
         "detail":detail,"published":status=="PUBLISH_COMPLETE"}
+
+
+@app.get("/api/admin/publishing/history")
+def publishing_history(platform: str = Query(default="", max_length=30),
+                       status: str = Query(default="", max_length=40),
+                       limit: int = Query(default=100, ge=1, le=250)):
+    allowed = {"youtube","youtube_shorts","facebook","instagram","tiktok","website"}
+    if platform and platform not in allowed:
+        raise HTTPException(status_code=422, detail="Unsupported publishing platform filter.")
+    clauses=[]; params=[]
+    if platform: clauses.append("h.platform=?"); params.append(platform)
+    if status: clauses.append("h.status=?"); params.append(status)
+    where=(" WHERE "+" AND ".join(clauses)) if clauses else ""
+    with db() as conn:
+        rows=conn.execute("""SELECT h.id,h.calendar_id,h.platform,h.status,h.external_id,h.detail,h.post_url,h.created_at,
+            c.title FROM publishing_history h LEFT JOIN content_calendar c ON c.id=h.calendar_id
+            """+where+" ORDER BY h.id DESC LIMIT ?",(*params,limit)).fetchall()
+        counts=conn.execute("SELECT status,COUNT(*) AS total FROM publishing_history GROUP BY status").fetchall()
+    totals={"events":sum(int(r["total"]) for r in counts),
+        "published":sum(int(r["total"]) for r in counts if r["status"]=="Published"),
+        "processing":sum(int(r["total"]) for r in counts if r["status"] in {"PROCESSING_UPLOAD","PROCESSING","PUBLISHING"}),
+        "failed":sum(int(r["total"]) for r in counts if r["status"] in {"FAILED","PUBLISH_FAILED","ERROR"})}
+    return {"items":[dict(r) for r in rows],"totals":totals,"filters":{"platform":platform,"status":status,"limit":limit},
+        "note":"Actual platform responses aur processing states record hote hain; legacy events backfill nahi hue hain."}
 
 
 @app.get("/api/calendar")
