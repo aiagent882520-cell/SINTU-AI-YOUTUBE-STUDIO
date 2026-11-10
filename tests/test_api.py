@@ -672,7 +672,7 @@ def test_ai_video_clip_assembly_contract(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "render_ai_clips", fake_assembly)
     result = client.post("/api/render", json={
         "title": "AI Short", "scenes": ["Opening clip", "Ending clip"],
-        "video_ids": clip_ids, "transition": "cut"
+        "video_ids": clip_ids
     })
     assert result.status_code == 200
     assert result.json()["scenes"] == 2
@@ -684,6 +684,6 @@ def test_ai_video_clip_assembly_contract(tmp_path, monkeypatch):
     assert invalid.status_code == 400
     missing = client.post("/api/render", json={
         "title": "AI Short", "scenes": ["Missing clip"],
-        "video_ids": ["d" * 32], "transition": "cut"
+        "video_ids": ["d" * 32]
     })
     assert missing.status_code == 404
