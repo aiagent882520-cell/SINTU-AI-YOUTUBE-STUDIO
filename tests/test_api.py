@@ -1120,3 +1120,35 @@ def test_content_calendar_rejects_past_naive_and_invalid_platform(tmp_path, monk
     assert client.post("/api/calendar", json={**base,"scheduled_at":future_naive}).status_code == 422
     future = (datetime.now(timezone.utc)+timedelta(days=2)).isoformat()
     assert client.post("/api/calendar", json={**base,"platform":"unsupported","scheduled_at":future}).status_code == 422
+
+
+def test_youtube_status_never_exposes_credentials(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("YOUTUBE_CLIENT_ID", "client-id-secret")
+    monkeypatch.setenv("YOUTUBE_CLIENT_SECRET", "client-secret-value")
+    monkeypatch.setenv("YOUTUBE_REDIRECT_URI", "https://example.test/api/admin/youtube/oauth/callback")
+    monkeypatch.setenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", "not-a-real-secret")
+    response = client.get("/api/admin/youtube/status")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["oauth_configured"] is True
+    assert body["encryption_configured"] is True
+    assert "client-secret-value" not in response.text
+    assert "client-id-secret" not in response.text
+
+
+def test_youtube_oauth_start_requires_all_server_credentials(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.post("/api/admin/youtube/oauth/start")
+    assert response.status_code == 503
+    monkeypatch.setenv("YOUTUBE_CLIENT_ID", "client-id")
+    monkeypatch.setenv("YOUTUBE_CLIENT_SECRET", "client-secret")
+    monkeypatch.setenv("YOUTUBE_REDIRECT_URI", "https://example.test/api/admin/youtube/oauth/callback")
+    response = client.post("/api/admin/youtube/oauth/start")
+    assert response.status_code == 503
+    from cryptography.fernet import Fernet
+    monkeypatch.setenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    response = client.post("/api/admin/youtube/oauth/start")
+    assert response.status_code == 200
+    assert response.json()["authorization_url"].startswith("https://accounts.google.com/o/oauth2/v2/auth?")
+    assert "youtube.upload" in response.json()["authorization_url"]
