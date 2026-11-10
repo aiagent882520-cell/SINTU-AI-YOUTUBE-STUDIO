@@ -1185,3 +1185,41 @@ def test_meta_instagram_rejects_non_https_url(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     response = client.post("/api/admin/meta/instagram/publish/1?video_url=http://example.com/video.mp4")
     assert response.status_code == 400
+
+
+def test_tiktok_status_hides_app_secrets_and_reports_setup(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("TIKTOK_CLIENT_KEY", "private-client-key")
+    monkeypatch.setenv("TIKTOK_CLIENT_SECRET", "private-client-secret")
+    monkeypatch.setenv("TIKTOK_REDIRECT_URI", "https://example.test/api/admin/tiktok/oauth/callback")
+    response = client.get("/api/admin/tiktok/status")
+    assert response.status_code == 200
+    assert response.json()["oauth_configured"] is True
+    assert "private-client-secret" not in response.text
+    assert "private-client-key" not in response.text
+
+
+def test_tiktok_oauth_start_requires_credentials_and_encryption(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    assert client.post("/api/admin/tiktok/oauth/start").status_code == 503
+    monkeypatch.setenv("TIKTOK_CLIENT_KEY", "client-key")
+    monkeypatch.setenv("TIKTOK_CLIENT_SECRET", "client-secret")
+    monkeypatch.setenv("TIKTOK_REDIRECT_URI", "https://example.test/api/admin/tiktok/oauth/callback")
+    assert client.post("/api/admin/tiktok/oauth/start").status_code == 503
+    from cryptography.fernet import Fernet
+    monkeypatch.setenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    response = client.post("/api/admin/tiktok/oauth/start")
+    assert response.status_code == 200
+    assert "video.publish" in response.json()["authorization_url"]
+    assert "state=" in response.json()["authorization_url"]
+
+
+def test_tiktok_oauth_rejects_non_https_redirect(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("TIKTOK_CLIENT_KEY", "client-key")
+    monkeypatch.setenv("TIKTOK_CLIENT_SECRET", "client-secret")
+    monkeypatch.setenv("TIKTOK_REDIRECT_URI", "http://example.test/callback")
+    from cryptography.fernet import Fernet
+    monkeypatch.setenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    response = client.post("/api/admin/tiktok/oauth/start")
+    assert response.status_code == 503
