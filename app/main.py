@@ -1111,7 +1111,7 @@ def tiktok_oauth_callback(request:Request,code:str="",state:str="",error:str="")
         raise HTTPException(status_code=502,detail="TikTok token exchange failed: "+str(tokens.get("error_description",tokens.get("error","missing token"))))
     access=tokens["access_token"]
     _,_,profile=_tiktok_request("https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name",
-        headers={"Authorization":"Bearer "+access})
+        headers={"Authorization":"Bearer "+access},method="GET")
     if profile.get("error",{}).get("code")!="ok":
         raise HTTPException(status_code=502,detail="TikTok profile fetch failed.")
     user=profile.get("data",{}).get("user",{})
