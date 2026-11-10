@@ -68,6 +68,16 @@
       <input id="renderImageIds" placeholder="AI image result se image ID paste karein">
       <label for="renderAudioId">Voiceover audio ID (optional)</label>
       <input id="renderAudioId" placeholder="AI voiceover result se audio ID paste karein">
+      <hr>
+      <h3>AI Music Generator (Stable Audio 3.0)</h3>
+      <p id="aiMusicStatus" class="muted" role="status">AI music provider status checking…</p>
+      <label for="aiMusicPrompt">Music prompt / mood / instruments</label>
+      <textarea id="aiMusicPrompt" rows="3" maxlength="2000" placeholder="Cinematic mysterious Indian documentary background score, atmospheric strings, subtle percussion, no vocals"></textarea>
+      <label for="aiMusicDuration">Music duration (seconds, 5–360)</label>
+      <input id="aiMusicDuration" type="number" min="5" max="360" value="30">
+      <div class="actions"><button id="aiMusicButton" type="button">Generate AI Music</button></div>
+      <p id="aiMusicNotice" class="muted" role="status" aria-live="polite">Paid API generation disabled until configured by server admin.</p>
+      <div id="aiMusicResult" hidden><audio id="aiMusicPreview" controls style="width:100%"></audio><p><a id="aiMusicDownload" download="sintu-ai-music.mp3">Download generated music</a></p><p id="aiMusicAssetId" class="muted"></p></div>
       <label for="musicFile">Background music upload (MP3 / WAV / M4A / AAC / OGG, max 15 MB)</label>
       <input id="musicFile" type="file" accept="audio/mpeg,audio/wav,audio/mp4,audio/aac,audio/ogg,.mp3,.wav,.m4a,.aac,.ogg">
       <div class="actions"><button id="musicUploadButton" type="button">Upload background music</button></div>
