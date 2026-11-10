@@ -150,6 +150,29 @@ $("refresh").addEventListener("click", refresh);
 function calendarEscape(value) {
  return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
 }
+function analyticsEscape(value){return String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));}
+function formatAnalyticsDuration(seconds){const n=Math.max(0,Math.round(Number(seconds)||0));return Math.floor(n/60)+"m "+(n%60)+"s";}
+async function loadYouTubeAnalytics(){
+ const panel=$("youtubeAnalyticsPanel");if(!panel)return;
+ const notice=$("youtubeAnalyticsNotice"),button=$("youtubeAnalyticsRefresh");
+ button.disabled=true;notice.textContent="YouTube se official analytics load ho rahe hain…";
+ try{
+  const session=await request("/api/auth/session");
+  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  panel.hidden=false;
+  const end=$("youtubeAnalyticsEnd").value,start=$("youtubeAnalyticsStart").value;
+  const params=new URLSearchParams();if(start)params.set("start_date",start);if(end)params.set("end_date",end);
+  const data=await request("/api/admin/youtube/analytics?"+params.toString());
+  const t=data.totals||{};
+  const cards=[["Views",Number(t.views||0).toLocaleString()],["Watch time",Number(t.estimatedMinutesWatched||0).toLocaleString()+" min"],["Average view",formatAnalyticsDuration(t.averageViewDuration)],["Subscribers gained",Number(t.subscribersGained||0).toLocaleString()],["Subscribers lost",Number(t.subscribersLost||0).toLocaleString()]];
+  $("youtubeAnalyticsTotals").innerHTML=cards.map(([label,value])=>'<div class="integration-card"><strong>'+analyticsEscape(value)+'</strong><span>'+analyticsEscape(label)+'</span></div>').join("");
+  $("youtubeAnalyticsDaily").innerHTML=(data.daily||[]).slice(-31).reverse().map(row=>'<div class="admin-row"><strong>'+analyticsEscape(row.date||"")+'</strong><span>'+Number(row.views||0).toLocaleString()+' views · '+Number(row.watch_minutes||0).toLocaleString()+' min · +'+Number(row.subscribers_gained||0)+' / -'+Number(row.subscribers_lost||0)+' subs</span></div>').join("")||'<p class="muted">Is date range mein daily data nahi mila.</p>';
+  $("youtubeAnalyticsVideos").innerHTML=(data.top_videos||[]).map((video,i)=>'<div class="admin-row"><strong>#'+(i+1)+' · '+analyticsEscape(video.video_id)+'</strong><span>'+Number(video.views||0).toLocaleString()+' views · '+Number(video.watch_minutes||0).toLocaleString()+' min · <a href="'+analyticsEscape(video.url)+'" target="_blank" rel="noopener noreferrer">Open video</a></span></div>').join("")||'<p class="muted">Is range mein video report nahi mili.</p>';
+  notice.textContent=data.channel+" · "+data.start_date+" to "+data.end_date+" · "+data.note;
+ }catch(error){notice.textContent=error.message;}
+ finally{button.disabled=false;}
+}
+$("youtubeAnalyticsRefresh")?.addEventListener("click",loadYouTubeAnalytics);
 async function loadAnalyticsOverview(){
  const panel=$("analyticsOverviewPanel");if(!panel)return;
  try{
@@ -337,6 +360,7 @@ loadCalendar();
 loadPublishingHistory();
 loadSchedulerQueue();
 loadAnalyticsOverview();
+loadYouTubeAnalytics();
 function downloadPackage(format) {
   if (!latestTaskId) return;
   window.location.href = "/api/export/" + latestTaskId + "?format=" + format;
