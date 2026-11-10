@@ -762,7 +762,7 @@ def test_mixed_image_video_timeline_api_contract(tmp_path, monkeypatch):
     response = client.post("/api/render", json={
         "title": "Mixed timeline", "scenes": ["Image intro", "Moving clip"],
         "timeline": [f"image:{image_id}:6:fade", f"video:{video_id}:0:cut"],
-        "seconds_per_scene": 4, "subtitles": ["Intro caption", "Clip caption"]
+        "seconds_per_scene": 4, "subtitles": ["Intro caption", ""]
     })
     assert response.status_code == 200
     assert captured["items"] == [("image", f"{image_id}.jpg"), ("video", f"{video_id}.mp4")]
