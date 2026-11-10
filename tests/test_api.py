@@ -1327,7 +1327,7 @@ def test_youtube_reach_returns_official_report_csv(tmp_path, monkeypatch):
         elif "/reports?pageSize=50" in url:
             body = {"reports":[{"startTime":"2026-11-01T00:00:00Z","downloadUrl":"https://youtubereporting.googleapis.com/v1/media/report.csv"}]}
         elif url.endswith("/media/report.csv"):
-            body = b"date,channel_id,video_id,video_thumbnail_impressions,video_thumbnail_impressions_ctr\\n2026-11-01,UC123,vid1,100,0.05\\n"
+            body = b"date,channel_id,video_id,video_thumbnail_impressions,video_thumbnail_impressions_ctr\n2026-11-01,UC123,vid1,100,0.05\n"
             return 200, {}, body
         else:
             raise AssertionError(url)
