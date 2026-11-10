@@ -197,6 +197,18 @@
       <h3>External Integrations</h3><div id="integrationCards" class="integration-cards">Loading integrations…</div>
       <p class="foot">Security: API keys yahan enter nahi hoti, browser ko kabhi return nahi hoti. Hosting/server ke Secret Environment mein key add karni hogi. Paid APIs ka charge lag sakta hai.</p>
     </section>
+    <section class="panel" id="calendarPanel">
+      <div class="panel-head"><div><h2>Content Calendar & Scheduling</h2><p>Plan YouTube, Shorts, Instagram, Facebook, TikTok and website content.</p></div><button id="calendarRefresh" class="secondary" type="button">Refresh</button></div>
+      <form id="calendarForm" class="calendar-form">
+        <div><label for="calendarTitle">Content title</label><input id="calendarTitle" maxlength="160" required placeholder="Video title"></div>
+        <div><label for="calendarPlatform">Platform</label><select id="calendarPlatform"><option value="youtube">YouTube</option><option value="youtube_shorts">YouTube Shorts</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="tiktok">TikTok</option><option value="website">Website</option></select></div>
+        <div><label for="calendarDate">Date & time (your local time)</label><input id="calendarDate" type="datetime-local" required></div>
+        <div class="calendar-full"><label for="calendarPrompt">Content / topic / script</label><textarea id="calendarPrompt" rows="3" maxlength="10000" required placeholder="Post ka content ya topic likhein…"></textarea></div>
+        <button type="submit">Add to Calendar</button>
+      </form>
+      <p id="calendarNotice" class="muted" role="status" aria-live="polite">Every item needs approval. No automatic publishing is enabled.</p>
+      <div id="calendarItems" class="calendar-list">Loading calendar…</div>
+    </section>
     <section class="panel">
       <div class="panel-head"><div><h2>Task History</h2><p>Recent prompts and generated outputs.</p></div><button id="refresh" class="secondary" type="button">Refresh</button></div>
       <div class="task-filters">
