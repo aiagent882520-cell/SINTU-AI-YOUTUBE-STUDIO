@@ -394,3 +394,58 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         "format": "MP4 / H.264",
         "note": "Original clip audio is retained at reduced ambient level and mixed with optional voiceover/music. Captions are timed to each clip. Fade mode fades each clip at its boundaries; it is not a cross-dissolve."
     }
+
+
+def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
+                          seconds_per_scene: int = 4, audio_path: Path | None = None,
+                          music_path: Path | None = None, music_volume: float = 0.18,
+                          subtitles: list[str] | None = None, transition: str = "cut") -> dict:
+    """Create one ordered timeline from generated still images and AI video clips."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RendererUnavailable("FFmpeg server par installed nahi hai.")
+    if not items or len(items) > 25 or len(items) != len(scenes):
+        raise ValueError("Timeline mein 1 se 25 items hon aur har item ka scene text ho.")
+    if not 2 <= seconds_per_scene <= 12:
+        raise ValueError("Still image duration 2 se 12 seconds honi chahiye.")
+    if subtitles and len(subtitles) != len(items):
+        raise ValueError("Subtitle lines ki sankhya timeline items ke barabar honi chahiye.")
+    subtitles = subtitles or []
+    with tempfile.TemporaryDirectory(prefix="sintu-mixed-timeline-") as temp:
+        work = Path(temp)
+        clip_paths = []
+        for index, item in enumerate(items, start=1):
+            kind = item.get("kind")
+            path = item.get("path")
+            if kind == "video":
+                if not isinstance(path, Path) or not path.is_file():
+                    raise ValueError("Timeline AI video clip nahi mili.")
+                clip_paths.append(path)
+            elif kind == "image":
+                if not isinstance(path, Path) or not path.is_file():
+                    raise ValueError("Timeline scene image nahi mili.")
+                frame = work / f"still-{index:03d}.png"
+                _make_frame(frame, title, scenes[index - 1], index, len(items), path)
+                segment = work / f"still-{index:03d}.mp4"
+                completed = subprocess.run(
+                    [ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+                     "-loop", "1", "-framerate", "30", "-i", str(frame),
+                     "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+                     "-t", str(seconds_per_scene), "-shortest",
+                     "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+                     "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(segment)],
+                    capture_output=True, text=True, timeout=90, check=False
+                )
+                if completed.returncode != 0 or not segment.is_file():
+                    raise RenderFailed((completed.stderr or "Still image clip creation failed")[-1200:])
+                clip_paths.append(segment)
+            else:
+                raise ValueError("Timeline item kind image ya video hona chahiye.")
+        result = render_ai_clips(
+            clip_paths, audio_path=audio_path, music_path=music_path,
+            music_volume=music_volume, subtitles=subtitles, transition=transition
+        )
+        result["timeline_items"] = len(items)
+        result["timeline_order"] = [item["kind"] for item in items]
+        result["note"] = "Still images and AI video clips are joined in the requested order. Still-image duration uses seconds_per_scene; AI clip duration uses its source duration. Source video audio, optional voiceover/music, per-item subtitles and cut/fade transitions are supported."
+        return result
