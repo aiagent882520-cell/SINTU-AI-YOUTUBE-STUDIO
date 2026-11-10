@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from .agents import list_agents
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
-from .video_renderer import render_storyboard, render_ai_clips, RendererUnavailable, RenderFailed, OUTPUT_DIR
+from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, RendererUnavailable, RenderFailed, OUTPUT_DIR
 from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable, VoiceGenerationFailed, AUDIO_DIR
 from .image_generator import generate_image, image_status, ImageUnavailable, ImageGenerationFailed, IMAGE_DIR
 from .music_generator import generate_music, music_status, MusicUnavailable, MusicGenerationFailed
@@ -76,6 +76,7 @@ class RenderInput(BaseModel):
     seconds_per_scene: int = Field(default=4, ge=2, le=12)
     image_ids: list[str] = Field(default_factory=list, max_length=25)
     video_ids: list[str] = Field(default_factory=list, max_length=25)
+    timeline: list[str] = Field(default_factory=list, max_length=25)
     audio_id: str | None = Field(default=None, max_length=32)
     subtitles: list[str] = Field(default_factory=list, max_length=25)
     music_id: str | None = Field(default=None, max_length=32)
@@ -376,6 +377,10 @@ def render_video(payload: RenderInput):
         raise HTTPException(status_code=400, detail="Har scene ke liye exactly ek AI video ID dein.")
     if payload.video_ids and payload.image_ids:
         raise HTTPException(status_code=400, detail="AI video clips aur still-image storyboard ko ek render mein mix karna abhi supported nahi hai.")
+    if payload.timeline and (payload.image_ids or payload.video_ids):
+        raise HTTPException(status_code=400, detail="Mixed timeline use karte waqt alag image_ids/video_ids fields khaali rakhein.")
+    if payload.timeline and len(payload.timeline) != len(scenes):
+        raise HTTPException(status_code=400, detail="Har timeline item ke liye ek scene description dein.")
     if payload.subtitles and len(payload.subtitles) != len(scenes):
         raise HTTPException(status_code=400, detail="Subtitle lines ki sankhya scenes ke barabar honi chahiye.")
     if any(not line.strip() or len(line) > 1000 for line in payload.subtitles):
@@ -417,6 +422,27 @@ def render_video(payload: RenderInput):
         if not audio_path.is_file():
             raise HTTPException(status_code=404, detail="Voiceover audio not found.")
     try:
+        if payload.timeline:
+            timeline_items = []
+            for entry in payload.timeline:
+                match = re.fullmatch(r"(image|video):([a-f0-9]{32})", entry.strip())
+                if not match:
+                    raise HTTPException(status_code=400, detail="Timeline format image:ID ya video:ID hona chahiye.")
+                kind, asset_id = match.groups()
+                if kind == "image":
+                    asset_path = IMAGE_DIR / f"{asset_id}.jpg"
+                else:
+                    asset_path = AI_VIDEO_DIR / f"{asset_id}.mp4"
+                if not asset_path.is_file():
+                    raise HTTPException(status_code=404, detail=f"Timeline {kind} asset not found.")
+                timeline_items.append({"kind": kind, "path": asset_path})
+            if payload.motion != "none":
+                raise HTTPException(status_code=400, detail="Mixed timeline mein abhi source clip motion use hota hai; extra zoom unsupported hai.")
+            return render_mixed_timeline(timeline_items, title, scenes,
+                                         seconds_per_scene=payload.seconds_per_scene,
+                                         audio_path=audio_path, music_path=music_path,
+                                         music_volume=payload.music_volume,
+                                         subtitles=payload.subtitles, transition=payload.transition)
         if video_paths:
             if payload.motion != "none":
                 raise HTTPException(status_code=400, detail="AI clip assembly mode mein source clips ka original motion use hota hai; extra zoom effects abhi supported nahi hain.")
