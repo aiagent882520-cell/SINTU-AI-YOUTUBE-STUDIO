@@ -428,9 +428,14 @@ def render_video(payload: RenderInput):
             for entry in payload.timeline:
                 video_with_volume = re.fullmatch(r"video:([a-f0-9]{32}):([^:]+):([^:]*):([^:]+):(cut|fade)", entry.strip())
                 video_trim = re.fullmatch(r"video:([a-f0-9]{32}):([^:]+):([^:]*):(cut|fade)", entry.strip())
+                video_legacy = re.fullmatch(r"video:([a-f0-9]{32}):0:(cut|fade)", entry.strip())
                 image_match = re.fullmatch(r"image:([a-f0-9]{32}):(\d{1,2}):(cut|fade)", entry.strip())
                 if video_with_volume:
                     asset_id, first_value, second_value, volume_text, transition_mode = video_with_volume.groups()
+                    kind = "video"
+                elif video_legacy:
+                    asset_id, transition_mode = video_legacy.groups()
+                    first_value, second_value, volume_text = "0", "", "0.25"
                     kind = "video"
                 elif video_trim:
                     asset_id, first_value, second_value, transition_mode = video_trim.groups()
