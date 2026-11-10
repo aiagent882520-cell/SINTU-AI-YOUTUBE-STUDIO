@@ -6,6 +6,8 @@ import hmac
 import json
 import time
 import io
+import csv
+import gzip
 import sqlite3
 import re
 import shutil
@@ -708,7 +710,7 @@ def youtube_oauth_start(request: Request):
                      (state, actor["id"], hashlib.sha256((request.cookies.get(SESSION_COOKIE) or "local-dev-session").encode()).hexdigest(), expiry))
     params = urllib.parse.urlencode({
         "client_id": config["client_id"], "redirect_uri": config["redirect_uri"],
-        "response_type": "code", "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly",
+        "response_type": "code", "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
         "access_type": "offline", "prompt": "consent", "include_granted_scopes": "true", "state": state
     })
     return {"authorization_url": "https://accounts.google.com/o/oauth2/v2/auth?" + params,
@@ -1285,6 +1287,30 @@ def youtube_channel_analytics(
         headers_list = [column.get("name", "") for column in report.get("columnHeaders", [])]
         return [dict(zip(headers_list, row)) for row in report.get("rows", [])]
 
+    revenue = {"available": False, "currency": "INR", "note": "Revenue ke liye channel ka YouTube Partner Program mein hona aur monetary OAuth permission zaroori hai."}
+    revenue_url = "https://youtubeanalytics.googleapis.com/v2/reports?" + urllib.parse.urlencode({
+        "ids": "channel==MINE", "startDate": start_value.isoformat(), "endDate": end_value.isoformat(),
+        "metrics": "estimatedRevenue,estimatedAdRevenue,estimatedRedPartnerRevenue,grossRevenue,adImpressions,playbackBasedCpm",
+        "currency": "INR"
+    })
+    try:
+        _, _, revenue_body = _youtube_request(revenue_url, headers=headers)
+        revenue_report = json.loads(revenue_body.decode("utf-8"))
+        revenue_rows = unpack(revenue_report)
+        revenue_values = revenue_rows[0] if revenue_rows else {}
+        revenue = {
+            "available": bool(revenue_rows), "currency": "INR",
+            "estimated_revenue": float(revenue_values.get("estimatedRevenue", 0) or 0),
+            "estimated_ad_revenue": float(revenue_values.get("estimatedAdRevenue", 0) or 0),
+            "estimated_premium_revenue": float(revenue_values.get("estimatedRedPartnerRevenue", 0) or 0),
+            "gross_ad_revenue": float(revenue_values.get("grossRevenue", 0) or 0),
+            "ad_impressions": int(revenue_values.get("adImpressions", 0) or 0),
+            "playback_based_cpm": float(revenue_values.get("playbackBasedCpm", 0) or 0),
+            "note": "YouTube ke estimated revenue figures hain; final amount month-end adjustment se badal sakta hai."
+        }
+    except (HTTPException, ValueError, KeyError, TypeError):
+        revenue["note"] = "Revenue abhi available nahi. Monetization eligibility, monetary OAuth permission aur Google API setup check karein."
+
     daily_rows = unpack(daily_report)
     video_rows = unpack(video_report)
     totals = {"views": 0, "estimatedMinutesWatched": 0.0, "averageViewDuration": 0.0,
@@ -1332,8 +1358,107 @@ def youtube_channel_analytics(
         "totals": totals,
         "daily": daily,
         "top_videos": top_videos,
-        "note": "YouTube ke official reported metrics. Recent dates par data delay ho sakta hai; revenue aur thumbnail CTR is report mein shamil nahi hain.",
+        "revenue": revenue,
+        "note": "YouTube ke official reported metrics. Recent dates par data delay ho sakta hai; thumbnail impressions aur CTR alag daily Reporting API report se aate hain.",
     }
+
+
+@app.post("/api/admin/youtube/reach/setup")
+def youtube_reach_setup():
+    """Create the official daily channel reach report job for thumbnail impressions and CTR."""
+    token = _youtube_access_token()
+    headers = {"Authorization": "Bearer " + token}
+    base = "https://youtubereporting.googleapis.com/v1"
+    try:
+        _, _, jobs_body = _youtube_request(base + "/jobs?includeSystemManaged=true", headers=headers)
+        jobs = json.loads(jobs_body.decode("utf-8")).get("jobs", [])
+        existing = next((job for job in jobs if job.get("reportTypeId") == "channel_reach_basic_a1"), None)
+        if existing:
+            return {"configured": True, "job_id": existing.get("id"), "created": False,
+                    "note": "Thumbnail reach report job pehle se active hai."}
+        _, _, types_body = _youtube_request(base + "/reportTypes?includeSystemManaged=true", headers=headers)
+        types = json.loads(types_body.decode("utf-8")).get("reportTypes", [])
+        if not any(item.get("id") == "channel_reach_basic_a1" for item in types):
+            raise HTTPException(status_code=424, detail="YouTube account ke liye channel_reach_basic_a1 report type abhi available nahi hai.")
+        payload = json.dumps({"reportTypeId": "channel_reach_basic_a1",
+                              "name": "SINTU AI Studio channel thumbnail reach"}).encode()
+        _, _, created_body = _youtube_request(base + "/jobs", payload,
+            {"Authorization": "Bearer " + token, "Content-Type": "application/json"}, method="POST")
+        job = json.loads(created_body.decode("utf-8"))
+        return {"configured": True, "job_id": job.get("id"), "created": True,
+                "note": "Daily thumbnail impressions aur CTR reports enable ho gayi. Pehli report banne mein 24 ghante ya usse zyada lag sakte hain."}
+    except HTTPException as exc:
+        if exc.status_code == 502 and ("(409)" in str(exc.detail) or "(403)" in str(exc.detail)):
+            raise HTTPException(status_code=409, detail="Reach report job create nahi hua; ho sakta hai job pehle se ho ya YouTube is report ko system-managed rakhta ho. Refresh karke status check karein.") from None
+        raise
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=502, detail="YouTube Reporting API ka response samajh nahi aaya.") from None
+
+
+@app.get("/api/admin/youtube/reach")
+def youtube_channel_reach():
+    """Read official daily channel thumbnail impressions and click-through rates."""
+    token = _youtube_access_token()
+    headers = {"Authorization": "Bearer " + token}
+    base = "https://youtubereporting.googleapis.com/v1"
+    try:
+        _, _, jobs_body = _youtube_request(base + "/jobs?includeSystemManaged=true", headers=headers)
+        jobs = json.loads(jobs_body.decode("utf-8")).get("jobs", [])
+        job = next((item for item in jobs if item.get("reportTypeId") == "channel_reach_basic_a1"), None)
+        if not job:
+            return {"configured": False, "available": False, "daily": [], "top_videos": [],
+                    "note": "Thumbnail impressions/CTR ke daily reports enable karne ke liye Enable reports dabayein."}
+        reports_url = base + "/jobs/" + urllib.parse.quote(str(job["id"]), safe="") + "/reports?pageSize=50"
+        _, _, reports_body = _youtube_request(reports_url, headers=headers)
+        reports = json.loads(reports_body.decode("utf-8")).get("reports", [])
+        reports = sorted(reports, key=lambda item: item.get("startTime", ""))[-31:]
+        daily_map = {}
+        video_map = {}
+        for report in reports:
+            download_url = report.get("downloadUrl", "")
+            parsed = urllib.parse.urlparse(download_url)
+            host = (parsed.hostname or "").lower()
+            if parsed.scheme != "https" or not (host == "storage.googleapis.com" or host.endswith(".googleapis.com") or host.endswith(".googleusercontent.com")):
+                continue
+            _, response_headers, csv_body = _youtube_request(download_url, headers=headers)
+            encoding = response_headers.get("Content-Encoding", "") if hasattr(response_headers, "get") else ""
+            if encoding.lower() == "gzip":
+                csv_body = gzip.decompress(csv_body)
+            reader = csv.DictReader(io.StringIO(csv_body.decode("utf-8-sig")))
+            for row in reader:
+                date_value = row.get("date") or report.get("startTime", "")[:10]
+                impressions = int(float(row.get("video_thumbnail_impressions", 0) or 0))
+                ctr = float(row.get("video_thumbnail_impressions_ctr", 0) or 0)
+                video_id = str(row.get("video_id", ""))
+                day = daily_map.setdefault(date_value, {"date": date_value, "impressions": 0, "_weighted_ctr": 0.0})
+                day["impressions"] += impressions
+                day["_weighted_ctr"] += ctr * impressions
+                if video_id:
+                    item = video_map.setdefault(video_id, {"video_id": video_id, "impressions": 0, "_weighted_ctr": 0.0})
+                    item["impressions"] += impressions
+                    item["_weighted_ctr"] += ctr * impressions
+        daily = []
+        for item in sorted(daily_map.values(), key=lambda x: x["date"]):
+            weight = item.pop("_weighted_ctr")
+            item["ctr"] = round((weight / item["impressions"]) if item["impressions"] else 0, 6)
+            daily.append(item)
+        videos = []
+        for item in sorted(video_map.values(), key=lambda x: x["impressions"], reverse=True)[:10]:
+            weight = item.pop("_weighted_ctr")
+            item["ctr"] = round((weight / item["impressions"]) if item["impressions"] else 0, 6)
+            item["url"] = "https://www.youtube.com/watch?v=" + urllib.parse.quote(item["video_id"], safe="")
+            videos.append(item)
+        total_impressions = sum(item["impressions"] for item in daily)
+        total_ctr = (sum(item["ctr"] * item["impressions"] for item in daily) / total_impressions) if total_impressions else 0
+        return {"configured": True, "available": bool(daily), "source": "YouTube Reporting API",
+                "report_type": "channel_reach_basic_a1", "reports_checked": len(reports),
+                "totals": {"thumbnail_impressions": total_impressions, "thumbnail_ctr": round(total_ctr, 6)},
+                "daily": daily, "top_videos": videos,
+                "note": "Official YouTube thumbnail reach data. Daily bulk reports may arrive with delay." if daily else "Report job active hai; pehli daily report abhi generate nahi hui."}
+    except HTTPException:
+        raise
+    except (ValueError, KeyError, TypeError, csv.Error, gzip.BadGzipFile):
+        raise HTTPException(status_code=502, detail="YouTube reach report parse nahi ho paayi.") from None
 
 
 @app.get("/api/admin/publishing/history")
