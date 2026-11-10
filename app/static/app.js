@@ -29,7 +29,7 @@ $("timelineEditor").addEventListener("input",event=>{
  if(event.target.dataset.field!=="audioVolume")return;
  const i=Number(event.target.dataset.index),label=$("timelineEditor").querySelector('[data-volume-label="'+i+'"]');
  if(label)label.textContent=event.target.value+"%";
- const video=$("timelineEditor").querySelector('video');if(video)video.volume=Math.min(1,Number(event.target.value)/100);
+ const video=event.target.closest(".timeline-row")?.querySelector("video");if(video)video.volume=Math.min(1,Number(event.target.value)/100);
 });
 $("timelineEditor").addEventListener("change",event=>{
  const field=event.target.dataset.field;if(!field)return;const rows=timelineRows(),x=rows[Number(event.target.dataset.index)];if(!x)return;
