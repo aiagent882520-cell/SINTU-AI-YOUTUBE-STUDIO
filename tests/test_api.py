@@ -395,7 +395,8 @@ def test_renderer_builds_music_mix_and_fade_filter(tmp_path, monkeypatch):
     monkeypatch.setattr(video_renderer.subprocess, "run", fake_run)
     result = video_renderer.render_storyboard(
         "Cinematic", ["Scene one", "Scene two"], 3,
-        audio_path=voice, music_path=music, music_volume=0.2, transition="fade"
+        audio_path=voice, music_path=music, music_volume=0.2, transition="fade",
+        resolution="1920x1080", fps=24, quality="maximum"
     )
     command = captured["command"]
     assert "-filter_complex" in command
@@ -407,6 +408,11 @@ def test_renderer_builds_music_mix_and_fade_filter(tmp_path, monkeypatch):
     assert "fade=t=out" in video_filter and "fade=t=in" in video_filter
     assert result["audio"] == "voiceover+music"
     assert result["transition"] == "fade"
+    assert command[command.index("-r") + 1] == "24"
+    assert command[command.index("-crf") + 1] == "18"
+    assert result["resolution"] == "1920x1080"
+    assert result["fps"] == 24
+    assert result["quality"] == "maximum"
 
 
 def test_render_accepts_cinematic_motion_presets(tmp_path, monkeypatch):
