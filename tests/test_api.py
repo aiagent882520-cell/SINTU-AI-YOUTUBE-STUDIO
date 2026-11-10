@@ -807,7 +807,7 @@ def test_mixed_timeline_ffmpeg_integration(tmp_path, monkeypatch):
     assert result["timeline_order"] == ["image", "video"]
     assert result["timeline_items"] == 2
     assert result["scene_transitions"] == ["fade", "cut"]
-    assert result["scene_durations"] == [3, 0]
+    assert result["scene_durations"] == [3, None]
     assert result["subtitles_burned_in"] is True
     assert 3.8 <= result["duration_seconds"] <= 4.2
     probe = subprocess.run([ffprobe, "-v", "error", "-show_entries", "stream=codec_type",
