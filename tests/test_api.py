@@ -1225,6 +1225,28 @@ def test_tiktok_oauth_rejects_non_https_redirect(tmp_path, monkeypatch):
     assert response.status_code == 503
 
 
+def test_scheduler_queue_reports_approval_and_due_states(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    client=client_for_test(tmp_path,monkeypatch)
+    now=datetime.now(timezone.utc)
+    def add(title, when):
+        return client.post("/api/calendar",json={"title":title,"platform":"youtube","prompt":"test",
+            "scheduled_at":when.isoformat()}).json()["id"]
+    awaiting=add("Awaiting approval",now+timedelta(hours=2))
+    due=add("Due post",now+timedelta(minutes=5))
+    later=add("Later post",now+timedelta(days=3))
+    assert client.post(f"/api/calendar/{due}/approve").status_code==200
+    assert client.post(f"/api/calendar/{later}/approve").status_code==200
+    result=client.get("/api/admin/scheduler/queue?hours=24")
+    assert result.status_code==200
+    states={item["id"]:item["queue_state"] for item in result.json()["items"]}
+    assert states[awaiting]=="awaiting_approval"
+    assert states[due] in {"approved_upcoming","overdue_awaiting_manual_publish"}
+    assert states[later]=="scheduled_later"
+    assert result.json()["summary"]["awaiting_approval"]==1
+    assert client.get("/api/admin/scheduler/queue?hours=0").status_code==422
+
+
 def test_unified_publishing_history_filters_and_empty_state(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     response = client.get("/api/admin/publishing/history")
