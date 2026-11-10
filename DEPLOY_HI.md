@@ -48,3 +48,15 @@ API keys are optional for opening the dashboard and using non-provider parts. Pa
 ## FastAPI Cloud note
 
 FastAPI Cloud was considered earlier but no deployment was completed. This Docker setup is platform-neutral and does not create or charge for a hosting account.
+
+
+## Admin accounts, roles, and security audit
+
+- On first start, the configured `SINTU_ADMIN_USERNAME` and strong `SINTU_ADMIN_PASSWORD` create the initial admin account, only when the user table is empty for that username.
+- Passwords are stored as PBKDF2-HMAC-SHA256 hashes; plaintext passwords are not stored or returned by user APIs.
+- Admin can create users, change roles, reset passwords, and disable/reactivate accounts from the Security & User Management panel.
+- Roles: `admin` has full access; `editor` can use creator workflows but cannot access user management/audit; `viewer` is read-only.
+- The system prevents an admin from disabling/demoting their own active admin account and prevents disabling/demoting the last active admin.
+- Security audit records write requests with actor, role, HTTP method/path, status, IP address, and timestamp. It intentionally does not store request bodies or passwords.
+- User deactivation takes effect on the next request because each signed session is checked against the current user record.
+- Audit storage is in the same SQLite database volume; protect and back it up as operational/security data.
