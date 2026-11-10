@@ -152,8 +152,8 @@ function calendarEscape(value) {
 }
 async function loadCalendar() {
  try {
-  const [data, session, yt] = await Promise.all([
-   request("/api/calendar"), request("/api/auth/session"), request("/api/admin/youtube/status").catch(()=>({connected:false}))
+  const [data, session, yt, meta] = await Promise.all([
+   request("/api/calendar"), request("/api/auth/session"), request("/api/admin/youtube/status").catch(()=>({connected:false})), request("/api/admin/meta/status").catch(()=>({connected:false,instagram:null}))
   ]);
   const canPublish = session.authenticated && session.role === "admin" && yt.connected;
   $("calendarItems").innerHTML = data.items.length ? data.items.map(item => {
@@ -162,8 +162,8 @@ async function loadCalendar() {
     ? '<button class="secondary" data-calendar-approve="'+item.id+'">Approve</button> <button class="secondary" data-calendar-cancel="'+item.id+'">Cancel</button>'
     : (item.status === "Approved" ? '<button class="secondary" data-calendar-cancel="'+item.id+'">Cancel</button>' +
        (canPublish && ["youtube","youtube_shorts"].includes(item.platform) ? ' <button data-youtube-publish="'+item.id+'">Upload rendered MP4</button>' : '') +
-       (session.authenticated && session.role==="admin" && yt.connected && item.platform==="facebook" ? ' <button data-meta-facebook="'+item.id+'">Publish Facebook video</button>' : '') +
-       (session.authenticated && session.role==="admin" && item.platform==="instagram" ? ' <button data-meta-instagram="'+item.id+'">Publish Instagram Reel</button>' : '') : "");
+       (session.authenticated && session.role==="admin" && meta.connected && item.platform==="facebook" ? ' <button data-meta-facebook="'+item.id+'">Publish Facebook video</button>' : '') +
+       (session.authenticated && session.role==="admin" && meta.connected && !!meta.instagram && item.platform==="instagram" ? ' <button data-meta-instagram="'+item.id+'">Publish Instagram Reel</button>' : '') : "");
    return '<article class="calendar-item"><div><strong>'+calendarEscape(item.title)+'</strong><span>'+calendarEscape(item.platform.replace("_"," "))+' · '+calendarEscape(item.status)+'</span><small>'+calendarEscape(when)+'</small><p>'+calendarEscape(item.prompt)+'</p>'+actions+'</div></article>';
   }).join("") : '<p class="muted">Calendar abhi khaali hai. Pehla content schedule karein.</p>';
   $("calendarNotice").textContent = data.notice;
