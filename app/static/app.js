@@ -152,8 +152,8 @@ function calendarEscape(value) {
 }
 async function loadCalendar() {
  try {
-  const [data, session, yt, meta] = await Promise.all([
-   request("/api/calendar"), request("/api/auth/session"), request("/api/admin/youtube/status").catch(()=>({connected:false})), request("/api/admin/meta/status").catch(()=>({connected:false,instagram:null}))
+  const [data, session, yt, meta, tt] = await Promise.all([
+   request("/api/calendar"), request("/api/auth/session"), request("/api/admin/youtube/status").catch(()=>({connected:false})), request("/api/admin/meta/status").catch(()=>({connected:false,instagram:null})), request("/api/admin/tiktok/status").catch(()=>({connected:false}))
   ]);
   const canPublish = session.authenticated && session.role === "admin" && yt.connected;
   $("calendarItems").innerHTML = data.items.length ? data.items.map(item => {
@@ -164,8 +164,8 @@ async function loadCalendar() {
        (canPublish && ["youtube","youtube_shorts"].includes(item.platform) ? ' <button data-youtube-publish="'+item.id+'">Upload rendered MP4</button>' : '') +
        (session.authenticated && session.role==="admin" && meta.connected && item.platform==="facebook" ? ' <button data-meta-facebook="'+item.id+'">Publish Facebook video</button>' : '') +
        (session.authenticated && session.role==="admin" && meta.connected && !!meta.instagram && item.platform==="instagram" ? ' <button data-meta-instagram="'+item.id+'">Publish Instagram Reel</button>' : '') +
-       (session.authenticated && session.role==="admin" && item.platform==="tiktok" ? ' <button data-tiktok-publish="'+item.id+'">Publish TikTok</button>' : '') +
-       (session.authenticated && session.role==="admin" && item.platform==="tiktok" ? ' <button class="secondary" data-tiktok-status="'+item.id+'">Check TikTok status</button>' : '') : "");
+       (session.authenticated && session.role==="admin" && tt.connected && item.platform==="tiktok" ? ' <button data-tiktok-publish="'+item.id+'">Publish TikTok</button>' : '') +
+       (session.authenticated && session.role==="admin" && tt.connected && item.platform==="tiktok" ? ' <button class="secondary" data-tiktok-status="'+item.id+'">Check TikTok status</button>' : '') : "");
    return '<article class="calendar-item"><div><strong>'+calendarEscape(item.title)+'</strong><span>'+calendarEscape(item.platform.replace("_"," "))+' · '+calendarEscape(item.status)+'</span><small>'+calendarEscape(when)+'</small><p>'+calendarEscape(item.prompt)+'</p>'+actions+'</div></article>';
   }).join("") : '<p class="muted">Calendar abhi khaali hai. Pehla content schedule karein.</p>';
   $("calendarNotice").textContent = data.notice;
