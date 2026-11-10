@@ -16,7 +16,7 @@ import urllib.error
 from datetime import datetime, timezone
 from cryptography.fernet import Fernet, InvalidToken
 
-from fastapi import FastAPI, HTTPException, Header, Request
+from fastapi import FastAPI, HTTPException, Header, Request, Query
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -735,10 +735,10 @@ def youtube_disconnect():
 
 
 @app.post("/api/admin/youtube/publish/{calendar_id}")
-def youtube_publish(calendar_id: int, video_id: str = Field(..., min_length=32, max_length=32),
-                    title: str = Field(..., min_length=1, max_length=100),
-                    description: str = Field(default="", max_length=5000),
-                    privacy_status: str = Field(default="private", pattern=r"^(private|unlisted|public)$")):
+def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, max_length=32),
+                    title: str = Query(..., min_length=1, max_length=100),
+                    description: str = Query(default="", max_length=5000),
+                    privacy_status: str = Query(default="private", pattern=r"^(private|unlisted|public)$")):
     if not re.fullmatch(r"[a-f0-9]{32}", video_id):
         raise HTTPException(status_code=400, detail="Invalid rendered video ID.")
     with db() as conn:
