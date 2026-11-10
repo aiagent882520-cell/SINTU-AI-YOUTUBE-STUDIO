@@ -501,7 +501,7 @@ def test_ai_video_generation_endpoint_contract(tmp_path, monkeypatch):
         "video_id": "7" * 32, "url": "/api/ai-videos/" + "7" * 32,
         "format": "MP4", "size_bytes": 4096, "provider": "Google Gemini API",
         "model": "gemini-omni-1.1-flash", "aspect_ratio": aspect,
-        "resolution": resolution, "style": style, "duration_seconds": duration
+        "resolution": resolution, "style": style, "requested_duration_seconds": duration
     })
     response = client.post("/api/video/generate", json={
         "prompt": "An animated ancient temple", "aspect_ratio": "9:16",
@@ -510,7 +510,7 @@ def test_ai_video_generation_endpoint_contract(tmp_path, monkeypatch):
     assert response.status_code == 200
     assert response.json()["model"] == "gemini-omni-1.1-flash"
     assert response.json()["style"] == "3d-animation"
-    assert response.json()["duration_seconds"] == 10
+    assert response.json()["requested_duration_seconds"] == 10
     assert client.get("/api/ai-videos/" + "7" * 32).status_code == 404
     assert client.get("/api/ai-videos/not-valid").status_code == 400
     invalid = client.post("/api/video/generate", json={
