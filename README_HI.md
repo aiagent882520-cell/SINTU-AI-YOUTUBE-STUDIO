@@ -93,3 +93,7 @@ pytest -q
 - Date/time ISO-8601 timezone ke saath store hota hai; dashboard mein local time dikhaya jata hai.
 - Naye calendar items default **Needs approval** status mein rehte hain. Admin/editor approval ya cancellation action alag se hota hai.
 - Yeh calendar/planning workflow hai, automatic publisher nahi. OAuth/platform APIs, account authorization, upload processing aur explicit publish action abhi alag integration work hai. Approved item apne aap publish nahi hota.
+
+
+### Instagram aur Facebook publishing
+Meta OAuth se Facebook Page connect karne ke baad approved calendar item ka rendered MP4 Facebook Page par manually upload ho sakta hai. Instagram Reels ke liye linked Professional (Business/Creator) account aur Meta ke liye publicly accessible HTTPS MP4 URL required hai. Meta App Review/permissions aur rate limits apply; automatic scheduled publishing enabled nahi hai.
