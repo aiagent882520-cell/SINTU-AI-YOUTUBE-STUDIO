@@ -66,8 +66,8 @@
       <input id="sceneSeconds" type="number" min="2" max="12" value="4">
       <label for="renderTimeline">Mixed timeline order (optional; one item per line)</label>
       <textarea id="renderTimeline" hidden></textarea>
-      <div id="timelineEditor" class="timeline-editor" aria-live="polite"><p class="muted">Generated image/video assets yahan ordered timeline mein dikhenge.</p></div>
-      <p class="muted">Generated images aur AI video clips yahan preview honge. Move buttons se order badlein, remove karein, still image duration aur har scene ke baad transition chunein. Video clips ki duration source file se aati hai. Har item ke liye scene description aur subtitle line matching rakhein.</p>
+      <div class="actions"><button id="timelinePreviewPlay" type="button">Play full sequence preview</button><button id="timelinePreviewStop" type="button" class="secondary">Stop preview</button></div><p id="timelinePreviewNotice" class="muted" role="status">Sequence preview source assets dikhata hai; final render transitions ka exact preview nahi hai.</p><div id="timelinePreviewStage" style="width:100%;background:#111;border-radius:10px;overflow:hidden"></div><div id="timelineEditor" class="timeline-editor" aria-live="polite"><p class="muted">Generated image/video assets yahan ordered timeline mein dikhenge.</p></div>
+      <p class="muted">Generated images aur AI video clips yahan preview honge. Move buttons se order badlein, remove karein, still image duration aur har scene ke baad transition chunein. Video clips ke start/end seconds trim kar sakte hain. Har item ke liye scene description aur subtitle line matching rakhein.</p>
       <label for="renderImageIds">Scene image IDs (comma-separated, har scene ke liye ek; optional)</label>
       <input id="renderImageIds" placeholder="AI image result se image ID paste karein">
       <label for="renderVideoIds">AI video clip IDs (comma-separated, optional; generated clips ko order mein join karein)</label>
