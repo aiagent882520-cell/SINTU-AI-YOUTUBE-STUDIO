@@ -167,6 +167,7 @@ def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "7
             "type": "video",
             "aspect_ratio": aspect_ratio,
             "resolution": resolution,
+            "delivery": "uri",
         },
     }).encode("utf-8")
     request = urllib.request.Request(
