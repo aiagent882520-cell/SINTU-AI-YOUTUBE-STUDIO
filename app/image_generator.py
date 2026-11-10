@@ -7,7 +7,8 @@ from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 
-IMAGE_DIR = Path(__file__).resolve().parent.parent / "generated_images"
+DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(Path(__file__).resolve().parent.parent))).expanduser().resolve()
+IMAGE_DIR = DATA_DIR / "generated_images"
 MAX_IMAGE_BYTES = 15 * 1024 * 1024
 
 
