@@ -6,6 +6,7 @@ import pytest
 from app import main, video_renderer
 
 def client_for_test(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "false")
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "test.sqlite3")
     main.init_db()
     return TestClient(main.app)
@@ -926,3 +927,36 @@ def test_mixed_timeline_ffmpeg_integration(tmp_path, monkeypatch):
     assert result["resolution"] == "1080x1080"
     assert result["fps"] == 24
     assert result["quality"] == "maximum"
+
+
+
+def test_admin_auth_requires_credentials_and_protects_dashboard(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    client = client_for_test(tmp_path, monkeypatch)
+    protected = client.get("/", follow_redirects=False)
+    assert protected.status_code == 303
+    assert protected.headers["location"] == "/login"
+    assert client.get("/api/tasks").status_code == 401
+    assert client.get("/api/health").status_code == 200
+    assert client.post("/api/auth/login", json={"username": "owner", "password": "wrong-password"}).status_code == 401
+    login = client.post("/api/auth/login", json={"username": "owner", "password": "a-strong-test-password"})
+    assert login.status_code == 200
+    assert login.json()["authenticated"] is True
+    assert client.get("/api/auth/session").json()["authenticated"] is True
+    assert client.get("/").status_code == 200
+    assert client.get("/api/tasks").status_code == 200
+    assert client.post("/api/auth/logout").status_code == 200
+    assert client.get("/api/tasks").status_code == 401
+
+
+def test_admin_auth_fails_closed_without_host_secrets(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.delenv("SINTU_ADMIN_PASSWORD", raising=False)
+    monkeypatch.delenv("SINTU_SESSION_SECRET", raising=False)
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.post("/api/auth/login", json={"username": "admin", "password": "not-configured"})
+    assert response.status_code == 503
