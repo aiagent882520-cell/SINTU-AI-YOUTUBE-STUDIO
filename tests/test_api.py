@@ -962,3 +962,51 @@ def test_admin_auth_fails_closed_without_host_secrets(tmp_path, monkeypatch):
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
     response = client.post("/api/auth/login", json={"username": "admin", "password": "not-configured"})
     assert response.status_code == 503
+
+
+def test_admin_user_management_roles_and_audit(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    assert client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"}).status_code == 200
+    created = client.post("/api/admin/users", json={"username":"viewer_one","password":"viewer-password-long","role":"viewer"})
+    assert created.status_code == 200
+    viewer_id = created.json()["id"]
+    listed = client.get("/api/admin/users").json()["users"]
+    assert "password_hash" not in listed[0]
+    assert client.get("/api/admin/audit").status_code == 200
+    assert client.patch(f"/api/admin/users/{viewer_id}", json={"role":"editor"}).json()["role"] == "editor"
+    client.post("/api/auth/logout")
+    assert client.post("/api/auth/login", json={"username":"viewer_one","password":"viewer-password-long"}).json()["role"] == "editor"
+    assert client.post("/api/tasks", json={"prompt":"editor can create","workflow":"shorts"}).status_code == 200
+    assert client.get("/api/admin/users").status_code == 403
+    client.post("/api/auth/logout")
+    client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"})
+    assert client.patch(f"/api/admin/users/{viewer_id}", json={"is_active":False}).json()["is_active"] == 0
+    client.post("/api/auth/logout")
+    assert client.post("/api/auth/login", json={"username":"viewer_one","password":"viewer-password-long"}).status_code == 401
+    client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"})
+    assert client.patch(f"/api/admin/users/{viewer_id}", json={"is_active":True}).status_code == 200
+    client.post("/api/auth/logout")
+    assert client.post("/api/auth/login", json={"username":"viewer_one","password":"viewer-password-long"}).status_code == 200
+    assert client.post("/api/tasks", json={"prompt":"viewer cannot create","workflow":"shorts"}).status_code == 403
+    assert client.get("/api/tasks").status_code == 200
+    assert client.get("/api/admin/audit").status_code == 403
+
+
+def test_admin_cannot_disable_last_admin_or_self(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"})
+    admin_id = client.get("/api/admin/users").json()["users"][0]["id"]
+    assert client.patch(f"/api/admin/users/{admin_id}", json={"is_active":False}).status_code == 400
+    assert client.patch(f"/api/admin/users/{admin_id}", json={"role":"viewer"}).status_code == 400
