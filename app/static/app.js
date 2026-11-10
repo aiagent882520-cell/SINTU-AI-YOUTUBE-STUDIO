@@ -138,6 +138,7 @@ $("renderButton").addEventListener("click", async () => {
       body: JSON.stringify({
         title, scenes, seconds_per_scene: seconds,
         image_ids: $("renderImageIds").value.split(",").map(x => x.trim()).filter(Boolean),
+        video_ids: $("renderVideoIds").value.split(",").map(x => x.trim()).filter(Boolean),
         audio_id: $("renderAudioId").value.trim() || null,
         music_id: $("renderMusicId").value.trim() || null,
         music_volume: Number($("musicVolume").value || 0.18),
@@ -363,6 +364,11 @@ $("aiVideoButton").addEventListener("click", async () => {
     $("aiVideoPreview").src = result.url;
     $("aiVideoDownload").href = result.url;
     $("aiVideoAssetId").textContent = "AI Video ID: " + result.video_id + " · " + result.style + " · " + result.aspect_ratio + " · " + result.resolution + " · " + result.duration_seconds + "s";
+    const existingVideoIds = $("renderVideoIds").value.split(",").map(x => x.trim()).filter(Boolean);
+    existingVideoIds.push(result.video_id);
+    $("renderVideoIds").value = [...new Set(existingVideoIds)].join(", ");
+    const existingScenes = $("renderScenes").value.trim();
+    $("renderScenes").value = existingScenes ? existingScenes + "\n" + prompt : prompt;
     $("aiVideoNotice").textContent = result.provider + " · " + result.model + " · MP4 · " + Math.ceil(result.size_bytes / 1024) + " KB. " + result.notice;
     $("aiVideoResult").hidden = false;
   } catch (error) {
