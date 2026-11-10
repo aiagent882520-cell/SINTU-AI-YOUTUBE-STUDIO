@@ -150,6 +150,28 @@ $("refresh").addEventListener("click", refresh);
 function calendarEscape(value) {
  return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
 }
+async function loadPublishingHistory(){
+ const panel=$("publishingHistoryPanel");if(!panel)return;
+ try{
+  const session=await request("/api/auth/session");
+  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  panel.hidden=false;
+  const params=new URLSearchParams(),platform=$("publishingPlatformFilter")?.value||"",status=$("publishingStatusFilter")?.value||"";
+  if(platform)params.set("platform",platform);if(status)params.set("status",status);
+  const data=await request("/api/admin/publishing/history?"+params.toString()),totals=data.totals||{};
+  $("publishingTotals").innerHTML=[["Events",totals.events||0],["Published",totals.published||0],["Processing",totals.processing||0],["Failed",totals.failed||0]]
+   .map(([label,value])=>'<div class="integration-card"><strong>'+calendarEscape(value)+'</strong><span>'+calendarEscape(label)+'</span></div>').join("");
+  $("publishingHistoryItems").innerHTML=data.items.length?data.items.map(item=>{
+   const when=new Date(item.created_at).toLocaleString(),link=item.post_url?'<a href="'+calendarEscape(item.post_url)+'" target="_blank" rel="noopener noreferrer">Open post</a>':"";
+   return '<article class="calendar-item"><div><strong>'+calendarEscape(item.title||("Calendar item #"+item.calendar_id))+'</strong><span>'+calendarEscape(item.platform.replace("_"," "))+' · '+calendarEscape(item.status)+'</span><small>'+calendarEscape(when)+'</small><p>'+calendarEscape(item.detail||"")+'</p>'+link+'</div></article>';
+  }).join(""):'<p class="muted">Abhi publishing history record nahi hai.</p>';
+  $("publishingHistoryNotice").textContent=data.note;
+ }catch(error){$("publishingHistoryNotice").textContent=error.message;}
+}
+$("publishingHistoryRefresh")?.addEventListener("click",loadPublishingHistory);
+$("publishingPlatformFilter")?.addEventListener("change",loadPublishingHistory);
+$("publishingStatusFilter")?.addEventListener("change",loadPublishingHistory);
+
 async function loadCalendar() {
  try {
   const [data, session, yt, meta, tt] = await Promise.all([
@@ -219,7 +241,7 @@ $("calendarItems")?.addEventListener("click", async event => {
  if(tiktokStatus){
   const id=Number(tiktokStatus.dataset.tiktokStatus);tiktokStatus.disabled=true;
   try{const result=await request("/api/admin/tiktok/status/"+id,{method:"POST"});
-   $("calendarNotice").textContent="TikTok status: "+result.status+(result.detail?" · "+result.detail:"");await loadCalendar();}
+   $("calendarNotice").textContent="TikTok status: "+result.status+(result.detail?" · "+result.detail:"");await loadCalendar();await loadPublishingHistory();}
   catch(e){$("calendarNotice").textContent=e.message;tiktokStatus.disabled=false;}return;
  }
  if(metaFacebook||metaInstagram){
@@ -240,7 +262,7 @@ $("calendarItems")?.addEventListener("click", async event => {
   }
   const b=metaFacebook||metaInstagram;b.disabled=true;
   try{const result=await request(url+"?"+params.toString(),{method:"POST"});
-   $("calendarNotice").textContent=(metaFacebook?"Facebook":"Instagram")+" publish successful. "+(result.url||result.message||"");await loadCalendar();}
+   $("calendarNotice").textContent=(metaFacebook?"Facebook":"Instagram")+" publish successful. "+(result.url||result.message||"");await loadCalendar();await loadPublishingHistory();}
   catch(e){$("calendarNotice").textContent=e.message;b.disabled=false;}return;
  }
  if (publish) {
@@ -273,6 +295,7 @@ $("calendarItems")?.addEventListener("click", async event => {
 });
 $("calendarRefresh")?.addEventListener("click", loadCalendar);
 loadCalendar();
+loadPublishingHistory();
 function downloadPackage(format) {
   if (!latestTaskId) return;
   window.location.href = "/api/export/" + latestTaskId + "?format=" + format;
