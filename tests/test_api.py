@@ -1050,3 +1050,36 @@ def test_admin_cannot_select_unconfigured_provider(tmp_path, monkeypatch):
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
     client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"})
     assert client.patch("/api/admin/provider-settings", json={"selected_provider":"openai"}).status_code == 400
+
+
+
+def test_failed_task_can_be_retried(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    with main.db() as conn:
+        cur = conn.execute(
+            "INSERT INTO tasks(prompt,workflow,status,created_at) VALUES(?,?,?,?)",
+            ("Retry this Hindi short", "shorts", "Failed", "2026-11-10T00:00:00+00:00"),
+        )
+        task_id = cur.lastrowid
+    monkeypatch.setattr(main, "generate_text", lambda prompt, workflow: {
+        "provider": "test", "model": "test-model", "output": "Recovered production package"
+    })
+    retried = client.post(f"/api/tasks/{task_id}/retry")
+    assert retried.status_code == 200
+    assert retried.json()["status"] == "Completed"
+    assert retried.json()["output"] == "Recovered production package"
+    detail = client.get(f"/api/tasks/{task_id}").json()
+    assert detail["status"] == "Completed"
+    assert detail["output"] == "Recovered production package"
+
+
+def test_retry_rejects_missing_or_non_retryable_tasks(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    assert client.post("/api/tasks/999999/retry").status_code == 404
+    with main.db() as conn:
+        cur = conn.execute(
+            "INSERT INTO tasks(prompt,workflow,status,created_at) VALUES(?,?,?,?)",
+            ("Already done", "shorts", "Completed", "2026-11-10T00:00:00+00:00"),
+        )
+        task_id = cur.lastrowid
+    assert client.post(f"/api/tasks/{task_id}/retry").status_code == 409
