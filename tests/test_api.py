@@ -753,18 +753,27 @@ def test_mixed_image_video_timeline_api_contract(tmp_path, monkeypatch):
     def fake_mixed(items, title, scenes, **kwargs):
         captured["items"] = [(item["kind"], item["path"].name) for item in items]
         captured["scenes"] = scenes
+        captured["durations"] = [item.get("duration") for item in items]
+        captured["transitions"] = kwargs.get("transitions")
         return {"video_id": "3" * 32, "url": "/api/videos/" + "3" * 32,
                 "timeline_items": len(items), "timeline_order": [x["kind"] for x in items],
                 "duration_seconds": 8, "format": "MP4 / H.264"}
     monkeypatch.setattr(main, "render_mixed_timeline", fake_mixed)
     response = client.post("/api/render", json={
         "title": "Mixed timeline", "scenes": ["Image intro", "Moving clip"],
-        "timeline": [f"image:{image_id}", f"video:{video_id}"],
+        "timeline": [f"image:{image_id}:6:fade", f"video:{video_id}:0:cut"],
         "seconds_per_scene": 4, "subtitles": ["Intro caption", "Clip caption"]
     })
     assert response.status_code == 200
     assert captured["items"] == [("image", f"{image_id}.jpg"), ("video", f"{video_id}.mp4")]
     assert captured["scenes"] == ["Image intro", "Moving clip"]
+    assert captured["durations"] == [6, 0]
+    assert captured["transitions"] == ["fade", "cut"]
+    invalid_duration = client.post("/api/render", json={
+        "title": "Invalid video duration", "scenes": ["Clip"],
+        "timeline": [f"video:{video_id}:5:cut"]
+    })
+    assert invalid_duration.status_code == 400
     bad = client.post("/api/render", json={
         "title": "Bad timeline", "scenes": ["One"],
         "timeline": [f"image:{image_id}", f"video:{video_id}"]
@@ -789,16 +798,18 @@ def test_mixed_timeline_ffmpeg_integration(tmp_path, monkeypatch):
     Image.new("RGB", (320, 240), (220, 30, 30)).save(still, format="JPEG")
     monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path / "mixed-renders")
     result = video_renderer.render_mixed_timeline(
-        [{"kind": "image", "path": still}, {"kind": "video", "path": first_video}],
+        [{"kind": "image", "path": still, "duration": 3}, {"kind": "video", "path": first_video, "duration": 0}],
         "Mixed timeline", ["Image intro", "Video scene"], seconds_per_scene=2,
-        subtitles=["Still caption", "Video caption"], transition="cut"
+        subtitles=["Still caption", "Video caption"], transition="cut", transitions=["fade", "cut"]
     )
     output = tmp_path / "mixed-renders" / f'{result["video_id"]}.mp4'
     assert output.is_file()
     assert result["timeline_order"] == ["image", "video"]
     assert result["timeline_items"] == 2
+    assert result["scene_transitions"] == ["fade", "cut"]
+    assert result["scene_durations"] == [3, 0]
     assert result["subtitles_burned_in"] is True
-    assert 2.8 <= result["duration_seconds"] <= 3.2
+    assert 3.8 <= result["duration_seconds"] <= 4.2
     probe = subprocess.run([ffprobe, "-v", "error", "-show_entries", "stream=codec_type",
                             "-of", "json", str(output)], capture_output=True, text=True,
                            check=True, timeout=30)
