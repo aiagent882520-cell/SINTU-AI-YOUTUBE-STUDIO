@@ -428,7 +428,26 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
             if kind == "video":
                 if not isinstance(path, Path) or not path.is_file():
                     raise ValueError("Timeline AI video clip nahi mili.")
-                clip_paths.append(path)
+                trim_start=float(item.get("trim_start",0) or 0); trim_end=item.get("trim_end")
+                if trim_start<0 or (trim_end is not None and float(trim_end)<=trim_start):
+                    raise ValueError("Video trim end, start se bada hona chahiye.")
+                ffprobe=shutil.which("ffprobe")
+                if not ffprobe: raise RendererUnavailable("Video trimming ke liye FFprobe installed hona chahiye.")
+                probe=subprocess.run([ffprobe,"-v","error","-show_entries","format=duration","-of","default=noprint_wrappers=1:nokey=1",str(path)],capture_output=True,text=True,timeout=30,check=False)
+                if probe.returncode!=0: raise RenderFailed("Source video duration read nahi ho saki.")
+                try: source_duration=float(probe.stdout.strip())
+                except ValueError: raise RenderFailed("Source video duration invalid hai.") from None
+                effective_end=source_duration if trim_end is None else float(trim_end)
+                if trim_start>=source_duration or effective_end>source_duration+0.05:
+                    raise ValueError("Video trim range source clip ki duration ke andar hona chahiye.")
+                segment_duration=effective_end-trim_start
+                if segment_duration<0.25: raise ValueError("Trimmed video kam se kam 0.25 seconds ka hona chahiye.")
+                segment=work/f"trimmed-{index:03d}.mp4"
+                command=[ffmpeg,"-y","-hide_banner","-loglevel","error","-ss",f"{trim_start:.3f}","-i",str(path),"-t",f"{segment_duration:.3f}","-map","0:v:0","-map","0:a?","-c:v","libx264","-preset","veryfast","-pix_fmt","yuv420p","-c:a","aac","-b:a","128k","-movflags","+faststart",str(segment)]
+                completed=subprocess.run(command,capture_output=True,text=True,timeout=180,check=False)
+                if completed.returncode!=0 or not segment.is_file():
+                    raise RenderFailed((completed.stderr or "Video trim failed")[-1200:])
+                clip_paths.append(segment)
             elif kind == "image":
                 if not isinstance(path, Path) or not path.is_file():
                     raise ValueError("Timeline scene image nahi mili.")
@@ -459,6 +478,6 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
         result["timeline_items"] = len(items)
         result["timeline_order"] = [item["kind"] for item in items]
         result["scene_transitions"] = transitions
-        result["scene_durations"] = [item.get("duration") if item["kind"] == "image" else None for item in items]
-        result["note"] = "Still images and AI video clips are joined in the requested order. Still-image duration uses seconds_per_scene; AI clip duration uses its source duration. Source video audio, optional voiceover/music, per-item subtitles and cut/fade transitions are supported."
+        result["scene_durations"] = [item.get("duration") if item["kind"] == "image" else (round(float(item["trim_end"])-float(item.get("trim_start",0)),2) if item.get("trim_end") is not None else None) for item in items]
+        result["note"] = "Still images and AI video clips are joined in order. Still-image duration is configurable; video clips can be trimmed by start/end seconds without modifying original source files. Source video audio, optional voiceover/music, per-item subtitles and cut/fade transitions are supported."
         return result
