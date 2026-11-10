@@ -342,7 +342,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                 mix_labels.append("[music]")
             filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,atrim=duration={total_duration:.3f}[aout]")
 
-            if subtitles:
+            if any(line.strip() for line in subtitles):
                 srt_path = work / "captions.srt"
                 def stamp(seconds):
                     millis = int(round(seconds * 1000))
@@ -394,7 +394,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         "transition": transition,
         "motion": "source AI clip motion",
         "scene_images": 0,
-        "subtitles_burned_in": bool(subtitles),
+        "subtitles_burned_in": any(line.strip() for line in subtitles),
         "format": "MP4 / H.264",
         "note": "Original clip audio is retained at reduced ambient level and mixed with optional voiceover/music. Captions are timed to each clip. Fade mode fades each clip at its boundaries; it is not a cross-dissolve."
     }
