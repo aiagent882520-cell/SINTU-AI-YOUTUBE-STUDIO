@@ -56,3 +56,14 @@ This repository is not yet a complete autonomous video studio. Long-form AI vide
 pip install -r requirements-dev.txt
 pytest -q
 ```
+
+
+### Visual mixed-timeline editor
+
+- Generated still images and AI video clips appear in one ordered visual timeline with image/video previews.
+- Move scenes up/down or remove them before rendering.
+- Set each still-image scene duration independently (2–12 seconds). AI video duration follows the source clip.
+- Choose a cut or fade-to/from-black transition after each scene; the last scene's outgoing transition has no visible effect.
+- Edit each scene description and optional subtitle independently. Blank subtitle slots are supported so captions remain aligned after reordering.
+- Voiceover and background music continue to mix across the assembled timeline.
+- This is a sequential editor, not a multi-track nonlinear editor: no cross-dissolves, arbitrary video trimming, keyframes, or frame-accurate scrubbing yet.
