@@ -1,38 +1,46 @@
-# SINTU AI STUDIO — Cloud Deployment
+# SINTU AI STUDIO — Deployment
 
-## FastAPI Cloud readiness
+## Docker deployment (generic container host)
 
-- Entrypoint: `app.main:app` (configured in `pyproject.toml`)
-- Dependencies: `requirements.txt`
-- Local secrets and SQLite files excluded by `.fastapicloudignore`
-- Runtime health check: `/api/health`
+The repository now includes a Docker image with Python 3.11, FFmpeg, and DejaVu fonts. It listens on `PORT` (default 8000).
 
-## Deployment account step
+### Run locally or on a Docker-capable server
 
-Sign in to FastAPI Cloud with the GitHub account that owns this repository, then create/link an app from `aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO`. Deployment requires an authenticated FastAPI Cloud account and a deployment session/token.
+1. Install Docker Engine / Docker Desktop.
+2. Clone this repository.
+3. From the repository folder, run:
 
-## Required environment variables
+```bash
+docker compose up --build -d
+```
 
-Set these in the cloud app's Environment Variables / Secrets settings, never in GitHub files:
+4. Open `http://localhost:8000` and check `http://localhost:8000/api/health`.
 
-- `AI_PROVIDER` = `auto`, `openai`, or `gemini`
-- `OPENAI_API_KEY` (optional)
-- `OPENAI_MODEL` (optional)
-- `GEMINI_API_KEY` (optional)
-- `GEMINI_MODEL` (optional)
+Docker Compose stores SQLite, generated images, audio, music, and videos in the named `sintu-data` volume mounted at `/data`. Back up this volume. Do not delete it when updating the container.
 
-No API key is included in this repository.
+### Environment variables
 
-## Important data limitation
+Set secrets in the host's secret manager or a protected `.env` file (never commit it):
 
-The current SQLite database is stored on the app filesystem. Cloud instances may scale to zero or be replaced, so SQLite on local app storage is not a production-persistent database. Connect managed PostgreSQL before relying on saved prompts/results in production.
+- `AI_PROVIDER=auto|openai|gemini`
+- `OPENAI_API_KEY`, `OPENAI_MODEL`
+- `GEMINI_API_KEY`, `GEMINI_MODEL`
+- `STABILITY_API_KEY`
+- `MEDIA_GENERATION_TOKEN`
+- `ENABLE_PAID_MEDIA_GENERATION=false` (keep false until paid provider costs and credentials are intentionally configured)
 
-## Verification after deploy
+API keys are optional for opening the dashboard and using non-provider parts. Paid media generation stays disabled by default.
 
-1. Open `/api/health` and confirm `status: ok`.
-2. Open `/api/providers` and confirm provider configuration status (no key values should ever be shown).
-3. Generate a small text request after adding a provider secret.
-4. Confirm generated output and task status.
-5. Confirm persistence after a new deployment only after PostgreSQL is connected.
+### Production notes
 
-Deployment is not complete until the cloud platform reports a successful deployment and the live health endpoint passes.
+- A persistent disk/volume is required for the current SQLite database and generated media. The container filesystem alone is not durable.
+- Run one app instance when using SQLite. For multi-instance scaling, move tasks and metadata to managed PostgreSQL and media to object storage first.
+- Configure HTTPS at the hosting proxy/load balancer. Do not expose the app publicly without authentication and access controls; public deployment is not a substitute for user authentication.
+- Configure backups, resource limits, log retention, and monitoring before production use.
+- High-resolution video rendering requires sufficient CPU, memory, disk, and execution time.
+- YouTube/social publishing and paid AI media providers still require their own supported credentials and permissions.
+- A successful Docker build is not a cloud deployment. The host must report healthy and `/api/health` must pass before calling it live.
+
+## FastAPI Cloud note
+
+FastAPI Cloud was considered earlier but no deployment was completed. This Docker setup is platform-neutral and does not create or charge for a hosting account.
