@@ -1223,3 +1223,29 @@ def test_tiktok_oauth_rejects_non_https_redirect(tmp_path, monkeypatch):
     monkeypatch.setenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode())
     response = client.post("/api/admin/tiktok/oauth/start")
     assert response.status_code == 503
+
+
+def test_unified_publishing_history_filters_and_empty_state(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.get("/api/admin/publishing/history")
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+    assert response.json()["totals"]["events"] == 0
+    assert client.get("/api/admin/publishing/history?platform=invalid").status_code == 422
+
+
+def test_publishing_history_records_and_filters_events(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    from datetime import datetime, timedelta, timezone
+    payload={"title":"History test","platform":"youtube","prompt":"Test video",
+        "scheduled_at":(datetime.now(timezone.utc)+timedelta(days=1)).isoformat()}
+    item_id=client.post("/api/calendar",json=payload).json()["id"]
+    from app.main import _record_publish_event
+    _record_publish_event(item_id,"youtube","Published","video123","Upload succeeded","https://youtube.com/watch?v=video123")
+    response=client.get("/api/admin/publishing/history")
+    assert response.status_code==200
+    assert response.json()["items"][0]["calendar_id"]==item_id
+    assert response.json()["items"][0]["external_id"]=="video123"
+    assert response.json()["totals"]["published"]==1
+    assert len(client.get("/api/admin/publishing/history?platform=youtube&status=Published").json()["items"])==1
+    assert client.get("/api/admin/publishing/history?platform=tiktok").json()["items"]==[]
