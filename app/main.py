@@ -1151,6 +1151,10 @@ def tiktok_publish(calendar_id:int,video_id:str=Query(...,min_length=32,max_leng
         item=conn.execute("SELECT id,status,platform FROM content_calendar WHERE id=?",(calendar_id,)).fetchone()
     if not item or item["status"]!="Approved" or item["platform"]!="tiktok":
         raise HTTPException(status_code=409,detail="TikTok calendar item approved hona chahiye.")
+    with db() as conn:
+        pending=conn.execute("SELECT status FROM tiktok_posts WHERE calendar_id=? ORDER BY created_at DESC LIMIT 1",(calendar_id,)).fetchone()
+    if pending and pending["status"] not in {"PUBLISH_COMPLETE","FAILED","PUBLISH_FAILED","SEND_TO_USER_INBOX","INBOX_DELIVERED"}:
+        raise HTTPException(status_code=409,detail="TikTok par ek post abhi processing mein hai. Pehle status check karein; duplicate upload roka gaya.")
     path=OUTPUT_DIR/(video_id+".mp4")
     if not path.is_file() or path.stat().st_size<=0 or path.stat().st_size>512*1024*1024:
         raise HTTPException(status_code=404,detail="Valid rendered MP4 (max 512 MB) nahi mili.")
