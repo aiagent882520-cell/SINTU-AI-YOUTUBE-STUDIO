@@ -63,3 +63,8 @@ FastAPI Cloud was considered earlier but no deployment was completed. This Docke
 
 - Editors can create content and use generation workflows, but cannot perform update/delete operations or administer accounts. Viewers remain read-only.
 - Admins can reset an existing account password from the user list; use a unique 12+ character temporary password and share it securely.
+
+
+## AI provider control panel
+
+Admin dashboard ke **AI Provider Settings** section mein `auto`, `openai`, ya `gemini` provider preference choose karein. Selection persistent SQLite settings mein save hota hai aur new AI text generation requests par apply hota hai. Selected provider ki key server environment mein configured honi chahiye. Dashboard API keys ko kabhi accept/display/store nahi karta; unhe hosting secret manager mein hi set karein. Integration cards readiness aur missing OAuth integrations dikhate hain. Paid media setting environment-controlled rehti hai; dashboard se paid generation enable nahi hota.
