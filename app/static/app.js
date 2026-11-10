@@ -624,5 +624,32 @@ $("providerSettingsForm")?.addEventListener("submit", async event => {
   finally { button.disabled = false; }
 });
 $("providerRefresh")?.addEventListener("click", loadProviderAdminPanel);
+
+async function loadYouTubeAdminPanel() {
+ const panel = $("youtubeAdminPanel"); if (!panel) return;
+ try {
+  const session = await request("/api/auth/session");
+  if (!session.authenticated || session.role !== "admin") { panel.hidden = true; return; }
+  panel.hidden = false;
+  const data = await request("/api/admin/youtube/status");
+  $("youtubeConnectionStatus").textContent = data.connected
+   ? "Connected channel: "+data.channel.title+" · "+data.channel.id
+   : "Not connected. OAuth client: "+(data.oauth_configured?"configured":"missing")+" · token encryption: "+(data.encryption_configured?"configured":"missing");
+  $("youtubeConnect").disabled = !data.oauth_configured || !data.encryption_configured;
+  $("youtubeDisconnect").hidden = !data.connected;
+ } catch(error) { $("youtubeConnectionStatus").textContent = error.message; }
+}
+$("youtubeConnect")?.addEventListener("click", async () => {
+ const button=$("youtubeConnect"); button.disabled=true;
+ try { const data=await request("/api/admin/youtube/oauth/start"); window.location.assign(data.authorization_url); }
+ catch(error) { $("youtubeConnectionStatus").textContent=error.message; button.disabled=false; }
+});
+$("youtubeDisconnect")?.addEventListener("click", async () => {
+ if (!window.confirm("YouTube channel disconnect karein?")) return;
+ try { await request("/api/admin/youtube/disconnect",{method:"POST"}); await loadYouTubeAdminPanel(); }
+ catch(error) { $("youtubeConnectionStatus").textContent=error.message; }
+});
+$("youtubeRefresh")?.addEventListener("click",loadYouTubeAdminPanel);
+loadYouTubeAdminPanel();
 loadAdminPanel();
 loadProviderAdminPanel();
