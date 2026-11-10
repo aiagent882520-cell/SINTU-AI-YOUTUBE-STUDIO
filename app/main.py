@@ -17,6 +17,7 @@ from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text
 from .video_renderer import render_storyboard, RendererUnavailable, RenderFailed, OUTPUT_DIR
 from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable, VoiceGenerationFailed, AUDIO_DIR
 from .image_generator import generate_image, image_status, ImageUnavailable, ImageGenerationFailed, IMAGE_DIR
+from .music_generator import generate_music, music_status, MusicUnavailable, MusicGenerationFailed
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT.parent / "sintu_studio.db"
@@ -84,6 +85,10 @@ class MusicUploadInput(BaseModel):
     filename: str = Field(min_length=1, max_length=120)
     data_base64: str = Field(min_length=1, max_length=21_000_000)
 
+class MusicGenerateInput(BaseModel):
+    prompt: str = Field(min_length=1, max_length=2000)
+    duration_seconds: int = Field(default=30, ge=5, le=360)
+
 class ImageInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=3000)
     kind: str = Field(default="scene", max_length=20)
@@ -139,6 +144,7 @@ def capabilities():
         "storyboard_renderer": {"available": bool(shutil.which("ffmpeg")), "output": "720x1280 MP4 with optional scene images, narration, uploaded music and captions"},
         "voiceover": voice_status(),
         "image_generation": image_status(),
+        "ai_music_generation": music_status(),
         "requires_external_integration": [
             "video_generation",
             "advanced_video_rendering", "youtube_oauth", "social_oauth",
@@ -274,6 +280,34 @@ def render_capabilities():
         "limitations": ["background music is user-uploaded; music licensing remains user's responsibility", "basic slow zoom motion only; no advanced 2D/3D VFX", "FFmpeg must be installed"],
     }
 
+
+@app.get("/api/music/capabilities")
+def ai_music_capabilities():
+    return music_status()
+
+@app.post("/api/music/generate")
+def create_ai_music(payload: MusicGenerateInput, media_token: str = Header(default="", alias="X-Media-Token")):
+    import hmac, os
+    expected = os.getenv("MEDIA_GENERATION_TOKEN", "")
+    if not expected or not hmac.compare_digest(media_token, expected):
+        raise HTTPException(status_code=403, detail="Valid media access token required.")
+    try:
+        return generate_music(payload.prompt, payload.duration_seconds)
+    except MusicUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except MusicGenerationFailed as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+@app.get("/api/music/{music_id}")
+def get_ai_music(music_id: str):
+    if not re.fullmatch(r"[a-f0-9]{32}", music_id):
+        raise HTTPException(status_code=400, detail="Invalid music ID")
+    path = MUSIC_DIR / f"{music_id}.mp3"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Music not found")
+    return FileResponse(path, media_type="audio/mpeg", filename=f"sintu-music-{music_id}.mp3")
 
 @app.post("/api/music/upload")
 def upload_music(payload: MusicUploadInput, media_token: str = Header(default="", alias="X-Media-Token")):
