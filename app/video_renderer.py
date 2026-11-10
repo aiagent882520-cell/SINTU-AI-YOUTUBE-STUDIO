@@ -107,6 +107,9 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         raise ValueError("Har scene ki duration 2 se 12 seconds honi chahiye.")
     if transition not in {"cut", "fade"}:
         raise ValueError("Transition cut ya fade hona chahiye.")
+    transitions = transitions or [transition] * len(video_paths)
+    if len(transitions) != len(video_paths) or any(x not in {"cut", "fade"} for x in transitions):
+        raise ValueError("Har clip ke liye cut ya fade transition required hai.")
     if motion not in {"none", "slow-zoom-in", "slow-zoom-out"}:
         raise ValueError("Motion none, slow-zoom-in ya slow-zoom-out hona chahiye.")
     if not 0.0 <= music_volume <= 1.0:
@@ -215,7 +218,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
 
 def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                     music_path: Path | None = None, music_volume: float = 0.18,
-                    subtitles: list[str] | None = None, transition: str = "cut") -> dict:
+                    subtitles: list[str] | None = None, transition: str = "cut", transitions: list[str] | None = None) -> dict:
     """Join AI MP4 clips, preserving source audio and optionally mixing narration/music/captions."""
     import json
 
@@ -308,11 +311,11 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                     f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,"
                     f"crop={WIDTH}:{HEIGHT},fps=30,setsar=1,format=yuv420p,setpts=PTS-STARTPTS"
                 )
-                if transition == "fade" and len(clip_info) > 1:
+                if len(clip_info) > 1:
                     fade_duration = min(0.35, info["duration"] / 4)
-                    if index > 0:
+                    if index > 0 and transitions[index - 1] == "fade":
                         vfilters += f",fade=t=in:st=0:d={fade_duration:.3f}"
-                    if index < len(clip_info) - 1:
+                    if index < len(clip_info) - 1 and transitions[index] == "fade":
                         vfilters += f",fade=t=out:st={max(0, info['duration']-fade_duration):.3f}:d={fade_duration:.3f}"
                 filters.append(f"[{index}:v:0]{vfilters}[{vlabel}]")
                 audio_filters = (
@@ -399,7 +402,8 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
 def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                           seconds_per_scene: int = 4, audio_path: Path | None = None,
                           music_path: Path | None = None, music_volume: float = 0.18,
-                          subtitles: list[str] | None = None, transition: str = "cut") -> dict:
+                          subtitles: list[str] | None = None, transition: str = "cut",
+                          transitions: list[str] | None = None) -> dict:
     """Create one ordered timeline from generated still images and AI video clips."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
@@ -411,6 +415,9 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
     if subtitles and len(subtitles) != len(items):
         raise ValueError("Subtitle lines ki sankhya timeline items ke barabar honi chahiye.")
     subtitles = subtitles or []
+    transitions = transitions or [transition] * len(items)
+    if len(transitions) != len(items) or any(x not in {"cut", "fade"} for x in transitions):
+        raise ValueError("Har timeline scene ke liye cut ya fade transition chahiye.")
     with tempfile.TemporaryDirectory(prefix="sintu-mixed-timeline-") as temp:
         work = Path(temp)
         clip_paths = []
@@ -431,7 +438,7 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                     [ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
                      "-loop", "1", "-framerate", "30", "-i", str(frame),
                      "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
-                     "-t", str(seconds_per_scene), "-shortest",
+                     "-t", str(item.get("duration", seconds_per_scene)), "-shortest",
                      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
                      "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(segment)],
                     capture_output=True, text=True, timeout=90, check=False
@@ -443,9 +450,11 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                 raise ValueError("Timeline item kind image ya video hona chahiye.")
         result = render_ai_clips(
             clip_paths, audio_path=audio_path, music_path=music_path,
-            music_volume=music_volume, subtitles=subtitles, transition=transition
+            music_volume=music_volume, subtitles=subtitles, transition=transition, transitions=transitions
         )
         result["timeline_items"] = len(items)
         result["timeline_order"] = [item["kind"] for item in items]
+        result["scene_transitions"] = transitions
+        result["scene_durations"] = [item.get("duration") if item["kind"] == "image" else None for item in items]
         result["note"] = "Still images and AI video clips are joined in the requested order. Still-image duration uses seconds_per_scene; AI clip duration uses its source duration. Source video audio, optional voiceover/music, per-item subtitles and cut/fade transitions are supported."
         return result
