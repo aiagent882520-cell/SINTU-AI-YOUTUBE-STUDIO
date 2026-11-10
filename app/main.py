@@ -206,7 +206,7 @@ def init_db():
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_content_calendar_date ON content_calendar(scheduled_at)")
         conn.execute("""CREATE TABLE IF NOT EXISTS youtube_oauth_states (
-            state TEXT PRIMARY KEY, admin_user_id INTEGER NOT NULL, expires_at INTEGER NOT NULL
+            state TEXT PRIMARY KEY, admin_user_id INTEGER NOT NULL, session_hash TEXT NOT NULL, expires_at INTEGER NOT NULL
         )""")
         conn.execute("""CREATE TABLE IF NOT EXISTS youtube_connection (
             id INTEGER PRIMARY KEY CHECK(id=1), channel_id TEXT NOT NULL, channel_title TEXT NOT NULL,
@@ -319,7 +319,7 @@ def admin_login(payload: AdminLoginInput, request: Request):
     response = JSONResponse({"authenticated": True, "username": actor["username"], "role": actor["role"], "expires_in": SESSION_TTL_SECONDS})
     response.set_cookie(SESSION_COOKIE, _session_token(actor, int(now + SESSION_TTL_SECONDS)),
                         max_age=SESSION_TTL_SECONDS, httponly=True, secure=os.getenv("SINTU_COOKIE_SECURE", "true").lower() == "true",
-                        samesite="strict", path="/")
+                        samesite="lax", path="/")
     return response
 
 
@@ -665,8 +665,8 @@ def youtube_oauth_start(request: Request):
     expiry = int(time.time()) + 600
     with db() as conn:
         conn.execute("DELETE FROM youtube_oauth_states WHERE expires_at < ?", (int(time.time()),))
-        conn.execute("INSERT INTO youtube_oauth_states(state,admin_user_id,expires_at) VALUES(?,?,?)",
-                     (state, actor["id"], expiry))
+        conn.execute("INSERT INTO youtube_oauth_states(state,admin_user_id,session_hash,expires_at) VALUES(?,?,?,?)",
+                     (state, actor["id"], hashlib.sha256((request.cookies.get(SESSION_COOKIE) or "local-dev-session").encode()).hexdigest(), expiry))
     params = urllib.parse.urlencode({
         "client_id": config["client_id"], "redirect_uri": config["redirect_uri"],
         "response_type": "code", "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
@@ -685,7 +685,8 @@ def youtube_oauth_callback(request: Request, code: str = "", state: str = "", er
     with db() as conn:
         saved = conn.execute("SELECT admin_user_id,expires_at FROM youtube_oauth_states WHERE state=?", (state,)).fetchone()
         conn.execute("DELETE FROM youtube_oauth_states WHERE state=?", (state,))
-    if not state or not saved or saved["admin_user_id"] != actor.get("id") or saved["expires_at"] < int(time.time()):
+    session_hash = hashlib.sha256((request.cookies.get(SESSION_COOKIE) or "local-dev-session").encode()).hexdigest()
+    if not state or not saved or saved["admin_user_id"] != actor.get("id") or saved["session_hash"] != session_hash or saved["expires_at"] < int(time.time()):
         raise HTTPException(status_code=400, detail="OAuth state invalid/expired. Dobara Connect karein.")
     if not code:
         raise HTTPException(status_code=400, detail="Google authorization code missing.")
