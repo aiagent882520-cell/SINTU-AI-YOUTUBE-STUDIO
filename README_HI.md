@@ -76,3 +76,4 @@ pytest -q
 - Video trim ranges are checked against source duration by FFprobe; server must provide FFmpeg and FFprobe.
 
 - Per-video source audio level can be adjusted independently from mute to 200% gain; browser preview honors up to 100%, while FFmpeg applies the full selected gain during final render.
+- Final MP4 export profiles: 720x1280 portrait, 1080x1920 Full HD portrait, 1080x1080 square, 1280x720 landscape, or 1920x1080 Full HD landscape; 24/30/60 FPS; Standard/High/Maximum H.264 CRF quality presets. Output dimensions describe the render canvas, not guaranteed native source detail; lower-resolution sources may be upscaled. Higher settings increase processing time and output size. No native 4K/8K guarantee.
