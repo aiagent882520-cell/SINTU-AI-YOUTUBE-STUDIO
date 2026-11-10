@@ -990,7 +990,7 @@ def test_admin_user_management_roles_and_audit(tmp_path, monkeypatch):
     client.post("/api/auth/logout")
     assert client.post("/api/auth/login", json={"username":"viewer_one","password":"viewer-password-long"}).status_code == 401
     client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"})
-    assert client.patch(f"/api/admin/users/{viewer_id}", json={"is_active":True}).status_code == 200
+    assert client.patch(f"/api/admin/users/{viewer_id}", json={"is_active":True,"role":"viewer"}).status_code == 200
     client.post("/api/auth/logout")
     assert client.post("/api/auth/login", json={"username":"viewer_one","password":"viewer-password-long"}).status_code == 200
     assert client.post("/api/tasks", json={"prompt":"viewer cannot create","workflow":"shorts"}).status_code == 403
