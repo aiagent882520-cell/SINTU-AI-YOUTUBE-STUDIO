@@ -432,6 +432,9 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
             elif kind == "image":
                 if not isinstance(path, Path) or not path.is_file():
                     raise ValueError("Timeline scene image nahi mili.")
+                image_duration = item.get("duration", seconds_per_scene)
+                if not isinstance(image_duration, int) or not 2 <= image_duration <= 12:
+                    raise ValueError("Har still image ki duration 2 se 12 seconds honi chahiye.")
                 frame = work / f"still-{index:03d}.png"
                 _make_frame(frame, title, scenes[index - 1], index, len(items), path)
                 segment = work / f"still-{index:03d}.mp4"
@@ -439,7 +442,7 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                     [ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
                      "-loop", "1", "-framerate", "30", "-i", str(frame),
                      "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
-                     "-t", str(item.get("duration", seconds_per_scene)), "-shortest",
+                     "-t", str(image_duration), "-shortest",
                      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
                      "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(segment)],
                     capture_output=True, text=True, timeout=90, check=False
