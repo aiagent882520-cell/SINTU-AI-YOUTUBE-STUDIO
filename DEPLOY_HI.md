@@ -90,3 +90,15 @@ Admin dashboard ke **AI Provider Settings** section mein `auto`, `openai`, ya `g
 6. Instagram ke liye Page se linked Instagram **Business/Creator** account chahiye. Approved Instagram item par public HTTPS MP4 URL aur caption dein; Meta URL se video fetch karke Reel publish karega. Local-only MP4 URL supported nahi.
 7. Meta App Review/Advanced Access, Business Verification, Page role, account eligibility aur Graph API rate limits apply. Public users ke launch se pehle Meta approval complete karein.
 8. Publishing hamesha manual admin confirmation se hoti hai; scheduled auto-publishing abhi enabled nahi.
+
+
+## TikTok Direct Post connection
+1. TikTok for Developers par app banayein; **Login Kit** aur **Content Posting API** products add karein.
+2. `user.info.basic` aur `video.publish` scopes request/approval karein.
+3. Login Kit Web Redirect URI mein exact HTTPS URL register karein: `https://YOUR-DOMAIN/api/admin/tiktok/oauth/callback`.
+4. Server environment mein `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REDIRECT_URI` aur stable `YOUTUBE_TOKEN_ENCRYPTION_KEY` set karein.
+5. SINTU Admin panel mein Connect TikTok karke account authorize karein.
+6. Calendar mein TikTok item approve karein, rendered MP4 ID select karein, TikTok creator ke live privacy options mein se visibility choose karein, caption review karein aur AI-generated label sahi select karein.
+7. Video transfer ke baad **Check TikTok status** dabayein. Calendar tabhi Published hoga jab TikTok `PUBLISH_COMPLETE` return kare.
+8. TikTok Content Posting API ka app audit required hai public visibility restrictions hatane ke liye. Unaudited client ka Direct Post private-only hota hai. Scope approval, app audit, user authorization aur TikTok rate/creator limits apply.
+9. Scheduling ke time automatic publish enabled nahi hai; admin explicit publish action deta hai.
