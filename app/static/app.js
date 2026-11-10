@@ -2,12 +2,12 @@ const $ = (id) => document.getElementById(id);
 let latestTaskId = null;
 
 function queueTimelineAsset(kind, id, sceneText) {
-  const timeline = $("renderTimeline").value.split("\\n").map(x => x.trim()).filter(Boolean);
+  const timeline = $("renderTimeline").value.split("\n").map(x => x.trim()).filter(Boolean);
   timeline.push(kind + ":" + id);
-  $("renderTimeline").value = timeline.join("\\n");
-  const scenes = $("renderScenes").value.split("\\n").map(x => x.trim()).filter(Boolean);
+  $("renderTimeline").value = timeline.join("\n");
+  const scenes = $("renderScenes").value.split("\n").map(x => x.trim()).filter(Boolean);
   scenes.push(sceneText || (kind === "image" ? "Generated image scene" : "Generated AI video scene"));
-  $("renderScenes").value = scenes.join("\\n");
+  $("renderScenes").value = scenes.join("\n");
 }
 
 async function request(path, options={}) {
@@ -147,7 +147,7 @@ $("renderButton").addEventListener("click", async () => {
       method: "POST",
       body: JSON.stringify({
         title, scenes, seconds_per_scene: seconds,
-        timeline: $("renderTimeline").value.split("\\n").map(x => x.trim()).filter(Boolean),
+        timeline: $("renderTimeline").value.split("\n").map(x => x.trim()).filter(Boolean),
         image_ids: $("renderTimeline").value.trim() ? [] : $("renderImageIds").value.split(",").map(x => x.trim()).filter(Boolean),
         video_ids: $("renderTimeline").value.trim() ? [] : $("renderVideoIds").value.split(",").map(x => x.trim()).filter(Boolean),
         audio_id: $("renderAudioId").value.trim() || null,
