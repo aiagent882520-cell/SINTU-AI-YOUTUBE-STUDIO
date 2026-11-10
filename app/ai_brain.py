@@ -68,9 +68,12 @@ class ProviderNotConfigured(Exception):
 class ProviderRequestError(Exception):
     pass
 
-def provider_status():
+def provider_status(selected_override=None):
+    selected = (selected_override or os.getenv("AI_PROVIDER", "auto")).strip().lower()
+    if selected not in {"auto", "openai", "gemini"}:
+        selected = "auto"
     return {
-        "selected": os.getenv("AI_PROVIDER", "auto").lower(),
+        "selected": selected,
         "openai": {
             "configured": bool(os.getenv("OPENAI_API_KEY")),
             "model": os.getenv("OPENAI_MODEL", "gpt-5.5"),
@@ -81,9 +84,9 @@ def provider_status():
         },
     }
 
-def _selected_provider():
-    selected = os.getenv("AI_PROVIDER", "auto").strip().lower()
-    status = provider_status()
+def _selected_provider(selected_override=None):
+    selected = (selected_override or os.getenv("AI_PROVIDER", "auto")).strip().lower()
+    status = provider_status(selected)
     if selected == "auto":
         if status["openai"]["configured"]:
             return "openai"
@@ -96,8 +99,8 @@ def _selected_provider():
         raise ProviderNotConfigured(f"{selected} selected hai, lekin uski API key server par set nahi hai.")
     return selected
 
-def generate_text(prompt: str, workflow: str) -> dict:
-    provider = _selected_provider()
+def generate_text(prompt: str, workflow: str, provider_override=None) -> dict:
+    provider = _selected_provider(provider_override)
     workflow_key = (workflow or "content").strip().lower()
     guide = WORKFLOW_GUIDES.get(workflow_key, WORKFLOW_GUIDES["content"])
     user_input = (
