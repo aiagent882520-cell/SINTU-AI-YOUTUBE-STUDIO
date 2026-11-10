@@ -587,6 +587,33 @@ def test_video_generator_calls_gemini_and_saves_mp4(tmp_path, monkeypatch):
     body = json.loads(captured["request"].data)
     assert body["model"] == "gemini-omni-1.1-flash"
     assert body["response_format"]["aspect_ratio"] == "9:16"
+    assert body["response_format"]["delivery"] == "uri"
     assert captured["timeout"] == 360
     assert result["interaction_id"] == "interaction-test"
     assert (output_dir / (result["video_id"] + ".mp4")).read_bytes() == mp4
+
+
+def test_video_generator_extracts_and_downloads_uri_delivery(monkeypatch):
+    import json
+    from app import video_generator
+    mp4 = b"1234ftypmp42uri-video-content"
+    uri = "https://generativelanguage.googleapis.com/v1beta/files/abc-123:download?alt=media"
+    payload = {"steps": [{"type": "model_output", "content": [
+        {"type": "video", "mime_type": "video/mp4", "uri": uri}
+    ]}]}
+    assert video_generator._extract_video_file_id(payload) == "abc-123"
+    class FakeResponse:
+        def __init__(self, body): self.body = body
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self, limit): return self.body
+    calls = []
+    def fake_urlopen(request, timeout):
+        calls.append(request.full_url)
+        if "/files/abc-123?" in request.full_url:
+            return FakeResponse(json.dumps({"state": "ACTIVE"}).encode())
+        return FakeResponse(mp4)
+    monkeypatch.setattr(video_generator.urllib.request, "urlopen", fake_urlopen)
+    assert video_generator._download_video_file("abc-123", "test-key") == mp4
+    assert len(calls) == 2
+    assert calls[1].endswith("/files/abc-123:download?alt=media")
