@@ -142,3 +142,6 @@ The admin comments analyzer loads 50 comments per page from the official YouTube
 
 ### Manual YouTube comment review
 Admins can assign an internal review status (Pending, Reviewed, Follow-up, Resolved) and save a private note in SINTU's SQLite database. The state is keyed by YouTube comment ID and is shown again when comments are loaded. This is an internal workflow only: it does not delete, hide, approve, report, or reply to comments on YouTube.
+
+
+Community review queue controls: admins can filter loaded comments by category and internal review status, search comment text/author/private notes, and sort by newest, likes, or possible-spam heuristic. CSV export uses the same active filters and sort order. These are internal triage controls; YouTube-side moderation remains manual and separate.
