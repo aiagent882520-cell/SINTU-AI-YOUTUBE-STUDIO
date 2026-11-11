@@ -93,7 +93,7 @@ def _make_frame(path: Path, title: str, scene: str, index: int, total: int,
             image = canvas.convert("RGBA")
     else:
         image = Image.new("RGBA", (width, height), (16, 24, 39, 255))
-    watermark = _make_watermark_image(width=max(240, int(width * 0.34)), height=max(58, int(width * 0.08)))
+    watermark = _make_watermark_image(width=max(180, int(width * 0.22)), height=max(44, int(width * 0.05)))
     margin = max(18, int(width * 0.025))
     image.alpha_composite(watermark, (width - watermark.width - margin, height - watermark.height - margin))
     image.convert("RGB").save(path, format="PNG")
@@ -296,7 +296,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             work = Path(temp)
             command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
             brand_path = work / "sintu-watermark.png"
-            _make_watermark_image(width=max(240, int(width * 0.34)), height=max(58, int(width * 0.08))).save(brand_path, format="PNG")
+            _make_watermark_image(width=max(180, int(width * 0.22)), height=max(44, int(width * 0.05))).save(brand_path, format="PNG")
             for path in video_paths:
                 command += ["-i", str(path)]
 
