@@ -26,8 +26,9 @@ jobs:
       - name: Ensure FFmpeg is available for media integration tests
         run: |
           if ! command -v ffmpeg >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y ffmpeg
+            # Runner images already provide apt package indexes. Avoid a full
+            # apt-get update on every commit; install only the missing package.
+            sudo apt-get install -y --no-install-recommends ffmpeg
           fi
           ffmpeg -version
       - name: Install dependencies
