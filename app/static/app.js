@@ -234,6 +234,7 @@ async function loadYouTubeComments(loadMore=false){
 let youtubeSavedReviewsOffset=0;
 let youtubeSavedReviewsTotal=0;
 let youtubeSavedReviewsItems=[];
+let youtubeSavedReviewSelectedIds=new Set();
 async function loadYouTubeSavedReviews(loadMore=false){
  const list=$("youtubeSavedReviewsList"),notice=$("youtubeSavedReviewsNotice"),more=$("youtubeSavedReviewsMore");
  if(!list||!notice)return;
@@ -256,9 +257,10 @@ async function loadYouTubeSavedReviews(loadMore=false){
   list.innerHTML=youtubeSavedReviewsItems.map((item,index)=>{
    const status=item.review_status||"pending";
    const option=value=>'<option value="'+value+'"'+(status===value?" selected":"")+'>'+({pending:"Pending",reviewed:"Reviewed",follow_up:"Follow-up",resolved:"Resolved"}[value])+'</option>';
-   return '<div class="admin-row" data-saved-review-index="'+index+'"><strong>'+analyticsEscape(item.author||"Unknown author")+' · '+analyticsEscape(item.classification||"other")+'</strong><span>'+analyticsEscape(item.text||"Comment text not stored")+'</span><span>'+analyticsEscape(item.video_id)+' · '+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+'</span><label>Review status<select class="youtube-saved-review-status">'+["pending","reviewed","follow_up","resolved"].map(option).join("")+'</select></label><label>Internal review note<textarea class="youtube-saved-review-notes" rows="2" maxlength="1000">'+analyticsEscape(item.notes||"")+'</textarea></label><div class="button-row"><button class="secondary youtube-saved-review-save" type="button">Save changes</button><button class="secondary youtube-saved-review-history" type="button">View history</button></div><div class="muted youtube-saved-review-history-list" aria-live="polite"></div><span class="muted">Last reviewed: '+analyticsEscape(item.updated_at||"")+'</span></div>';
+   return '<div class="admin-row" data-saved-review-index="'+index+'"><label><input type="checkbox" class="youtube-saved-review-select" data-comment-id="'+analyticsEscape(item.comment_id)+'"'+(youtubeSavedReviewSelectedIds.has(item.comment_id)?" checked":"")+'> Select for bulk review</label><strong>'+analyticsEscape(item.author||"Unknown author")+' · '+analyticsEscape(item.classification||"other")+'</strong><span>'+analyticsEscape(item.text||"Comment text not stored")+'</span><span>'+analyticsEscape(item.video_id)+' · '+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+'</span><label>Review status<select class="youtube-saved-review-status">'+["pending","reviewed","follow_up","resolved"].map(option).join("")+'</select></label><label>Internal review note<textarea class="youtube-saved-review-notes" rows="2" maxlength="1000">'+analyticsEscape(item.notes||"")+'</textarea></label><div class="button-row"><button class="secondary youtube-saved-review-save" type="button">Save changes</button><button class="secondary youtube-saved-review-history" type="button">View history</button></div><div class="muted youtube-saved-review-history-list" aria-live="polite"></div><span class="muted">Last reviewed: '+analyticsEscape(item.updated_at||"")+'</span></div>';
   }).join("")||'<p class="muted">Saved review queue empty hai.</p>';
   if(more)more.hidden=youtubeSavedReviewsOffset>=youtubeSavedReviewsTotal;
+  updateYouTubeSavedReviewBulkControls();
   notice.textContent="Saved reviews: "+youtubeSavedReviewsItems.length+" / "+youtubeSavedReviewsTotal+".";
  }catch(e){notice.textContent=e.message;}
  finally{if(more)more.disabled=false;}
@@ -349,6 +351,49 @@ $("youtubeSavedReviewsSort")?.addEventListener("change",()=>loadYouTubeSavedRevi
 $("youtubeSavedReviewsSearchButton")?.addEventListener("click",()=>loadYouTubeSavedReviews(false));
 $("youtubeSavedReviewsSearch")?.addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();loadYouTubeSavedReviews(false);}});
 $("youtubeSavedReviewsMore")?.addEventListener("click",()=>loadYouTubeSavedReviews(true));
+function updateYouTubeSavedReviewBulkControls(){
+ const visible=youtubeSavedReviewsItems.map(item=>item.comment_id);
+ const selectVisible=$("youtubeSavedReviewsSelectVisible");
+ if(selectVisible){
+  selectVisible.checked=visible.length>0&&visible.every(id=>youtubeSavedReviewSelectedIds.has(id));
+  selectVisible.indeterminate=visible.some(id=>youtubeSavedReviewSelectedIds.has(id))&&!selectVisible.checked;
+ }
+ const count=$("youtubeSavedReviewsSelectedCount");
+ if(count)count.textContent=youtubeSavedReviewSelectedIds.size+" selected";
+ const apply=$("youtubeSavedReviewsBulkApply");
+ if(apply)apply.disabled=youtubeSavedReviewSelectedIds.size===0;
+}
+$("youtubeSavedReviewsList")?.addEventListener("change",event=>{
+ const checkbox=event.target.closest(".youtube-saved-review-select");
+ if(!checkbox)return;
+ if(checkbox.checked)youtubeSavedReviewSelectedIds.add(checkbox.dataset.commentId);
+ else youtubeSavedReviewSelectedIds.delete(checkbox.dataset.commentId);
+ updateYouTubeSavedReviewBulkControls();
+});
+$("youtubeSavedReviewsSelectVisible")?.addEventListener("change",event=>{
+ youtubeSavedReviewsItems.forEach(item=>{
+  if(event.target.checked)youtubeSavedReviewSelectedIds.add(item.comment_id);
+  else youtubeSavedReviewSelectedIds.delete(item.comment_id);
+ });
+ document.querySelectorAll(".youtube-saved-review-select").forEach(box=>{box.checked=event.target.checked;});
+ updateYouTubeSavedReviewBulkControls();
+});
+$("youtubeSavedReviewsBulkApply")?.addEventListener("click",async()=>{
+ const ids=Array.from(youtubeSavedReviewSelectedIds);
+ const status=$("youtubeSavedReviewsBulkStatus")?.value||"reviewed";
+ if(!ids.length)return;
+ const statusLabel={pending:"Pending",reviewed:"Reviewed",follow_up:"Follow-up",resolved:"Resolved"}[status];
+ if(!window.confirm(ids.length+" saved comments ko "+statusLabel+" mark karein? Yeh sirf SINTU ke internal records update karega; YouTube par koi action nahi hoga."))return;
+ const button=$("youtubeSavedReviewsBulkApply"),notice=$("youtubeSavedReviewsNotice");
+ button.disabled=true;notice.textContent="Bulk review save ho raha hai…";
+ try{
+  const result=await request("/api/admin/youtube/comments/reviews/bulk",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({comment_ids:ids,review_status:status})});
+  youtubeSavedReviewSelectedIds.clear();
+  await loadYouTubeSavedReviews(false);
+  notice.textContent=result.updated+" saved reviews updated to "+statusLabel+". YouTube par koi action nahi hua.";
+ }catch(e){notice.textContent=e.message;}
+ finally{button.disabled=youtubeSavedReviewSelectedIds.size===0;}
+});
 $("youtubeSavedReviewsList")?.addEventListener("click",async event=>{
  const row=event.target.closest(".admin-row");
  const historyButton=event.target.closest(".youtube-saved-review-history");
