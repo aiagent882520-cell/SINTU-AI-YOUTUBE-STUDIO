@@ -1546,6 +1546,25 @@ def test_youtube_comment_review_assignment_missing_id_is_atomic(tmp_path, monkey
     assert saved["assigned_to"] == ""
 
 
+def test_youtube_comment_follow_up_due_inbox_excludes_resolved_and_future(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    for cid,due,status in [
+        ("inbox-overdue","2026-11-09","pending"),
+        ("inbox-today","2026-11-11","follow_up"),
+        ("inbox-resolved","2026-11-10","resolved"),
+        ("inbox-future","2026-11-12","pending"),
+    ]:
+        payload={"comment_id":cid,"video_id":"abcdefghijk","review_status":status,
+                 "follow_up_at":due,"assigned_to":"Community Team","text":"Please review"}
+        assert client.post("/api/admin/youtube/comments/review",json=payload).status_code==200
+    result=client.get("/api/admin/youtube/comments/reviews/follow-ups/due?as_of=2026-11-11").json()
+    assert result["total"]==2
+    assert {item["comment_id"]:item["due_state"] for item in result["items"]}=={
+        "inbox-overdue":"overdue","inbox-today":"due_today"
+    }
+    assert client.get("/api/admin/youtube/comments/reviews/follow-ups/due?as_of=bad").status_code==422
+
+
 def test_youtube_comment_follow_up_summary_and_owner_workload(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     for cid,owner,due,status in [
