@@ -1898,3 +1898,20 @@ def test_production_project_schema_upgrades_existing_installation(tmp_path, monk
     with main.db() as conn:
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(production_projects)").fetchall()}
     assert {"last_task_id", "last_task_status", "last_task_updated_at"} <= columns
+
+
+def test_project_generation_marks_provider_missing_without_fake_output(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    created = client.post("/api/projects", json={
+        "name": "Provider pending", "brief": "Make a Hindi video.",
+        "format_id": "youtube-shorts", "language": "Hindi", "duration_seconds": 60
+    })
+    project_id = created.json()["project"]["id"]
+    def no_provider(prompt, workflow):
+        raise main.ProviderNotConfigured("No AI provider key configured.")
+    monkeypatch.setattr(main, "generate_text", no_provider)
+    response = client.post(f"/api/projects/{project_id}/generate", json={"workflow": "shorts"})
+    assert response.status_code == 503
+    saved = client.get(f"/api/projects/{project_id}").json()["project"]
+    assert saved["last_task_status"] == "Blocked"
+    assert saved["last_task_id"] is None
