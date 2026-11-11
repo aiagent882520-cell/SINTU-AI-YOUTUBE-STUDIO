@@ -1741,3 +1741,54 @@ def test_complete_production_catalog_and_project_studio(tmp_path, monkeypatch):
     assert "/static/production_studio.css" in page.text
     assert client.get("/static/production_studio.js").status_code == 200
     assert client.get("/static/production_studio.css").status_code == 200
+
+
+def test_production_projects_server_crud_export_and_validation(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    payload = {
+        "name": "Hindi Mystery Short",
+        "brief": "भारत की रहस्यमयी जगह पर तथ्य-जाँचा हुआ वीडियो बनाओ।",
+        "format_id": "youtube-shorts",
+        "language": "Hindi",
+        "duration_seconds": 60,
+    }
+    created = client.post("/api/projects", json=payload)
+    assert created.status_code == 201
+    project = created.json()["project"]
+    assert project["name"] == payload["name"]
+    assert project["owner_username"] == "local"
+    project_id = project["id"]
+
+    listing = client.get("/api/projects")
+    assert listing.status_code == 200
+    assert listing.json()["total"] == 1
+    assert listing.json()["projects"][0]["id"] == project_id
+
+    detail = client.get(f"/api/projects/{project_id}")
+    assert detail.status_code == 200
+    assert detail.json()["project"]["brief"] == payload["brief"]
+
+    changed = {**payload, "name": "Updated Mystery Short", "duration_seconds": 90}
+    updated = client.put(f"/api/projects/{project_id}", json=changed)
+    assert updated.status_code == 200
+    assert updated.json()["project"]["version"] == 2
+    assert updated.json()["project"]["duration_seconds"] == 90
+
+    exported = client.get(f"/api/projects/{project_id}/export")
+    assert exported.status_code == 200
+    assert exported.json()["project"]["format"]["id"] == "youtube-shorts"
+    assert len(exported.json()["project"]["pipeline"]) == 8
+
+    invalid = client.post("/api/projects", json={**payload, "format_id": "unknown"})
+    assert invalid.status_code == 400
+    assert client.delete(f"/api/projects/{project_id}").json()["deleted"] is True
+    assert client.get(f"/api/projects/{project_id}").status_code == 404
+
+
+def test_production_project_input_limits_and_bad_ids(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    payload = {"name": "Bad", "brief": "Brief", "format_id": "youtube-shorts",
+               "language": "Hindi", "duration_seconds": 2}
+    assert client.post("/api/projects", json=payload).status_code == 422
+    assert client.get("/api/projects/not-an-id").status_code == 400
+    assert client.delete("/api/projects/not-an-id").status_code == 400
