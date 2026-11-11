@@ -66,6 +66,11 @@ def test_installable_app_shell(tmp_path, monkeypatch):
     assert worker.status_code == 200
     assert worker.headers["Service-Worker-Allowed"] == "/"
     assert client.get("/static/icon.svg").status_code == 200
+    assert client.get("/static/offline.html").status_code == 200
+    assert "/static/production_studio.js" in worker.text
+    assert "/static/production_studio.css" in worker.text
+    assert "sintu-studio-shell-v7" in worker.text
+    assert "/static/offline.html" in worker.text
 
 def test_agent_orchestration_catalog_and_teams(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
