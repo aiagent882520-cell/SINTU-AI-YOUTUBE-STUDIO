@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title SINTU AI STUDIO
+title SINTU AI YOUTUBE STUDIO
 
 where py >nul 2>nul
 if %errorlevel%==0 (
@@ -48,10 +48,19 @@ python scripts\bootstrap_local.py
 if errorlevel 1 goto failed
 
 echo.
-echo SINTU AI STUDIO is starting at http://127.0.0.1:8000
+set "HOST=127.0.0.1"
+if /i "%SINTU_ALLOW_LAN%"=="true" (
+  set "HOST=0.0.0.0"
+  echo.
+  echo LAN mode enabled. Open the PC IPv4 address on another device on the same Wi-Fi:
+  ipconfig | findstr /i "IPv4"
+  echo Allow Python through Windows Firewall only on your trusted private network.
+)
+echo.
+echo SINTU AI YOUTUBE STUDIO is starting on port 8000.
 echo Keep this window open while using the studio.
 start "" cmd /c "timeout /t 3 /nobreak >nul & start http://127.0.0.1:8000"
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn app.main:app --host %HOST% --port 8000
 goto end
 
 :failed
