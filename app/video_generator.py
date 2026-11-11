@@ -143,10 +143,14 @@ def _extract_video_file_id(payload: dict) -> str | None:
 
 def _download_video_file(file_id: str, api_key: str) -> bytes:
     status_url = f"https://generativelanguage.googleapis.com/v1beta/files/{file_id}"
-    for _ in range(120):
+    deadline = time.monotonic() + 600
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise VideoGenerationFailed("Gemini video file processing timeout (10 minutes).")
         status_request = urllib.request.Request(status_url, headers={"x-goog-api-key": api_key})
         try:
-            with urllib.request.urlopen(status_request, timeout=30) as response:
+            with urllib.request.urlopen(status_request, timeout=min(30, remaining)) as response:
                 file_info = json.loads(response.read(64 * 1024).decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read(1000).decode("utf-8", "replace")
@@ -158,9 +162,9 @@ def _download_video_file(file_id: str, api_key: str) -> bytes:
             break
         if state == "FAILED":
             raise VideoGenerationFailed("Gemini video file processing failed.")
-        time.sleep(5)
-    else:
-        raise VideoGenerationFailed("Gemini video file processing timeout (10 minutes).")
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            time.sleep(min(5, remaining))
 
     download_url = f"https://generativelanguage.googleapis.com/v1beta/files/{file_id}:download?alt=media"
     download_request = urllib.request.Request(download_url, headers={"x-goog-api-key": api_key})
