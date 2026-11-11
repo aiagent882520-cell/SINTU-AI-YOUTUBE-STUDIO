@@ -118,7 +118,7 @@ def _save_step(run_id: str, sequence: int, role: str, step_type: str,
 def _checker_payload(text: str) -> dict:
     """Require machine-readable verdicts and evidence; fail closed on ambiguity."""
     candidate = (text or "").strip()
-    match = re.search(r"\\{[\\s\\S]*\\}", candidate)
+    match = re.search(r"\{[\s\S]*\}", candidate)
     if match:
         try:
             data = json.loads(match.group(0))
