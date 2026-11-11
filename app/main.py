@@ -600,7 +600,7 @@ def admin_integrations():
         "paid_media_generation": {"status": "enabled" if paid_media and media_token else "disabled", "provider_keys_present": {"openai": bool(os.getenv("OPENAI_API_KEY")), "gemini": bool(os.getenv("GEMINI_API_KEY")), "stability": bool(os.getenv("STABILITY_API_KEY"))}},
         "youtube_publishing": {"status": "connected" if _youtube_connection() else ("needs_credentials" if not (_youtube_config()["client_id"] and _youtube_config()["client_secret"] and _youtube_config()["redirect_uri"] and _youtube_config()["encryption_key"]) else "not_connected"), "note": "Google OAuth channel connection and manual approved MP4 upload endpoints are available; server credentials required."},
         "social_publishing": {"status": "connected" if _meta_connection() else ("needs_credentials" if not (_meta_config()["app_id"] and _meta_config()["app_secret"] and _meta_config()["redirect_uri"] and _meta_config()["encryption_key"]) else "not_connected"), "note": "Meta OAuth: Facebook Page video upload and Instagram Reels (public HTTPS video URL) are available; server app credentials and Meta permissions required."},
-        "analytics": {"status": "not_connected", "note": "Channel analytics connection not implemented."},
+        "analytics": {"status": "ready" if _youtube_connection() else "needs_youtube_connection", "endpoint": "/api/admin/youtube/analytics", "note": "Official YouTube Analytics API integration is implemented. Connect the channel and grant analytics scopes; estimated revenue additionally requires YPP eligibility and monetary permission."},
         "other_text_providers": {"status": "not_connected", "providers": ["Claude", "DeepSeek", "GLM", "Doubao", "Kimi"]}
     }
 

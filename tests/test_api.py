@@ -1090,7 +1090,11 @@ def test_admin_provider_settings_persist_and_never_expose_secrets(tmp_path, monk
     assert changed.json()["selected_provider"] == "gemini"
     assert client.get("/api/providers").json()["selected"] == "gemini"
     assert client.patch("/api/admin/provider-settings", json={"selected_provider":"claude"}).status_code == 422
-    assert client.get("/api/admin/integrations").status_code == 200
+    integrations = client.get("/api/admin/integrations")
+    assert integrations.status_code == 200
+    assert integrations.json()["analytics"]["status"] == "needs_youtube_connection"
+    assert integrations.json()["analytics"]["endpoint"] == "/api/admin/youtube/analytics"
+    assert "integration is implemented" in integrations.json()["analytics"]["note"].lower()
     client.post("/api/auth/logout")
     assert client.get("/api/admin/provider-settings").status_code == 401
 
