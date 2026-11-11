@@ -13,6 +13,7 @@
   <title>SINTU AI STUDIO — Creator Workspace</title>
   <link rel="manifest" href="/static/manifest.json">
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/production_studio.css">
 </head>
 <body>
   <header class="top">
@@ -324,8 +325,21 @@
       </div>
     </section>
     <p class="foot">AI generation ke liye server par OpenAI ya Gemini API key zaroori hai. API usage par provider charges lag sakte hain. Keys ko GitHub ya chat mein share na karein. Text package generate hona video render, upload ya publish hone ke barabar nahi hai.</p>
-  </main>
+  <section class="panel production-studio" id="productionStudio">
+ <div class="panel-head"><div><h2>Complete Production Studio</h2><p>Video formats, end-to-end pipeline aur reusable project briefs — API keys ke bina planning aur project setup.</p></div><span class="status">Local-first</span></div>
+ <p id="catalogNotice" class="muted" role="status"></p>
+ <div class="production-grid">
+  <div><label for="formatSearch">Video format search</label><input id="formatSearch" placeholder="Shorts, documentary, 3D, avatar..."><label for="formatCategory">Category</label><select id="formatCategory"><option value="">All categories</option><option>Short-form</option><option>Long-form</option><option>Promotion</option><option>Social</option><option>Learning</option><option>Animation</option><option>Avatar</option><option>Creator</option><option>Commercial</option><option>Music</option><option>Basic video</option><option>Storytelling</option><option>Information</option></select></div>
+  <div><label>Selected format</label><div id="formatDetail" class="format-detail">Loading…</div><label for="presetSelect">Ready project preset</label><select id="presetSelect"><option value="mystery-short">Hindi Mystery Short</option><option value="documentary">Documentary Starter</option><option value="faceless">Faceless Explainer</option><option value="course">Course Lesson</option><option value="product-ad">Product Promo</option></select></div>
+ </div>
+ <div id="formatCards" class="format-grid"></div><h3>End-to-end production pipeline</h3><div id="pipelineCards" class="pipeline-grid"></div>
+ <h3>Project brief builder</h3><div class="production-grid"><div><label for="projectName">Project name</label><input id="projectName" value="My SINTU Video Project"><label for="projectLanguage">Language</label><input id="projectLanguage" value="Hindi"><label for="projectDuration">Target duration (seconds)</label><input id="projectDuration" type="number" min="5" max="7200" value="60"></div><div><label for="projectTopic">Topic / complete brief</label><textarea id="projectTopic" rows="7" placeholder="Video ka topic, audience, style aur message likhein..."></textarea></div></div>
+ <div class="actions"><button id="saveProjectDraft" type="button">Save project draft</button><button id="exportProjectBrief" class="secondary" type="button">Export project brief JSON</button></div><p id="draftNotice" role="status" class="muted"></p><h3>Saved local drafts</h3><div id="localDrafts" class="draft-grid"></div>
+ <p class="muted small-note">Drafts isi browser/device mein save hote hain. AI generation, cloud sync, avatar/true 2D-3D rendering aur public publishing ke liye baad mein provider keys, rendering engines aur platform approvals add honge.</p>
+</section>
+</main>
   <script src="/static/app.js"></script>
+  <script src="/static/production_studio.js"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
