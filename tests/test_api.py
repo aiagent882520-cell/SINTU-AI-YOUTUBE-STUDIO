@@ -1979,3 +1979,12 @@ def test_project_task_output_is_available_only_to_project_owner(tmp_path, monkey
     assert output.json()["task"]["output"] == "Owner-only generated package"
     assert client.get(f"/api/projects/{project_id}/task-output",
                       headers={"x-test-owner": "different-user"}).status_code == 404
+
+
+def test_production_projects_reject_whitespace_only_fields(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    payload = {"name": "   ", "brief": "   ", "format_id": "youtube-shorts", "language": "Hindi", "duration_seconds": 60}
+    assert client.post("/api/projects", json=payload).status_code == 400
+    valid = {**payload, "name": "Project", "brief": "Brief"}
+    project_id = client.post("/api/projects", json=valid).json()["project"]["id"]
+    assert client.put(f"/api/projects/{project_id}", json={**valid, "language": "   "}).status_code == 400
