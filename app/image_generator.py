@@ -52,6 +52,8 @@ def generate_image(prompt: str, kind: str = "scene", aspect: str = "portrait") -
     if not prompt or len(prompt) > 3000:
         raise ValueError("Image prompt must contain 1 to 3000 characters.")
     size = {"portrait": "1024x1536", "landscape": "1536x1024", "square": "1024x1024"}[aspect]
+    if kind == "scene":
+        prompt += " Clean text-free video frame: no text, no letters, no words, no subtitles, no captions, no logo, no watermark. The final SINTU AI YOUTUBE STUDIO watermark is added by the renderer."
     if kind == "thumbnail" and aspect != "landscape":
         raise ValueError("YouTube thumbnails must use landscape aspect ratio.")
     if status["local_available"]:
