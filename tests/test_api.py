@@ -1356,6 +1356,34 @@ def test_youtube_comments_paginates_with_youtube_page_token(tmp_path, monkeypatc
     assert response.json()["next_page_token"] == "NEXT_TOKEN"
 
 
+def test_youtube_comment_review_is_saved_and_returned(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    from app import main as app_main
+    payload = {"comment_id":"comment-123","video_id":"abcdefghijk","review_status":"follow_up","notes":"Check context before replying"}
+    saved = client.post("/api/admin/youtube/comments/review", json=payload)
+    assert saved.status_code == 200
+    assert saved.json()["saved"] is True
+    monkeypatch.setattr(app_main, "_youtube_access_token", lambda: "test-token")
+    monkeypatch.setattr(app_main, "_youtube_connection", lambda: {"channel_id":"UC123","channel_title":"Test Channel"})
+    def fake_request(url, data=None, headers=None, method=None):
+        body = {"items":[{"snippet":{"topLevelComment":{"id":"comment-123","snippet":{"authorDisplayName":"A","textDisplay":"Please explain","videoId":"abcdefghijk","likeCount":0}}}}]}
+        return 200, {}, json.dumps(body).encode()
+    monkeypatch.setattr(app_main, "_youtube_request", fake_request)
+    response = client.get("/api/admin/youtube/comments")
+    assert response.status_code == 200
+    comment = response.json()["comments"][0]
+    assert comment["review_status"] == "follow_up"
+    assert comment["review_notes"] == "Check context before replying"
+
+
+def test_youtube_comment_review_rejects_invalid_status(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.post("/api/admin/youtube/comments/review", json={
+        "comment_id":"comment-123","video_id":"abcdefghijk","review_status":"delete","notes":"No"
+    })
+    assert response.status_code == 422
+
+
 def test_youtube_comments_requires_connected_channel(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     from app import main as app_main
