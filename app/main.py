@@ -32,6 +32,7 @@ from .blender_renderer import BLENDER_DIR, blender_status, render_scene, Blender
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
 from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, RendererUnavailable, RenderFailed, OUTPUT_DIR
+from .format_rendering import all_format_render_profiles, format_render_profile
 from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable, VoiceGenerationFailed, AUDIO_DIR
 from .image_generator import generate_image, image_status, ImageUnavailable, ImageGenerationFailed, IMAGE_DIR
 from .music_generator import generate_music, music_status, MusicUnavailable, MusicGenerationFailed
@@ -3038,6 +3039,20 @@ def render_video(payload: RenderInput):
         raise HTTPException(status_code=502, detail=f"Video render failed: {exc}")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/rendering/formats")
+def rendering_format_capabilities():
+    """Return truthful export capabilities for each catalogued video format."""
+    return all_format_render_profiles()
+
+
+@app.get("/api/rendering/formats/{format_id}")
+def rendering_format_profile(format_id: str):
+    try:
+        return format_render_profile(format_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Unknown video format.") from None
 
 
 @app.get("/api/video/capabilities")
