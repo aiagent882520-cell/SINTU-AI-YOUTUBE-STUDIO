@@ -1363,6 +1363,59 @@ def youtube_channel_analytics(
     }
 
 
+@app.get("/api/admin/youtube/retention")
+def youtube_video_retention(
+    video_id: str = Query(..., min_length=11, max_length=20, regex=r"^[A-Za-z0-9_-]+$"),
+    start_date: str = Query(default="", max_length=10),
+    end_date: str = Query(default="", max_length=10),
+):
+    """Return official audience-retention curve for one YouTube video."""
+    today = datetime.now(timezone.utc).date()
+    default_end = today - timedelta(days=1)
+    default_start = default_end - timedelta(days=27)
+    try:
+        start_value = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else default_start
+        end_value = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else default_end
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Dates YYYY-MM-DD format mein honi chahiye.") from None
+    if end_value < start_value or (end_value - start_value).days > 364:
+        raise HTTPException(status_code=422, detail="Date range valid hona chahiye aur maximum 365 din ka ho sakta hai.")
+    token = _youtube_access_token()
+    params = {
+        "ids": "channel==MINE", "startDate": start_value.isoformat(), "endDate": end_value.isoformat(),
+        "dimensions": "elapsedVideoTimeRatio",
+        "metrics": "audienceWatchRatio,relativeRetentionPerformance,startedWatching,stoppedWatching",
+        "filters": "video==" + video_id, "sort": "elapsedVideoTimeRatio", "maxResults": "200",
+    }
+    url = "https://youtubeanalytics.googleapis.com/v2/reports?" + urllib.parse.urlencode(params)
+    try:
+        _, _, body = _youtube_request(url, headers={"Authorization": "Bearer " + token})
+        report = json.loads(body.decode("utf-8"))
+        columns = [column.get("name", "") for column in report.get("columnHeaders", [])]
+        rows = [dict(zip(columns, row)) for row in report.get("rows", [])]
+    except HTTPException as exc:
+        if exc.status_code == 502:
+            raise HTTPException(status_code=424, detail="Audience retention data nahi mili. YouTube Analytics API, video ownership aur account permission check karein.") from None
+        raise
+    except (ValueError, KeyError, TypeError):
+        raise HTTPException(status_code=502, detail="YouTube audience-retention response samajh nahi aaya.") from None
+    points = [{
+        "elapsed_ratio": float(row.get("elapsedVideoTimeRatio", 0) or 0),
+        "audience_watch_ratio": float(row.get("audienceWatchRatio", 0) or 0),
+        "relative_retention_performance": float(row.get("relativeRetentionPerformance", 0) or 0),
+        "started_watching": int(row.get("startedWatching", 0) or 0),
+        "stopped_watching": int(row.get("stoppedWatching", 0) or 0),
+    } for row in rows]
+    return {
+        "source": "YouTube Analytics API", "video_id": video_id,
+        "video_url": "https://www.youtube.com/watch?v=" + urllib.parse.quote(video_id, safe=""),
+        "start_date": start_value.isoformat(), "end_date": end_value.isoformat(),
+        "available": bool(points), "points": points,
+        "note": "AudienceWatchRatio segment ko total video views ke muqable mein dikhata hai; rewind se 1 se zyada ho sakta hai. Relative retention 0–1 par similar-length videos se comparison hai."
+        if points else "Is video aur date range ke liye retention report abhi available nahi hai.",
+    }
+
+
 @app.post("/api/admin/youtube/reach/setup")
 def youtube_reach_setup():
     """Create the official daily channel reach report job for thumbnail impressions and CTR."""
