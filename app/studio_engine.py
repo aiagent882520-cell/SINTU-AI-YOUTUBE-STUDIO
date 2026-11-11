@@ -28,7 +28,7 @@ def ensure_schema():
         CREATE TABLE IF NOT EXISTS studio_runs (
           id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT NOT NULL,
           format_id TEXT NOT NULL, status TEXT NOT NULL, current_task_id TEXT,
-          plan_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+          plan_json TEXT NOT NULL, last_error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_studio_runs_owner ON studio_runs(owner, updated_at DESC);
         CREATE TABLE IF NOT EXISTS studio_run_tasks (
@@ -63,6 +63,10 @@ def ensure_schema():
         );
         CREATE INDEX IF NOT EXISTS idx_studio_render_queue ON studio_render_queue(owner, status, created_at);
         """)
+        try:
+            conn.execute("ALTER TABLE studio_runs ADD COLUMN last_error TEXT")
+        except sqlite3.OperationalError:
+            pass
 
 def _row(row):
     return dict(row) if row else None
@@ -301,3 +305,31 @@ def update_render_item(owner, item_id, status, result=None):
         conn.execute("UPDATE studio_render_queue SET status=?,result_json=?,updated_at=? WHERE id=? AND owner=?",
                      (status, json.dumps(result, ensure_ascii=False) if result is not None else None, now, item_id, owner))
     return next((item for item in list_render_queue(owner) if item["id"] == item_id), None)
+
+
+def set_run_status(owner, run_id, status, error=None):
+    ensure_schema()
+    allowed = {"queued", "in_progress", "paused", "revision_required", "awaiting_human_approval", "completed", "approval_rejected"}
+    if status not in allowed:
+        raise ValueError("Unsupported production run status.")
+    now = _now()
+    with _db() as conn:
+        cur = conn.execute("UPDATE studio_runs SET status=?,last_error=?,updated_at=? WHERE id=? AND owner=?",
+                           (status, error[:4000] if error else None, now, run_id, owner))
+    return get_run(owner, run_id) if cur.rowcount else None
+
+def start_run(owner, run_id):
+    ensure_schema()
+    now = _now()
+    with _db() as conn:
+        row = conn.execute("SELECT status,current_task_id FROM studio_runs WHERE id=? AND owner=?", (run_id, owner)).fetchone()
+        if not row:
+            return None
+        if not row["current_task_id"]:
+            return get_run(owner, run_id)
+        if row["status"] == "in_progress":
+            raise ValueError("Production run is already executing.")
+        if row["status"] in {"completed","awaiting_human_approval","approval_rejected"}:
+            raise ValueError("Production run is already at a final gate.")
+        conn.execute("UPDATE studio_runs SET status='in_progress',last_error=NULL,updated_at=? WHERE id=? AND owner=?", (now, run_id, owner))
+    return get_run(owner, run_id)
