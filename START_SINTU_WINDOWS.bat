@@ -36,7 +36,7 @@ if errorlevel 1 goto failed
 echo.
 echo SINTU AI STUDIO is starting at http://127.0.0.1:8000
 echo Keep this window open while using the studio.
-start "" "http://127.0.0.1:8000"
+start "" cmd /c "timeout /t 3 /nobreak >nul & start http://127.0.0.1:8000"
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 goto end
 
