@@ -40,3 +40,26 @@ def test_final_reviewer_preserves_fail_issues():
     result = _review_payload('{"decision":"FAIL","evidence":[],"issues":["copyright source missing"]}')
     assert result["decision"] == "FAIL"
     assert result["issues"] == ["copyright source missing"]
+
+
+
+def test_checker_rejects_pass_without_evidence():
+    result = _checker_payload('{"decision":"PASS","evidence":[],"issues":[]}')
+    assert result["decision"] == "FAIL"
+    assert "non-empty evidence" in result["issues"][0]
+
+
+def test_checker_rejects_pass_with_unresolved_issues():
+    result = _checker_payload('{"decision":"PASS","evidence":["script reviewed"],"issues":["copyright unclear"]}')
+    assert result["decision"] == "FAIL"
+    assert "non-empty evidence" in result["issues"][0]
+
+
+def test_checker_rejects_non_string_evidence():
+    result = _checker_payload('{"decision":"PASS","evidence":[true],"issues":[]}')
+    assert result["decision"] == "FAIL"
+
+
+def test_final_reviewer_rejects_pass_without_evidence():
+    result = _review_payload('{"decision":"PASS","evidence":[],"issues":[]}')
+    assert result["decision"] == "FAIL"
