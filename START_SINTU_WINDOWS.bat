@@ -37,6 +37,11 @@ python -m pip install -r requirements.txt
 if errorlevel 1 goto failed
 
 echo Preparing secure local login...
+where ffmpeg >nul 2>nul
+if errorlevel 1 echo WARNING: FFmpeg not found. MP4 export requires FFmpeg on PATH.
+where ollama >nul 2>nul
+if errorlevel 1 echo NOTE: Install Ollama and run ollama pull qwen2.5:3b for free local AI.
+echo Paid APIs remain locked until revenue and explicit approval.
 python scripts\bootstrap_local.py
 if errorlevel 1 goto failed
 
