@@ -14,8 +14,8 @@ class ComfyUIUnavailable(Exception):
 def _base_url():
     url = os.getenv("COMFYUI_BASE_URL", "http://127.0.0.1:8188").rstrip("/")
     parsed = urlparse(url)
-    if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
-        raise ComfyUIUnavailable("ComfyUI must use a local loopback HTTP address.")
+    if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost", "::1", "host.docker.internal"}:
+        raise ComfyUIUnavailable("ComfyUI must use localhost or the Docker host bridge.")
     return url
 
 def image_workflow_status():

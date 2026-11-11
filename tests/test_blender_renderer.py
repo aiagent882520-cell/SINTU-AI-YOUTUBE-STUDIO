@@ -23,3 +23,7 @@ def test_blender_scene_render_uses_local_executable_and_validated_json(tmp_path,
     assert result["format"] == "MP4 / H.264"
     assert "--background" in captured["command"]
     assert Path(captured["command"][-1]).is_file()
+
+
+def test_blender_embedded_script_has_valid_python_syntax():
+    compile(blender_renderer.BLENDER_SCRIPT, "<sintu-blender-script>", "exec")

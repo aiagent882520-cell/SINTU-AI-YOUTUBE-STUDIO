@@ -24,3 +24,11 @@ def test_comfyui_rejects_non_loopback_server(tmp_path, monkeypatch):
     status = comfyui_client.image_workflow_status()
     assert status["available"] is False
     assert "localhost" in status["reason"]
+
+
+def test_comfyui_allows_docker_host_bridge_for_local_service(tmp_path, monkeypatch):
+    workflow = tmp_path / "image.json"
+    workflow.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("COMFYUI_BASE_URL", "http://host.docker.internal:8188")
+    monkeypatch.setenv("COMFYUI_IMAGE_WORKFLOW_PATH", str(workflow))
+    assert comfyui_client.image_workflow_status()["available"] is True
