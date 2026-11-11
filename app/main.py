@@ -338,6 +338,16 @@ class CalendarItemInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=10000)
     scheduled_at: str = Field(min_length=20, max_length=40)
 
+class TimelineItemInput(BaseModel):
+    kind: str = Field(pattern=r"^(image|video)$")
+    asset_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    duration: int | None = Field(default=None, ge=2, le=12)
+    trim_start: float = Field(default=0, ge=0, le=600)
+    trim_end: float | None = Field(default=None, gt=0, le=600)
+    audio_volume: float = Field(default=0.25, ge=0, le=2)
+    transition: str = Field(default="cut", pattern=r"^(cut|fade)$")
+
+
 class RenderInput(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     scenes: list[str] = Field(min_length=1, max_length=25)
@@ -346,6 +356,7 @@ class RenderInput(BaseModel):
     image_ids: list[str] = Field(default_factory=list, max_length=25)
     video_ids: list[str] = Field(default_factory=list, max_length=25)
     timeline: list[str] = Field(default_factory=list, max_length=25)
+    timeline_items: list[TimelineItemInput] = Field(default_factory=list, max_length=25)
     audio_id: str | None = Field(default=None, max_length=32)
     subtitles: list[str] = Field(default_factory=list, max_length=25)
     music_id: str | None = Field(default=None, max_length=32)
@@ -2905,6 +2916,23 @@ def upload_music(payload: MusicUploadInput, media_token: str = Header(default=""
 def render_video(payload: RenderInput):
     title = payload.title.strip()
     scenes = [scene.strip() for scene in payload.scenes]
+    if payload.timeline and payload.timeline_items:
+        raise HTTPException(status_code=400, detail="Legacy timeline aur structured timeline_items ek saath nahi bhejein.")
+    timeline_entries = list(payload.timeline)
+    for entry in payload.timeline_items:
+        if entry.kind == "image":
+            if entry.duration is None:
+                raise HTTPException(status_code=400, detail="Structured image timeline item ke liye duration required hai.")
+            timeline_entries.append(f"image:{entry.asset_id}:{entry.duration}:{entry.transition}")
+        else:
+            if entry.duration is not None:
+                raise HTTPException(status_code=400, detail="Video timeline item duration ke bajay trim_start/trim_end use karein.")
+            if entry.trim_end is not None and entry.trim_end <= entry.trim_start:
+                raise HTTPException(status_code=400, detail="Video trim_end, trim_start se bada hona chahiye.")
+            end_value = "" if entry.trim_end is None else str(entry.trim_end)
+            timeline_entries.append(
+                f"video:{entry.asset_id}:{entry.trim_start}:{end_value}:{entry.audio_volume}:{entry.transition}"
+            )
     resolution = payload.resolution or "720x1280"
     if payload.format_id:
         try:
@@ -2922,9 +2950,9 @@ def render_video(payload: RenderInput):
         raise HTTPException(status_code=400, detail="Har scene ke liye exactly ek AI video ID dein.")
     if payload.video_ids and payload.image_ids:
         raise HTTPException(status_code=400, detail="AI video clips aur still-image storyboard ko ek render mein mix karna abhi supported nahi hai.")
-    if payload.timeline and (payload.image_ids or payload.video_ids):
+    if timeline_entries and (payload.image_ids or payload.video_ids):
         raise HTTPException(status_code=400, detail="Mixed timeline use karte waqt alag image_ids/video_ids fields khaali rakhein.")
-    if payload.timeline and len(payload.timeline) != len(scenes):
+    if timeline_entries and len(timeline_entries) != len(scenes):
         raise HTTPException(status_code=400, detail="Har timeline item ke liye ek scene description dein.")
     if payload.subtitles:
         raise HTTPException(status_code=400, detail="Video par subtitles, captions ya spoken-word text allowed nahi hai. Sirf SINTU AI YOUTUBE STUDIO watermark rahega.")
@@ -2973,10 +3001,10 @@ def render_video(payload: RenderInput):
         if not audio_path.is_file():
             raise HTTPException(status_code=404, detail="Voiceover audio not found.")
     try:
-        if payload.timeline:
+        if timeline_entries:
             timeline_items = []
             scene_transitions = []
-            for entry in payload.timeline:
+            for entry in timeline_entries:
                 video_with_volume = re.fullmatch(r"video:([a-f0-9]{32}):([^:]+):([^:]*):([^:]+):(cut|fade)", entry.strip())
                 video_trim = re.fullmatch(r"video:([a-f0-9]{32}):([^:]+):([^:]*):(cut|fade)", entry.strip())
                 video_legacy = re.fullmatch(r"video:([a-f0-9]{32}):0:(cut|fade)", entry.strip())
@@ -3263,7 +3291,7 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput):
         raise HTTPException(status_code=409, detail="Production run must pass all builder/checker and final reviewer gates before rendering.")
     if run["format_id"] != payload.format_id:
         raise HTTPException(status_code=400, detail="Render format must match the approved production run format.")
-    if not payload.image_ids and not payload.video_ids and not payload.timeline:
+    if not payload.image_ids and not payload.video_ids and not payload.timeline and not payload.timeline_items:
         raise HTTPException(status_code=400, detail="Final production render requires supplied scene images, AI video clips or a mixed media timeline; scene descriptions alone are not visuals.")
     rendered = render_video(payload)
     try:
