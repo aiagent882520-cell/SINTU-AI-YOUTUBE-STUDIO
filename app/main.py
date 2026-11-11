@@ -1386,7 +1386,8 @@ def youtube_channel_comments(limit: int = Query(default=50, ge=1, le=100)):
         raise HTTPException(status_code=502, detail="YouTube comments response samajh nahi aaya.") from None
 
     spam_patterns = [
-        r"\b(whatsapp|telegram)\b.{0,40}\b(contact|dm|message|join)\b",
+        r"\b(whatsapp|telegram)\b",
+        r"\b(guaranteed|double|risk[- ]free)\s+(profit|returns?|income)\b",
         r"\b(crypto|forex|investment)\b.{0,50}\b(profit|guaranteed|double|signals)\b",
         r"\b(subscribers?\s*for\s*subscribers?|sub4sub|follow\s*for\s*follow)\b",
         r"https?://|www\.",
