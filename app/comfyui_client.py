@@ -34,32 +34,58 @@ def _load_api_workflow(env_name, required_placeholders=None):
     for node_id, node in workflow.items():
         if not isinstance(node, dict) or not isinstance(node.get("class_type"), str) or not isinstance(node.get("inputs"), dict):
             return None, False, "API workflow node " + str(node_id) + " must contain class_type and inputs."
-    if "__SINTU_PROMPT__" not in json.dumps(workflow):
-        return None, False, "API workflow is missing the __SINTU_PROMPT__ placeholder."
+    required = required_placeholders or ("__SINTU_PROMPT__",)
+    serialized = json.dumps(workflow)
+    missing = [placeholder for placeholder in required if placeholder not in serialized]
+    if missing:
+        return None, False, "API workflow is missing required placeholders: " + ", ".join(missing)
     return workflow, True, None
 
 
 def _engine_status(env_name):
-    workflow, configured, reason = _load_api_workflow(env_name)
+    required = ("__SINTU_PROMPT__", "__SINTU_WIDTH__", "__SINTU_HEIGHT__")
+    if env_name == "COMFYUI_VIDEO_WORKFLOW_PATH":
+        required += ("__SINTU_FRAMES__", "__SINTU_FPS__")
+    workflow, configured, reason = _load_api_workflow(env_name, required)
     try:
         base = _base_url()
     except ComfyUIUnavailable:
         return {"available": False, "server_reachable": False, "workflow_configured": configured,
-                "workflow_valid": configured, "reason": "ComfyUI URL must use localhost or the Docker host bridge."}
+                "workflow_valid": configured, "nodes_verified": False, "missing_nodes": [],
+                "workflow_node_types": [], "reason": "ComfyUI URL must use localhost or the Docker host bridge."}
     if not configured:
         return {"available": False, "server_reachable": False, "workflow_configured": False,
-                "workflow_valid": False, "base_url": base, "reason": reason}
+                "workflow_valid": False, "nodes_verified": False, "missing_nodes": [],
+                "workflow_node_types": [], "base_url": base, "reason": reason}
     try:
         response = json.loads(_request(base + "/system_stats", timeout=2))
         reachable = isinstance(response, dict)
     except Exception:
         reachable = False
+    node_types = sorted({node["class_type"] for node in workflow.values()})
+    nodes_verified = False
+    missing_nodes = []
+    if reachable:
+        try:
+            object_info = json.loads(_request(base + "/object_info", timeout=10))
+            if isinstance(object_info, dict):
+                nodes_verified = True
+                missing_nodes = [node_type for node_type in node_types if node_type not in object_info]
+        except Exception:
+            nodes_verified = False
     if not reachable:
         reason = "ComfyUI server did not respond at the configured local URL."
-    return {"available": bool(configured and reachable), "server_reachable": reachable,
+    elif not nodes_verified:
+        reason = "ComfyUI is online, but its installed node types could not be verified."
+    elif missing_nodes:
+        reason = "ComfyUI is missing required workflow nodes: " + ", ".join(missing_nodes)
+    else:
+        reason = None
+    available = bool(configured and reachable and nodes_verified and not missing_nodes)
+    return {"available": available, "server_reachable": reachable,
             "workflow_configured": configured, "workflow_valid": configured,
-            "base_url": base, "reason": reason}
-
+            "nodes_verified": nodes_verified, "missing_nodes": missing_nodes,
+            "workflow_node_types": node_types, "base_url": base, "reason": reason}
 
 def image_workflow_status():
     return _engine_status("COMFYUI_IMAGE_WORKFLOW_PATH")
@@ -136,7 +162,7 @@ def generate_video_bytes(prompt, width, height, frames, fps=24, timeout_seconds=
     status = video_workflow_status()
     if not status["available"]:
         raise ComfyUIUnavailable("Free ComfyUI video workflow is not configured. Set COMFYUI_VIDEO_WORKFLOW_PATH to an API-format workflow JSON.")
-    workflow, valid, reason = _load_api_workflow("COMFYUI_VIDEO_WORKFLOW_PATH")
+    workflow, valid, reason = _load_api_workflow("COMFYUI_VIDEO_WORKFLOW_PATH", ("__SINTU_PROMPT__", "__SINTU_WIDTH__", "__SINTU_HEIGHT__", "__SINTU_FRAMES__", "__SINTU_FPS__"))
     if not valid:
         raise ComfyUIUnavailable(reason or "ComfyUI video workflow is invalid.")
     workflow = _replace_placeholders(workflow, prompt,
