@@ -245,3 +245,18 @@ def execute_run(run_id: str) -> None:
         _set_run(run_id, "blocked", error=str(exc))
     except Exception as exc:
         _set_run(run_id, "failed", error=f"Production runtime error: {type(exc).__name__}")
+
+
+def attach_render_result(run_id: str, render_result: dict[str, Any]) -> dict[str, Any]:
+    """Attach a separately rendered MP4 to a completed production package."""
+    run = get_run(run_id)
+    if not run:
+        raise ValueError("Production run not found.")
+    if run["status"] != "completed" or not isinstance(run.get("result"), dict):
+        raise ValueError("Only a completed, quality-approved production package can be rendered.")
+    result = dict(run["result"])
+    result["render"] = dict(render_result)
+    result["video_rendered"] = True
+    result["published"] = False
+    _set_run(run_id, "completed", current_role=None, result=result)
+    return get_run(run_id)
