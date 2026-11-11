@@ -41,7 +41,7 @@ def main() -> None:
     if not any(line.startswith("SINTU_COOKIE_SECURE=") for line in content.splitlines()):
         content = replace_or_add(content, "SINTU_COOKIE_SECURE", "false")
     ENV_FILE.write_text(content, encoding="utf-8")
-    print("SINTU AI STUDIO local configuration is ready.")
+    print("SINTU AI YOUTUBE STUDIO local configuration is ready.")
     if generated:
         print("\nSave these local login details securely; the password is stored only in your ignored .env file:")
         print("Admin username: " + next((line.split("=", 1)[1] for line in content.splitlines()
