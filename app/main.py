@@ -28,6 +28,7 @@ from .production_catalog import production_catalog
 from .studio_scope import agent_registry, production_plan, scope_summary
 from . import studio_engine
 from .policy import paid_upgrades_allowed
+from .blender_renderer import BLENDER_DIR, blender_status, render_scene
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
 from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, RendererUnavailable, RenderFailed, OUTPUT_DIR
@@ -833,6 +834,14 @@ def studio_production_plan(format_id: str):
 
 
 
+class BlenderRenderInput(BaseModel):
+    project_id: str = Field(min_length=32, max_length=32, pattern=r"^[a-f0-9]{32}$")
+    title: str = Field(min_length=1, max_length=100)
+    objects: list[dict] = Field(min_length=1, max_length=20)
+    duration_seconds: int = Field(default=8, ge=1, le=30)
+    resolution: str = Field(default="1280x720", max_length=12)
+    fps: int = Field(default=24, ge=24, le=60)
+
 class StudioRunInput(BaseModel):
     project_id: str = Field(min_length=32, max_length=32, pattern=r"^[a-f0-9]{32}$")
     format_id: str = Field(min_length=1, max_length=80)
@@ -877,6 +886,34 @@ def _studio_project_or_404(project_id: str, request: Request):
     if not row:
         raise HTTPException(status_code=404, detail="Project not found.")
     return dict(row)
+
+@app.get("/api/studio/blender/status")
+def studio_blender_status():
+    return blender_status()
+
+@app.post("/api/studio/blender/render", status_code=201)
+def studio_blender_render(payload: BlenderRenderInput, request: Request):
+    project = _studio_project_or_404(payload.project_id, request)
+    try:
+        result = render_scene(payload.title, payload.objects, payload.duration_seconds, payload.resolution, payload.fps)
+    except BlenderUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except BlenderRenderFailed as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    studio_engine.add_asset(_studio_owner(request), payload.project_id, "render", payload.title,
+                            result["url"], {"engine":"Blender","render_id":result["render_id"],"resolution":result["resolution"]})
+    return {"render":result,"project_id":project["id"]}
+
+@app.get("/api/blender-renders/{render_id}")
+def get_blender_render(render_id: str):
+    if not re.fullmatch(r"[a-f0-9]{32}", render_id):
+        raise HTTPException(status_code=400, detail="Invalid Blender render ID.")
+    path = BLENDER_DIR / render_id / (render_id + ".mp4")
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Blender render not found.")
+    return FileResponse(path, media_type="video/mp4", filename="sintu-3d-" + render_id + ".mp4")
 
 @app.get("/api/studio/summary")
 def studio_summary():
@@ -1120,6 +1157,7 @@ def capabilities():
             "gemini": providers["gemini"]["configured"],
         },
         "studio_scope": scope_summary(),
+        "blender_3d": blender_status(),
         "paid_upgrades_allowed": paid_upgrades_allowed(),
         "storyboard_renderer": {"available": bool(shutil.which("ffmpeg")), "output": "720x1280 MP4 with optional scene images, narration, uploaded music and captions"},
         "voiceover": voice_status(),
