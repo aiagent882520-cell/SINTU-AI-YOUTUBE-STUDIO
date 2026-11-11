@@ -103,7 +103,7 @@
       <select id="renderMotion"><option value="none">Static (no motion)</option><option value="slow-zoom-in">Slow cinematic zoom in</option><option value="slow-zoom-out">Slow cinematic zoom out</option></select>
       <label for="renderSubtitles">Burn-in subtitles (AI clip mode: har line ek clip; storyboard mode: har line ek scene; optional)</label>
       <textarea id="renderSubtitles" rows="3" placeholder="Scene 1 subtitle&#10;Scene 2 subtitle"></textarea>
-      <div class="actions"><button id="renderButton" type="button">Create MP4</button></div>
+      <div class="actions"><button id="renderButton" type="button">Create MP4 now</button><button id="queueRenderButton" class="secondary" type="button">Add to Render Queue</button><button id="executeRenderQueueButton" class="secondary" type="button">Run Queued Render</button></div><p id="renderQueueNotice" class="muted" role="status"></p>
       <p id="renderNotice" class="muted" role="status" aria-live="polite">Renderer availability checking…</p>
       <div id="renderResult" hidden><video id="renderVideo" controls playsinline style="width:100%;max-height:520px;background:#000;border-radius:12px"></video><p><a id="renderDownload" download="sintu-storyboard.mp4">Download MP4</a></p></div>
     </section>

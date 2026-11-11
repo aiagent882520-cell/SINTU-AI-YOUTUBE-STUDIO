@@ -1279,3 +1279,55 @@ $("blenderRenderButton")?.addEventListener("click",async()=>{
  finally{button.disabled=false;checkBlenderStudio();}
 });
 checkBlenderStudio();
+
+
+function currentStudioRenderPayload(){
+ const title=$("renderTitle").value.trim();
+ const scenes=$("renderScenes").value.split("\n").map(x=>x.trim()).filter(Boolean);
+ const timelineText=$("renderTimeline").value.trim();
+ return {
+  title,scenes,seconds_per_scene:Number($("sceneSeconds").value||4),
+  timeline:timelineText?timelineText.split("\n").map(x=>x.trim()).filter(Boolean):[],
+  image_ids:timelineText?[]:$("renderImageIds").value.split(",").map(x=>x.trim()).filter(Boolean),
+  video_ids:timelineText?[]:$("renderVideoIds").value.split(",").map(x=>x.trim()).filter(Boolean),
+  audio_id:$("renderAudioId").value.trim()||null,music_id:$("renderMusicId").value.trim()||null,
+  music_volume:Number($("musicVolume").value||0.18),resolution:$("renderResolution").value,
+  fps:Number($("renderFps").value),quality:$("renderQuality").value,
+  transition:$("renderTransition").value,
+  motion:timelineText||$("renderVideoIds").value.trim()?"none":$("renderMotion").value,
+  subtitles:timelineText?timelineRows().map(x=>x.subtitle||""):$("renderSubtitles").value.split("\n").map(x=>x.trim()).filter(Boolean)
+ };
+}
+$("queueRenderButton")?.addEventListener("click",async()=>{
+ const notice=$("renderQueueNotice");
+ try{
+  const payload=currentStudioRenderPayload();
+  if(!payload.title||!payload.scenes.length)throw new Error("Title aur kam se kam ek scene likhein.");
+  let projectId=window.SINTU_ACTIVE_PROJECT_ID||"";
+  if(!projectId){
+   const format=payload.resolution.includes("1280")||payload.resolution.includes("1920x1080")?"youtube-long":"youtube-shorts";
+   const created=await request("/api/projects",{method:"POST",body:JSON.stringify({
+    name:payload.title,brief:payload.scenes.join("\n"),format_id:format,language:"Hindi",
+    duration_seconds:Math.max(1,payload.scenes.length*payload.seconds_per_scene)
+   })});
+   projectId=created.project.id;window.SINTU_ACTIVE_PROJECT_ID=projectId;
+  }
+  const queued=await request("/api/studio/render-queue",{method:"POST",body:JSON.stringify({project_id:projectId,payload})});
+  window.SINTU_QUEUED_RENDER_ID=queued.item.id;
+  notice.textContent="Render queued: "+queued.item.id+" · Run Queued Render dabakar FFmpeg render start karein.";
+ }catch(error){notice.textContent=error.message;}
+});
+$("executeRenderQueueButton")?.addEventListener("click",async()=>{
+ const notice=$("renderQueueNotice"),button=$("executeRenderQueueButton");
+ try{
+  let itemId=window.SINTU_QUEUED_RENDER_ID||"";
+  if(!itemId){const queue=await request("/api/studio/render-queue");const item=(queue.queue||[]).find(x=>x.status==="queued");if(item)itemId=item.id;}
+  if(!itemId)throw new Error("Koi queued render nahi mila.");
+  button.disabled=true;notice.textContent="Queued FFmpeg render chal raha hai…";
+  const result=await request("/api/studio/render-queue/"+encodeURIComponent(itemId)+"/execute",{method:"POST"});
+  $("renderVideo").src=result.render.url;$("renderDownload").href=result.render.url;$("renderResult").hidden=false;
+  notice.textContent="Render complete: "+result.render.resolution+" · "+result.render.duration_seconds+" sec.";
+  window.SINTU_QUEUED_RENDER_ID="";
+ }catch(error){notice.textContent=error.message;}
+ finally{button.disabled=false;}
+});
