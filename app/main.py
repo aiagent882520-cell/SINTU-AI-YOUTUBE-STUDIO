@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .agents import list_agents
+from .production_catalog import production_catalog
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
 from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, RendererUnavailable, RenderFailed, OUTPUT_DIR
@@ -576,6 +577,11 @@ def workflows():
         {"id": key, "name": key.replace("-", " ").title(), "description": value.splitlines()[0]}
         for key, value in WORKFLOW_GUIDES.items()
     ]}
+
+@app.get("/api/production-catalog")
+def production_catalog_api():
+    """Return API-independent production formats, presets and pipeline stages."""
+    return production_catalog()
 
 @app.get("/api/agents")
 def agents():
