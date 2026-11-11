@@ -58,7 +58,7 @@
       <p id="providerStatus" class="muted">AI provider status checking…</p>
     </section>
     <section class="panel">
-      <div class="panel-head"><div><h2>MP4 Storyboard Renderer</h2><p>AI clips ko order mein join karein, ya still-image storyboard ke saath voiceover, music, subtitles aur transitions se vertical MP4 banayein.</p></div></div>
+      <div class="panel-head"><div><h2>MP4 Storyboard Renderer</h2><p>AI clips ko order mein join karein, ya still-image storyboard ke saath voiceover, music aur transitions se text-free MP4 banayein.</p></div></div>
       <label for="renderTitle">Video title</label>
       <input id="renderTitle" maxlength="100" placeholder="Video ka title">
       <label for="renderScenes">Scenes (har line ek scene)</label>
@@ -71,12 +71,12 @@
       <label for="renderTimeline">Mixed timeline order (optional; one item per line)</label>
       <textarea id="renderTimeline" hidden></textarea>
       <div class="actions"><button id="timelinePreviewPlay" type="button">Play full sequence preview</button><button id="timelinePreviewStop" type="button" class="secondary">Stop preview</button></div><p id="timelinePreviewNotice" class="muted" role="status">Sequence preview source assets dikhata hai; final render transitions ka exact preview nahi hai.</p><div id="timelinePreviewStage" style="width:100%;background:#111;border-radius:10px;overflow:hidden"></div><div id="timelineEditor" class="timeline-editor" aria-live="polite"><p class="muted">Generated image/video assets yahan ordered timeline mein dikhenge.</p></div>
-      <p class="muted">Generated images aur AI video clips yahan preview honge. Move buttons se order badlein, remove karein, still image duration aur har scene ke baad transition chunein. Video clips ke start/end seconds trim aur har clip ka original audio volume alag set kar sakte hain. Har item ke liye scene description aur subtitle line matching rakhein.</p>
+      <p class="muted">Generated images aur AI video clips yahan preview honge. Move buttons se order badlein, remove karein, still image duration aur har scene ke baad transition chunein. Video clips ke start/end seconds trim aur har clip ka original audio volume alag set kar sakte hain. Har item ke liye scene description rakhein. Scene description video par print nahi hota.</p>
       <label for="renderImageIds">Scene image IDs (comma-separated, har scene ke liye ek; optional)</label>
       <input id="renderImageIds" placeholder="AI image result se image ID paste karein">
       <label for="renderVideoIds">AI video clip IDs (comma-separated, optional; generated clips ko order mein join karein)</label>
       <input id="renderVideoIds" placeholder="AI Video ID yahan automatically add hogi">
-      <p class="muted">AI clips generate karne par IDs yahan automatically add hongi. Clip mode mein original clip audio preserve hoti hai; optional voiceover/music mix aur har clip ke liye timed subtitles bhi add kar sakte hain. Fade ya cut transition select karein.</p>
+      <p class="muted">AI clips generate karne par IDs yahan automatically add hongi. Clip mode mein original clip audio preserve hoti hai; optional voiceover/music mix add kar sakte hain. Spoken words screen par nahi dikhaye jaate. Fade ya cut transition select karein.</p>
       <label for="renderAudioId">Voiceover audio ID (optional)</label>
       <input id="renderAudioId" placeholder="AI voiceover result se audio ID paste karein">
       <hr>
@@ -101,8 +101,9 @@
       <select id="renderTransition"><option value="fade">Fade</option><option value="cut">Cut</option></select>
       <label for="renderMotion">Cinematic motion effect</label>
       <select id="renderMotion"><option value="none">Static (no motion)</option><option value="slow-zoom-in">Slow cinematic zoom in</option><option value="slow-zoom-out">Slow cinematic zoom out</option></select>
-      <label for="renderSubtitles">Burn-in subtitles (AI clip mode: har line ek clip; storyboard mode: har line ek scene; optional)</label>
-      <textarea id="renderSubtitles" rows="3" placeholder="Scene 1 subtitle&#10;Scene 2 subtitle"></textarea>
+      <label for="renderSubtitles">Video text overlays</label>
+      <textarea id="renderSubtitles" rows="2" disabled placeholder="Disabled — video par koi subtitle/caption nahi aayega. Sirf SINTU watermark rahega."></textarea>
+      <p class="muted">Har final video par SINTU AI YOUTUBE STUDIO ka logo watermark automatically lagega. Subtitles, captions, title cards aur spoken-word text disabled hain.</p>
       <div class="actions"><button id="renderButton" type="button">Create MP4 now</button><button id="queueRenderButton" class="secondary" type="button">Add to Render Queue</button><button id="executeRenderQueueButton" class="secondary" type="button">Run Queued Render</button></div><p id="renderQueueNotice" class="muted" role="status"></p>
       <p id="renderNotice" class="muted" role="status" aria-live="polite">Renderer availability checking…</p>
       <div id="renderResult" hidden><video id="renderVideo" controls playsinline style="width:100%;max-height:520px;background:#000;border-radius:12px"></video><p><a id="renderDownload" download="sintu-storyboard.mp4">Download MP4</a></p></div>
