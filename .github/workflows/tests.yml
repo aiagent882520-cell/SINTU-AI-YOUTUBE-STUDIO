@@ -28,3 +28,5 @@ jobs:
         run: node --check app/static/app.js && node --check app/static/production_studio.js
       - name: Run tests
         run: pytest -q
+      - name: Build production Docker image
+        run: docker build -t sintu-ai-youtube-studio:ci .
