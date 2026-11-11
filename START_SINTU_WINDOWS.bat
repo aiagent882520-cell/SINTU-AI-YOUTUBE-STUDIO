@@ -16,6 +16,13 @@ if %errorlevel%==0 (
   set "PYTHON=python"
 )
 
+%PYTHON% -c "import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)"
+if errorlevel 1 (
+  echo Python 3.10 or newer is required. Update Python and run this file again.
+  pause
+  exit /b 1
+)
+
 if not exist ".venv\Scripts\python.exe" (
   echo Creating the local Python environment...
   %PYTHON% -m venv .venv
