@@ -1,4 +1,4 @@
-const CACHE_NAME = "sintu-studio-shell-v7";
+const CACHE_NAME = "sintu-studio-shell-v8";
 const APP_SHELL = [
   "/login",
   "/static/manifest.json",
