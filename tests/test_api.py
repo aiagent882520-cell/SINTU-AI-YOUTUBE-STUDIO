@@ -2332,3 +2332,47 @@ def test_production_run_render_rejects_unknown_run(tmp_path, monkeypatch):
         "title": "Hindi short", "scenes": ["Opening"], "format_id": "youtube-shorts"
     })
     assert response.status_code == 404
+
+
+
+def test_structured_mixed_timeline_api_contract(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    images_dir = tmp_path / "generated_images"
+    videos_dir = tmp_path / "generated_ai_videos"
+    images_dir.mkdir()
+    videos_dir.mkdir()
+    image_id = "a" * 32
+    video_id = "b" * 32
+    (images_dir / f"{image_id}.jpg").write_bytes(b"image")
+    (videos_dir / f"{video_id}.mp4").write_bytes(b"video")
+    monkeypatch.setattr(main, "IMAGE_DIR", images_dir)
+    monkeypatch.setattr(main, "AI_VIDEO_DIR", videos_dir)
+    captured = {}
+    def fake_mixed(items, title, scenes, **kwargs):
+        captured["items"] = items
+        return {"video_id": "c" * 32, "timeline_items": len(items), "timeline_order": [x["kind"] for x in items]}
+    monkeypatch.setattr(main, "render_mixed_timeline", fake_mixed)
+    response = client.post("/api/render", json={
+        "title": "Structured timeline", "scenes": ["Still", "Motion"],
+        "timeline_items": [
+            {"kind": "image", "asset_id": image_id, "duration": 5, "transition": "fade"},
+            {"kind": "video", "asset_id": video_id, "trim_start": 1.25, "trim_end": 4.5,
+             "audio_volume": 0.7, "transition": "cut"}
+        ]
+    })
+    assert response.status_code == 200
+    assert [item["kind"] for item in captured["items"]] == ["image", "video"]
+    assert captured["items"][0]["duration"] == 5
+    assert captured["items"][1]["trim_start"] == 1.25
+    assert captured["items"][1]["trim_end"] == 4.5
+    assert captured["items"][1]["audio_volume"] == 0.7
+
+
+def test_structured_timeline_rejects_invalid_video_trim(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.post("/api/render", json={
+        "title": "Invalid structured timeline", "scenes": ["Scene"],
+        "timeline_items": [{"kind": "video", "asset_id": "d" * 32,
+                             "trim_start": 4, "trim_end": 2}]
+    })
+    assert response.status_code == 422
