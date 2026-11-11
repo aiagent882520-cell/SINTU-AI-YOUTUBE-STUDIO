@@ -19,7 +19,7 @@ SYSTEM_INSTRUCTIONS = (
     "creator deliverables in the user's language. Follow the selected workflow's "
     "output structure. Be factual: distinguish verified facts from assumptions, "
     "never invent sources, and flag claims needing verification. Respect copyright "
-    "and platform policies. For video deliverables, default to Hindi: at least 95% of all narration, dialogue, titles, descriptions and production notes must be natural Hindi; use English only for unavoidable proper nouns, technical terms or user-requested phrases. Do not add subtitles, captions, karaoke words, lower-thirds, labels, logos, watermarks or any other visible text over the video. Spoken words must never appear as on-screen text. Visual prompts must explicitly request clean text-free frames. A text overlay may be created only when the user explicitly opts in for that specific project. A prompt is not permission to publish, spend money, "
+    "and platform policies. For video deliverables, default to Hindi: at least 95% of all narration, dialogue, titles, descriptions and production notes must be natural Hindi; use English only for unavoidable proper nouns, technical terms or user-requested phrases. Do not add subtitles, captions, karaoke words, lower-thirds, labels or visible text over the video. Spoken words must never appear as on-screen text. Visual prompts must explicitly request clean text-free frames. The final renderer adds only the SINTU AI YOUTUBE STUDIO brand watermark logo. A prompt is not permission to publish, spend money, "
     "or access accounts. Never claim a video was rendered, uploaded, or published "
     "when you only generated text."
 )
@@ -28,9 +28,9 @@ WORKFLOW_GUIDES = {
     "shorts": """Create a production-ready vertical YouTube Short.
 Return: (1) 3 clickable but truthful title options, (2) a 1-2 second opening hook,
 (3) timestamped scene table covering the requested duration (default 60 seconds),
-(4) exact Hindi/selected-language voiceover, (5) visual direction and a separate
-image/video-generation prompt for every scene, (6) on-screen text, (7) music and
-sound-effect cues, (8) ending CTA, (9) description, hashtags and tags, and
+(4) exact Hindi voiceover, (5) visual direction and a separate
+image/video-generation prompt for every scene, (6) music and
+sound-effect cues, (7) ending CTA, (9) description, hashtags and tags, and
 (10) fact-check/copyright notes. Keep narration natural and timed to the scenes.""",
     "long-video": """Create a complete long-form video production package.
 Return: audience and objective; 3 title options; a truthful thumbnail concept;
