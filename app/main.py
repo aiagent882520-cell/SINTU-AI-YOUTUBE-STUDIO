@@ -588,6 +588,10 @@ class ProductionProjectInput(BaseModel):
     duration_seconds: int = Field(default=60, ge=5, le=7200)
 
 
+class ProductionProjectGenerateInput(BaseModel):
+    workflow: str = Field(default="content", min_length=1, max_length=80)
+
+
 def _ensure_production_projects_table():
     with db() as conn:
         conn.execute("""
@@ -601,11 +605,18 @@ def _ensure_production_projects_table():
                 duration_seconds INTEGER NOT NULL,
                 status TEXT NOT NULL DEFAULT 'Draft',
                 version INTEGER NOT NULL DEFAULT 1,
+                last_task_id INTEGER,
+                last_task_status TEXT,
+                last_task_updated_at TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_production_projects_owner_updated ON production_projects(owner_username, updated_at DESC)")
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(production_projects)").fetchall()}
+        for column, declaration in (("last_task_id", "INTEGER"), ("last_task_status", "TEXT"), ("last_task_updated_at", "TEXT")):
+            if column not in columns:
+                conn.execute(f"ALTER TABLE production_projects ADD COLUMN {column} {declaration}")
 
 
 def _production_project_owner(request: Request) -> str:
@@ -700,6 +711,41 @@ def delete_production_project(project_id: str, request: Request):
     if cursor.rowcount != 1:
         raise HTTPException(status_code=404, detail="Project not found.")
     return {"deleted": True, "id": project_id}
+
+
+
+@app.post("/api/projects/{project_id}/generate")
+def generate_production_project(project_id: str, payload: ProductionProjectGenerateInput, request: Request):
+    if not re.fullmatch(r"[a-f0-9]{32}", project_id):
+        raise HTTPException(status_code=400, detail="Invalid project ID.")
+    _ensure_production_projects_table()
+    owner = _production_project_owner(request)
+    with db() as conn:
+        row = conn.execute(
+            "SELECT * FROM production_projects WHERE id=? AND owner_username=?",
+            (project_id, owner)
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    project = _production_project_dict(row)
+    if payload.workflow not in WORKFLOW_GUIDES:
+        raise HTTPException(status_code=400, detail="Unknown AI workflow.")
+    format_info = next((item for item in production_catalog()["formats"] if item["id"] == project["format_id"]), None)
+    prompt = (
+        project["brief"] + "\n\nProduction format: " + (format_info["name"] if format_info else project["format_id"]) +
+        "\nLanguage: " + project["language"] +
+        "\nTarget duration: " + str(project["duration_seconds"]) +
+        " seconds. Return a complete production package with scene-by-scene narration, visuals, on-screen text, sound cues, CTA, and publishing metadata."
+    )
+    task = generate(TaskInput(prompt=prompt, workflow=payload.workflow))
+    now = datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        conn.execute(
+            "UPDATE production_projects SET last_task_id=?,last_task_status=?,last_task_updated_at=?,updated_at=?,version=version+1 WHERE id=? AND owner_username=?",
+            (task["id"], task["status"], now, now, project_id, owner)
+        )
+        updated = conn.execute("SELECT * FROM production_projects WHERE id=?", (project_id,)).fetchone()
+    return {"project": _production_project_dict(updated), "task": task}
 
 
 @app.get("/api/projects/{project_id}/export")
