@@ -27,7 +27,7 @@ def test_checker_accepts_explicit_pass_with_evidence():
 def test_final_reviewer_rejects_ambiguous_free_text():
     result = _review_payload("Everything looks excellent, ship it!")
     assert result["decision"] == "FAIL"
-    assert "Reviewer did not return valid PASS/FAIL JSON." in result["issues"]
+    assert "Reviewer did not return valid PASS/FAIL JSON with evidence." in result["issues"]
 
 
 def test_final_reviewer_requires_explicit_pass_evidence():
