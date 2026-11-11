@@ -1316,6 +1316,32 @@ def test_youtube_analytics_rejects_invalid_date_range(tmp_path, monkeypatch):
 
 
 
+def test_youtube_video_retention_returns_curve(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "_youtube_access_token", lambda: "test-token")
+    captured = []
+    def fake_request(url, data=None, headers=None, method=None):
+        captured.append(url)
+        body = {"columnHeaders":[
+            {"name":"elapsedVideoTimeRatio"},{"name":"audienceWatchRatio"},
+            {"name":"relativeRetentionPerformance"},{"name":"startedWatching"},{"name":"stoppedWatching"}],
+            "rows":[[0.0,1.0,0.7,100,2],[0.5,0.6,0.4,1,30],[1.0,0.3,0.8,0,12]]}
+        return 200, {}, json.dumps(body).encode()
+    monkeypatch.setattr(main, "_youtube_request", fake_request)
+    response = client.get("/api/admin/youtube/retention?video_id=abcdefghijk")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["available"] is True
+    assert len(data["points"]) == 3
+    assert data["points"][1]["audience_watch_ratio"] == 0.6
+    assert "filters=video%3D%3Dabcdefghijk" in captured[0]
+
+
+def test_youtube_video_retention_rejects_invalid_video_id(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    assert client.get("/api/admin/youtube/retention?video_id=bad").status_code == 422
+
+
 def test_youtube_reach_returns_official_report_csv(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setattr(main, "_youtube_access_token", lambda: "test-token")
