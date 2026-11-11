@@ -578,6 +578,150 @@ def workflows():
         for key, value in WORKFLOW_GUIDES.items()
     ]}
 
+
+
+class ProductionProjectInput(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    brief: str = Field(min_length=1, max_length=12000)
+    format_id: str = Field(min_length=1, max_length=80)
+    language: str = Field(default="Hindi", min_length=1, max_length=40)
+    duration_seconds: int = Field(default=60, ge=5, le=7200)
+
+
+def _ensure_production_projects_table():
+    with db() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS production_projects (
+                id TEXT PRIMARY KEY,
+                owner_username TEXT NOT NULL,
+                name TEXT NOT NULL,
+                brief TEXT NOT NULL,
+                format_id TEXT NOT NULL,
+                language TEXT NOT NULL,
+                duration_seconds INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'Draft',
+                version INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_production_projects_owner_updated ON production_projects(owner_username, updated_at DESC)")
+
+
+def _production_project_owner(request: Request) -> str:
+    user = getattr(request.state, "user", None) or {}
+    return str(user.get("username") or "local")[:120]
+
+
+def _production_project_dict(row):
+    return dict(row) if row else None
+
+
+@app.get("/api/projects")
+def list_production_projects(request: Request, limit: int = Query(default=100, ge=1, le=200)):
+    _ensure_production_projects_table()
+    owner = _production_project_owner(request)
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM production_projects WHERE owner_username=? ORDER BY updated_at DESC LIMIT ?",
+            (owner, limit)
+        ).fetchall()
+    return {"projects": [_production_project_dict(row) for row in rows], "total": len(rows), "storage": "server"}
+
+
+@app.post("/api/projects", status_code=201)
+def create_production_project(payload: ProductionProjectInput, request: Request):
+    _ensure_production_projects_table()
+    valid_formats = {item["id"] for item in production_catalog()["formats"]}
+    if payload.format_id not in valid_formats:
+        raise HTTPException(status_code=400, detail="Unknown production format.")
+    now = datetime.now(timezone.utc).isoformat()
+    project_id = secrets.token_hex(16)
+    owner = _production_project_owner(request)
+    with db() as conn:
+        conn.execute("""
+            INSERT INTO production_projects
+            (id,owner_username,name,brief,format_id,language,duration_seconds,status,version,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,?,'Draft',1,?,?)
+        """, (project_id, owner, payload.name.strip(), payload.brief.strip(),
+              payload.format_id, payload.language.strip(), payload.duration_seconds, now, now))
+        row = conn.execute("SELECT * FROM production_projects WHERE id=?", (project_id,)).fetchone()
+    return {"project": _production_project_dict(row), "storage": "server"}
+
+
+@app.get("/api/projects/{project_id}")
+def get_production_project(project_id: str, request: Request):
+    if not re.fullmatch(r"[a-f0-9]{32}", project_id):
+        raise HTTPException(status_code=400, detail="Invalid project ID.")
+    _ensure_production_projects_table()
+    with db() as conn:
+        row = conn.execute(
+            "SELECT * FROM production_projects WHERE id=? AND owner_username=?",
+            (project_id, _production_project_owner(request))
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    return {"project": _production_project_dict(row)}
+
+
+@app.put("/api/projects/{project_id}")
+def update_production_project(project_id: str, payload: ProductionProjectInput, request: Request):
+    if not re.fullmatch(r"[a-f0-9]{32}", project_id):
+        raise HTTPException(status_code=400, detail="Invalid project ID.")
+    _ensure_production_projects_table()
+    valid_formats = {item["id"] for item in production_catalog()["formats"]}
+    if payload.format_id not in valid_formats:
+        raise HTTPException(status_code=400, detail="Unknown production format.")
+    now = datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        cursor = conn.execute("""
+            UPDATE production_projects
+            SET name=?,brief=?,format_id=?,language=?,duration_seconds=?,version=version+1,updated_at=?
+            WHERE id=? AND owner_username=?
+        """, (payload.name.strip(), payload.brief.strip(), payload.format_id,
+              payload.language.strip(), payload.duration_seconds, now,
+              project_id, _production_project_owner(request)))
+        if cursor.rowcount != 1:
+            raise HTTPException(status_code=404, detail="Project not found.")
+        row = conn.execute("SELECT * FROM production_projects WHERE id=?", (project_id,)).fetchone()
+    return {"project": _production_project_dict(row), "storage": "server"}
+
+
+@app.delete("/api/projects/{project_id}")
+def delete_production_project(project_id: str, request: Request):
+    if not re.fullmatch(r"[a-f0-9]{32}", project_id):
+        raise HTTPException(status_code=400, detail="Invalid project ID.")
+    _ensure_production_projects_table()
+    with db() as conn:
+        cursor = conn.execute(
+            "DELETE FROM production_projects WHERE id=? AND owner_username=?",
+            (project_id, _production_project_owner(request))
+        )
+    if cursor.rowcount != 1:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    return {"deleted": True, "id": project_id}
+
+
+@app.get("/api/projects/{project_id}/export")
+def export_production_project(project_id: str, request: Request):
+    if not re.fullmatch(r"[a-f0-9]{32}", project_id):
+        raise HTTPException(status_code=400, detail="Invalid project ID.")
+    _ensure_production_projects_table()
+    with db() as conn:
+        row = conn.execute(
+            "SELECT * FROM production_projects WHERE id=? AND owner_username=?",
+            (project_id, _production_project_owner(request))
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    project = _production_project_dict(row)
+    project["format"] = next((item for item in production_catalog()["formats"] if item["id"] == project["format_id"]), None)
+    project["pipeline"] = production_catalog()["pipeline"]
+    content = json.dumps({"project": project, "notice": "Project brief and production plan only; external AI generation and video rendering require configured providers/engines."}, ensure_ascii=False, indent=2)
+    return StreamingResponse(io.BytesIO(content.encode("utf-8")), media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="sintu-project-{project_id}.json"'})
+
+
 @app.get("/api/production-catalog")
 def production_catalog_api():
     """Return API-independent production formats, presets and pipeline stages."""
