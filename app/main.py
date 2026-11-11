@@ -28,7 +28,7 @@ from .production_catalog import production_catalog
 from .studio_scope import agent_registry, production_plan, scope_summary
 from . import studio_engine
 from .policy import paid_upgrades_allowed
-from .blender_renderer import BLENDER_DIR, blender_status, render_scene
+from .blender_renderer import BLENDER_DIR, blender_status, render_scene, BlenderUnavailable, BlenderRenderFailed
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
 from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, RendererUnavailable, RenderFailed, OUTPUT_DIR
