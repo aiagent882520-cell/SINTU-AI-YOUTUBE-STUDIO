@@ -14,6 +14,7 @@ SINTU AI STUDIO is a responsive web/PWA creator workspace. It currently provides
 ## AI provider
 
 - `AI_PROVIDER=local` (default): local Ollama model; no API key, subscription, or paid request.
+- Paid APIs are locked unless BOTH `SINTU_REVENUE_CONFIRMED=true` and `ALLOW_PAID_UPGRADES=true` are set by the owner after revenue and approval. Paid media generation also needs its separate enable flag.
 - `AI_PROVIDER=auto`: free-first and always resolves to local Ollama; it never silently falls back to a paid provider.
 - `AI_PROVIDER=openai` or `gemini`: optional paid integrations; enable only after revenue and explicit approval.
 - Default local model: `qwen2.5:3b`; configure `OLLAMA_MODEL` and `OLLAMA_BASE_URL` as needed.
@@ -34,7 +35,9 @@ If Ollama is not installed/running, generation displays setup guidance and does 
 - Existing 61-role registry retained for compatibility, plus 100+ specialist roles with a distinct independent checker role for every specialist.
 - All 60 approved video formats, 15 Studio Modules, format-specific role presets, 8 production stages and checker PASS/FAIL revision gates.
 - Free-first engine policy: Ollama, ComfyUI, Blender, FFmpeg, Piper and SQLite; no required paid API, subscription or cloud GPU.
-- New /api/studio/agents and /api/studio/production-plan/{format_id} endpoints expose the expanded registry and format-specific production plan.
+- Persistent /api/studio endpoints provide worker/checker production runs, PASS/FAIL revision gates, human approval, project memory, assets, version snapshots and a render queue.
+- Local-first provider guard prevents paid model/media calls until revenue is confirmed and the owner explicitly enables upgrades.
+- Local AI worker and independent checker use two separate Ollama requests per role pair; actual execution requires the local Ollama runtime.
 - The role registry separates every specialist from its checker. The current shared-model gateway is not a claim that all role workers are running as independent background processes; actual worker execution is reported separately.
 - Workflow-team API, platform capability API, and explicit provider/integration readiness reporting.
 - Basic browser security headers (CSP, frame protection, MIME sniffing protection, referrer and permissions policies).
@@ -224,3 +227,17 @@ Follow-up workload CSV export: the community review workload panel can download 
 5. Keep the command window open while using SINTU. FFmpeg is optional for video rendering; install it separately if local MP4 rendering is needed.
 
 - Generated task output is fetched through the project-owner-checked route `GET /api/projects/{project_id}/task-output`, rather than exposing another user's task by ID from the Production Studio card.
+
+
+## Full studio execution
+- Production Studio shows all 60 formats, 15 modules and every specialist/checker pair.
+- Save a project, then create a production run. Each worker task is queued in order and later tasks stay blocked until the independent checker passes the current task.
+- The local Execute button sends one request to the specialist and a separate request to its checker through Ollama. A failed checker sends the task back for revision; final completion requires explicit human approval.
+- Project memory, asset metadata, version snapshots and render queue are stored in the local SQLite database and scoped to the signed-in owner.
+- The render queue is a durable queue/metadata system; actual rendering is performed by the FFmpeg renderer when a render job is explicitly started. It is not represented as an always-running background worker.
+
+## Windows setup
+1. Run START_SINTU_WINDOWS.bat to create the virtual environment, install Python dependencies and start the dashboard.
+2. Install Ollama separately, then run `ollama pull qwen2.5:3b` in CMD. On an 8 GB RAM computer, use a small quantized model and keep expectations modest.
+3. Install FFmpeg and ensure `ffmpeg` is on PATH for MP4 export. Blender, ComfyUI and Piper can be installed later as needed.
+4. Keep `.env` private. API keys, OAuth credentials, paid models, cloud GPUs and subscriptions are not required to start the core studio.
