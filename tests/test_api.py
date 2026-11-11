@@ -2247,3 +2247,30 @@ def test_scene_image_prompts_are_text_free(tmp_path, monkeypatch):
     assert "no text" in captured["prompt"].lower()
     assert "no subtitles" in captured["prompt"].lower()
     assert "SINTU AI YOUTUBE STUDIO watermark" in captured["prompt"]
+
+
+
+def test_format_rendering_capability_api_lists_all_formats(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.get("/api/rendering/formats")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["format_count"] == 60
+    assert body["generic_export_ready_count"] == 56
+    assert body["specialized_pipeline_blocked_count"] == 4
+    assert len(body["profiles"]) == 60
+
+
+def test_format_rendering_profile_api_reports_vertical_shorts(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.get("/api/rendering/formats/youtube-shorts")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["default_resolution"] == "1080x1920"
+    assert body["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
+    assert body["burned_in_text"] is False
+
+
+def test_format_rendering_profile_api_rejects_unknown_format(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    assert client.get("/api/rendering/formats/not-real").status_code == 404
