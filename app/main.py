@@ -1200,7 +1200,7 @@ def capabilities():
         "studio_scope": scope_summary(),
         "blender_3d": blender_status(),
         "paid_upgrades_allowed": paid_upgrades_allowed(),
-        "storyboard_renderer": {"available": bool(shutil.which("ffmpeg")), "output": "720x1280 MP4 with optional scene images, narration, uploaded music and captions"},
+        "storyboard_renderer": {"available": bool(shutil.which("ffmpeg")), "output": "MP4 with scene images, narration, music, mandatory SINTU watermark and no text overlays"},
         "voiceover": voice_status(),
         "image_generation": image_status(),
         "ai_music_generation": music_status(),
