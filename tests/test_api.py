@@ -1939,6 +1939,13 @@ def test_windows_bootstrap_generates_secure_local_login_without_api_keys(tmp_pat
     capsys.readouterr()
     module.main()
     assert module.ENV_FILE.read_text(encoding="utf-8") == content
+    weak_env = tmp_path / "weak.env"
+    weak_env.write_text("SINTU_ADMIN_USERNAME=admin\\nSINTU_ADMIN_PASSWORD=short\\nSINTU_SESSION_SECRET=" + "a" * 64 + "\\n", encoding="utf-8")
+    module.ENV_FILE = weak_env
+    module.main()
+    upgraded = weak_env.read_text(encoding="utf-8")
+    assert "SINTU_ADMIN_PASSWORD=short" not in upgraded
+    assert len(next(line.split("=", 1)[1] for line in upgraded.splitlines() if line.startswith("SINTU_ADMIN_PASSWORD="))) >= 24
 
 
 def test_windows_launcher_is_in_repo_and_uses_bootstrap():
