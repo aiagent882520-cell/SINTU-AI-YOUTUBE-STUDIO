@@ -157,3 +157,6 @@ Admins can update the status and internal note of previously saved queue entries
 
 
 Review History / Audit Trail records each saved comment review creation and update with UTC timestamp, previous and new status, and whether the internal note changed. Admins can inspect the latest 100 events per saved comment from the queue. History stores change metadata rather than duplicating private note contents; it is an internal SINTU audit trail and does not reflect or trigger YouTube moderation actions.
+
+
+Bulk Community Review lets admins select up to 100 saved comments from the visible queue pages and apply one internal review status (Pending, Follow-up, Reviewed or Resolved). Every affected comment receives an audit-history event. The operation validates that every selected record exists before changing any record; if one is missing, no partial update is applied. A confirmation is shown before the bulk update. This feature never deletes, hides, approves or replies to comments on YouTube.
