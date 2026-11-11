@@ -451,11 +451,27 @@ $("youtubeSavedReviewsList")?.addEventListener("click",async event=>{
  }catch(e){notice.textContent=e.message;}
  finally{button.disabled=false;}
 });
+async function loadYouTubeFollowUpDueInbox(){
+ const box=$("youtubeSavedReviewsDueInbox");if(!box)return;
+ box.textContent="Due follow-ups load ho rahe hain…";
+ try{
+  const data=await request("/api/admin/youtube/comments/reviews/follow-ups/due?limit=50");
+  const items=data.items||[];
+  box.innerHTML='<strong>Action required · '+items.length+'</strong>'+items.map(item=>'<div class="admin-row"><strong>'+analyticsEscape(item.due_state==="overdue"?"OVERDUE":"DUE TODAY")+' · '+analyticsEscape(item.author||"Unknown author")+'</strong><span>'+analyticsEscape(item.text||"Comment text not stored")+'</span><span>Due: '+analyticsEscape(item.follow_up_at)+' · Owner: '+analyticsEscape(item.assigned_to||"Unassigned")+' · '+analyticsEscape(item.review_status)+'</span><button class="secondary youtube-followup-open" data-owner="'+analyticsEscape(item.assigned_to||"")+'" type="button">Open in saved queue</button></div>').join("")||'<p class="muted">Abhi koi overdue ya aaj due follow-up nahi hai.</p>';
+ }catch(e){box.textContent=e.message;}
+}
+$("youtubeSavedReviewsDueInbox")?.addEventListener("click",event=>{
+ const button=event.target.closest(".youtube-followup-open");if(!button)return;
+ const due=$("youtubeSavedReviewsDueFilter");if(due)due.value=button.closest(".admin-row")?.querySelector("strong")?.textContent.includes("OVERDUE")?"overdue":"today";
+ const owner=$("youtubeSavedReviewsOwnerFilter");if(owner)owner.value=button.dataset.owner||"";
+ loadYouTubeSavedReviews(false);
+});
 async function loadYouTubeFollowUpSummary(){
  const box=$("youtubeSavedReviewsWorkload");if(!box)return;
  box.textContent="Workload summary load ho raha hai…";
  try{
   const data=await request("/api/admin/youtube/comments/reviews/follow-ups/summary");
+  await loadYouTubeFollowUpDueInbox();
   const totals=data.totals||{};
   const owners=(data.owners||[]).map(row=>'<div>'+analyticsEscape(row.owner)+': '+Number(row.total||0)+' total · '+Number(row.overdue||0)+' overdue · '+Number(row.due_today||0)+' due today · '+Number(row.resolved||0)+' resolved</div>').join("");
   box.innerHTML='<strong>Follow-up workload</strong><div>'+Number(totals.total||0)+' total · '+Number(totals.overdue||0)+' overdue · '+Number(totals.due_today||0)+' due today · '+Number(totals.upcoming||0)+' upcoming · '+Number(totals.unscheduled||0)+' unscheduled · '+Number(totals.resolved||0)+' resolved</div><strong>Team workload</strong>'+ (owners||'<div>No assigned reviews yet.</div>');
