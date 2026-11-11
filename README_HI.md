@@ -284,6 +284,7 @@ Follow-up workload CSV export: the community review workload panel can download 
 ### 60 format render capability map
 - `GET /api/rendering/formats` सभी 60 catalog formats के export profiles, default resolution, FPS options, H.264 output, watermark policy और current capability limits देता है।
 - `GET /api/rendering/formats/{format_id}` किसी एक format का profile देता है।
+- `POST /api/render` में optional `format_id` देने पर उसी format की default resolution लागू होती है; 360°, VR, AR और virtual-production requests specialised renderer तैयार होने तक 501 के साथ रोकी जाती हैं।
 - Generic FFmpeg export केवल supplied scene images या MP4 clips को assemble करता है; यह अपने-आप AI scenes generate नहीं करता।
 - 360°, VR, AR और virtual-production formats को specialised pipeline बनने तक स्पष्ट रूप से blocked दिखाया जाता है। बाकी formats के लिए भी native generation को अभी ready नहीं बताया गया है।
 - 3D/film/hybrid formats में Blender optional native engine है; Blender installation और configured scene workflow जरूरी है।
