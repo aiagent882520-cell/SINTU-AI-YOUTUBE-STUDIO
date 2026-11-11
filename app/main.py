@@ -1568,7 +1568,7 @@ def list_youtube_comment_reviews(
 
 
 @app.get("/api/admin/youtube/comments/reviews/{comment_id}/history")
-def get_youtube_comment_review_history(comment_id: str = Query(default="", min_length=0, max_length=200)):
+def get_youtube_comment_review_history(comment_id: str):
     """Return internal status-change history for one saved comment."""
     if not comment_id.strip():
         raise HTTPException(status_code=422, detail="comment_id is required")
