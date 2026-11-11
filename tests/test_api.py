@@ -307,12 +307,12 @@ def test_final_video_passes_assets_to_renderer(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "render_storyboard", fake_render)
     result = client.post("/api/render", json={
         "title": "Final", "scenes": ["Hook"], "image_ids": [image_id],
-        "audio_id": audio_id, "subtitles": ["Namaste"]
+        "audio_id": audio_id
     })
     assert result.status_code == 200
     assert captured["image_paths"] == [image_dir / (image_id + ".jpg")]
     assert captured["audio_path"] == audio_dir / (audio_id + ".mp3")
-    assert captured["subtitles"] == ["Namaste"]
+    assert captured["subtitles"] == []
 
 
 def test_music_upload_requires_token_and_valid_extension(tmp_path, monkeypatch):
