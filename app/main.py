@@ -737,7 +737,16 @@ def generate_production_project(project_id: str, payload: ProductionProjectGener
         "\nTarget duration: " + str(project["duration_seconds"]) +
         " seconds. Return a complete production package with scene-by-scene narration, visuals, on-screen text, sound cues, CTA, and publishing metadata."
     )
-    task = generate(TaskInput(prompt=prompt, workflow=payload.workflow))
+    if len(prompt) > 10000:
+        raise HTTPException(status_code=400, detail="Brief bahut lamba hai. AI generation ke liye ise 9,000 characters se chhota karein.")
+    try:
+        task = generate(TaskInput(prompt=prompt, workflow=payload.workflow))
+    except HTTPException as exc:
+        if exc.status_code in (502, 503):
+            failed_at = datetime.now(timezone.utc).isoformat()
+            with db() as conn:
+                conn.execute("UPDATE production_projects SET last_task_status=?,last_task_updated_at=? WHERE id=? AND owner_username=?", ("Blocked" if exc.status_code == 503 else "Failed", failed_at, project_id, owner))
+        raise
     now = datetime.now(timezone.utc).isoformat()
     with db() as conn:
         conn.execute(
