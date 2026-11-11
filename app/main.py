@@ -269,6 +269,15 @@ def init_db():
             changed_at TEXT NOT NULL
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_youtube_comment_review_history_comment ON youtube_comment_review_history(comment_id,changed_at DESC)")
+        history_columns = {row["name"] for row in conn.execute("PRAGMA table_info(youtube_comment_review_history)").fetchall()}
+        for column, definition in {
+            "previous_assigned_to": "TEXT NOT NULL DEFAULT ''",
+            "new_assigned_to": "TEXT NOT NULL DEFAULT ''",
+            "previous_follow_up_at": "TEXT NOT NULL DEFAULT ''",
+            "new_follow_up_at": "TEXT NOT NULL DEFAULT ''",
+        }.items():
+            if column not in history_columns:
+                conn.execute(f"ALTER TABLE youtube_comment_review_history ADD COLUMN {column} {definition}")
         review_columns = {row["name"] for row in conn.execute("PRAGMA table_info(youtube_comment_reviews)").fetchall()}
         for column, definition in {
             "author": "TEXT NOT NULL DEFAULT ''",
@@ -276,6 +285,8 @@ def init_db():
             "published_at": "TEXT NOT NULL DEFAULT ''",
             "likes": "INTEGER NOT NULL DEFAULT 0",
             "classification": "TEXT NOT NULL DEFAULT 'other'",
+            "assigned_to": "TEXT NOT NULL DEFAULT ''",
+            "follow_up_at": "TEXT NOT NULL DEFAULT ''",
         }.items():
             if column not in review_columns:
                 conn.execute(f"ALTER TABLE youtube_comment_reviews ADD COLUMN {column} {definition}")
@@ -297,11 +308,19 @@ class YouTubeCommentReviewInput(BaseModel):
     published_at: str = Field(default="", max_length=40)
     likes: int = Field(default=0, ge=0, le=100000000)
     classification: str = Field(default="other", pattern=r"^(possible_spam|positive|negative|question|other)$")
+    assigned_to: str = Field(default="", max_length=120)
+    follow_up_at: str = Field(default="", max_length=40)
 
 
 class YouTubeCommentBulkReviewInput(BaseModel):
     comment_ids: list[str] = Field(min_length=1, max_length=100)
     review_status: str = Field(pattern=r"^(pending|reviewed|follow_up|resolved)$")
+
+
+class YouTubeCommentAssignmentInput(BaseModel):
+    comment_ids: list[str] = Field(min_length=1, max_length=100)
+    assigned_to: str = Field(max_length=120)
+    follow_up_at: str = Field(default="", max_length=40)
 
 
 class CalendarItemInput(BaseModel):
@@ -1502,7 +1521,7 @@ def save_youtube_comment_review(item: YouTubeCommentReviewInput):
     now = datetime.now(timezone.utc).isoformat()
     with db() as conn:
         previous = conn.execute(
-            "SELECT review_status,notes FROM youtube_comment_reviews WHERE comment_id=?",
+            "SELECT review_status,notes,assigned_to,follow_up_at FROM youtube_comment_reviews WHERE comment_id=?",
             (item.comment_id,),
         ).fetchone()
         event_type = "created" if previous is None else "updated"
@@ -1510,23 +1529,28 @@ def save_youtube_comment_review(item: YouTubeCommentReviewInput):
         note_changed = previous is not None and previous["notes"] != item.notes.strip()
         conn.execute(
             """INSERT INTO youtube_comment_reviews(
-                 comment_id,video_id,review_status,notes,updated_at,author,comment_text,published_at,likes,classification
-               ) VALUES(?,?,?,?,?,?,?,?,?,?)
+                 comment_id,video_id,review_status,notes,updated_at,author,comment_text,published_at,likes,classification,assigned_to,follow_up_at
+               ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT(comment_id) DO UPDATE SET video_id=excluded.video_id,
                  review_status=excluded.review_status,notes=excluded.notes,updated_at=excluded.updated_at,
                  author=excluded.author,comment_text=excluded.comment_text,published_at=excluded.published_at,
-                 likes=excluded.likes,classification=excluded.classification""",
+                 likes=excluded.likes,classification=excluded.classification,
+                 assigned_to=excluded.assigned_to,follow_up_at=excluded.follow_up_at""",
             (item.comment_id, item.video_id, item.review_status, item.notes.strip(), now,
-             item.author.strip(), item.text, item.published_at, item.likes, item.classification),
+             item.author.strip(), item.text, item.published_at, item.likes, item.classification,
+             item.assigned_to.strip(), item.follow_up_at.strip()),
         )
         conn.execute(
             """INSERT INTO youtube_comment_review_history(
-                 comment_id,video_id,event_type,previous_status,new_status,note_changed,changed_at
-               ) VALUES(?,?,?,?,?,?,?)""",
-            (item.comment_id,item.video_id,event_type,previous_status,item.review_status,int(note_changed),now),
+                 comment_id,video_id,event_type,previous_status,new_status,note_changed,changed_at,
+                 previous_assigned_to,new_assigned_to,previous_follow_up_at,new_follow_up_at
+               ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+            (item.comment_id,item.video_id,event_type,previous_status,item.review_status,int(note_changed),now,
+             previous["assigned_to"],item.assigned_to.strip(),previous["follow_up_at"],item.follow_up_at.strip()),
         )
     return {"saved": True, "comment_id": item.comment_id, "review_status": item.review_status,
             "notes": item.notes.strip(), "updated_at": now, "author": item.author.strip(),
+            "assigned_to": item.assigned_to.strip(), "follow_up_at": item.follow_up_at.strip(),
             "note": "Review SINTU mein save hua hai. YouTube comment par koi action nahi hua."}
 
 
@@ -1558,6 +1582,38 @@ def bulk_update_youtube_comment_reviews(item: YouTubeCommentBulkReviewInput):
             )
     return {"updated":len(rows),"review_status":item.review_status,"updated_at":now,
             "note":"Bulk review SINTU ke internal records mein save hua. YouTube par koi action nahi hua."}
+
+
+@app.post("/api/admin/youtube/comments/reviews/assign")
+def assign_youtube_comment_reviews(item: YouTubeCommentAssignmentInput):
+    """Assign internal owners and follow-up dates for saved reviews only."""
+    ids = [value.strip() for value in item.comment_ids]
+    if len(set(ids)) != len(ids) or any(not value or len(value) > 200 for value in ids):
+        raise HTTPException(status_code=422, detail="Invalid or duplicate comment IDs")
+    now = datetime.now(timezone.utc).isoformat()
+    placeholders = ",".join("?" for _ in ids)
+    with db() as conn:
+        rows = conn.execute(
+            f"SELECT comment_id,video_id,assigned_to,follow_up_at,review_status FROM youtube_comment_reviews WHERE comment_id IN ({placeholders})",
+            ids,
+        ).fetchall()
+        if len(rows) != len(ids):
+            raise HTTPException(status_code=404, detail="One or more saved comments were not found; no changes applied")
+        for row in rows:
+            conn.execute(
+                "UPDATE youtube_comment_reviews SET assigned_to=?,follow_up_at=?,updated_at=? WHERE comment_id=?",
+                (item.assigned_to.strip(),item.follow_up_at.strip(),now,row["comment_id"]),
+            )
+            conn.execute(
+                """INSERT INTO youtube_comment_review_history(
+                     comment_id,video_id,event_type,previous_status,new_status,note_changed,changed_at,
+                     previous_assigned_to,new_assigned_to,previous_follow_up_at,new_follow_up_at
+                   ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                (row["comment_id"],row["video_id"],"assignment_updated",row["review_status"],row["review_status"],0,now,
+                 row["assigned_to"],item.assigned_to.strip(),row["follow_up_at"],item.follow_up_at.strip()),
+            )
+    return {"updated":len(rows),"assigned_to":item.assigned_to.strip(),"follow_up_at":item.follow_up_at.strip(),
+            "note":"Assignment SINTU ke internal records mein save hua. YouTube par koi action nahi hua."}
 
 
 @app.get("/api/admin/youtube/comments/reviews")
@@ -1592,7 +1648,7 @@ def list_youtube_comment_reviews(
         total = conn.execute(f"SELECT COUNT(*) FROM youtube_comment_reviews {where}", params).fetchone()[0]
         rows = conn.execute(
             f"""SELECT comment_id,video_id,review_status,notes,updated_at,author,
-                       comment_text AS text,published_at,likes,classification
+                       comment_text AS text,published_at,likes,classification,assigned_to,follow_up_at
                 FROM youtube_comment_reviews {where}
                 ORDER BY {ordering} LIMIT ? OFFSET ?""",
             (*params, limit, offset),
