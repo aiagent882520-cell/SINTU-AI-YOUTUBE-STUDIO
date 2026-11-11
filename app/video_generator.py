@@ -160,7 +160,8 @@ def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "7
     if status["local_available"]:
         if reference_image_id:
             raise VideoUnavailable("Current free ComfyUI workflow supports text-to-video. Remove the reference image or configure an image-to-video workflow connector later.")
-        width, height = (768, 1360) if aspect_ratio == "9:16" else (1360, 768)
+        short_side = {"360p": 360, "720p": 720, "1080p": 1080, "4k": 2160}[resolution]
+        width, height = (short_side, round(short_side * 16 / 9)) if aspect_ratio == "9:16" else (round(short_side * 16 / 9), short_side)
         try:
             video_bytes = _validate_video(generate_video_bytes(full_prompt, width, height, duration_seconds * 24, 24))
         except ComfyUIUnavailable as exc:

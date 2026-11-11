@@ -26,7 +26,8 @@ def voice_status():
     enabled = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "false").strip().lower() == "true" and paid_upgrades_allowed()
     configured = bool(os.getenv("OPENAI_API_KEY"))
     token_configured = bool(os.getenv("MEDIA_GENERATION_TOKEN"))
-    piper_executable = os.getenv("PIPER_EXECUTABLE") or shutil.which("piper")
+    configured_executable = os.getenv("PIPER_EXECUTABLE") or "piper"
+    piper_executable = shutil.which(configured_executable) or (configured_executable if Path(configured_executable).is_file() else None)
     piper_model = os.getenv("PIPER_MODEL_PATH", "")
     local_available = bool(piper_executable and piper_model and Path(piper_model).is_file())
     return {
@@ -53,7 +54,10 @@ def generate_voiceover(text: str, voice: str = "alloy") -> dict:
         AUDIO_DIR.mkdir(parents=True, exist_ok=True)
         audio_id = uuid.uuid4().hex
         output = AUDIO_DIR / f"{audio_id}.wav"
-        executable = os.getenv("PIPER_EXECUTABLE") or shutil.which("piper")
+        configured_executable = os.getenv("PIPER_EXECUTABLE") or "piper"
+        executable = shutil.which(configured_executable) or (configured_executable if Path(configured_executable).is_file() else None)
+        if not executable:
+            raise VoiceUnavailable("Piper executable is not installed or not on PATH.")
         model = os.environ["PIPER_MODEL_PATH"]
         try:
             completed = subprocess.run([executable, "--model", model, "--output_file", str(output)],

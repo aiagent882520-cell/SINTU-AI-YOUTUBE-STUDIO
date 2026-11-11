@@ -522,13 +522,17 @@ def test_ai_music_generation_endpoint_contract(tmp_path, monkeypatch):
     assert invalid.status_code == 422
 
 
-def test_music_generator_validates_configuration_and_prompt(monkeypatch):
+def test_music_generator_validates_configuration_and_prompt(tmp_path, monkeypatch):
     from app import music_generator
+    monkeypatch.setattr(music_generator, "MUSIC_DIR", tmp_path / "generated_music")
     monkeypatch.delenv("ENABLE_PAID_MEDIA_GENERATION", raising=False)
     monkeypatch.delenv("STABILITY_API_KEY", raising=False)
     free_track = music_generator.generate_music("Ambient score", 8)
     assert free_track["local"] is True
     assert free_track["format"] == "WAV"
+    import wave
+    with wave.open(str(music_generator.MUSIC_DIR / (free_track["music_id"] + ".wav")), "rb") as track:
+        assert track.getnframes() == 8 * track.getframerate()
     monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
     monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
@@ -2073,3 +2077,27 @@ def test_render_queue_executes_existing_ffmpeg_renderer(tmp_path, monkeypatch):
     assert executed.status_code == 200
     assert executed.json()["item"]["status"] == "completed"
     assert executed.json()["render"]["video_id"] == "f"*32
+
+
+def test_piper_voice_is_free_and_does_not_need_media_token(tmp_path, monkeypatch):
+    import wave
+    from app import voice_generator
+    model = tmp_path / "hi_IN-model.onnx"
+    model.write_bytes(b"test-model")
+    output_dir = tmp_path / "audio"
+    monkeypatch.setattr(voice_generator, "AUDIO_DIR", output_dir)
+    monkeypatch.setenv("PIPER_EXECUTABLE", "fake-piper")
+    monkeypatch.setenv("PIPER_MODEL_PATH", str(model))
+    monkeypatch.setattr(voice_generator.shutil, "which", lambda name: "fake-piper")
+    def fake_run(command, **kwargs):
+        output = Path(command[command.index("--output_file") + 1])
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(output), "wb") as audio:
+            audio.setnchannels(1); audio.setsampwidth(2); audio.setframerate(22050)
+            audio.writeframes(b"\x00\x00" * 2205)
+        return type("Result", (), {"returncode":0,"stderr":""})()
+    monkeypatch.setattr(voice_generator.subprocess, "run", fake_run)
+    result = voice_generator.generate_voiceover("Namaste SINTU", "alloy")
+    assert result["local"] is True
+    assert result["format"] == "WAV"
+    assert (output_dir / result["filename"]).is_file()
