@@ -1957,3 +1957,24 @@ def test_windows_launcher_is_in_repo_and_uses_bootstrap():
     assert "uvicorn app.main:app" in launcher
     gitignore = (root / ".gitignore").read_text(encoding="utf-8")
     assert ".env" in gitignore and ".venv/" in gitignore
+
+
+def test_project_task_output_is_available_only_to_project_owner(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "_production_project_owner",
+                        lambda request: request.headers.get("x-test-owner", "local"))
+    monkeypatch.setattr(main, "generate_text", lambda prompt, workflow: {
+        "provider": "test", "model": "test-model", "output": "Owner-only generated package"
+    })
+    created = client.post("/api/projects", json={
+        "name": "Private output", "brief": "Private project brief.",
+        "format_id": "youtube-shorts", "language": "Hindi", "duration_seconds": 60
+    })
+    project_id = created.json()["project"]["id"]
+    generated = client.post(f"/api/projects/{project_id}/generate", json={"workflow": "shorts"})
+    assert generated.status_code == 200
+    output = client.get(f"/api/projects/{project_id}/task-output")
+    assert output.status_code == 200
+    assert output.json()["task"]["output"] == "Owner-only generated package"
+    assert client.get(f"/api/projects/{project_id}/task-output",
+                      headers={"x-test-owner": "different-user"}).status_code == 404
