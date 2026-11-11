@@ -46,10 +46,20 @@ def voice_status():
     }
 
 
+def hindi_letter_ratio(text: str) -> float:
+    letters = [char for char in text if char.isalpha()]
+    if not letters:
+        return 0.0
+    hindi_letters = sum("\\u0900" <= char <= "\\u097F" for char in letters)
+    return hindi_letters / len(letters)
+
+
 def generate_voiceover(text: str, voice: str = "alloy") -> dict:
     status = voice_status()
     if not text.strip() or len(text) > 4000:
         raise ValueError("Voiceover text must contain 1 to 4000 characters.")
+    if hindi_letter_ratio(text) < 0.95:
+        raise ValueError("Video voiceover must be at least 95% Hindi in Devanagari. Rewrite the narration in Hindi.")
     if status["local_available"]:
         AUDIO_DIR.mkdir(parents=True, exist_ok=True)
         audio_id = uuid.uuid4().hex
