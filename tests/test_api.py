@@ -1484,6 +1484,39 @@ def test_youtube_comment_review_history_returns_404_for_unknown_comment(tmp_path
     assert response.status_code == 404
 
 
+def test_youtube_comment_reviews_bulk_status_update_and_history(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    for comment_id,status in [("bulk-review-1","pending"),("bulk-review-2","follow_up")]:
+        payload = {"comment_id":comment_id,"video_id":"abcdefghijk","review_status":status,
+                   "author":"Tester","text":"Saved comment","classification":"other"}
+        assert client.post("/api/admin/youtube/comments/review",json=payload).status_code == 200
+    response = client.post("/api/admin/youtube/comments/reviews/bulk",json={
+        "comment_ids":["bulk-review-1","bulk-review-2"],"review_status":"reviewed"
+    })
+    assert response.status_code == 200
+    assert response.json()["updated"] == 2
+    queue = client.get("/api/admin/youtube/comments/reviews?review_status=reviewed")
+    assert queue.json()["total"] == 2
+    history = client.get("/api/admin/youtube/comments/reviews/bulk-review-1/history")
+    assert history.status_code == 200
+    assert history.json()["items"][0]["event_type"] == "bulk_updated"
+    assert history.json()["items"][0]["previous_status"] == "pending"
+    assert history.json()["items"][0]["new_status"] == "reviewed"
+
+
+def test_youtube_comment_reviews_bulk_rejects_missing_ids_without_partial_updates(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    payload = {"comment_id":"bulk-existing-1","video_id":"abcdefghijk","review_status":"pending"}
+    assert client.post("/api/admin/youtube/comments/review",json=payload).status_code == 200
+    response = client.post("/api/admin/youtube/comments/reviews/bulk",json={
+        "comment_ids":["bulk-existing-1","bulk-missing-2"],"review_status":"resolved"
+    })
+    assert response.status_code == 404
+    existing = client.get("/api/admin/youtube/comments/reviews?review_status=pending")
+    assert existing.json()["total"] == 1
+    assert client.get("/api/admin/youtube/comments/reviews?review_status=resolved").json()["total"] == 0
+
+
 def test_youtube_comment_review_rejects_invalid_status(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     response = client.post("/api/admin/youtube/comments/review", json={
