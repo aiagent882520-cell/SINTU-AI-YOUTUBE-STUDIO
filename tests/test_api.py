@@ -2312,9 +2312,12 @@ def test_production_run_render_requires_approved_matching_format(tmp_path, monke
     monkeypatch.setattr(main, "attach_render_result", lambda value, result: {
         "status": "completed", "result": {"video_rendered": True}
     })
-    payload = {"title": "Hindi short", "scenes": ["Opening"], "format_id": "youtube-shorts"}
+    payload = {"title": "Hindi short", "scenes": ["Opening"], "format_id": "youtube-shorts", "image_ids": ["d" * 32]}
     assert client.post(f"/api/production/runs/{run_id}/render", json=payload).status_code == 409
     state["status"] = "completed"
+    no_visuals = dict(payload)
+    no_visuals.pop("image_ids")
+    assert client.post(f"/api/production/runs/{run_id}/render", json=no_visuals).status_code == 400
     mismatch = dict(payload, format_id="documentary")
     assert client.post(f"/api/production/runs/{run_id}/render", json=mismatch).status_code == 400
     response = client.post(f"/api/production/runs/{run_id}/render", json=payload)
