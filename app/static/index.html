@@ -128,9 +128,9 @@
       <div id="aiVideoResult" hidden><video id="aiVideoPreview" controls playsinline style="width:100%;max-height:520px;background:#000;border-radius:12px"></video><p><a id="aiVideoDownload" download="sintu-ai-video.mp4">Download AI video MP4</a></p><p id="aiVideoAssetId" class="muted"></p></div>
     </section>
     <section class="panel">
-      <div class="panel-head"><div><h2>AI Voiceover & Subtitles</h2><p>Hindi ya kisi bhi language ka narration audio aur scene-wise SRT subtitles banayein.</p></div></div>
-      <label for="voiceText">Voiceover script (max 4,000 characters)</label>
-      <textarea id="voiceText" rows="5" maxlength="4000" placeholder="Yahan apna final narration paste karein…"></textarea>
+      <div class="panel-head"><div><h2>Hindi Voiceover & Separate SRT File</h2><p>कम से कम 95% हिंदी narration audio बनाएं। SRT अलग file होती है; video में subtitle नहीं जुड़ता।</p></div></div>
+      <label for="voiceText">Hindi voiceover script (95% Hindi; max 4,000 characters)</label>
+      <textarea id="voiceText" rows="5" maxlength="4000" placeholder="यहाँ अपना कम से कम 95% हिंदी narration लिखें…"></textarea>
       <label for="mediaToken">Media access token (server administrator se)</label>
       <input id="mediaToken" type="password" autocomplete="off" placeholder="Media access token">
       <label for="voiceChoice">AI voice</label>
@@ -139,11 +139,11 @@
       <p id="voiceNotice" class="muted" role="status" aria-live="polite">Voice service status checking…</p>
       <div id="voiceResult" hidden><audio id="voiceAudio" controls style="width:100%"></audio><p><a id="voiceDownload" download="sintu-voiceover.mp3">Download MP3</a></p><p id="voiceAssetId" class="muted"></p></div>
       <hr>
-      <label for="subtitleScenes">Subtitle lines (har line ek subtitle)</label>
+      <label for="subtitleScenes">Optional SRT file text (video par overlay nahi hoga)</label>
       <textarea id="subtitleScenes" rows="4" placeholder="Pehla dialogue&#10;Doosra dialogue&#10;Teesra dialogue"></textarea>
       <label for="subtitleSeconds">Har subtitle ki duration (seconds)</label>
       <input id="subtitleSeconds" type="number" min="1" max="60" value="4">
-      <div class="actions"><button id="subtitleButton" type="button">Download SRT Subtitles</button></div>
+      <div class="actions"><button id="subtitleButton" type="button">Download Separate SRT File</button></div>
       <p id="subtitleNotice" class="muted" role="status" aria-live="polite"></p>
     </section>
 <section class="panel">
