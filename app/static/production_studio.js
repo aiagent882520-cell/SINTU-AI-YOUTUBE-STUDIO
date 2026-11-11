@@ -18,7 +18,7 @@
  function renderPipeline(){document.getElementById("pipelineCards").innerHTML=state.catalog.pipeline.map((x,i)=>'<div class="pipeline-step"><b>'+String(i+1).padStart(2,"0")+' · '+esc(x.name)+'</b><span>'+esc(x.description)+'</span></div>').join("");}
  function renderDrafts(){
   const el=document.getElementById("localDrafts");if(!el)return;
-  const remote=state.projects.map(d=>'<article class="local-draft"><b>'+esc(d.name)+'</b><small>Server saved · '+esc(d.format_id)+' · '+new Date(d.updated_at).toLocaleString()+'</small><p>'+esc(d.brief.slice(0,220))+'</p><div class="actions"><button type="button" class="secondary" data-open-project="'+esc(d.id)+'">Open</button><a class="secondary" href="/api/projects/'+esc(d.id)+'/export">Export JSON</a><button type="button" class="secondary" data-delete-project="'+esc(d.id)+'">Delete</button></div></article>').join("");
+  const remote=state.projects.map(d=>'<article class="local-draft"><b>'+esc(d.name)+'</b><small>Server saved · '+esc(d.format_id)+(d.last_task_status?' · AI: '+esc(d.last_task_status):'')+' · '+new Date(d.updated_at).toLocaleString()+'</small><p>'+esc(d.brief.slice(0,220))+'</p><div class="actions"><button type="button" class="secondary" data-open-project="'+esc(d.id)+'">Open</button><a class="secondary" href="/api/projects/'+esc(d.id)+'/export">Export JSON</a><button type="button" class="secondary" data-delete-project="'+esc(d.id)+'">Delete</button></div></article>').join("");
   const local=state.localDrafts.map((d,i)=>'<article class="local-draft"><b>'+esc(d.name)+'</b><small>Only this device · '+esc(d.formatName)+' · '+new Date(d.updatedAt).toLocaleString()+'</small><p>'+esc(d.topic.slice(0,220))+'</p><div class="actions"><button type="button" class="secondary" data-open-local="'+i+'">Open</button><button type="button" class="secondary" data-delete-local="'+i+'">Delete</button></div></article>').join("");
   el.innerHTML=remote+local||'<p class="muted">Abhi koi saved project nahi hai.</p>';
  }
@@ -43,8 +43,17 @@
    const workflowMap={"youtube-shorts":"shorts","instagram-reels":"shorts","facebook-reels":"shorts","tiktok":"shorts","podcast-clips":"shorts","story-video":"shorts","youtube-long":"long-video","documentary":"long-video","educational":"long-video","course-lesson":"course","faceless":"long-video","explainer":"long-video","2d-cartoon":"script","3d-animation":"script","ai-avatar":"script","product-ad":"social","music-video":"social","square-social":"social","landscape-social":"social","youtube-live-promo":"social","news-summary":"research"};
    const workflow=workflowMap[payload.format_id]||"content";
    const output=document.getElementById("productionPackageOutput");output.hidden=false;output.textContent="AI production package generate ho raha hai…";
-   try{const r=await fetch("/api/generate",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt:payload.brief+"\n\nFormat: "+selectedFormat().name+"\nLanguage: "+payload.language+"\nTarget duration: "+payload.duration_seconds+" seconds. Include complete scene-by-scene production package, voiceover, visuals, on-screen text, sound cues, CTA and metadata.",workflow})});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"AI generation failed");output.textContent="Saved task #"+data.id+" · "+data.provider+" / "+data.model+"\n\n"+data.output;}
-   catch(err){output.textContent="Generation abhi complete nahi hua: "+err.message+"\n\nAPI key/provider configure hone ke baad isi button se dobara try karein.";}
+   try{
+    let projectId=state.editingProjectId;
+    const saveResponse=await fetch(projectId?("/api/projects/"+encodeURIComponent(projectId)):"/api/projects",{method:projectId?"PUT":"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    const saved=await saveResponse.json().catch(()=>({}));if(!saveResponse.ok)throw new Error(saved.detail||"Project save failed");
+    if(projectId){state.projects=state.projects.map(x=>x.id===projectId?saved.project:x);}else{projectId=saved.project.id;state.projects.unshift(saved.project);}
+    state.editingProjectId=projectId;renderDrafts();
+    const r=await fetch("/api/projects/"+encodeURIComponent(projectId)+"/generate",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({workflow})});
+    const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"AI generation failed");
+    state.projects=state.projects.map(x=>x.id===projectId?data.project:x);renderDrafts();
+    output.textContent="Saved project · Task #"+data.task.id+" · "+data.task.provider+" / "+data.task.model+"\n\n"+data.task.output;
+   }catch(err){output.textContent="Generation abhi complete nahi hua: "+err.message+"\n\nAPI key/provider configure hone ke baad isi button se dobara try karein.";}
   });
   document.getElementById("exportProjectBrief").addEventListener("click",()=>{const d={...formPayload(),format:selectedFormat(),pipeline:state.catalog.pipeline};const blob=new Blob([JSON.stringify(d,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="sintu-project-brief.json";a.click();URL.revokeObjectURL(a.href);});
   document.getElementById("localDrafts").addEventListener("click",async e=>{
