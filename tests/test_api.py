@@ -1825,3 +1825,34 @@ def test_production_studio_prompt_uses_real_line_break_escapes(tmp_path, monkeyp
     script = client.get("/static/production_studio.js").text
     assert '\\\\nLanguage:' not in script
     assert '"\\\\nLanguage:' not in script
+
+
+def test_saved_production_project_generates_and_links_ai_task(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "generate_text", lambda prompt, workflow: {
+        "provider": "test", "model": "test-model", "output": "Complete scene-by-scene production package"
+    })
+    created = client.post("/api/projects", json={
+        "name": "Linked project", "brief": "Make a Hindi mystery short.",
+        "format_id": "youtube-shorts", "language": "Hindi", "duration_seconds": 60
+    })
+    assert created.status_code == 201
+    project_id = created.json()["project"]["id"]
+    generated = client.post(f"/api/projects/{project_id}/generate", json={"workflow": "shorts"})
+    assert generated.status_code == 200
+    data = generated.json()
+    assert data["task"]["status"] == "Completed"
+    assert data["task"]["output"] == "Complete scene-by-scene production package"
+    assert data["project"]["last_task_id"] == data["task"]["id"]
+    assert data["project"]["last_task_status"] == "Completed"
+
+
+def test_saved_production_project_generation_rejects_unknown_workflow(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    created = client.post("/api/projects", json={
+        "name": "Bad workflow", "brief": "Make a video.",
+        "format_id": "youtube-shorts", "language": "Hindi", "duration_seconds": 60
+    })
+    project_id = created.json()["project"]["id"]
+    response = client.post(f"/api/projects/{project_id}/generate", json={"workflow": "unknown"})
+    assert response.status_code == 400
