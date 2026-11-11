@@ -253,7 +253,11 @@ async function loadYouTubeSavedReviews(loadMore=false){
   youtubeSavedReviewsTotal=Number(data.total)||0;
   youtubeSavedReviewsItems=youtubeSavedReviewsItems.concat(data.items||[]);
   youtubeSavedReviewsOffset+=((data.items||[]).length);
-  list.innerHTML=youtubeSavedReviewsItems.map(item=>'<div class="admin-row"><strong>'+analyticsEscape(item.author||"Unknown author")+' · '+analyticsEscape(item.review_status)+'</strong><span>'+analyticsEscape(item.text||"Comment text not stored")+'</span><span>'+analyticsEscape(item.video_id)+' · '+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+'</span><span>Internal note: '+analyticsEscape(item.notes||"—")+'</span><span>Last reviewed: '+analyticsEscape(item.updated_at||"")+'</span></div>').join("")||'<p class="muted">Saved review queue empty hai.</p>';
+  list.innerHTML=youtubeSavedReviewsItems.map((item,index)=>{
+   const status=item.review_status||"pending";
+   const option=value=>'<option value="'+value+'"'+(status===value?" selected":"")+'>'+({pending:"Pending",reviewed:"Reviewed",follow_up:"Follow-up",resolved:"Resolved"}[value])+'</option>';
+   return '<div class="admin-row" data-saved-review-index="'+index+'"><strong>'+analyticsEscape(item.author||"Unknown author")+' · '+analyticsEscape(item.classification||"other")+'</strong><span>'+analyticsEscape(item.text||"Comment text not stored")+'</span><span>'+analyticsEscape(item.video_id)+' · '+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+'</span><label>Review status<select class="youtube-saved-review-status">'+["pending","reviewed","follow_up","resolved"].map(option).join("")+'</select></label><label>Internal review note<textarea class="youtube-saved-review-notes" rows="2" maxlength="1000">'+analyticsEscape(item.notes||"")+'</textarea></label><button class="secondary youtube-saved-review-save" type="button">Save changes</button><span class="muted">Last reviewed: '+analyticsEscape(item.updated_at||"")+'</span></div>';
+  }).join("")||'<p class="muted">Saved review queue empty hai.</p>';
   if(more)more.hidden=youtubeSavedReviewsOffset>=youtubeSavedReviewsTotal;
   notice.textContent="Saved reviews: "+youtubeSavedReviewsItems.length+" / "+youtubeSavedReviewsTotal+".";
  }catch(e){notice.textContent=e.message;}
@@ -345,6 +349,23 @@ $("youtubeSavedReviewsSort")?.addEventListener("change",()=>loadYouTubeSavedRevi
 $("youtubeSavedReviewsSearchButton")?.addEventListener("click",()=>loadYouTubeSavedReviews(false));
 $("youtubeSavedReviewsSearch")?.addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();loadYouTubeSavedReviews(false);}});
 $("youtubeSavedReviewsMore")?.addEventListener("click",()=>loadYouTubeSavedReviews(true));
+$("youtubeSavedReviewsList")?.addEventListener("click",async event=>{
+ const button=event.target.closest(".youtube-saved-review-save");if(!button)return;
+ const row=button.closest(".admin-row"),item=youtubeSavedReviewsItems[Number(row?.dataset.savedReviewIndex)];
+ if(!item)return;
+ button.disabled=true;
+ try{
+  const result=await request("/api/admin/youtube/comments/review",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+   comment_id:item.comment_id,video_id:item.video_id,review_status:row.querySelector(".youtube-saved-review-status").value,
+   notes:row.querySelector(".youtube-saved-review-notes").value,author:item.author,text:item.text,
+   published_at:item.published_at,likes:item.likes,classification:item.classification
+  })});
+  item.review_status=result.review_status;item.notes=result.notes;item.updated_at=result.updated_at;
+  await loadYouTubeSavedReviews(false);
+  notice.textContent="Saved comment review updated in SINTU. YouTube par koi action nahi hua.";
+ }catch(e){notice.textContent=e.message;}
+ finally{button.disabled=false;}
+});
 $("youtubeCommentsRefresh")?.addEventListener("click",async()=>{await loadYouTubeComments(false);await loadYouTubeSavedReviews(false);});
 $("youtubeCommentsMore")?.addEventListener("click",()=>loadYouTubeComments(true));
 async function loadYouTubeRetention(){
