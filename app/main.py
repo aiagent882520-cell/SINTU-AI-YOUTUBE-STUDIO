@@ -2731,9 +2731,13 @@ def get_ai_music(music_id: str):
     if not re.fullmatch(r"[a-f0-9]{32}", music_id):
         raise HTTPException(status_code=400, detail="Invalid music ID")
     path = MUSIC_DIR / f"{music_id}.mp3"
+    media_type, filename = "audio/mpeg", f"sintu-music-{music_id}.mp3"
+    if not path.is_file():
+        path = MUSIC_DIR / f"{music_id}.wav"
+        media_type, filename = "audio/wav", f"sintu-music-{music_id}.wav"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Music not found")
-    return FileResponse(path, media_type="audio/mpeg", filename=f"sintu-music-{music_id}.mp3")
+    return FileResponse(path, media_type=media_type, filename=filename)
 
 @app.post("/api/music/upload")
 def upload_music(payload: MusicUploadInput, media_token: str = Header(default="", alias="X-Media-Token")):
@@ -3013,8 +3017,8 @@ def voice_capabilities():
 def create_voiceover(payload: VoiceInput, media_token: str = Header(default="", alias="X-Media-Token")):
     import hmac, os
     expected = os.getenv("MEDIA_GENERATION_TOKEN", "")
-    if not expected or not hmac.compare_digest(media_token, expected):
-        raise HTTPException(status_code=403, detail="Valid media access token required.")
+    if not voice_status().get("local_available") and (not expected or not hmac.compare_digest(media_token, expected)):
+        raise HTTPException(status_code=403, detail="Valid media access token required for the optional paid voice provider.")
     try:
         return generate_voiceover(payload.text, payload.voice)
     except VoiceUnavailable as exc:
@@ -3030,9 +3034,13 @@ def get_audio(audio_id: str):
     if not re.fullmatch(r"[a-f0-9]{32}", audio_id):
         raise HTTPException(status_code=400, detail="Invalid audio ID")
     path = AUDIO_DIR / f"{audio_id}.mp3"
+    media_type, filename = "audio/mpeg", f"sintu-voice-{audio_id}.mp3"
+    if not path.is_file():
+        path = AUDIO_DIR / f"{audio_id}.wav"
+        media_type, filename = "audio/wav", f"sintu-voice-{audio_id}.wav"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Audio not found")
-    return FileResponse(path, media_type="audio/mpeg", filename=f"sintu-voice-{audio_id}.mp3")
+    return FileResponse(path, media_type=media_type, filename=filename)
 
 
 def _srt_time(seconds: int) -> str:

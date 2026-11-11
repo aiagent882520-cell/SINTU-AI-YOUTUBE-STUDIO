@@ -3,6 +3,9 @@ from pathlib import Path
 from .policy import paid_upgrades_allowed
 import os
 import uuid
+import math
+import struct
+import wave
 import urllib.request
 import urllib.error
 
@@ -26,13 +29,15 @@ def music_status():
     enabled = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "").lower() == "true" and paid_upgrades_allowed()
     key_set = bool(os.getenv("STABILITY_API_KEY"))
     return {
-        "available": enabled and key_set,
+        "available": True,
+        "local_available": True,
+        "local_engine": "SINTU Procedural Composer",
         "provider": "Stability AI Stable Audio 3.0",
         "model": MODEL,
         "enabled": enabled,
         "api_key_configured": key_set,
         "max_duration_seconds": 360,
-        "note": "Paid generation remains locked until revenue is confirmed and the user explicitly approves upgrades.",
+        "note": "Free procedural ambient soundtrack is always available. Paid Stable Audio remains locked until revenue and explicit approval.",
     }
 
 
@@ -49,15 +54,55 @@ def _multipart(fields: dict[str, str], boundary: str) -> bytes:
     return b"".join(chunks)
 
 
+def _generate_procedural(prompt: str, duration: int) -> dict:
+    sample_rate = 22050
+    loop_seconds = 8
+    frequencies = [110.0, 138.59, 164.81, 220.0]
+    lowered = prompt.lower()
+    if any(word in lowered for word in ("dark", "mystery", "horror", "suspense")):
+        frequencies = [82.41, 98.0, 123.47, 164.81]
+    elif any(word in lowered for word in ("happy", "joy", "bright", "celebration")):
+        frequencies = [130.81, 164.81, 196.0, 261.63]
+    samples = bytearray()
+    total = sample_rate * loop_seconds
+    for i in range(total):
+        t = i / sample_rate
+        slow = 0.5 + 0.5 * math.sin(2 * math.pi * 0.08 * t)
+        tone = (0.34 * math.sin(2 * math.pi * frequencies[0] * t)
+                + 0.22 * math.sin(2 * math.pi * frequencies[1] * t)
+                + 0.16 * math.sin(2 * math.pi * frequencies[2] * t)
+                + 0.08 * math.sin(2 * math.pi * frequencies[3] * t))
+        shimmer = 0.05 * math.sin(2 * math.pi * (frequencies[3] * 2) * t + 0.4 * math.sin(2 * math.pi * 0.12 * t))
+        fade = min(1.0, t / 0.7, (loop_seconds - t) / 0.7)
+        value = max(-1.0, min(1.0, (tone * (0.55 + slow * 0.25) + shimmer) * fade * 0.65))
+        samples.extend(struct.pack("<h", int(value * 32767)))
+    loop = bytes(samples)
+    AUDIO_DIR = MUSIC_DIR
+    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    music_id = uuid.uuid4().hex
+    output = AUDIO_DIR / f"{music_id}.wav"
+    with wave.open(str(output), "wb") as wav:
+        wav.setnchannels(1); wav.setsampwidth(2); wav.setframerate(sample_rate)
+        remaining = duration
+        while remaining > 0:
+            chunk_seconds = min(loop_seconds, remaining)
+            wav.writeframesraw(loop[:chunk_seconds * sample_rate * 2])
+            remaining -= chunk_seconds
+        wav.writeframes(b"")
+    return {"music_id": music_id, "url": f"/api/music/{music_id}", "format": "WAV",
+            "size_bytes": output.stat().st_size, "duration_seconds": duration,
+            "provider": "SINTU Procedural Composer (local)", "model": "Original ambient synthesis",
+            "local": True, "notice": "Original procedurally synthesized ambient audio; not a trained AI music model. Review before publishing."}
+
 def generate_music(prompt: str, duration: int = 30) -> dict:
-    status = music_status()
-    if not status["available"]:
-        raise MusicUnavailable("AI music generation disabled hai. Server admin ko paid generation enable karke STABILITY_API_KEY secure secret mein set karna hoga.")
     prompt = prompt.strip()
     if not prompt or len(prompt) > 2000:
         raise ValueError("Music prompt 1 se 2000 characters ka hona chahiye.")
     if not 5 <= duration <= 360:
         raise ValueError("Music duration 5 se 360 seconds ke beech honi chahiye.")
+    status = music_status()
+    if not (status["enabled"] and status["api_key_configured"]):
+        return _generate_procedural(prompt, duration)
 
     boundary = "----SINTUStableAudio" + uuid.uuid4().hex
     body = _multipart({
