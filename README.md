@@ -1,4 +1,4 @@
-# SINTU AI STUDIO
+# SINTU AI YOUTUBE STUDIO
 
 An AI-powered creator platform for planning, producing, managing, and analyzing video content.
 
