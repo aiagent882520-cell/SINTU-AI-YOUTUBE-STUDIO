@@ -63,7 +63,7 @@ class RecordInput(BaseModel):
     notes: str = Field(default="", max_length=2000)
 
 class TargetInput(BaseModel):
-    month: str = Field(pattern=r"^\\d{4}-(0[1-9]|1[0-2])$")
+    month: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
     target_amount: float = Field(gt=0, le=1_000_000_000)
     currency: str = Field(default="INR", pattern=r"^(INR|USD|EUR|GBP)$")
 
@@ -77,7 +77,7 @@ def earnings_page():
     return FileResponse(Path(__file__).resolve().parent / "static" / "earnings.html")
 
 @router.get("/api/earnings/summary")
-def earnings_summary(month: str | None = Query(default=None, pattern=r"^\\d{4}-(0[1-9]|1[0-2])$")):
+def earnings_summary(month: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$")):
     month = month or datetime.now(timezone.utc).strftime("%Y-%m")
     with _connect() as conn:
         rows = conn.execute("SELECT kind,status,currency,SUM(amount) total,COUNT(*) count FROM earning_records WHERE substr(record_date,1,7)=? GROUP BY kind,status,currency", (month,)).fetchall()
