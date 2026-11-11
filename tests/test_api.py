@@ -1803,3 +1803,18 @@ def test_production_studio_has_direct_generation_action(tmp_path, monkeypatch):
     assert script.status_code == 200
     assert 'workflowMap' in script.text
     assert 'fetch("/api/generate"' in script.text
+
+
+def test_docker_compose_forwards_optional_integration_secrets():
+    from pathlib import Path
+    compose = (Path(__file__).resolve().parents[1] / "docker-compose.yml").read_text(encoding="utf-8")
+    for key in [
+        "OPENAI_API_KEY", "GEMINI_API_KEY", "STABILITY_API_KEY",
+        "YOUTUBE_CLIENT_ID", "YOUTUBE_CLIENT_SECRET", "YOUTUBE_REDIRECT_URI",
+        "YOUTUBE_TOKEN_ENCRYPTION_KEY", "META_APP_ID", "META_APP_SECRET",
+        "META_REDIRECT_URI", "TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET",
+        "TIKTOK_REDIRECT_URI", "MEDIA_GENERATION_TOKEN"
+    ]:
+        assert key + ":" in compose
+    assert "OPENAI_MODEL:-gpt-5.5" in compose
+    assert "GEMINI_MODEL:-gemini-2.5-flash" in compose
