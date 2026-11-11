@@ -64,52 +64,39 @@ def _wrap(draw, text, font, max_width):
     return lines or [""]
 
 
+def _make_watermark_image(width: int = 320, height: int = 76) -> Image.Image:
+    """Create the mandatory SINTU brand mark used on every exported video."""
+    logo = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(logo)
+    draw.rounded_rectangle((1, 1, width - 2, height - 2), radius=18, fill=(8, 15, 28, 150), outline=(255, 255, 255, 115), width=2)
+    icon_size = height - 18
+    draw.rounded_rectangle((9, 9, 9 + icon_size, 9 + icon_size), radius=13, fill=(14, 165, 140, 235))
+    draw.text((17, 7), "S", font=_font(int(height * 0.72)), fill=(255, 255, 255, 255))
+    draw.text((icon_size + 25, 10), "SINTU AI", font=_font(int(height * 0.31)), fill=(255, 255, 255, 255))
+    draw.text((icon_size + 25, int(height * 0.53)), "YOUTUBE STUDIO", font=_font(int(height * 0.16)), fill=(215, 230, 240, 255))
+    return logo
+
+
 def _make_frame(path: Path, title: str, scene: str, index: int, total: int,
                 source_image: Path | None = None, subtitle: str | None = None,
                 width: int = WIDTH, height: int = HEIGHT):
-    WIDTH, HEIGHT = width, height
+    """Create a clean visual frame; only the required brand watermark is drawn."""
+    if subtitle:
+        raise ValueError("Burned-in subtitles are disabled; SINTU exports clean video frames.")
     if source_image:
         with Image.open(source_image) as source:
             source.load()
             image = source.convert("RGB")
-            image.thumbnail((WIDTH, HEIGHT), Image.Resampling.LANCZOS)
-            canvas = Image.new("RGB", (WIDTH, HEIGHT), (16, 24, 39))
-            canvas.paste(image, ((WIDTH - image.width) // 2, (HEIGHT - image.height) // 2))
-            image = canvas
-        overlay = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
-        shade = ImageDraw.Draw(overlay)
-        shade.rectangle((0, 0, WIDTH, 330), fill=(0, 0, 0, 150))
-        shade.rectangle((0, HEIGHT - 360, WIDTH, HEIGHT), fill=(0, 0, 0, 175))
-        image = Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB")
+            image.thumbnail((width, height), Image.Resampling.LANCZOS)
+            canvas = Image.new("RGB", (width, height), (16, 24, 39))
+            canvas.paste(image, ((width - image.width) // 2, (height - image.height) // 2))
+            image = canvas.convert("RGBA")
     else:
-        image = Image.new("RGB", (WIDTH, HEIGHT), (16, 24, 39))
-    draw = ImageDraw.Draw(image)
-    draw.rounded_rectangle((42, 70, WIDTH - 42, HEIGHT - 70), radius=34, outline=(68, 89, 120), width=3)
-    small = _font(26)
-    heading = _font(42)
-    body = _font(38)
-    draw.text((82, 112), "SINTU AI STUDIO", font=small, fill=(125, 211, 252))
-    draw.text((82, 190), title[:72], font=heading, fill=(255, 255, 255))
-    draw.line((82, 275, WIDTH - 82, 275), fill=(68, 89, 120), width=3)
-    lines = _wrap(draw, scene, body, WIDTH - 164)
-    line_height = 58
-    y = max(360, (HEIGHT - len(lines) * line_height) // 2)
-    for line in lines[:12]:
-        draw.text((82, y), line, font=body, fill=(238, 242, 255))
-        y += line_height
-    draw.text((82, HEIGHT - 150), f"SCENE {index} / {total}", font=small, fill=(148, 163, 184))
-    if subtitle:
-        caption_font = _font(30)
-        caption_lines = _wrap(draw, subtitle, caption_font, WIDTH - 120)[:3]
-        caption_height = len(caption_lines) * 42 + 28
-        caption_top = HEIGHT - 300 - caption_height
-        draw.rounded_rectangle((48, caption_top, WIDTH - 48, caption_top + caption_height),
-                               radius=18, fill=(0, 0, 0))
-        for line_no, line in enumerate(caption_lines):
-            draw.text((68, caption_top + 14 + line_no * 42), line, font=caption_font,
-                      fill=(255, 255, 255), stroke_width=1, stroke_fill=(0, 0, 0))
-    image.save(path, format="PNG")
-
+        image = Image.new("RGBA", (width, height), (16, 24, 39, 255))
+    watermark = _make_watermark_image(width=max(240, int(width * 0.34)), height=max(58, int(width * 0.08)))
+    margin = max(18, int(width * 0.025))
+    image.alpha_composite(watermark, (width - watermark.width - margin, height - watermark.height - margin))
+    image.convert("RGB").save(path, format="PNG")
 
 def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                       image_paths: list[Path] | None = None, audio_path: Path | None = None,
