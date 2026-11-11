@@ -227,6 +227,7 @@ async function loadYouTubeComments(loadMore=false){
   renderYouTubeComments();
   if(more)more.hidden=!youtubeCommentsNextPageToken;
   notice.textContent=data.note+" Loaded "+youtubeCommentsItems.length+" comments.";
+  if(!loadMore)await loadYouTubeSavedReviews(false);
  }catch(e){notice.textContent=e.message;}
  finally{button.disabled=false;if(more)more.disabled=false;}
 }
