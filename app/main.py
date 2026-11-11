@@ -1364,7 +1364,7 @@ def youtube_channel_analytics(
 
 
 @app.get("/api/admin/youtube/comments")
-def youtube_channel_comments(limit: int = Query(default=50, ge=1, le=100)):
+def youtube_channel_comments(limit: int = Query(default=50, ge=1, le=100), page_token: str = Query(default="", max_length=2048)):
     """Read recent channel comments and provide transparent heuristic triage; never moderates or replies."""
     connection = _youtube_connection()
     if not connection:
@@ -1374,6 +1374,8 @@ def youtube_channel_comments(limit: int = Query(default=50, ge=1, le=100)):
         "part": "snippet", "allThreadsRelatedToChannelId": connection["channel_id"],
         "order": "time", "textFormat": "plainText", "maxResults": str(limit),
     }
+    if page_token:
+        params["pageToken"] = page_token
     url = "https://www.googleapis.com/youtube/v3/commentThreads?" + urllib.parse.urlencode(params)
     try:
         _, _, body = _youtube_request(url, headers={"Authorization": "Bearer " + token})
@@ -1432,6 +1434,7 @@ def youtube_channel_comments(limit: int = Query(default=50, ge=1, le=100)):
     return {
         "source": "YouTube Data API v3", "channel": connection.get("channel_title"),
         "comments": comments, "counts": counts,
+        "next_page_token": payload.get("nextPageToken", ""),
         "note": "Spam aur sentiment labels simple keyword heuristics hain, AI verdict nahi. Suggestions draft-only hain. Koi comment delete, hide, approve ya reply nahi kiya gaya.",
     }
 
