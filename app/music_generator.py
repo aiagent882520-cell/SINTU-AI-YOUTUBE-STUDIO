@@ -1,5 +1,6 @@
 """Optional Stable Audio 3 music generation through Stability AI."""
 from pathlib import Path
+from .policy import paid_upgrades_allowed
 import os
 import uuid
 import urllib.request
@@ -22,7 +23,7 @@ class MusicGenerationFailed(Exception):
 
 
 def music_status():
-    enabled = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "").lower() == "true"
+    enabled = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "").lower() == "true" and paid_upgrades_allowed()
     key_set = bool(os.getenv("STABILITY_API_KEY"))
     return {
         "available": enabled and key_set,
@@ -31,7 +32,7 @@ def music_status():
         "enabled": enabled,
         "api_key_configured": key_set,
         "max_duration_seconds": 360,
-        "note": "Paid generation is off unless ENABLE_PAID_MEDIA_GENERATION=true and STABILITY_API_KEY are configured.",
+        "note": "Paid generation remains locked until revenue is confirmed and the user explicitly approves upgrades.",
     }
 
 
