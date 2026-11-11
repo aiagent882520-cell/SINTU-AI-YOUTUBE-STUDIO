@@ -2715,8 +2715,8 @@ def ai_music_capabilities():
 def create_ai_music(payload: MusicGenerateInput, media_token: str = Header(default="", alias="X-Media-Token")):
     import hmac, os
     expected = os.getenv("MEDIA_GENERATION_TOKEN", "")
-    if not expected or not hmac.compare_digest(media_token, expected):
-        raise HTTPException(status_code=403, detail="Valid media access token required.")
+    if not music_status().get("local_available", False) and (not expected or not hmac.compare_digest(media_token, expected)):
+        raise HTTPException(status_code=403, detail="Valid media access token required for the optional paid music provider.")
     try:
         return generate_music(payload.prompt, payload.duration_seconds)
     except MusicUnavailable as exc:

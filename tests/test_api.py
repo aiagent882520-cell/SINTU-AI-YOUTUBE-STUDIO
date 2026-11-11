@@ -473,16 +473,19 @@ def test_ai_music_generation_is_disabled_by_default(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.delenv("ENABLE_PAID_MEDIA_GENERATION", raising=False)
     monkeypatch.delenv("STABILITY_API_KEY", raising=False)
-    assert client.get("/api/music/capabilities").json()["available"] is False
-    monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "media-secret")
+    assert client.get("/api/music/capabilities").json()["available"] is True
     response = client.post("/api/music/generate", json={
         "prompt": "Cinematic orchestral mystery score", "duration_seconds": 20
-    }, headers={"X-Media-Token": "media-secret"})
-    assert response.status_code == 503
+    })
+    assert response.status_code == 200
+    assert response.json()["local"] is True
+    assert response.json()["format"] == "WAV"
 
 
 def test_ai_music_generation_requires_media_token(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
     monkeypatch.setenv("STABILITY_API_KEY", "stability-test-key")
     monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "media-secret")
@@ -492,6 +495,8 @@ def test_ai_music_generation_requires_media_token(tmp_path, monkeypatch):
 
 def test_ai_music_generation_endpoint_contract(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
     monkeypatch.setenv("STABILITY_API_KEY", "stability-test-key")
     monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "media-secret")
@@ -518,8 +523,9 @@ def test_music_generator_validates_configuration_and_prompt(monkeypatch):
     from app import music_generator
     monkeypatch.delenv("ENABLE_PAID_MEDIA_GENERATION", raising=False)
     monkeypatch.delenv("STABILITY_API_KEY", raising=False)
-    with pytest.raises(music_generator.MusicUnavailable):
-        music_generator.generate_music("Ambient score", 30)
+    free_track = music_generator.generate_music("Ambient score", 8)
+    assert free_track["local"] is True
+    assert free_track["format"] == "WAV"
     monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
     monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
