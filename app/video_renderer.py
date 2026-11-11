@@ -79,7 +79,7 @@ def _make_watermark_image(width: int = 320, height: int = 76) -> Image.Image:
 
 def _make_frame(path: Path, title: str, scene: str, index: int, total: int,
                 source_image: Path | None = None, subtitle: str | None = None,
-                width: int = WIDTH, height: int = HEIGHT):
+                width: int = WIDTH, height: int = HEIGHT, include_watermark: bool = True):
     """Create a clean visual frame; only the required brand watermark is drawn."""
     if subtitle:
         raise ValueError("Burned-in subtitles are disabled; SINTU exports clean video frames.")
@@ -93,9 +93,10 @@ def _make_frame(path: Path, title: str, scene: str, index: int, total: int,
             image = canvas.convert("RGBA")
     else:
         image = Image.new("RGBA", (width, height), (16, 24, 39, 255))
-    watermark = _make_watermark_image(width=max(180, int(width * 0.22)), height=max(44, int(width * 0.05)))
-    margin = max(18, int(width * 0.025))
-    image.alpha_composite(watermark, (width - watermark.width - margin, height - watermark.height - margin))
+    if include_watermark:
+        watermark = _make_watermark_image(width=max(180, int(width * 0.22)), height=max(44, int(width * 0.05)))
+        margin = max(18, int(width * 0.025))
+        image.alpha_composite(watermark, (width - watermark.width - margin, height - watermark.height - margin))
     image.convert("RGB").save(path, format="PNG")
 
 def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
@@ -465,7 +466,7 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                 if not isinstance(image_duration, int) or not 2 <= image_duration <= 12:
                     raise ValueError("Har still image ki duration 2 se 12 seconds honi chahiye.")
                 frame = work / f"still-{index:03d}.png"
-                _make_frame(frame, title, scenes[index - 1], index, len(items), path, width=width, height=height)
+                _make_frame(frame, title, scenes[index - 1], index, len(items), path, width=width, height=height, include_watermark=False)
                 segment = work / f"still-{index:03d}.mp4"
                 completed = subprocess.run(
                     [ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
