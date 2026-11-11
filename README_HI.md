@@ -175,3 +175,13 @@ Team performance metrics: the community follow-up workload summary now reports o
 
 
 Follow-up workload CSV export: the community review workload panel can download a CSV containing the overall queue totals and per-owner open/resolved counts, overdue/due-today/upcoming counts, resolution rate, and follow-up coverage. The export is based only on SINTU's internal saved review records; it does not trigger YouTube actions.
+
+
+## Complete Production Studio (API-independent foundation)
+
+- Production format catalog includes Shorts, long-form, Reels, TikTok, square/landscape social, documentary, tutorials, course lessons, explainers, 2D/3D-style storyboards, avatar presenter briefs, faceless videos, ads, music videos, podcast clips, slideshows, mystery stories and current-affairs explainers.
+- Every format includes aspect ratio, recommended resolution, duration guidance and an honest readiness label.
+- End-to-end pipeline checklist: brief, research/fact-check, script/storyboard, assets, edit, QA, export and approval/publishing.
+- Ready-made Hindi presets and a project brief builder are available without provider API keys.
+- Drafts are saved locally in the current browser/device and can be exported as JSON. They are not cloud-synced.
+- The catalog is a target-format list, not a promise that every format can already be rendered. Native 2D/3D rigs, talking-avatar rendering, autonomous agents and platform publishing still need their dedicated engines and approvals.
