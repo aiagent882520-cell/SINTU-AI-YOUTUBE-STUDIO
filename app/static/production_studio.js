@@ -39,6 +39,23 @@
   if(editing)state.projects=state.projects.map(x=>x.id===editing?data.project:x);else state.projects.unshift(data.project);
   state.editingProjectId=data.project.id;window.SINTU_ACTIVE_PROJECT_ID=data.project.id;renderDrafts();return data.project;
  }
+ async function refreshProjectTools(){
+  const projectId=window.SINTU_ACTIVE_PROJECT_ID||state.editingProjectId;const notice=document.getElementById("studioToolsNotice");
+  if(!projectId){notice.textContent="Project select/save karein; memory aur assets usi project se linked rahenge.";return;}
+  try{
+   const [memory,assets,versions,queue]=await Promise.all([
+    fetch("/api/studio/memory/"+encodeURIComponent(projectId),{credentials:"same-origin"}).then(r=>r.json()),
+    fetch("/api/studio/assets?project_id="+encodeURIComponent(projectId),{credentials:"same-origin"}).then(r=>r.json()),
+    fetch("/api/studio/versions/"+encodeURIComponent(projectId),{credentials:"same-origin"}).then(r=>r.json()),
+    fetch("/api/studio/render-queue?project_id="+encodeURIComponent(projectId),{credentials:"same-origin"}).then(r=>r.json())
+   ]);
+   document.getElementById("studioMemoryList").innerHTML=(memory.memory||[]).map(x=>'<div class="agent-pair"><b>'+esc(x.key)+'</b><span>'+esc(x.value)+'</span></div>').join("")||'<p class="muted">No saved project memory.</p>';
+   document.getElementById("studioAssetList").innerHTML=(assets.assets||[]).map(x=>'<div class="agent-pair"><b>'+esc(x.name)+'</b><span>'+esc(x.kind)+' · '+esc(x.uri)+'</span><button type="button" class="secondary" data-delete-studio-asset="'+esc(x.id)+'">Delete metadata</button></div>').join("")||'<p class="muted">No project assets yet.</p>';
+   document.getElementById("studioVersionList").innerHTML=(versions.versions||[]).map(x=>'<div class="agent-pair"><b>Version '+x.version+'</b><span>'+esc(x.created_at)+'</span></div>').join("")||'<p class="muted">No saved versions.</p>';
+   document.getElementById("studioRenderQueueList").innerHTML=(queue.queue||[]).map(x=>'<div class="agent-pair"><b>'+esc(x.id)+'</b><span>'+esc(x.status)+'</span></div>').join("")||'<p class="muted">Render queue empty.</p>';
+   notice.textContent="Project tools refreshed · "+(memory.memory||[]).length+" memory items · "+(assets.assets||[]).length+" assets · "+(versions.versions||[]).length+" versions · "+(queue.queue||[]).length+" render jobs.";
+  }catch(err){notice.textContent=err.message;}
+ }
  function renderDrafts(){
   const el=document.getElementById("localDrafts");if(!el)return;
   const remote=state.projects.map(d=>'<article class="local-draft"><b>'+esc(d.name)+'</b><small>Server saved · '+esc(d.format_id)+(d.last_task_status?' · AI: '+esc(d.last_task_status):'')+' · '+new Date(d.updated_at).toLocaleString()+'</small><p>'+esc(d.brief.slice(0,220))+'</p><div class="actions"><button type="button" class="secondary" data-open-project="'+esc(d.id)+'">Open</button>'+(d.last_task_id?'<button type="button" class="secondary" data-view-project-output="'+esc(d.id)+'">View output #'+esc(d.last_task_id)+'</button>':'')+'<a class="secondary" href="/api/projects/'+esc(d.id)+'/export">Export JSON</a><button type="button" class="secondary" data-delete-project="'+esc(d.id)+'">Delete</button></div></article>').join("");
@@ -78,6 +95,20 @@
     output.textContent="Saved project · Task #"+data.task.id+" · "+data.task.provider+" / "+data.task.model+"\n\n"+data.task.output;
    }catch(err){output.textContent="Generation abhi complete nahi hua: "+err.message+"\n\nLocal Ollama setup karein; paid provider automatically enable nahi hoga.";}
   });
+  document.getElementById("refreshStudioTools").addEventListener("click",refreshProjectTools);
+  document.getElementById("saveStudioMemory").addEventListener("click",async()=>{
+   try{const project=await saveCurrentProject();const r=await fetch("/api/studio/memory",{method:"PUT",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({project_id:project.id,key:document.getElementById("studioMemoryKey").value,value:document.getElementById("studioMemoryValue").value})});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Memory save failed");await refreshProjectTools();}
+   catch(err){document.getElementById("studioToolsNotice").textContent=err.message;}
+  });
+  document.getElementById("addStudioAsset").addEventListener("click",async()=>{
+   try{const project=await saveCurrentProject();const r=await fetch("/api/studio/assets",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({project_id:project.id,kind:document.getElementById("studioAssetKind").value,name:document.getElementById("studioAssetName").value,uri:document.getElementById("studioAssetUri").value,metadata:{}})});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Asset save failed");await refreshProjectTools();}
+   catch(err){document.getElementById("studioToolsNotice").textContent=err.message;}
+  });
+  document.getElementById("studioAssetList").addEventListener("click",async(e)=>{
+   const b=e.target.closest("[data-delete-studio-asset]");if(!b)return;
+   try{const r=await fetch("/api/studio/assets/"+encodeURIComponent(b.dataset.deleteStudioAsset),{method:"DELETE",credentials:"same-origin"});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Asset delete failed");await refreshProjectTools();}
+   catch(err){document.getElementById("studioToolsNotice").textContent=err.message;}
+  });
   document.getElementById("startProductionRun").addEventListener("click",async()=>{
    const box=document.getElementById("productionRunStatus");box.textContent="Project save aur complete production task queue ban rahi hai…";
    try{const project=await saveCurrentProject();const r=await fetch("/api/studio/runs",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({project_id:project.id,format_id:project.format_id})});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Run create failed");renderRun(data.run);}
@@ -94,16 +125,16 @@
    catch(err){document.getElementById("productionRunStatus").textContent=err.message;}
   });
   document.getElementById("saveProjectVersion").addEventListener("click",async()=>{
-   try{const project=await saveCurrentProject();const r=await fetch("/api/studio/versions",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({project_id:project.id})});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Version save failed");document.getElementById("draftNotice").textContent="Version "+data.version.version+" safely saved.";}
+   try{const project=await saveCurrentProject();const r=await fetch("/api/studio/versions",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({project_id:project.id})});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Version save failed");document.getElementById("draftNotice").textContent="Version "+data.version.version+" safely saved.";await refreshProjectTools();}
    catch(err){document.getElementById("draftNotice").textContent=err.message;}
   });
   document.getElementById("exportProjectBrief").addEventListener("click",()=>{const d={...formPayload(),format:selectedFormat(),pipeline:state.catalog.pipeline};const blob=new Blob([JSON.stringify(d,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="sintu-project-brief.json";a.click();URL.revokeObjectURL(a.href);});
   document.getElementById("localDrafts").addEventListener("click",async e=>{
    const remoteOpen=e.target.closest("[data-open-project]"),remoteDelete=e.target.closest("[data-delete-project]"),viewTask=e.target.closest("[data-view-project-output]"),localOpen=e.target.closest("[data-open-local]"),localDelete=e.target.closest("[data-delete-local]");
    if(viewTask){const output=document.getElementById("productionPackageOutput");output.hidden=false;output.textContent="Task output load ho raha hai…";try{const r=await fetch("/api/projects/"+encodeURIComponent(viewTask.dataset.viewProjectOutput)+"/task-output",{credentials:"same-origin"});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Task not found");output.textContent="Task #"+data.task.id+" · "+data.task.status+"\n\n"+(data.task.output||data.task.prompt||"No output saved.");}catch(err){output.textContent=err.message;}}
-   if(remoteOpen){const d=state.projects.find(x=>x.id===remoteOpen.dataset.openProject);if(d)fillForm(d,true);}
+   if(remoteOpen){const d=state.projects.find(x=>x.id===remoteOpen.dataset.openProject);if(d){fillForm(d,true);window.SINTU_ACTIVE_PROJECT_ID=d.id;refreshProjectTools();}}
    if(remoteDelete){const id=remoteDelete.dataset.deleteProject;if(!confirm("Is saved project ko delete karna hai?"))return;try{const r=await fetch("/api/projects/"+encodeURIComponent(id),{method:"DELETE",credentials:"same-origin"});if(!r.ok)throw new Error("Delete failed");state.projects=state.projects.filter(x=>x.id!==id);renderDrafts();}catch(err){alert(err.message);}}
-   if(localOpen){const d=state.localDrafts[Number(localOpen.dataset.openLocal)];if(d)fillForm(d,false);}
+   if(localOpen){const d=state.localDrafts[Number(localOpen.dataset.openLocal)];if(d){fillForm(d,false);window.SINTU_ACTIVE_PROJECT_ID="";}}
    if(localDelete){state.localDrafts.splice(Number(localDelete.dataset.deleteLocal),1);saveLocal();}
   });
   readLocal();renderDrafts();renderPipeline();renderFormats();renderArchitecture();loadProjects();
