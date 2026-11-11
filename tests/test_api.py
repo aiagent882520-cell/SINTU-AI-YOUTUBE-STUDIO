@@ -1392,6 +1392,27 @@ def test_youtube_comment_review_updates_existing_record(tmp_path, monkeypatch):
     assert rows[0]["notes"] == "Checked; no action needed"
 
 
+def test_youtube_comment_reviews_queue_persists_comment_snapshot_and_filters(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    payload = {"comment_id":"comment-queue-1","video_id":"abcdefghijk","review_status":"follow_up",
+               "notes":"Need context","author":"Creator Fan","text":"Please make a part two",
+               "published_at":"2026-11-10T10:00:00Z","likes":7,"classification":"positive"}
+    saved = client.post("/api/admin/youtube/comments/review", json=payload)
+    assert saved.status_code == 200
+    all_reviews = client.get("/api/admin/youtube/comments/reviews")
+    assert all_reviews.status_code == 200
+    assert all_reviews.json()["total"] == 1
+    record = all_reviews.json()["items"][0]
+    assert record["author"] == "Creator Fan"
+    assert record["text"] == "Please make a part two"
+    assert record["likes"] == 7
+    filtered = client.get("/api/admin/youtube/comments/reviews?review_status=resolved")
+    assert filtered.status_code == 200
+    assert filtered.json()["total"] == 0
+    follow_up = client.get("/api/admin/youtube/comments/reviews?review_status=follow_up")
+    assert follow_up.json()["items"][0]["comment_id"] == "comment-queue-1"
+
+
 def test_youtube_comment_review_rejects_invalid_status(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     response = client.post("/api/admin/youtube/comments/review", json={
