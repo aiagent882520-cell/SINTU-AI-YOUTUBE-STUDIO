@@ -18,7 +18,7 @@ def _base_url():
         raise ComfyUIUnavailable("ComfyUI must use localhost or the Docker host bridge.")
     return url
 
-def _load_api_workflow(env_name):
+def _load_api_workflow(env_name, required_placeholders=None):
     configured = os.getenv(env_name, "").strip()
     if not configured:
         return None, False, "API workflow file path is not configured."
