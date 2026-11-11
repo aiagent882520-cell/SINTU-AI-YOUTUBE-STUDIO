@@ -122,6 +122,8 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
 
     image_paths = image_paths or []
     subtitles = subtitles or []
+    if subtitles:
+        raise ValueError("Subtitles/captions are disabled. Exported videos contain no spoken-word text overlays.")
     if image_paths and len(image_paths) != len(scenes):
         raise ValueError("Scene images ki sankhya scenes ke barabar honi chahiye.")
     if subtitles and len(subtitles) != len(scenes):
@@ -217,9 +219,10 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         "transition": transition,
         "motion": motion,
         "scene_images": len(image_paths),
-        "subtitles_burned_in": bool(subtitles),
+        "subtitles_burned_in": False,
+        "brand_watermark": "SINTU AI YOUTUBE STUDIO",
         "format": "MP4 / H.264",
-        "note": "Scene images, optional narration, background music with automatic fade-in/fade-out, and burned-in captions are combined. Optional slow zoom motion is a basic Ken Burns effect; advanced 2D/3D animation and VFX are not included.",
+        "note": "Clean scene imagery with the mandatory SINTU AI YOUTUBE STUDIO watermark, optional narration and background music. Spoken words and scene descriptions are never burned into the frames.",
     }
 
 
@@ -249,6 +252,8 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
     if len(clip_audio_volumes) != len(video_paths) or any(not isinstance(v, (int, float)) or not 0 <= v <= 2 for v in clip_audio_volumes):
         raise ValueError("Har clip ka source audio volume 0 se 2 (0–200%) hona chahiye.")
     subtitles = subtitles or []
+    if subtitles:
+        raise ValueError("Subtitles/captions are disabled. Exported videos contain no spoken-word text overlays.")
     if subtitles and len(subtitles) != len(video_paths):
         raise ValueError("Subtitle lines ki sankhya AI clips ke barabar honi chahiye.")
     if any(len(line) > 1000 for line in subtitles):
@@ -290,6 +295,8 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         with tempfile.TemporaryDirectory(prefix="sintu-ai-join-") as temp:
             work = Path(temp)
             command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
+            brand_path = work / "sintu-watermark.png"
+            _make_watermark_image().save(brand_path, format="PNG")
             for path in video_paths:
                 command += ["-i", str(path)]
 
@@ -314,6 +321,8 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                 command += ["-stream_loop", "-1", "-i", str(music_path)]
                 music_index = next_index
                 next_index += 1
+            brand_index = next_index
+            command += ["-loop", "1", "-i", str(brand_path)]
 
             filters = []
             video_labels = []
@@ -341,6 +350,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                 filters.append(f"[{audio_input_indexes[index]}:a:0]{audio_filters},volume={float(clip_audio_volumes[index]):.3f}[{alabel}]")
 
             filters.append("".join(video_labels) + f"concat=n={len(video_paths)}:v=1:a=0[vout]")
+            filters.append(f"[vout][{brand_index}:v]overlay=x=W-w-28:y=H-h-28:format=auto[vbrand]")
             filters.append("".join(audio_labels) + f"concat=n={len(video_paths)}:v=0:a=1[clipaudio]")
 
             mix_labels = []
@@ -358,7 +368,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                 mix_labels.append("[music]")
             filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,atrim=duration={total_duration:.3f}[aout]")
 
-            if any(line.strip() for line in subtitles):
+            if False and any(line.strip() for line in subtitles):
                 srt_path = work / "captions.srt"
                 def stamp(seconds):
                     millis = int(round(seconds * 1000))
@@ -380,7 +390,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                 filters.append(f"[vout]subtitles=filename='{safe_srt}':force_style='FontSize=22,Outline=2,Shadow=0,MarginV=70'[vcaption]")
                 video_map = "[vcaption]"
             else:
-                video_map = "[vout]"
+                video_map = "[vbrand]"
 
             command += ["-filter_complex", ";".join(filters), "-map", video_map, "-map", "[aout]",
                         "-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
@@ -413,9 +423,10 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         "transition": transition,
         "motion": "source AI clip motion",
         "scene_images": 0,
-        "subtitles_burned_in": any(line.strip() for line in subtitles),
+        "subtitles_burned_in": False,
+        "brand_watermark": "SINTU AI YOUTUBE STUDIO",
         "format": "MP4 / H.264",
-        "note": "Original clip audio is retained at reduced ambient level and mixed with optional voiceover/music. Captions are timed to each clip. Fade mode fades each clip at its boundaries; it is not a cross-dissolve."
+        "note": "Original clip audio is retained at reduced ambient level and mixed with optional voiceover/music. The SINTU AI YOUTUBE STUDIO watermark is added to the final output; no subtitle or spoken-word overlay is burned in. Fade mode fades each clip at its boundaries; it is not a cross-dissolve."
     }
 
 
@@ -434,9 +445,9 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
         raise ValueError("Timeline mein 1 se 25 items hon aur har item ka scene text ho.")
     if not 2 <= seconds_per_scene <= 12:
         raise ValueError("Still image duration 2 se 12 seconds honi chahiye.")
-    if subtitles and len(subtitles) != len(items):
-        raise ValueError("Subtitle lines ki sankhya timeline items ke barabar honi chahiye.")
-    subtitles = subtitles or []
+    if subtitles:
+        raise ValueError("Subtitles/captions are disabled. Exported videos contain no spoken-word text overlays.")
+    subtitles = []
     transitions = transitions or [transition] * len(items)
     if len(transitions) != len(items) or any(x not in {"cut", "fade"} for x in transitions):
         raise ValueError("Har timeline scene ke liye cut ya fade transition chahiye.")
