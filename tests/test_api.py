@@ -2145,3 +2145,24 @@ def test_storyboard_renderer_accepts_local_piper_wav_voiceover(tmp_path, monkeyp
     response = client.post("/api/render", json={"title":"Piper WAV test","scenes":["One scene"],"audio_id":audio_id})
     assert response.status_code == 200
     assert called["audio_path"].suffix == ".wav"
+
+
+def test_background_run_can_be_started_and_resumed_after_pause(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    project_response = client.post("/api/projects", json={
+        "name":"Background workflow test","brief":"Test the one-click agent pipeline",
+        "format_id":"youtube-shorts","language":"Hindi","duration_seconds":30
+    })
+    project_id = project_response.json()["project"]["id"]
+    run_response = client.post("/api/studio/runs", json={"project_id":project_id,"format_id":"youtube-shorts"})
+    run_id = run_response.json()["run"]["id"]
+    monkeypatch.setattr(main, "_run_studio_background", lambda owner, identifier: None)
+    started = client.post(f"/api/studio/runs/{run_id}/execute-all")
+    assert started.status_code == 200
+    assert started.json()["started"] is True
+    assert started.json()["run"]["status"] == "in_progress"
+    studio_engine = __import__("app.studio_engine", fromlist=["set_run_status"])
+    studio_engine.set_run_status("test-admin", run_id, "paused", "Test pause")
+    resumed = client.post(f"/api/studio/runs/{run_id}/execute-all")
+    assert resumed.status_code == 200
+    assert resumed.json()["run"]["status"] == "in_progress"
