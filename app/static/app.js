@@ -938,7 +938,9 @@ async function checkImageService() {
     window.SINTU_IMAGE_LOCAL_AVAILABLE=!!info.local_available;
     $("imageNotice").textContent = info.local_available
       ? "Ready: free local ComfyUI image workflow · no API key or media token."
-      : info.available ? "Ready: optional paid image provider." : "Free image generation needs a local ComfyUI API workflow. Paid provider remains locked until revenue and approval.";
+      : info.available ? "Ready: optional paid image provider."
+      : info.workflow_configured ? "ComfyUI workflow valid, but local server is offline: " + (info.reason || "Start ComfyUI on the configured local address.")
+      : "Free image generation needs a valid ComfyUI API workflow JSON. " + (info.reason || "Set COMFYUI_IMAGE_WORKFLOW_PATH.");
     $("imageButton").disabled = !info.available;
   } catch (error) {
     $("imageNotice").textContent = "Image service status unavailable.";
@@ -983,7 +985,9 @@ async function checkAIVideoService() {
     window.SINTU_VIDEO_LOCAL_AVAILABLE=!!info.local_available;
     $("aiVideoStatus").textContent = info.local_available
       ? "Ready: free local ComfyUI text-to-video workflow · no API key or media token."
-      : info.available ? "Ready: optional paid Gemini video provider." : "Free video generation needs a local ComfyUI video workflow. Paid provider remains locked until revenue and approval.";
+      : info.available ? "Ready: optional paid Gemini video provider."
+      : info.workflow_configured ? "ComfyUI video workflow valid, but local server is offline: " + (info.reason || "Start ComfyUI on the configured local address.")
+      : "Free video generation needs a valid ComfyUI API workflow JSON. " + (info.reason || "Set COMFYUI_VIDEO_WORKFLOW_PATH.");
     $("aiVideoButton").disabled = !info.available;
   } catch (error) {
     $("aiVideoStatus").textContent = "AI video provider status unavailable.";
