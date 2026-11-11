@@ -219,3 +219,5 @@ Follow-up workload CSV export: the community review workload panel can download 
 3. The launcher creates a private `.venv`, installs Python packages, creates a random local admin password/session secret in the ignored `.env`, and starts the dashboard at `http://127.0.0.1:8000`.
 4. The first run prints the admin username and newly generated password in the command window. Save that password. The launcher does not create API keys; add provider credentials to `.env` later if/when needed.
 5. Keep the command window open while using SINTU. FFmpeg is optional for video rendering; install it separately if local MP4 rendering is needed.
+
+- Generated task output is fetched through the project-owner-checked route `GET /api/projects/{project_id}/task-output`, rather than exposing another user's task by ID from the Production Studio card.
