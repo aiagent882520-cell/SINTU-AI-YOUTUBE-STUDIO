@@ -33,7 +33,7 @@ def music_status():
         "local_available": True,
         "paid_available": enabled and key_set,
         "local_engine": "SINTU Procedural Composer",
-        "provider": "Stability AI Stable Audio 3.0",
+        "provider": "SINTU Procedural Composer / optional Stability AI",
         "model": MODEL,
         "enabled": enabled,
         "api_key_configured": key_set,

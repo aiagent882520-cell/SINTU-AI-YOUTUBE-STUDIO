@@ -82,21 +82,22 @@ function escapeHtml(value) {
 }
 async function refresh() {
   try {
-    const [status,agents,tasks,providers,workflows] = await Promise.all([
-      request("/api/status"), request("/api/agents"), request("/api/tasks"),
+    const [status,agents,studioAgents,tasks,providers,workflows] = await Promise.all([
+      request("/api/status"), request("/api/agents"), request("/api/studio/agents"), request("/api/tasks"),
       request("/api/providers"), request("/api/workflows")
     ]);
     $("health").textContent = "API online";
-    $("agentCount").textContent = agents.total;
+    $("agentCount").textContent = studioAgents.total_role_instances;
     $("workflowCount").textContent = workflows.total;
     $("taskCount").textContent = status.tasks_saved;
     $("doneCount").textContent = status.tasks_completed;
     const available = [];
-    if (providers.openai.configured) available.push("OpenAI");
-    if (providers.gemini.configured) available.push("Gemini");
+    if (providers.local.configured) available.push("Free local Ollama");
+    if (providers.paid_upgrades_allowed && providers.openai.configured) available.push("OpenAI (optional)");
+    if (providers.paid_upgrades_allowed && providers.gemini.configured) available.push("Gemini (optional)");
     $("providerStatus").textContent = available.length
-      ? "Configured: " + available.join(" + ") + " · selected: " + providers.selected
-      : "AI key configured nahi hai — server admin ko OpenAI/Gemini key secure environment mein add karni hogi.";
+      ? "Available: " + available.join(" + ") + " · selected: " + providers.selected
+      : "Free local AI setup needed: install/start Ollama and pull the configured model. Paid providers locked until revenue + approval.";
     $("agents").innerHTML = agents.agents.map(a =>
       '<div class="agent"><span>'+a.id+'. '+escapeHtml(a.name)+'</span><small>'+escapeHtml(a.status)+'</small></div>'
     ).join("");
@@ -110,7 +111,7 @@ async function loadTeam() {
     const data = await request("/api/workflows/" + encodeURIComponent(workflow) + "/team");
     const names = data.team.map(role => role.name).join(" · ");
     $("teamStatus").textContent = "Assigned role team (" + data.team.length + "): " + names +
-      " — one configured AI model coordinates these role prompts; these are not 61 independent agents.";
+      " — each specialist has a separate checker role. The production run executes worker and checker as separate local-model requests.";
   } catch (error) {
     $("teamStatus").textContent = "Workflow team details unavailable.";
   }

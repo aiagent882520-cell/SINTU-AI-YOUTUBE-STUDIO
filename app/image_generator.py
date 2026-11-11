@@ -35,7 +35,7 @@ def image_status():
         "enabled_by_admin": enabled,
         "provider_configured": configured,
         "access_token_configured": token_configured,
-        "provider": "OpenAI",
+        "provider": "ComfyUI local / optional OpenAI",
         "model": os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
         "formats": ["png"],
         "notice": "Paid image generation remains locked until revenue is confirmed and the user explicitly approves upgrades.",

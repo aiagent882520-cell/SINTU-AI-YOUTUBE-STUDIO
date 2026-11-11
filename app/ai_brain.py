@@ -69,15 +69,30 @@ class ProviderNotConfigured(Exception):
 class ProviderRequestError(Exception):
     pass
 
+def _ollama_status():
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+    model = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+    try:
+        with urllib.request.urlopen(base_url + "/api/tags", timeout=0.5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        names = [str(item.get("name", "")) for item in payload.get("models", [])]
+        available = any(name == model or name.startswith(model + ":") for name in names)
+        return {"service_running": True, "model_available": available}
+    except Exception:
+        return {"service_running": False, "model_available": False}
+
 def provider_status(selected_override=None):
     selected = (selected_override or os.getenv("AI_PROVIDER", "local")).strip().lower()
     if selected not in {"auto", "local", "openai", "gemini"}:
         selected = "auto"
+    local_status = _ollama_status()
     return {
         "selected": selected,
         "paid_upgrades_allowed": paid_upgrades_allowed(),
         "local": {
-            "configured": True,
+            "configured": local_status["model_available"],
+            "service_running": local_status["service_running"],
+            "model_available": local_status["model_available"],
             "model": os.getenv("OLLAMA_MODEL", "qwen2.5:3b"),
             "base_url": os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
         },

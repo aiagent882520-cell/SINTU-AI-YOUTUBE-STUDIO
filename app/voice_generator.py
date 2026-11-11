@@ -38,7 +38,7 @@ def voice_status():
         "provider_configured": configured,
         "access_token_required": True,
         "access_token_configured": token_configured,
-        "provider": "OpenAI",
+        "provider": "Piper local / optional OpenAI",
         "model": os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
         "format": "MP3",
         "notice": "Paid APIs remain locked until revenue is confirmed and the user explicitly approves upgrades.",
