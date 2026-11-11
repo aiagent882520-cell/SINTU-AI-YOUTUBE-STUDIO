@@ -18,15 +18,55 @@ def _base_url():
         raise ComfyUIUnavailable("ComfyUI must use localhost or the Docker host bridge.")
     return url
 
-def image_workflow_status():
-    path = Path(os.getenv("COMFYUI_IMAGE_WORKFLOW_PATH", "")).expanduser()
+def _load_api_workflow(env_name):
+    configured = os.getenv(env_name, "").strip()
+    if not configured:
+        return None, False, "API workflow file path is not configured."
+    path = Path(configured).expanduser()
+    if not path.is_file():
+        return None, False, "Configured API workflow file was not found."
+    try:
+        workflow = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None, False, "API workflow JSON could not be read."
+    if not isinstance(workflow, dict) or not workflow:
+        return None, False, "API workflow must be a non-empty ComfyUI API node dictionary."
+    for node_id, node in workflow.items():
+        if not isinstance(node, dict) or not isinstance(node.get("class_type"), str) or not isinstance(node.get("inputs"), dict):
+            return None, False, "API workflow node " + str(node_id) + " must contain class_type and inputs."
+    if "__SINTU_PROMPT__" not in json.dumps(workflow):
+        return None, False, "API workflow is missing the __SINTU_PROMPT__ placeholder."
+    return workflow, True, None
+
+
+def _engine_status(env_name):
+    workflow, configured, reason = _load_api_workflow(env_name)
     try:
         base = _base_url()
     except ComfyUIUnavailable:
-        return {"available": False, "reason": "ComfyUI URL must be localhost."}
-    return {"available": bool(str(path) and path.is_file()), "base_url": base,
-            "workflow_configured": bool(str(path) and path.is_file()),
-            "workflow_path": str(path) if path.is_file() else None}
+        return {"available": False, "server_reachable": False, "workflow_configured": configured,
+                "workflow_valid": configured, "reason": "ComfyUI URL must use localhost or the Docker host bridge."}
+    if not configured:
+        return {"available": False, "server_reachable": False, "workflow_configured": False,
+                "workflow_valid": False, "base_url": base, "reason": reason}
+    try:
+        response = json.loads(_request(base + "/system_stats", timeout=2))
+        reachable = isinstance(response, dict)
+    except Exception:
+        reachable = False
+    if not reachable:
+        reason = "ComfyUI server did not respond at the configured local URL."
+    return {"available": bool(configured and reachable), "server_reachable": reachable,
+            "workflow_configured": configured, "workflow_valid": configured,
+            "base_url": base, "reason": reason}
+
+
+def image_workflow_status():
+    return _engine_status("COMFYUI_IMAGE_WORKFLOW_PATH")
+
+
+def video_workflow_status():
+    return _engine_status("COMFYUI_VIDEO_WORKFLOW_PATH")
 
 def _replace_placeholders(value, prompt, negative, width, height, seed):
     if isinstance(value, dict):
@@ -56,13 +96,9 @@ def generate_image_bytes(prompt, width, height, timeout_seconds=240):
     status = image_workflow_status()
     if not status["available"]:
         raise ComfyUIUnavailable("Free ComfyUI image workflow is not configured. Set COMFYUI_IMAGE_WORKFLOW_PATH to an API-format workflow JSON.")
-    workflow_path = Path(os.environ["COMFYUI_IMAGE_WORKFLOW_PATH"]).expanduser()
-    try:
-        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        raise ComfyUIUnavailable("ComfyUI workflow JSON could not be read.") from None
-    if not isinstance(workflow, dict) or not workflow:
-        raise ComfyUIUnavailable("ComfyUI workflow must be a non-empty API-format node dictionary.")
+    workflow, valid, reason = _load_api_workflow("COMFYUI_IMAGE_WORKFLOW_PATH")
+    if not valid:
+        raise ComfyUIUnavailable(reason or "ComfyUI image workflow is invalid.")
     workflow = _replace_placeholders(workflow, prompt,
         "text, watermark, low quality, distorted, malformed, extra limbs",
         width, height, secrets.randbelow(2**31 - 1))
@@ -95,27 +131,14 @@ def generate_image_bytes(prompt, width, height, timeout_seconds=240):
         raise ComfyUIUnavailable("ComfyUI local request failed (" + type(exc).__name__ + ").") from None
 
 
-def video_workflow_status():
-    path = Path(os.getenv("COMFYUI_VIDEO_WORKFLOW_PATH", "")).expanduser()
-    try:
-        base = _base_url()
-    except ComfyUIUnavailable:
-        return {"available": False, "reason": "ComfyUI URL must be localhost."}
-    return {"available": bool(path.is_file()), "base_url": base,
-            "workflow_configured": bool(path.is_file()),
-            "workflow_path": str(path) if path.is_file() else None}
 
 def generate_video_bytes(prompt, width, height, frames, fps=24, timeout_seconds=600):
     status = video_workflow_status()
     if not status["available"]:
         raise ComfyUIUnavailable("Free ComfyUI video workflow is not configured. Set COMFYUI_VIDEO_WORKFLOW_PATH to an API-format workflow JSON.")
-    workflow_path = Path(os.environ["COMFYUI_VIDEO_WORKFLOW_PATH"]).expanduser()
-    try:
-        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        raise ComfyUIUnavailable("ComfyUI video workflow JSON could not be read.") from None
-    if not isinstance(workflow, dict) or not workflow:
-        raise ComfyUIUnavailable("ComfyUI video workflow must be a non-empty API-format node dictionary.")
+    workflow, valid, reason = _load_api_workflow("COMFYUI_VIDEO_WORKFLOW_PATH")
+    if not valid:
+        raise ComfyUIUnavailable(reason or "ComfyUI video workflow is invalid.")
     workflow = _replace_placeholders(workflow, prompt,
         "text, watermark, low quality, distorted, malformed",
         width, height, secrets.randbelow(2**31 - 1))
