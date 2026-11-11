@@ -2,7 +2,7 @@
 (() => {
  const root=document.getElementById("productionStudio");
  if(!root)return;
- const state={catalog:null,format:"youtube-shorts",preset:"mystery-short",localDrafts:[],projects:[],editingProjectId:null};
+ const state={catalog:null,format:"youtube-shorts",preset:"mystery-short",localDrafts:[],projects:[],editingProjectId:null,activeRun:null};
  const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
  const storeKey="sintu.production.drafts.v1";
  function readLocal(){try{state.localDrafts=JSON.parse(localStorage.getItem(storeKey)||"[]");if(!Array.isArray(state.localDrafts))state.localDrafts=[];}catch{state.localDrafts=[];}}
@@ -16,6 +16,29 @@
   document.getElementById("formatDetail").textContent=selectedFormat().name+" · "+selectedFormat().recommended_resolution+" · "+selectedFormat().duration;
  }
  function renderPipeline(){document.getElementById("pipelineCards").innerHTML=state.catalog.pipeline.map((x,i)=>'<div class="pipeline-step"><b>'+String(i+1).padStart(2,"0")+' · '+esc(x.name)+'</b><span>'+esc(x.description)+'</span></div>').join("");}
+ function renderArchitecture(){
+  const scope=state.catalog.scope||{},registry=state.catalog.agent_registry||{};
+  document.getElementById("studioArchitectureStats").textContent=(scope.video_format_count||state.catalog.formats.length)+" video formats · "+(scope.studio_module_count||state.catalog.studio_modules.length)+" Studio Modules · "+(registry.specialist_total||0)+" Specialist Agents · "+(registry.checker_total||0)+" independent Checker Agents · ₹0-first policy";
+  document.getElementById("studioModulesGrid").innerHTML=(state.catalog.studio_modules||[]).map((name,i)=>'<article class="pipeline-step"><b>'+String(i+1).padStart(2,"0")+' · '+esc(name)+'</b><span>Included in the complete studio architecture</span></article>').join("");
+  document.getElementById("studioAgentPairs").innerHTML=(registry.checker_pairs||[]).map((p,i)=>'<div class="agent-pair"><b>'+String(i+1)+'. '+esc(p.specialist)+'</b><span>→ '+esc(p.checker)+'</span></div>').join("");
+  const select=document.getElementById("formatCategory"),cats=[...new Set(state.catalog.formats.map(x=>x.category))].sort();
+  select.innerHTML='<option value="">All categories</option>'+cats.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join("");
+ }
+ function renderRun(run){
+  state.activeRun=run;const p=run.progress||{};
+  document.getElementById("productionRunStatus").innerHTML='<b>Run '+esc(run.id)+'</b> · '+esc(run.status)+' · '+(p.approved||0)+' / '+(p.total||0)+' approved<div class="run-task-list">'+(run.tasks||[]).map(t=>'<div class="agent-pair"><b>'+esc(t.specialist)+'</b> → '+esc(t.checker)+'<span> · '+esc(t.stage_id)+' · '+esc(t.status)+(t.checker_decision?' · '+esc(t.checker_decision):'')+'</span>'+(t.checker_issues?'<small>'+esc(t.checker_issues)+'</small>':'')+'</div>').join("")+'</div>';
+  const active=(run.tasks||[]).find(t=>t.id===run.current_task_id);
+  document.getElementById("executeNextAgent").disabled=!(active&&["pending","needs_revision"].includes(active.status));
+  document.getElementById("approveProductionRun").disabled=run.status!=="awaiting_human_approval";
+ }
+ async function saveCurrentProject(){
+  const payload=formPayload();if(!payload.brief)throw new Error("Pehle topic ya brief likhein.");
+  const editing=state.editingProjectId;
+  const r=await fetch(editing?("/api/projects/"+encodeURIComponent(editing)):"/api/projects",{method:editing?"PUT":"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+  const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Project save failed.");
+  if(editing)state.projects=state.projects.map(x=>x.id===editing?data.project:x);else state.projects.unshift(data.project);
+  state.editingProjectId=data.project.id;renderDrafts();return data.project;
+ }
  function renderDrafts(){
   const el=document.getElementById("localDrafts");if(!el)return;
   const remote=state.projects.map(d=>'<article class="local-draft"><b>'+esc(d.name)+'</b><small>Server saved · '+esc(d.format_id)+(d.last_task_status?' · AI: '+esc(d.last_task_status):'')+' · '+new Date(d.updated_at).toLocaleString()+'</small><p>'+esc(d.brief.slice(0,220))+'</p><div class="actions"><button type="button" class="secondary" data-open-project="'+esc(d.id)+'">Open</button>'+(d.last_task_id?'<button type="button" class="secondary" data-view-project-output="'+esc(d.id)+'">View output #'+esc(d.last_task_id)+'</button>':'')+'<a class="secondary" href="/api/projects/'+esc(d.id)+'/export">Export JSON</a><button type="button" class="secondary" data-delete-project="'+esc(d.id)+'">Delete</button></div></article>').join("");
@@ -40,8 +63,8 @@
   });
   document.getElementById("generateProductionPackage").addEventListener("click",async()=>{
    const payload=formPayload();if(!payload.brief){alert("Pehle topic ya brief likhein.");return;}
-   const workflowMap={"youtube-shorts":"shorts","instagram-reels":"shorts","facebook-reels":"shorts","tiktok":"shorts","podcast-clips":"shorts","story-video":"shorts","youtube-long":"long-video","documentary":"long-video","educational":"long-video","course-lesson":"course","faceless":"long-video","explainer":"long-video","2d-cartoon":"script","3d-animation":"script","ai-avatar":"script","product-ad":"social","music-video":"social","square-social":"social","landscape-social":"social","youtube-live-promo":"social","news-summary":"research"};
-   const workflow=workflowMap[payload.format_id]||"content";
+   const preset=selectedFormat().preset;const workflowMap={short:"shorts",long:"long-video",documentary:"long-video",education:"course",ad:"social",live:"content",podcast:"content",2d:"script",3d:"script",motion:"script",film:"long-video",stop:"script",music:"social",vfx:"script",immersive:"script",hybrid:"script",avatar:"script",news:"research"};
+   const workflow=workflowMap[preset]||"content";
    const output=document.getElementById("productionPackageOutput");output.hidden=false;output.textContent="AI production package generate ho raha hai…";
    try{
     let projectId=state.editingProjectId;
@@ -53,7 +76,26 @@
     const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"AI generation failed");
     state.projects=state.projects.map(x=>x.id===projectId?data.project:x);renderDrafts();
     output.textContent="Saved project · Task #"+data.task.id+" · "+data.task.provider+" / "+data.task.model+"\n\n"+data.task.output;
-   }catch(err){output.textContent="Generation abhi complete nahi hua: "+err.message+"\n\nAPI key/provider configure hone ke baad isi button se dobara try karein.";}
+   }catch(err){output.textContent="Generation abhi complete nahi hua: "+err.message+"\n\nLocal Ollama setup karein; paid provider automatically enable nahi hoga.";}
+  });
+  document.getElementById("startProductionRun").addEventListener("click",async()=>{
+   const box=document.getElementById("productionRunStatus");box.textContent="Project save aur complete production task queue ban rahi hai…";
+   try{const project=await saveCurrentProject();const r=await fetch("/api/studio/runs",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({project_id:project.id,format_id:project.format_id})});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Run create failed");renderRun(data.run);}
+   catch(err){box.textContent=err.message;}
+  });
+  document.getElementById("executeNextAgent").addEventListener("click",async()=>{
+   if(!state.activeRun)return;const b=document.getElementById("executeNextAgent"),box=document.getElementById("productionRunStatus");b.disabled=true;box.textContent="Local AI specialist aur independent checker alag-alag run ho rahe hain…";
+   try{const r=await fetch("/api/studio/runs/"+encodeURIComponent(state.activeRun.id)+"/execute-next",{method:"POST",credentials:"same-origin"});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Agent execution failed");renderRun(data.run);const out=document.getElementById("productionPackageOutput");out.hidden=false;out.textContent="Worker: "+data.worker.role+"\nChecker: "+data.checker.role+" · "+data.checker.decision+"\nEvidence: "+data.checker.evidence+"\n"+(data.checker.issues?"Revision: "+data.checker.issues:"")+"\n\n"+data.worker.output;}
+   catch(err){box.textContent=err.message;b.disabled=false;}
+  });
+  document.getElementById("approveProductionRun").addEventListener("click",async()=>{
+   if(!state.activeRun||!confirm("All checker gates pass. Final production run ko approve karna hai?"))return;
+   try{const r=await fetch("/api/studio/runs/"+encodeURIComponent(state.activeRun.id)+"/approve",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({approved:true,note:"User approved final production workflow."})});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Approval failed");renderRun(data.run);}
+   catch(err){document.getElementById("productionRunStatus").textContent=err.message;}
+  });
+  document.getElementById("saveProjectVersion").addEventListener("click",async()=>{
+   try{const project=await saveCurrentProject();const r=await fetch("/api/studio/versions",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({project_id:project.id})});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Version save failed");document.getElementById("draftNotice").textContent="Version "+data.version.version+" safely saved.";}
+   catch(err){document.getElementById("draftNotice").textContent=err.message;}
   });
   document.getElementById("exportProjectBrief").addEventListener("click",()=>{const d={...formPayload(),format:selectedFormat(),pipeline:state.catalog.pipeline};const blob=new Blob([JSON.stringify(d,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="sintu-project-brief.json";a.click();URL.revokeObjectURL(a.href);});
   document.getElementById("localDrafts").addEventListener("click",async e=>{
@@ -64,7 +106,7 @@
    if(localOpen){const d=state.localDrafts[Number(localOpen.dataset.openLocal)];if(d)fillForm(d,false);}
    if(localDelete){state.localDrafts.splice(Number(localDelete.dataset.deleteLocal),1);saveLocal();}
   });
-  readLocal();renderDrafts();renderPipeline();renderFormats();loadProjects();
+  readLocal();renderDrafts();renderPipeline();renderFormats();renderArchitecture();loadProjects();
  }
  fetch("/api/production-catalog").then(r=>{if(!r.ok)throw new Error("catalog unavailable");return r.json();}).then(data=>{state.catalog=data;init();}).catch(()=>{root.querySelector("#catalogNotice").textContent="Production catalog load nahi ho paya. Page refresh karein.";});
 })();
