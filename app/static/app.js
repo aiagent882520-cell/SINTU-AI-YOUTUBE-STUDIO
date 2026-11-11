@@ -245,6 +245,7 @@ async function loadYouTubeSavedReviews(loadMore=false){
  const owner=$("youtubeSavedReviewsOwnerFilter")?.value.trim()||"";
  const due=$("youtubeSavedReviewsDueFilter")?.value||"";
  if(!loadMore){youtubeSavedReviewsOffset=0;youtubeSavedReviewsItems=[];youtubeSavedReviewSelectedIds.clear();}
+ if(!loadMore&&typeof loadYouTubeFollowUpSummary==="function")loadYouTubeFollowUpSummary();
  notice.textContent="Saved review queue load ho rahi hai…";
  if(more)more.disabled=true;
  try{
