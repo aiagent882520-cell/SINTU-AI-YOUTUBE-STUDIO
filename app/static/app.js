@@ -473,8 +473,8 @@ async function loadYouTubeFollowUpSummary(){
   const data=await request("/api/admin/youtube/comments/reviews/follow-ups/summary");
   await loadYouTubeFollowUpDueInbox();
   const totals=data.totals||{};
-  const owners=(data.owners||[]).map(row=>'<div>'+analyticsEscape(row.owner)+': '+Number(row.total||0)+' total · '+Number(row.overdue||0)+' overdue · '+Number(row.due_today||0)+' due today · '+Number(row.resolved||0)+' resolved</div>').join("");
-  box.innerHTML='<strong>Follow-up workload</strong><div>'+Number(totals.total||0)+' total · '+Number(totals.overdue||0)+' overdue · '+Number(totals.due_today||0)+' due today · '+Number(totals.upcoming||0)+' upcoming · '+Number(totals.unscheduled||0)+' unscheduled · '+Number(totals.resolved||0)+' resolved</div><strong>Team workload</strong>'+ (owners||'<div>No assigned reviews yet.</div>');
+  const owners=(data.owners||[]).map(row=>'<div class="admin-row"><strong>'+analyticsEscape(row.owner)+'</strong><span>'+Number(row.total||0)+' total · '+Number(row.open||0)+' open · '+Number(row.resolved||0)+' resolved · '+Number(row.overdue||0)+' overdue · '+Number(row.due_today||0)+' due today</span><span>Resolution rate: '+Number(row.resolution_rate||0)+'% · Follow-up coverage: '+Number(row.follow_up_coverage||0)+'%</span></div>').join("");
+  box.innerHTML='<strong>Follow-up workload</strong><div>'+Number(totals.total||0)+' total · '+Number(totals.open||0)+' open · '+Number(totals.overdue||0)+' overdue · '+Number(totals.due_today||0)+' due today · '+Number(totals.upcoming||0)+' upcoming · '+Number(totals.unscheduled||0)+' unscheduled · '+Number(totals.resolved||0)+' resolved</div><div>Overall resolution rate: '+Number(totals.resolution_rate||0)+'%</div><strong>Team performance (internal queue)</strong>'+ (owners||'<div>No assigned reviews yet.</div>');
  }catch(e){box.textContent=e.message;}
 }
 $("youtubeSavedReviewsSummaryRefresh")?.addEventListener("click",loadYouTubeFollowUpSummary);
