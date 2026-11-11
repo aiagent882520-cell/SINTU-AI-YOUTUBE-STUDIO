@@ -194,3 +194,10 @@ Follow-up workload CSV export: the community review workload panel can download 
 - The UI keeps an offline local-browser fallback if server sync is unavailable. Local fallback drafts remain on that browser and are not automatically synchronized.
 - Server project data is stored in the configured SINTU data directory. Use a persistent volume and backups in deployment.
 - These project records store planning briefs and pipeline metadata; they do not imply that AI generation, video rendering or social publishing has occurred.
+
+
+### Production Brief to AI Package
+
+- Production Studio includes a direct action that sends the current brief to the existing AI generation API and selects a workflow based on the chosen format (Shorts, long-form, course, social, script or research).
+- Successful output is saved in the existing task history and shown in the Production Studio. Provider-not-configured and provider errors are shown honestly; no placeholder output is fabricated.
+- The button uses the same server-side OpenAI/Gemini provider configuration as the rest of the app. API keys remain server-side.
