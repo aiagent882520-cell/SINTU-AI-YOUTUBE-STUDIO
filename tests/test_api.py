@@ -1792,3 +1792,14 @@ def test_production_project_input_limits_and_bad_ids(tmp_path, monkeypatch):
     assert client.post("/api/projects", json=payload).status_code == 422
     assert client.get("/api/projects/not-an-id").status_code == 400
     assert client.delete("/api/projects/not-an-id").status_code == 400
+
+
+def test_production_studio_has_direct_generation_action(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    page = client.get("/")
+    assert page.status_code == 200
+    assert 'id="generateProductionPackage"' in page.text
+    script = client.get("/static/production_studio.js")
+    assert script.status_code == 200
+    assert 'workflowMap' in script.text
+    assert 'fetch("/api/generate"' in script.text
