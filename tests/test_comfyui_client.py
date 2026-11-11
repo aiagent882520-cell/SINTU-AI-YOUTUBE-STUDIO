@@ -123,3 +123,36 @@ def test_comfyui_video_workflow_requires_frame_and_fps_placeholders(tmp_path, mo
     assert status["available"] is False
     assert "__SINTU_FRAMES__" in status["reason"]
     assert "__SINTU_FPS__" in status["reason"]
+
+
+def test_comfyui_video_output_finds_mp4_and_webm_metadata():
+    entry = {"outputs": {
+        "12": {"gifs": [
+            {"filename": "preview.gif", "subfolder": "clips", "type": "output"},
+            {"filename": "final.mp4", "subfolder": "clips", "type": "output"},
+        ]},
+        "13": {"videos": [{"filename": "alternate.webm", "type": "output"}]},
+    }}
+    items = comfyui_client._video_output_items(entry)
+    assert [item["filename"] for item in items] == ["preview.gif", "final.mp4", "alternate.webm"]
+    assert next(item for item in items if item["filename"] == "final.mp4")["subfolder"] == "clips"
+
+
+def test_comfyui_video_output_ignores_malformed_nodes_and_entries():
+    entry = {"outputs": {
+        "1": None,
+        "2": {"gifs": "not-a-list", "videos": [None, "clip.mp4", {"filename": 42}]},
+    }}
+    assert comfyui_client._video_output_items(entry) == []
+
+
+def test_comfyui_video_history_error_extracts_execution_failure():
+    entry = {"status": {"messages": [
+        ["execution_start", {}],
+        ["execution_error", {"exception_message": "Missing model weights"}],
+    ]}}
+    assert comfyui_client._video_history_error(entry) == "Missing model weights"
+
+
+def test_comfyui_video_history_without_failure_returns_none():
+    assert comfyui_client._video_history_error({"status": {"messages": [["execution_success", {}]]}}) is None
