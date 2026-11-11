@@ -126,3 +126,11 @@ Admin dashboard mein approval-pending, agle 24 ghante ke approved posts, due pos
 - One video ID per query; defaults to the latest 28 complete days and accepts a maximum 365-day date range.
 - Requires an authenticated admin, connected YouTube channel, and YouTube Analytics API access. Retention availability depends on YouTube's reporting for that video.
 - Audience watch ratio is not a unique-viewer percentage and can exceed 100% when viewers rewind; relative retention is a 0–1 comparison against videos of similar length.
+
+
+### YouTube Comments Analyzer
+- Admin-only endpoint: `GET /api/admin/youtube/comments?limit=50` (1–100 recent channel comments).
+- Reads recent top-level channel comments using YouTube Data API v3 and the connected channel.
+- Shows simple keyword-based possible-spam, positive, negative and question labels plus suggested reply drafts.
+- Labels are heuristic triage, not an AI verdict. Reply suggestions are drafts only; this feature does not publish replies, delete, hide or approve comments.
+- Requires YouTube Data API v3 enabled and an authenticated connected channel with comment-read access.
