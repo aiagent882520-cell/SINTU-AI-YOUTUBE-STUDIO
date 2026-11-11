@@ -1584,6 +1584,11 @@ def test_youtube_comment_follow_up_summary_and_owner_workload(tmp_path, monkeypa
     assert summary["totals"]["resolved"]==1
     team_a=next(row for row in summary["owners"] if row["owner"]=="Team A")
     assert team_a["total"]==2 and team_a["overdue"]==1
+    assert team_a["open"]==2 and team_a["resolved"]==0
+    assert team_a["resolution_rate"]==0
+    assert team_a["follow_up_coverage"]==100
+    assert summary["totals"]["open"]==3 and summary["totals"]["resolution_rate"]==25
+
 
 
 def test_youtube_comment_follow_up_queue_filters_and_invalid_date(tmp_path, monkeypatch):
