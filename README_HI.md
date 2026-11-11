@@ -49,6 +49,16 @@ If Ollama is not installed/running, generation displays setup guidance and does 
 - Basic browser security headers (CSP, frame protection, MIME sniffing protection, referrer and permissions policies).
 - API tests for health, catalog, generation flow, task retrieval, export, PWA shell, team routing and capability safety.
 
+## Earning System
+
+- Main dashboard se **Earning System** kholein: `/earnings`.
+- Income sources: YouTube ads/memberships/Supers, affiliate, sponsorship, brand deals, digital products, services, licensing aur other.
+- Income/expense ledger with confirmed, received, estimated, pending and cancelled states; currency-wise monthly summaries; monthly target/progress; CSV export.
+- Estimated aur pending amounts ko received cash nahi maana jata. Different currencies ko bina FX rate ke combine nahi kiya jata.
+- This is a bookkeeping and planning foundation, not a payment processor or earnings guarantee. Automatic affiliate attribution, sponsor marketplace, payouts, and automatic YouTube revenue import still require provider-specific integrations and verification.
+- API endpoints: `/api/earnings/summary`, `/api/earnings/records`, `/api/earnings/target`, `/api/earnings/export.csv`.
+- Local SQLite data file: `sintu_earnings.sqlite3` under `SINTU_DATA_DIR` (or the project data directory). Back up this file with the rest of the local database data.
+
 ## Not yet integrated / not verified
 
 This repository is still under active implementation and is not yet a fully autonomous video studio. Long-form AI video scene generation and automatic multi-clip assembly, true editable 2D/3D animation rigs and advanced FFmpeg editing/VFX beyond basic slow zoom, YouTube/social OAuth publishing, analytics/revenue connectors, autonomous multi-agent execution, managed database and native Android/iOS apps require further integrations and testing. Basic storyboard MP4 rendering is available only where FFmpeg is installed. A generated script or production package is not a rendered video file. No publishing or external account action occurs automatically.
