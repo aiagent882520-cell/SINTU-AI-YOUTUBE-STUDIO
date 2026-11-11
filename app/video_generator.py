@@ -156,7 +156,7 @@ def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "7
     }
     if style not in styles:
         raise ValueError("Unsupported video style.")
-    full_prompt = f"{styles[style]} {prompt}. Target duration: approximately {duration_seconds} seconds. Create one coherent short clip with intentional subject movement, camera movement, lighting and a clear visual composition. Do not render any visible text, letters, words, subtitles, captions, logos or watermarks. The final SINTU AI YOUTUBE STUDIO logo is added later by the renderer."
+    full_prompt = f"{styles[style]} {prompt}. Target duration: approximately {duration_seconds} seconds. Create one coherent short clip with intentional subject movement, camera movement, lighting and a clear visual composition. No visible text: no text, no letters, no words, no subtitles, no captions, no logos, no watermarks. The final SINTU AI YOUTUBE STUDIO logo is added later by the renderer."
     if status["local_available"]:
         if reference_image_id:
             raise VideoUnavailable("Current free ComfyUI workflow supports text-to-video. Remove the reference image or configure an image-to-video workflow connector later.")
