@@ -15,7 +15,7 @@ Free-first, local-first AI creator workspace for planning, producing, reviewing,
 
 ## Quick start
 
-1. Install Python 3.10+.
+1. Install Python 3.11+.
 2. Install dependencies: `pip install -r requirements.txt`.
 3. Copy `.env.example` to `.env` and review the settings.
 4. For free local text generation, install Ollama and pull a compatible model such as `qwen2.5:3b`.

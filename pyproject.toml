@@ -2,7 +2,7 @@
 name = "sintu-ai-studio"
 version = "0.2.0"
 description = "SINTU AI STUDIO creator platform"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 
 [tool.fastapi]
 entrypoint = "app.main:app"

@@ -4,7 +4,7 @@ SINTU AI YOUTUBE STUDIO is a responsive web/PWA creator workspace. It currently 
 
 ## Run locally
 
-1. Python 3.10+ install karein.
+1. Python 3.11+ install karein.
 2. `pip install -r requirements.txt`
 3. `.env.example` ko copy karke `.env` banayein.
 4. Free local AI ke liye Ollama install karein aur ollama pull qwen2.5:3b chalayein. `.env` mein `AI_PROVIDER=local` rakhein. Paid API key zaroori nahi.
@@ -240,7 +240,7 @@ Follow-up workload CSV export: the community review workload panel can download 
 
 ## One-click Windows start
 
-1. Install Python 3.10 or newer on Windows.
+1. Install Python 3.11 or newer on Windows.
 2. Download/clone the repository and double-click `START_SINTU_WINDOWS.bat`.
 3. The launcher creates a private `.venv`, installs Python packages, creates a random local admin password/session secret in the ignored `.env`, and starts the dashboard at `http://127.0.0.1:8000`.
 4. The first run prints the admin username and newly generated password in the command window. Save that password. The launcher does not create API keys; add provider credentials to `.env` later if/when needed.
