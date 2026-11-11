@@ -38,6 +38,7 @@ def video_status():
         "local_available": local["available"],
         "local_engine": "ComfyUI" if local["available"] else None,
         "local_workflow_configured": local["workflow_configured"],
+        "local_diagnostics": {key: local.get(key) for key in ("server_reachable", "workflow_valid", "nodes_verified", "missing_nodes", "missing_models", "reason")},
         "paid_available": enabled and key_set,
         "provider": "Google Gemini API",
         "model": MODEL,
