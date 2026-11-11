@@ -1413,6 +1413,30 @@ def test_youtube_comment_reviews_queue_persists_comment_snapshot_and_filters(tmp
     assert follow_up.json()["items"][0]["comment_id"] == "comment-queue-1"
 
 
+def test_youtube_comment_reviews_queue_search_category_and_sort(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    base = {"video_id":"abcdefghijk","review_status":"reviewed","published_at":"2026-11-10T10:00:00Z"}
+    records = [
+        {**base,"comment_id":"queue-search-1","author":"Asha","text":"Great tutorial","notes":"Follow up soon","likes":3,"classification":"positive"},
+        {**base,"comment_id":"queue-search-2","author":"Ravi","text":"Join my Telegram","notes":"Spam check","likes":20,"classification":"possible_spam"},
+        {**base,"comment_id":"queue-search-3","author":"Meera","text":"How to install?","notes":"Answer this","likes":8,"classification":"question"},
+    ]
+    for item in records:
+        response = client.post("/api/admin/youtube/comments/review", json=item)
+        assert response.status_code == 200
+    search = client.get("/api/admin/youtube/comments/reviews?search=Telegram")
+    assert search.status_code == 200
+    assert search.json()["total"] == 1
+    assert search.json()["items"][0]["comment_id"] == "queue-search-2"
+    category = client.get("/api/admin/youtube/comments/reviews?classification=question")
+    assert category.json()["total"] == 1
+    assert category.json()["items"][0]["author"] == "Meera"
+    liked = client.get("/api/admin/youtube/comments/reviews?sort=likes")
+    assert [item["likes"] for item in liked.json()["items"]] == [20, 8, 3]
+    spam_first = client.get("/api/admin/youtube/comments/reviews?sort=spam")
+    assert spam_first.json()["items"][0]["classification"] == "possible_spam"
+
+
 def test_youtube_comment_review_rejects_invalid_status(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     response = client.post("/api/admin/youtube/comments/review", json={
