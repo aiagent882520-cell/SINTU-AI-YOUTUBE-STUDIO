@@ -238,7 +238,7 @@ function renderYouTubeComments(){
  const visible=youtubeCommentsItems.filter(item=>(!category||item.classification===category)&&(!query||(item.text+" "+item.author).toLowerCase().includes(query)));
  $("youtubeCommentsList").innerHTML=visible.map((item,index)=>{
   const originalIndex=youtubeCommentsItems.indexOf(item);
-  return '<div class="admin-row" data-comment-index="'+originalIndex+'"><strong>'+analyticsEscape(item.author)+' · '+analyticsEscape(item.classification.replace("_"," "))+'</strong><span>'+analyticsEscape(item.text)+'</span><span>'+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+(item.video_id?' · <a href="https://www.youtube.com/watch?v='+encodeURIComponent(item.video_id)+'" target="_blank" rel="noopener noreferrer">Open video</a>':'')+'</span><label>Reply draft (edit before copying)<textarea class="youtube-reply-draft" rows="2">'+analyticsEscape(item.suggested_reply)+'</textarea></label><button class="secondary youtube-copy-reply" type="button">Copy reply draft</button></div>';
+  return '<div class="admin-row" data-comment-index="'+originalIndex+'"><strong>'+analyticsEscape(item.author)+' · '+analyticsEscape(item.classification.replace("_"," "))+'</strong><span>'+analyticsEscape(item.text)+'</span><span>'+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+(item.video_id?' · <a href="https://www.youtube.com/watch?v='+encodeURIComponent(item.video_id)+'" target="_blank" rel="noopener noreferrer">Open video</a>':'')+'</span><label>Review status<select class="youtube-review-status"><option value="pending">Pending</option><option value="reviewed">Reviewed</option><option value="follow_up">Follow-up</option><option value="resolved">Resolved</option></select></label><label>Internal review note<textarea class="youtube-review-notes" rows="2" maxlength="1000" placeholder="Optional review note">'+analyticsEscape(item.review_notes||'')+'</textarea></label><button class="secondary youtube-save-review" type="button">Save review</button><span class="muted youtube-review-state">'+analyticsEscape(item.review_status||'pending')+'</span><label>Reply draft (edit before copying)<textarea class="youtube-reply-draft" rows="2">'+analyticsEscape(item.suggested_reply)+'</textarea></label><button class="secondary youtube-copy-reply" type="button">Copy reply draft</button></div>';
  }).join("")||'<p class="muted">Is filter mein comments nahi mile.</p>';
 }
 function exportYouTubeCommentsCsv(){
@@ -255,9 +255,30 @@ function exportYouTubeCommentsCsv(){
 $("youtubeCommentsExport")?.addEventListener("click",exportYouTubeCommentsCsv);
 $("youtubeCommentsSearch")?.addEventListener("input",renderYouTubeComments);
 $("youtubeCommentsFilter")?.addEventListener("change",renderYouTubeComments);
+$("youtubeCommentsList")?.addEventListener("change",event=>{
+ const select=event.target.closest(".youtube-review-status");if(!select)return;
+ const row=select.closest(".admin-row");const item=youtubeCommentsItems[Number(row?.dataset.commentIndex)];
+ if(item)item.review_status=select.value;
+});
 $("youtubeCommentsList")?.addEventListener("click",async event=>{
+ const row=event.target.closest(".admin-row");if(!row)return;
+ const reviewButton=event.target.closest(".youtube-save-review");
+ if(reviewButton){
+  const item=youtubeCommentsItems[Number(row.dataset.commentIndex)];if(!item)return;
+  reviewButton.disabled=true;
+  try{
+   const result=await request("/api/admin/youtube/comments/review",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+    comment_id:item.comment_id,video_id:item.video_id,review_status:row.querySelector(".youtube-review-status").value,
+    notes:row.querySelector(".youtube-review-notes").value
+   })});
+   item.review_status=result.review_status;item.review_notes=result.notes;
+   row.querySelector(".youtube-review-state").textContent="Saved: "+result.review_status;
+  }catch(e){row.querySelector(".youtube-review-state").textContent=e.message;}
+  finally{reviewButton.disabled=false;}
+  return;
+ }
  const button=event.target.closest(".youtube-copy-reply");if(!button)return;
- const draft=button.closest(".admin-row")?.querySelector(".youtube-reply-draft")?.value||"";
+ const draft=row.querySelector(".youtube-reply-draft")?.value||"";
  try{await navigator.clipboard.writeText(draft);button.textContent="Copied";}catch(e){button.textContent="Copy unavailable";}
 });
 $("youtubeCommentsRefresh")?.addEventListener("click",()=>loadYouTubeComments(false));
