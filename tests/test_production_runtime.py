@@ -63,3 +63,52 @@ def test_checker_rejects_non_string_evidence():
 def test_final_reviewer_rejects_pass_without_evidence():
     result = _review_payload('{"decision":"PASS","evidence":[],"issues":[]}')
     assert result["decision"] == "FAIL"
+
+
+
+def test_runtime_executes_worker_and_checker_as_separate_calls(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    calls = []
+    def fake_generate(prompt, workflow, provider):
+        calls.append((prompt, workflow, provider))
+        is_gate = "independent quality checker" in prompt.lower() or "final video production reviewer" in prompt.lower()
+        output = ('{"decision":"PASS","evidence":["reviewed against acceptance criteria"],'
+                  '"issues":[],"revision_instructions":[]}') if is_gate else "Hindi production deliverable"
+        return {"output": output, "provider": "test", "model": "fixture"}
+    monkeypatch.setattr(runtime, "generate_text", fake_generate)
+
+    run = runtime.create_run("youtube-shorts", "भारत की रहस्यमयी जगहें")
+    runtime.execute_run(run["id"])
+    result = runtime.get_run(run["id"])
+
+    assert result["status"] == "completed"
+    assert result["result"]["video_rendered"] is False
+    assert result["result"]["published"] is False
+    assert len(result["result"]["reviewer_reports"]) == 5
+    assert len(calls) == 2 * len([x for x in result["steps"] if x["step_type"] == "builder"]) + 5
+    assert all(step["status"] in {"completed", "pass"} for step in result["steps"])
+
+
+def test_runtime_stops_after_first_checker_failure(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    calls = []
+    def fake_generate(prompt, workflow, provider):
+        calls.append(prompt)
+        if "independent quality checker" in prompt.lower():
+            return {"output": '{"decision":"FAIL","evidence":[],"issues":["missing source"],'
+                              '"revision_instructions":["add source"]}', "provider": "test", "model": "fixture"}
+        return {"output": "Draft output", "provider": "test", "model": "fixture"}
+    monkeypatch.setattr(runtime, "generate_text", fake_generate)
+
+    run = runtime.create_run("youtube-shorts", "भारत की रहस्यमयी जगहें")
+    runtime.execute_run(run["id"])
+    result = runtime.get_run(run["id"])
+
+    assert result["status"] == "paused"
+    assert result["current_role"].endswith("Checker")
+    assert len(calls) == 2
+    assert result["steps"][-1]["status"] == "fail"
