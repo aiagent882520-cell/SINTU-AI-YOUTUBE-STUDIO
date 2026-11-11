@@ -38,7 +38,16 @@ def test_explicit_provider_without_key_fails(monkeypatch):
 
 def test_video_generation_prompt_enforces_hindi_and_no_text_overlay(monkeypatch):
     monkeypatch.setenv("AI_PROVIDER", "local")
-    captured = {}\n    def fake_generate(prompt):\n        captured["prompt"] = prompt\n        return "निर्माण पैकेज"\n    monkeypatch.setattr(ai_brain, "_generate_ollama", fake_generate)
+    captured = {}
+
+    def fake_generate(prompt):
+        captured["prompt"] = prompt
+        return "निर्माण पैकेज"
+
+    monkeypatch.setattr(ai_brain, "_generate_ollama", fake_generate)
     monkeypatch.setattr(ai_brain, "_ollama_status", lambda: {"service_running": True, "model_available": True})
     result = ai_brain.generate_text("भारत के रहस्य पर वीडियो बनाओ", "shorts")
-    assert result["output"] == "निर्माण पैकेज"\n    assert "कम से कम 95%" in captured["prompt"] or "at least 95%" in captured["prompt"].lower()\n    assert "NO text overlay" in captured["prompt"]
+    assert result["output"] == "निर्माण पैकेज"
+    assert "At least 95% Hindi" in captured["prompt"]
+    assert "NO text overlay" in captured["prompt"]
+    assert "SINTU AI YOUTUBE STUDIO brand watermark logo" in captured["prompt"]
