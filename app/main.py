@@ -45,7 +45,7 @@ STATIC = ROOT / "static"
 MUSIC_DIR = DATA_DIR / "generated_music"
 ALLOWED_MUSIC_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".ogg"}
 
-app = FastAPI(title="SINTU AI STUDIO", version="0.3.0")
+app = FastAPI(title="SINTU AI YOUTUBE STUDIO", version="0.3.0")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 SESSION_COOKIE = "sintu_admin_session"
@@ -575,7 +575,7 @@ def service_worker():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "app": "SINTU AI STUDIO", "version": app.version}
+    return {"status": "ok", "app": "SINTU AI YOUTUBE STUDIO", "version": app.version}
 
 @app.get("/api/workflows")
 def workflows():
@@ -1188,7 +1188,7 @@ def agents():
 def capabilities():
     providers = provider_status(_get_app_setting("selected_provider", os.getenv("AI_PROVIDER", "auto").lower()))
     return {
-        "product": "SINTU AI STUDIO",
+        "product": "SINTU AI YOUTUBE STUDIO",
         "workflows": list(WORKFLOW_GUIDES.keys()),
         "agent_catalog": len(list_agents()),
         "orchestration": orchestration_summary(),
@@ -2780,13 +2780,13 @@ def export_task(task_id: int, format: str = "txt"):
         raise HTTPException(status_code=400, detail="format must be txt, md, or json")
     if format == "json":
         return JSONResponse(content={
-            "product": "SINTU AI STUDIO",
+            "product": "SINTU AI YOUTUBE STUDIO",
             "task": {key: item[key] for key in ("id", "workflow", "status", "created_at", "prompt", "output")},
             "notice": "AI-generated production package; not a rendered or published video."
         }, headers={"Content-Disposition": f"attachment; filename=sintu-task-{task_id}.json"})
     if format == "md":
         content = (
-            f"# SINTU AI STUDIO — {item['workflow']}\n\n"
+            f"# SINTU AI YOUTUBE STUDIO — {item['workflow']}\n\n"
             f"- Task: #{item['id']}\n- Created: {item['created_at']}\n"
             f"- Status: {item['status']}\n\n## Prompt\n\n{item['prompt']}\n\n"
             f"## Production package\n\n{item['output']}\n\n"
@@ -2795,7 +2795,7 @@ def export_task(task_id: int, format: str = "txt"):
         media_type, extension = "text/markdown; charset=utf-8", "md"
     else:
         content = (
-            f"SINTU AI STUDIO — {item['workflow']}\n"
+            f"SINTU AI YOUTUBE STUDIO — {item['workflow']}\n"
             f"Task: #{item['id']}\nCreated: {item['created_at']}\n"
             f"Prompt: {item['prompt']}\n\n{'=' * 60}\n\n{item['output']}\n"
         )
