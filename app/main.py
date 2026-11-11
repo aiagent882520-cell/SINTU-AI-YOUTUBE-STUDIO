@@ -39,6 +39,7 @@ from .music_generator import generate_music, music_status, MusicUnavailable, Mus
 from .video_generator import generate_video, video_status, VideoUnavailable, VideoGenerationFailed, AI_VIDEO_DIR
 from .production_runtime import create_run as create_production_run, get_run as get_production_run, execute_run as execute_production_run, attach_render_result
 from .earning_system import router as earning_router
+from .security import RequestRateLimiter, client_address_allowed, same_origin_request
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT.parent))).expanduser().resolve()
@@ -51,6 +52,43 @@ ALLOWED_MUSIC_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".ogg"}
 app = FastAPI(title="SINTU AI YOUTUBE STUDIO", version="0.3.0")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 app.include_router(earning_router)
+
+# Application firewall: IP allowlist, API request throttling and browser CSRF checks.
+_FIREWALL_LIMITER = RequestRateLimiter()
+
+
+@app.middleware("http")
+async def application_firewall(request: Request, call_next):
+    path = request.url.path
+    peer_ip = request.client.host if request.client else "unknown"
+    if path != "/api/health":
+        allowed_ips = os.getenv("SINTU_ALLOWED_IPS", "")
+        if not client_address_allowed(peer_ip, allowed_ips):
+            return JSONResponse(status_code=403, content={"detail": "Network firewall: client IP is not allowed."})
+        if path.startswith("/api/") and path not in {"/api/auth/login"}:
+            try:
+                limit = max(1, min(10000, int(os.getenv("SINTU_RATE_LIMIT_PER_MINUTE", "300"))))
+            except ValueError:
+                limit = 300
+            allowed, retry_after = _FIREWALL_LIMITER.check(peer_ip, limit, 60)
+            if not allowed:
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Request rate limit exceeded. Please retry shortly."},
+                    headers={"Retry-After": str(retry_after)},
+                )
+
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        origin = request.headers.get("origin")
+        fetch_site = request.headers.get("sec-fetch-site", "").lower()
+        if (origin and not same_origin_request(origin, request.headers.get("host", ""))) or fetch_site == "cross-site":
+            return JSONResponse(status_code=403, content={"detail": "Cross-origin request blocked by security policy."})
+
+    response = await call_next(request)
+    if request.url.scheme == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
 
 SESSION_COOKIE = "sintu_admin_session"
 SESSION_TTL_SECONDS = 12 * 60 * 60
