@@ -2279,10 +2279,10 @@ def assign_youtube_comment_reviews(item: YouTubeCommentAssignmentInput):
 
 @app.get("/api/admin/youtube/comments/reviews")
 def list_youtube_comment_reviews(
-    review_status: str = Query(default="", regex=r"^(|pending|reviewed|follow_up|resolved)$"),
-    classification: str = Query(default="", regex=r"^(|possible_spam|positive|negative|question|other)$"),
+    review_status: str = Query(default="", pattern=r"^(|pending|reviewed|follow_up|resolved)$"),
+    classification: str = Query(default="", pattern=r"^(|possible_spam|positive|negative|question|other)$"),
     search: str = Query(default="", max_length=200),
-    sort: str = Query(default="newest", regex=r"^(newest|likes|spam)$"),
+    sort: str = Query(default="newest", pattern=r"^(newest|likes|spam)$"),
     assigned_to: str = Query(default="", max_length=120),
     follow_up_filter: str = Query(default="", pattern=r"^(|overdue|today|upcoming|unscheduled)$"),
     as_of: str = Query(default="", max_length=10),
@@ -2462,10 +2462,10 @@ def get_youtube_comment_review_history(comment_id: str):
 
 @app.get("/api/admin/youtube/comments/reviews/export")
 def export_youtube_comment_reviews(
-    review_status: str = Query(default="", regex=r"^(|pending|reviewed|follow_up|resolved)$"),
-    classification: str = Query(default="", regex=r"^(|possible_spam|positive|negative|question|other)$"),
+    review_status: str = Query(default="", pattern=r"^(|pending|reviewed|follow_up|resolved)$"),
+    classification: str = Query(default="", pattern=r"^(|possible_spam|positive|negative|question|other)$"),
     search: str = Query(default="", max_length=200),
-    sort: str = Query(default="newest", regex=r"^(newest|likes|spam)$"),
+    sort: str = Query(default="newest", pattern=r"^(newest|likes|spam)$"),
 ):
     """Export every saved review matching the queue filters as CSV."""
     clauses = []
@@ -2507,7 +2507,7 @@ def export_youtube_comment_reviews(
 
 @app.get("/api/admin/youtube/retention")
 def youtube_video_retention(
-    video_id: str = Query(..., min_length=11, max_length=20, regex=r"^[A-Za-z0-9_-]+$"),
+    video_id: str = Query(..., min_length=11, max_length=20, pattern=r"^[A-Za-z0-9_-]+$"),
     start_date: str = Query(default="", max_length=10),
     end_date: str = Query(default="", max_length=10),
 ):
