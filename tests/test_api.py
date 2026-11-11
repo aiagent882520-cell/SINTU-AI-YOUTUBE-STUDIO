@@ -2081,6 +2081,7 @@ def test_render_queue_executes_existing_ffmpeg_renderer(tmp_path, monkeypatch):
 
 def test_piper_voice_is_free_and_does_not_need_media_token(tmp_path, monkeypatch):
     import wave
+    from pathlib import Path
     from app import voice_generator
     model = tmp_path / "hi_IN-model.onnx"
     model.write_bytes(b"test-model")
