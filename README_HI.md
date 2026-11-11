@@ -267,7 +267,7 @@ Follow-up workload CSV export: the community review workload panel can download 
 
 
 ### Free local Blender 3D rendering
-- The dashboard includes a Local Blender 3D Studio panel. It accepts a validated JSON list of primitive objects (cube, sphere, cylinder, cone, torus, monkey head or text) and renders an animated H.264 MP4 through Blender in background mode.
+- The dashboard includes a Local Blender 3D Studio panel. It accepts a validated JSON list of primitive objects (cube, sphere, cylinder, cone, torus या monkey head) and renders an animated H.264 MP4 through Blender in background mode.
 - No Python code from the user is executed; only supported JSON shapes, positions, scales and colors are accepted.
 - Install Blender, add its executable to PATH, or set BLENDER_EXECUTABLE. This creates starter 3D scenes and turntable-style object animation; advanced character modeling/rigging still needs compatible Blender assets and specialist workflows.
 
@@ -279,3 +279,12 @@ Follow-up workload CSV export: the community review workload panel can download 
 - AI visual prompts request clean frames with no generated logos or watermarks; the final renderer adds the official SINTU brand mark after the visual is generated.
 - Thumbnail and YouTube metadata text are separate assets and are not burned into video frames.
 - SRT sidecar generation, if used, creates a separate file; it is not included in the MP4.
+
+
+### 60 format render capability map
+- `GET /api/rendering/formats` सभी 60 catalog formats के export profiles, default resolution, FPS options, H.264 output, watermark policy और current capability limits देता है।
+- `GET /api/rendering/formats/{format_id}` किसी एक format का profile देता है।
+- Generic FFmpeg export केवल supplied scene images या MP4 clips को assemble करता है; यह अपने-आप AI scenes generate नहीं करता।
+- 360°, VR, AR और virtual-production formats को specialised pipeline बनने तक स्पष्ट रूप से blocked दिखाया जाता है। बाकी formats के लिए भी native generation को अभी ready नहीं बताया गया है।
+- 3D/film/hybrid formats में Blender optional native engine है; Blender installation और configured scene workflow जरूरी है।
+- Format profiles का automated test है; सभी 60 formats का full production shoot/render QA अभी complete नहीं है।
