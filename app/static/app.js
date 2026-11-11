@@ -242,7 +242,7 @@ async function loadYouTubeSavedReviews(loadMore=false){
  const category=$("youtubeSavedReviewsCategory")?.value||"";
  const sort=$("youtubeSavedReviewsSort")?.value||"newest";
  const search=$("youtubeSavedReviewsSearch")?.value.trim()||"";
- if(!loadMore){youtubeSavedReviewsOffset=0;youtubeSavedReviewsItems=[];}
+ if(!loadMore){youtubeSavedReviewsOffset=0;youtubeSavedReviewsItems=[];youtubeSavedReviewSelectedIds.clear();}
  notice.textContent="Saved review queue load ho rahi hai…";
  if(more)more.disabled=true;
  try{
@@ -366,16 +366,22 @@ function updateYouTubeSavedReviewBulkControls(){
 $("youtubeSavedReviewsList")?.addEventListener("change",event=>{
  const checkbox=event.target.closest(".youtube-saved-review-select");
  if(!checkbox)return;
- if(checkbox.checked)youtubeSavedReviewSelectedIds.add(checkbox.dataset.commentId);
- else youtubeSavedReviewSelectedIds.delete(checkbox.dataset.commentId);
+ if(checkbox.checked){
+  if(youtubeSavedReviewSelectedIds.size>=100){checkbox.checked=false;const notice=$("youtubeSavedReviewsNotice");if(notice)notice.textContent="Ek bulk action mein maximum 100 comments select kar sakte hain.";return;}
+  youtubeSavedReviewSelectedIds.add(checkbox.dataset.commentId);
+ }else youtubeSavedReviewSelectedIds.delete(checkbox.dataset.commentId);
  updateYouTubeSavedReviewBulkControls();
 });
 $("youtubeSavedReviewsSelectVisible")?.addEventListener("change",event=>{
- youtubeSavedReviewsItems.forEach(item=>{
-  if(event.target.checked)youtubeSavedReviewSelectedIds.add(item.comment_id);
-  else youtubeSavedReviewSelectedIds.delete(item.comment_id);
- });
- document.querySelectorAll(".youtube-saved-review-select").forEach(box=>{box.checked=event.target.checked;});
+ if(event.target.checked){
+  const available=100-youtubeSavedReviewSelectedIds.size;
+  const remaining=youtubeSavedReviewsItems.filter(item=>!youtubeSavedReviewSelectedIds.has(item.comment_id));
+  remaining.slice(0,Math.max(0,available)).forEach(item=>youtubeSavedReviewSelectedIds.add(item.comment_id));
+  if(remaining.length>available){event.target.checked=false;const notice=$("youtubeSavedReviewsNotice");if(notice)notice.textContent="Ek bulk action mein maximum 100 comments select ho sakte hain. Baaki items alag batch mein select karein.";}
+ }else{
+  youtubeSavedReviewsItems.forEach(item=>youtubeSavedReviewSelectedIds.delete(item.comment_id));
+ }
+ document.querySelectorAll(".youtube-saved-review-select").forEach(box=>{box.checked=youtubeSavedReviewSelectedIds.has(box.dataset.commentId);});
  updateYouTubeSavedReviewBulkControls();
 });
 $("youtubeSavedReviewsBulkApply")?.addEventListener("click",async()=>{
