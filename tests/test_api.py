@@ -2221,7 +2221,7 @@ def test_video_voiceover_requires_at_least_95_percent_hindi(monkeypatch):
         voice_generator.generate_voiceover("Hello world, this is an English narration.")
 
 
-def test_scene_image_prompts_are_text_free_and_thumbnail_prompts_are_not_forced_text_free(tmp_path, monkeypatch):
+def test_scene_image_prompts_are_text_free(tmp_path, monkeypatch):
     import io
     from PIL import Image
     from app import image_generator
