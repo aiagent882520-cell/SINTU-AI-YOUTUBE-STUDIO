@@ -3263,6 +3263,8 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput):
         raise HTTPException(status_code=409, detail="Production run must pass all builder/checker and final reviewer gates before rendering.")
     if run["format_id"] != payload.format_id:
         raise HTTPException(status_code=400, detail="Render format must match the approved production run format.")
+    if not payload.image_ids and not payload.video_ids and not payload.timeline:
+        raise HTTPException(status_code=400, detail="Final production render requires supplied scene images, AI video clips or a mixed media timeline; scene descriptions alone are not visuals.")
     rendered = render_video(payload)
     try:
         updated = attach_render_result(run_id, rendered)
