@@ -262,6 +262,8 @@ Follow-up workload CSV export: the community review workload panel can download 
 ### Free local media connectors
 - Piper TTS: set PIPER_EXECUTABLE and PIPER_MODEL_PATH to an installed Piper binary and compatible voice model. The API serves local WAV output without a media token.
 - ComfyUI images: export a workflow in API format, set COMFYUI_IMAGE_WORKFLOW_PATH, and replace prompt/negative/width/height/seed inputs with the documented SINTU placeholders. ComfyUI is restricted to localhost.
+- SINTU अब केवल JSON file मौजूद होने पर ComfyUI को Ready नहीं दिखाता: workflow node structure और `__SINTU_PROMPT__` placeholder validate होते हैं, फिर local `/system_stats` health probe होता है। Dashboard अलग-अलग बताता है कि workflow valid है या ComfyUI server offline है।
+- Image workflow starter: `config/comfyui_image_workflow.example.json` को copy करें, `YOUR_OPEN_MODEL_CHECKPOINT.safetensors` को अपने installed checkpoint के exact filename से बदलें, और ComfyUI के API prompt format में export की गई file का path `COMFYUI_IMAGE_WORKFLOW_PATH` में दें। यह template standard ComfyUI nodes पर आधारित है; checkpoint/model डाउनलोड अलग से करना होगा।
 - Procedural music: original ambient WAV generation works without a model or API. It is a procedural soundtrack, not a trained generative music model.
 - Video AI: local ComfyUI video workflow support is available when you install/configure a compatible open model and workflow. Gemini remains an optional paid connector. FFmpeg/Blender handle editing/rendering; no unlimited free cloud text-to-video model is promised for low-memory hardware.
 
