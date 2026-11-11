@@ -2201,6 +2201,14 @@ def test_storyboard_frames_are_clean_and_include_sintu_branding(tmp_path):
         assert image.getpixel((180, 300))[:3] == (16, 24, 39)
         assert image.getpixel((200, 590))[:3] != (16, 24, 39)
 
+    clean_frame = tmp_path / "clean-frame-without-mark.png"
+    video_renderer._make_frame(
+        clean_frame, "Hidden title", "Hidden scene", 1, 1,
+        width=360, height=640, include_watermark=False
+    )
+    with Image.open(clean_frame) as image:
+        assert image.getpixel((200, 590))[:3] == (16, 24, 39)
+
 
 def test_storyboard_frame_rejects_subtitle_overlay(tmp_path):
     from app import video_renderer
