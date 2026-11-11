@@ -219,3 +219,31 @@ def test_comfyui_video_generation_stops_on_history_execution_error(tmp_path, mon
         assert False, "Expected workflow execution failure"
     except comfyui_client.ComfyUIUnavailable as exc:
         assert "Missing video model" in str(exc)
+
+
+def test_comfyui_detects_missing_checkpoint_from_object_info():
+    workflow = {
+        "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "missing-model.safetensors"}}
+    }
+    object_info = {
+        "CheckpointLoaderSimple": {
+            "input": {"required": {"ckpt_name": ["COMBO", {"options": ["available-model.safetensors"]}]}}
+        }
+    }
+    missing = comfyui_client._missing_model_files(workflow, object_info)
+    assert missing == [{
+        "node_id": "1", "node_type": "CheckpointLoaderSimple",
+        "input": "ckpt_name", "configured": "missing-model.safetensors"
+    }]
+
+
+def test_comfyui_accepts_installed_checkpoint_from_object_info():
+    workflow = {
+        "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "available-model.safetensors"}}
+    }
+    object_info = {
+        "CheckpointLoaderSimple": {
+            "input": {"required": {"ckpt_name": ["COMBO", {"options": ["available-model.safetensors"]}]}}
+        }
+    }
+    assert comfyui_client._missing_model_files(workflow, object_info) == []
