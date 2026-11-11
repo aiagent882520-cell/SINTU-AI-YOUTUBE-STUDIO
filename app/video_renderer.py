@@ -296,7 +296,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             work = Path(temp)
             command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
             brand_path = work / "sintu-watermark.png"
-            _make_watermark_image().save(brand_path, format="PNG")
+            _make_watermark_image(width=max(240, int(width * 0.34)), height=max(58, int(width * 0.08))).save(brand_path, format="PNG")
             for path in video_paths:
                 command += ["-i", str(path)]
 
@@ -514,5 +514,5 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
         result["scene_transitions"] = transitions
         result["clip_audio_volumes"] = [item.get("audio_volume", 0.25) if item["kind"] == "video" else 0.0 for item in items]
         result["scene_durations"] = [item.get("duration") if item["kind"] == "image" else (round(float(item["trim_end"])-float(item.get("trim_start",0)),2) if item.get("trim_end") is not None else None) for item in items]
-        result["note"] = "Still images and AI video clips are joined in order. Still-image duration is configurable; video clips can be trimmed by start/end seconds without modifying original source files. Source video audio, optional voiceover/music, per-item subtitles and cut/fade transitions are supported."
+        result["note"] = "Still images and AI video clips are joined in order. Still-image duration is configurable; video clips can be trimmed by start/end seconds without modifying original source files. Source audio, optional voiceover/music, mandatory SINTU branding and cut/fade transitions are supported. No text overlays are burned in."
         return result
