@@ -80,7 +80,7 @@
   });
   document.getElementById("generateProductionPackage").addEventListener("click",async()=>{
    const payload=formPayload();if(!payload.brief){alert("Pehle topic ya brief likhein.");return;}
-   const preset=selectedFormat().preset;const workflowMap={short:"shorts",long:"long-video",documentary:"long-video",education:"course",ad:"social",live:"content",podcast:"content",2d:"script",3d:"script",motion:"script",film:"long-video",stop:"script",music:"social",vfx:"script",immersive:"script",hybrid:"script",avatar:"script",news:"research"};
+   const preset=selectedFormat().preset;const workflowMap={short:"shorts",long:"long-video",documentary:"long-video",education:"course",ad:"social",live:"content",podcast:"content","2d":"script","3d":"script",motion:"script",film:"long-video",stop:"script",music:"social",vfx:"script",immersive:"script",hybrid:"script",avatar:"script",news:"research"};
    const workflow=workflowMap[preset]||"content";
    const output=document.getElementById("productionPackageOutput");output.hidden=false;output.textContent="AI production package generate ho raha hai…";
    try{
