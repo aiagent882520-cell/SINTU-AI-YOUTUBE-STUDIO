@@ -148,3 +148,5 @@ Community review queue controls: admins can filter loaded comments by category a
 
 
 Persistent Community Review Queue: saved comment reviews now keep a snapshot of author, comment text, video ID, publication time, likes, heuristic category, internal status, private note and last-updated timestamp. Admins can retrieve the queue independently of the currently loaded YouTube comment page, filter by status and page through saved records. This snapshot is internal to SINTU and does not perform YouTube moderation actions.
+
+Saved Community Review Queue controls now support searching across author, saved comment text, internal notes and video ID; category filtering for spam/sentiment/question labels; and sorting by most recently reviewed, most liked, or possible-spam first. Filters and search work with server-side pagination.
