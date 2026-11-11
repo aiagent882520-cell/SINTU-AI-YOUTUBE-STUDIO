@@ -10,6 +10,7 @@ import urllib.request
 from dotenv import load_dotenv
 
 from .agent_orchestrator import workflow_team, orchestration_summary
+from .policy import paid_upgrades_allowed
 
 load_dotenv()
 
@@ -74,6 +75,7 @@ def provider_status(selected_override=None):
         selected = "auto"
     return {
         "selected": selected,
+        "paid_upgrades_allowed": paid_upgrades_allowed(),
         "local": {
             "configured": True,
             "model": os.getenv("OLLAMA_MODEL", "qwen2.5:3b"),
@@ -96,7 +98,9 @@ def _selected_provider(selected_override=None):
         # Free-first: auto always selects the local model. Paid providers are never auto-enabled.
         return "local"
     if selected not in ("openai", "gemini"):
-        raise ProviderRequestError("AI_PROVIDER must be auto, openai, or gemini.")
+        raise ProviderRequestError("AI_PROVIDER must be auto, local, openai, or gemini.")
+    if not paid_upgrades_allowed():
+        raise ProviderNotConfigured("Paid upgrade locked: SINTU must earn revenue first and the user must explicitly approve paid upgrades.")
     if not status[selected]["configured"]:
         raise ProviderNotConfigured(f"{selected} selected hai, lekin uski API key server par set nahi hai.")
     return selected

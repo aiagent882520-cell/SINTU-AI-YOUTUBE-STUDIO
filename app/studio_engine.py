@@ -11,15 +11,14 @@ from pathlib import Path
 from .studio_scope import get_format, production_plan
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT))).expanduser().resolve()
-DB_PATH = DATA_DIR / "sintu_studio.db"
 
 def _now():
     return datetime.now(timezone.utc).isoformat()
 
 def _db():
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    data_dir = Path(os.getenv("SINTU_DATA_DIR", str(ROOT))).expanduser().resolve()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(data_dir / "sintu_studio.db")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -279,3 +278,26 @@ def list_render_queue(owner, project_id=None):
         item["result"] = json.loads(item.pop("result_json")) if item["result_json"] else None
         result.append(item)
     return result
+
+
+def delete_asset(owner, asset_id):
+    ensure_schema()
+    with _db() as conn:
+        cur = conn.execute("DELETE FROM studio_assets WHERE owner=? AND id=?", (owner, asset_id))
+    return cur.rowcount > 0
+
+def update_render_item(owner, item_id, status, result=None):
+    ensure_schema()
+    if status not in {"running", "completed", "failed"}:
+        raise ValueError("Render status must be running, completed, or failed.")
+    now = _now()
+    with _db() as conn:
+        row = conn.execute("SELECT status FROM studio_render_queue WHERE id=? AND owner=?", (item_id, owner)).fetchone()
+        if not row:
+            return None
+        allowed = {"queued":{"running"}, "running":{"completed","failed"}}
+        if status not in allowed.get(row["status"], set()):
+            raise ValueError("Invalid render queue status transition.")
+        conn.execute("UPDATE studio_render_queue SET status=?,result_json=?,updated_at=? WHERE id=? AND owner=?",
+                     (status, json.dumps(result, ensure_ascii=False) if result is not None else None, now, item_id, owner))
+    return next((item for item in list_render_queue(owner) if item["id"] == item_id), None)
