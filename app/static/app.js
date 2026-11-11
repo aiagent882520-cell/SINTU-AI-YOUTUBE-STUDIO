@@ -260,13 +260,13 @@ function renderYouTubeComments(){
   const originalIndex=youtubeCommentsItems.indexOf(item);
   const reviewStatus=item.review_status||"pending";
   const statusOption=value=>'<option value="'+value+'"'+(reviewStatus===value?" selected":"")+'>'+({pending:"Pending",reviewed:"Reviewed",follow_up:"Follow-up",resolved:"Resolved"}[value])+'</option>';
-  return '<div class="admin-row" data-comment-index="'+originalIndex+'"><strong>'+analyticsEscape(item.author)+' · '+analyticsEscape(item.classification.replace("_"," "))+'</strong><span>'+analyticsEscape(item.text)+'</span><span>'+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+(item.video_id?' · <a href="https://www.youtube.com/watch?v='+encodeURIComponent(item.video_id)+'" target="_blank" rel="noopener noreferrer">Open video</a>':'')+'</span><label>Review status<select class="youtube-review-status">'+["pending","reviewed","follow_up","resolved"].map(statusOption).join("")+'</select></label><label>Internal review note<textarea class="youtube-review-notes" rows="2" maxlength="1000" placeholder="Optional review note">'+analyticsEscape(item.review_notes||'')+'</textarea></label><button class="secondary youtube-save-review" type="button">Save review</button><span class="muted youtube-review-state">'+analyticsEscape(item.review_status||'pending')+'</span><label>Reply draft (edit before copying)<textarea class="youtube-reply-draft" rows="2">'+analyticsEscape(item.suggested_reply)+'</textarea></label><button class="secondary youtube-copy-reply" type="button">Copy reply draft</button></div>';
+  return '<div class="admin-row" data-comment-index="'+originalIndex+'"><strong>'+analyticsEscape(item.author)+' · '+analyticsEscape(item.classification.replace("_"," "))+'</strong><span>'+analyticsEscape(item.text)+'</span><span>'+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+(item.video_id?' · <a href="https://www.youtube.com/watch?v='+encodeURIComponent(item.video_id)+'" target="_blank" rel="noopener noreferrer">Open video</a>':'')+'</span><label>Review status<select class="youtube-review-status">'+["pending","reviewed","follow_up","resolved"].map(statusOption).join("")+'</select></label><label>Internal review note<textarea class="youtube-review-notes" rows="2" maxlength="1000" placeholder="Optional review note">'+analyticsEscape(item.review_notes||'')+'</textarea></label><button class="secondary youtube-save-review" type="button">Save review</button><span class="muted youtube-review-state">'+analyticsEscape(item.review_status||'pending')+(item.review_updated_at?' · '+analyticsEscape(new Date(item.review_updated_at).toLocaleString()):'')+'</span><label>Reply draft (edit before copying)<textarea class="youtube-reply-draft" rows="2">'+analyticsEscape(item.suggested_reply)+'</textarea></label><button class="secondary youtube-copy-reply" type="button">Copy reply draft</button></div>';
  }).join("")||'<p class="muted">Is filter mein comments nahi mile.</p>';
 }
 function exportYouTubeCommentsCsv(){
  const rows=getFilteredYouTubeComments();
  if(!rows.length){const n=$("youtubeCommentsNotice");if(n)n.textContent="Export karne ke liye comments nahi hain.";return;}
- const columns=["author","classification","review_status","review_notes","text","published_at","likes","video_id","suggested_reply"];
+ const columns=["author","classification","review_status","review_notes","review_updated_at","text","published_at","likes","video_id","suggested_reply"];
  const quote=value=>'"'+String(value??"").replace(/"/g,'""')+'"';
  const csv="\uFEFF"+[columns.join(","),...rows.map(item=>columns.map(key=>quote(item[key])).join(","))].join("\r\n");
  const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
@@ -288,7 +288,7 @@ $("youtubeCommentsList")?.addEventListener("click",async event=>{
     comment_id:item.comment_id,video_id:item.video_id,review_status:row.querySelector(".youtube-review-status").value,
     notes:row.querySelector(".youtube-review-notes").value
    })});
-   item.review_status=result.review_status;item.review_notes=result.notes;
+   item.review_status=result.review_status;item.review_notes=result.notes;item.review_updated_at=result.updated_at;
    renderYouTubeCommentTotals();
    $("youtubeCommentsNotice").textContent="Review status saved in SINTU. YouTube comment par koi action nahi hua.";
    renderYouTubeComments();
