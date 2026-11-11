@@ -1437,6 +1437,25 @@ def test_youtube_comment_reviews_queue_search_category_and_sort(tmp_path, monkey
     assert spam_first.json()["items"][0]["classification"] == "possible_spam"
 
 
+def test_youtube_comment_reviews_export_respects_filters_and_csv_encoding(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    payloads = [
+        {"comment_id":"csv-review-1","video_id":"abcdefghijk","review_status":"reviewed",
+         "author":"Asha","text":"Great, thanks!","notes":"Keep in touch","likes":4,"classification":"positive"},
+        {"comment_id":"csv-review-2","video_id":"abcdefghijk","review_status":"follow_up",
+         "author":"Ravi","text":"Join Telegram","notes":"Spam","likes":12,"classification":"possible_spam"},
+    ]
+    for payload in payloads:
+        assert client.post("/api/admin/youtube/comments/review", json=payload).status_code == 200
+    response = client.get("/api/admin/youtube/comments/reviews/export?classification=possible_spam")
+    assert response.status_code == 200
+    assert "text/csv" in response.headers["content-type"]
+    assert "sintu-community-review-queue.csv" in response.headers["content-disposition"]
+    assert response.content.startswith(b"\\xef\\xbb\\xbf")
+    assert b"csv-review-2" in response.content
+    assert b"csv-review-1" not in response.content
+
+
 def test_youtube_comment_review_rejects_invalid_status(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     response = client.post("/api/admin/youtube/comments/review", json={
