@@ -738,6 +738,7 @@ def test_ai_video_clip_assembly_contract(tmp_path, monkeypatch):
         (clips_dir / f"{clip_id}.mp4").write_bytes(b"test")
     monkeypatch.setattr(main, "AI_VIDEO_DIR", clips_dir)
     called = {}
+
     def fake_assembly(paths, audio_path=None, music_path=None, music_volume=0.18, subtitles=None, transition="cut", resolution="720x1280", fps=30, quality="high"):
         called["paths"] = paths
         called["subtitles"] = subtitles
@@ -746,17 +747,27 @@ def test_ai_video_clip_assembly_contract(tmp_path, monkeypatch):
             "video_id": "c" * 32, "url": "/api/videos/" + "c" * 32,
             "scenes": len(paths), "duration_seconds": None,
             "resolution": "720x1280", "format": "MP4 / H.264",
-            "audio": "clip-audio-not-preserved", "note": "assembled"
+            "audio": "clip-audio-not-preserved", "note": "assembled",
+            "subtitles_burned_in": False, "brand_watermark": "SINTU AI YOUTUBE STUDIO"
         }
+
     monkeypatch.setattr(main, "render_ai_clips", fake_assembly)
-    result = client.post("/api/render", json={
+    rejected = client.post("/api/render", json={
         "title": "AI Short", "scenes": ["Opening clip", "Ending clip"],
         "video_ids": clip_ids, "subtitles": ["Caption one", "Caption two"], "transition": "fade"
+    })
+    assert rejected.status_code == 400
+    assert "text" in rejected.json()["detail"].lower()
+    assert "paths" not in called
+
+    result = client.post("/api/render", json={
+        "title": "AI Short", "scenes": ["Opening clip", "Ending clip"],
+        "video_ids": clip_ids, "transition": "fade"
     })
     assert result.status_code == 200
     assert result.json()["scenes"] == 2
     assert len(called["paths"]) == 2
-    assert called["subtitles"] == ["Caption one", "Caption two"]
+    assert called["subtitles"] == []
     assert called["transition"] == "fade"
     invalid = client.post("/api/render", json={
         "title": "AI Short", "scenes": ["Only one scene"],
@@ -769,16 +780,11 @@ def test_ai_video_clip_assembly_contract(tmp_path, monkeypatch):
     })
     assert missing.status_code == 404
 
-
 def test_ai_clip_assembly_ffmpeg_integration(tmp_path, monkeypatch):
     ffmpeg = shutil.which("ffmpeg")
     ffprobe = shutil.which("ffprobe")
     if not ffmpeg or not ffprobe:
         pytest.skip("FFmpeg/FFprobe not installed on this runner")
-    filters = subprocess.run([ffmpeg, "-filters"], capture_output=True, text=True, check=False)
-    if "subtitles" not in (filters.stdout + filters.stderr):
-        pytest.skip("FFmpeg subtitles filter unavailable")
-
     first = tmp_path / "clip-one.mp4"
     second = tmp_path / "clip-two.mp4"
     subprocess.run([
@@ -795,11 +801,12 @@ def test_ai_clip_assembly_ffmpeg_integration(tmp_path, monkeypatch):
 
     monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path / "renders")
     result = video_renderer.render_ai_clips(
-        [first, second], subtitles=["First caption", "Second caption"], transition="fade"
+        [first, second], transition="fade"
     )
     output = tmp_path / "renders" / f'{result["video_id"]}.mp4'
     assert output.is_file()
-    assert result["subtitles_burned_in"] is True
+    assert result["subtitles_burned_in"] is False
+    assert result["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
     assert result["transition"] == "fade"
     probe = subprocess.run([
         ffprobe, "-v", "error", "-show_entries", "stream=codec_type",
@@ -834,10 +841,16 @@ def test_mixed_image_video_timeline_api_contract(tmp_path, monkeypatch):
                 "timeline_items": len(items), "timeline_order": [x["kind"] for x in items],
                 "duration_seconds": 8, "format": "MP4 / H.264"}
     monkeypatch.setattr(main, "render_mixed_timeline", fake_mixed)
-    response = client.post("/api/render", json={
+    rejected = client.post("/api/render", json={
         "title": "Mixed timeline", "scenes": ["Image intro", "Moving clip"],
         "timeline": [f"image:{image_id}:6:fade", f"video:{video_id}:0:cut"],
         "seconds_per_scene": 4, "subtitles": ["Intro caption", ""]
+    })
+    assert rejected.status_code == 400
+    response = client.post("/api/render", json={
+        "title": "Mixed timeline", "scenes": ["Image intro", "Moving clip"],
+        "timeline": [f"image:{image_id}:6:fade", f"video:{video_id}:0:cut"],
+        "seconds_per_scene": 4
     })
     assert response.status_code == 200
     assert captured["items"] == [("image", f"{image_id}.jpg"), ("video", f"{video_id}.mp4")]
@@ -932,7 +945,7 @@ def test_mixed_timeline_ffmpeg_integration(tmp_path, monkeypatch):
     result = video_renderer.render_mixed_timeline(
         [{"kind": "image", "path": still, "duration": 3}, {"kind": "video", "path": first_video, "duration": 0}],
         "Mixed timeline", ["Image intro", "Video scene"], seconds_per_scene=2,
-        subtitles=["Still caption", "Video caption"], transition="cut", transitions=["fade", "cut"],
+        transition="cut", transitions=["fade", "cut"],
         resolution="1080x1080", fps=24, quality="maximum"
     )
     output = tmp_path / "mixed-renders" / f'{result["video_id"]}.mp4'
@@ -941,7 +954,8 @@ def test_mixed_timeline_ffmpeg_integration(tmp_path, monkeypatch):
     assert result["timeline_items"] == 2
     assert result["scene_transitions"] == ["fade", "cut"]
     assert result["scene_durations"] == [3, None]
-    assert result["subtitles_burned_in"] is True
+    assert result["subtitles_burned_in"] is False
+    assert result["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
     assert 3.8 <= result["duration_seconds"] <= 4.2
     probe = subprocess.run([ffprobe, "-v", "error", "-show_entries", "stream=codec_type,width,height,r_frame_rate",
                             "-of", "json", str(output)], capture_output=True, text=True,
