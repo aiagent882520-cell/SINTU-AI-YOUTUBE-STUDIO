@@ -6,6 +6,7 @@ import os
 import re
 import math
 import subprocess
+import tempfile
 import urllib.error
 import urllib.request
 import uuid
@@ -59,14 +60,19 @@ def _validate_video(raw: bytes) -> bytes:
     if len(raw) < 16 or len(raw) > MAX_VIDEO_BYTES or raw[4:8] != b"ftyp":
         raise VideoGenerationFailed("Generated video invalid hai ya 100 MB size limit se badi hai.")
     try:
-        probe = subprocess.run(
-            [
-                "ffprobe", "-v", "error", "-select_streams", "v:0",
-                "-show_entries", "stream=codec_type,codec_name,width,height:format=format_name,duration",
-                "-of", "json", "pipe:0",
-            ],
-            input=raw, capture_output=True, check=False, timeout=30,
-        )
+        # Use a temporary seekable file: ordinary MP4 metadata (moov atom) may
+        # live at the end, which cannot be reliably inspected from a non-seekable pipe.
+        with tempfile.TemporaryDirectory(prefix="sintu-video-check-") as temp_dir:
+            candidate = Path(temp_dir) / "candidate.mp4"
+            candidate.write_bytes(raw)
+            probe = subprocess.run(
+                [
+                    "ffprobe", "-v", "error", "-select_streams", "v:0",
+                    "-show_entries", "stream=codec_type,codec_name,width,height:format=format_name,duration",
+                    "-of", "json", str(candidate),
+                ],
+                capture_output=True, check=False, timeout=30,
+            )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise VideoGenerationFailed(
             "Video verification ke liye FFprobe available nahi hai ya timeout hua. FFmpeg/FFprobe install karein."
