@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from .agents import list_agents
 from .production_catalog import production_catalog
+from .studio_scope import agent_registry, production_plan
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
 from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, RendererUnavailable, RenderFailed, OUTPUT_DIR
@@ -504,18 +505,18 @@ def _set_app_setting(key: str, value: str):
 
 
 class ProviderSettingsInput(BaseModel):
-    selected_provider: str = Field(pattern=r"^(auto|openai|gemini)$")
+    selected_provider: str = Field(pattern=r"^(auto|local|openai|gemini)$")
 
 
 @app.get("/api/admin/provider-settings")
 def admin_provider_settings():
-    selected = _get_app_setting("selected_provider", os.getenv("AI_PROVIDER", "auto").lower())
+    selected = _get_app_setting("selected_provider", os.getenv("AI_PROVIDER", "local").lower())
     status = provider_status(selected)
     return {
         "selected_provider": status["selected"],
         "providers": {
             key: {"configured": value["configured"], "model": value["model"]}
-            for key, value in status.items() if key in {"openai", "gemini"}
+            for key, value in status.items() if key in {"local", "openai", "gemini"}
         },
         "secret_policy": "API keys are read only from server environment variables and are never accepted or returned by this dashboard."
     }
@@ -812,6 +813,19 @@ def export_production_project(project_id: str, request: Request):
 def production_catalog_api():
     """Return API-independent production formats, presets and pipeline stages."""
     return production_catalog()
+
+@app.get("/api/studio/agents")
+def studio_agent_registry():
+    return agent_registry()
+
+
+@app.get("/api/studio/production-plan/{format_id}")
+def studio_production_plan(format_id: str):
+    try:
+        return production_plan(format_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Unknown video format.")
+
 
 @app.get("/api/agents")
 def agents():

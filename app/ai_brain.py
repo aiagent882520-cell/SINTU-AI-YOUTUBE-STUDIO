@@ -69,11 +69,16 @@ class ProviderRequestError(Exception):
     pass
 
 def provider_status(selected_override=None):
-    selected = (selected_override or os.getenv("AI_PROVIDER", "auto")).strip().lower()
-    if selected not in {"auto", "openai", "gemini"}:
+    selected = (selected_override or os.getenv("AI_PROVIDER", "local")).strip().lower()
+    if selected not in {"auto", "local", "openai", "gemini"}:
         selected = "auto"
     return {
         "selected": selected,
+        "local": {
+            "configured": True,
+            "model": os.getenv("OLLAMA_MODEL", "qwen2.5:3b"),
+            "base_url": os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
+        },
         "openai": {
             "configured": bool(os.getenv("OPENAI_API_KEY")),
             "model": os.getenv("OPENAI_MODEL", "gpt-5.5"),
@@ -85,14 +90,11 @@ def provider_status(selected_override=None):
     }
 
 def _selected_provider(selected_override=None):
-    selected = (selected_override or os.getenv("AI_PROVIDER", "auto")).strip().lower()
+    selected = (selected_override or os.getenv("AI_PROVIDER", "local")).strip().lower()
     status = provider_status(selected)
-    if selected == "auto":
-        if status["openai"]["configured"]:
-            return "openai"
-        if status["gemini"]["configured"]:
-            return "gemini"
-        raise ProviderNotConfigured("AI provider configure nahi hai. Server par OPENAI_API_KEY ya GEMINI_API_KEY set karna hoga.")
+    if selected in {"auto", "local"}:
+        # Free-first: auto always selects the local model. Paid providers are never auto-enabled.
+        return "local"
     if selected not in ("openai", "gemini"):
         raise ProviderRequestError("AI_PROVIDER must be auto, openai, or gemini.")
     if not status[selected]["configured"]:
@@ -114,7 +116,9 @@ def generate_text(prompt: str, workflow: str, provider_override=None) -> dict:
         "make a sensible clearly stated assumption instead of blocking."
     )
     try:
-        if provider == "openai":
+        if provider == "local":
+            output = _generate_ollama(user_input)
+        elif provider == "openai":
             from openai import OpenAI
             client = OpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=60.0, max_retries=1)
             response = client.responses.create(
@@ -159,3 +163,34 @@ def _generate_gemini(user_input: str) -> str:
         raise ProviderRequestError("Gemini API connection timed out or network is unavailable.") from None
     parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
     return "\n".join(part.get("text", "") for part in parts if part.get("text"))
+
+
+def _generate_ollama(user_input: str) -> str:
+    """Generate text through a local Ollama server; no API key or paid service."""
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+    model = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+    payload = {
+        "model": model,
+        "prompt": SYSTEM_INSTRUCTIONS + "\n\n" + user_input,
+        "stream": False,
+        "options": {"temperature": 0.7},
+    }
+    request = urllib.request.Request(
+        base_url + "/api/generate",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise ProviderRequestError(f"Local Ollama returned HTTP {exc.code}. Check the local model service.") from None
+    except (urllib.error.URLError, TimeoutError):
+        raise ProviderNotConfigured(
+            "Free local AI abhi available nahi hai. Ollama install/start karein, phir ollama pull qwen2.5:3b chalayein. Paid API automatically use nahi hogi."
+        ) from None
+    output = data.get("response", "")
+    if not isinstance(output, str) or not output.strip():
+        raise ProviderRequestError("Local Ollama returned an empty response.")
+    return output.strip()
