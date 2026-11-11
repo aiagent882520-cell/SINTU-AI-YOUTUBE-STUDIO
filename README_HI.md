@@ -169,3 +169,6 @@ Follow-up dashboard: the saved community review queue can be filtered by interna
 
 
 Due follow-up inbox: the community review dashboard now lists open overdue and due-today follow-ups (resolved and future-dated items are excluded), shows the owner and due date, and lets an operator open the matching filtered queue. This is an in-app internal work queue, not a push notification, and it does not perform moderation or publishing actions on YouTube.
+
+
+Team performance metrics: the community follow-up workload summary now reports open and resolved review counts, overall resolution rate, and per-owner resolution rate and follow-up-date coverage, alongside overdue and due-date counts. These are descriptive metrics from SINTU's saved internal queue only; they are not YouTube channel analytics or a standalone employee-performance assessment.
