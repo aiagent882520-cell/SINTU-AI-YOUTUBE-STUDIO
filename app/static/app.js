@@ -256,7 +256,7 @@ async function loadYouTubeSavedReviews(loadMore=false){
   list.innerHTML=youtubeSavedReviewsItems.map((item,index)=>{
    const status=item.review_status||"pending";
    const option=value=>'<option value="'+value+'"'+(status===value?" selected":"")+'>'+({pending:"Pending",reviewed:"Reviewed",follow_up:"Follow-up",resolved:"Resolved"}[value])+'</option>';
-   return '<div class="admin-row" data-saved-review-index="'+index+'"><strong>'+analyticsEscape(item.author||"Unknown author")+' · '+analyticsEscape(item.classification||"other")+'</strong><span>'+analyticsEscape(item.text||"Comment text not stored")+'</span><span>'+analyticsEscape(item.video_id)+' · '+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+'</span><label>Review status<select class="youtube-saved-review-status">'+["pending","reviewed","follow_up","resolved"].map(option).join("")+'</select></label><label>Internal review note<textarea class="youtube-saved-review-notes" rows="2" maxlength="1000">'+analyticsEscape(item.notes||"")+'</textarea></label><button class="secondary youtube-saved-review-save" type="button">Save changes</button><span class="muted">Last reviewed: '+analyticsEscape(item.updated_at||"")+'</span></div>';
+   return '<div class="admin-row" data-saved-review-index="'+index+'"><strong>'+analyticsEscape(item.author||"Unknown author")+' · '+analyticsEscape(item.classification||"other")+'</strong><span>'+analyticsEscape(item.text||"Comment text not stored")+'</span><span>'+analyticsEscape(item.video_id)+' · '+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+'</span><label>Review status<select class="youtube-saved-review-status">'+["pending","reviewed","follow_up","resolved"].map(option).join("")+'</select></label><label>Internal review note<textarea class="youtube-saved-review-notes" rows="2" maxlength="1000">'+analyticsEscape(item.notes||"")+'</textarea></label><div class="button-row"><button class="secondary youtube-saved-review-save" type="button">Save changes</button><button class="secondary youtube-saved-review-history" type="button">View history</button></div><div class="muted youtube-saved-review-history-list" aria-live="polite"></div><span class="muted">Last reviewed: '+analyticsEscape(item.updated_at||"")+'</span></div>';
   }).join("")||'<p class="muted">Saved review queue empty hai.</p>';
   if(more)more.hidden=youtubeSavedReviewsOffset>=youtubeSavedReviewsTotal;
   notice.textContent="Saved reviews: "+youtubeSavedReviewsItems.length+" / "+youtubeSavedReviewsTotal+".";
@@ -350,8 +350,22 @@ $("youtubeSavedReviewsSearchButton")?.addEventListener("click",()=>loadYouTubeSa
 $("youtubeSavedReviewsSearch")?.addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();loadYouTubeSavedReviews(false);}});
 $("youtubeSavedReviewsMore")?.addEventListener("click",()=>loadYouTubeSavedReviews(true));
 $("youtubeSavedReviewsList")?.addEventListener("click",async event=>{
+ const row=event.target.closest(".admin-row");
+ const historyButton=event.target.closest(".youtube-saved-review-history");
+ if(historyButton){
+  const item=youtubeSavedReviewsItems[Number(row?.dataset.savedReviewIndex)];
+  const historyBox=row.querySelector(".youtube-saved-review-history-list");
+  if(!item||!historyBox)return;
+  historyButton.disabled=true;historyBox.textContent="History load ho rahi hai…";
+  try{
+   const data=await request("/api/admin/youtube/comments/reviews/"+encodeURIComponent(item.comment_id)+"/history");
+   historyBox.innerHTML=(data.items||[]).map(entry=>'<div>'+analyticsEscape(entry.event_type==="created"?"Created":"Updated")+' · '+analyticsEscape(entry.previous_status||"—")+' → '+analyticsEscape(entry.new_status)+' · Note changed: '+(entry.note_changed?"Yes":"No")+' · '+analyticsEscape(entry.changed_at)+'</div>').join("")||"No history available.";
+  }catch(e){historyBox.textContent=e.message;}
+  finally{historyButton.disabled=false;}
+  return;
+ }
  const button=event.target.closest(".youtube-saved-review-save");if(!button)return;
- const row=button.closest(".admin-row"),item=youtubeSavedReviewsItems[Number(row?.dataset.savedReviewIndex)];
+ const item=youtubeSavedReviewsItems[Number(row?.dataset.savedReviewIndex)];
  if(!item)return;
  button.disabled=true;
  try{
