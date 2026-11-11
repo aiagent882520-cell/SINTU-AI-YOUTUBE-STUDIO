@@ -24,7 +24,7 @@ def test_blender_scene_render_uses_local_executable_and_validated_json(tmp_path,
     assert result["format"] == "MP4 / H.264"
     assert result["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
     assert "--background" in captured["commands"][0]
-    assert "overlay=x=W-w-28:y=H-h-28" in captured["commands"][1]
+    assert "overlay=x=W-w-28:y=H-h-28" in " ".join(captured["commands"][1])
     assert Path(captured["commands"][1][-1]).is_file()
 
 
