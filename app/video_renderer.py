@@ -338,8 +338,8 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             has_audio = any(stream.get("codec_type") == "audio" for stream in metadata.get("streams", []))
         except (ValueError, KeyError, TypeError, json.JSONDecodeError):
             raise RenderFailed("AI clip duration ya audio metadata invalid hai.") from None
-        if duration <= 0 or duration > 600:
-            raise ValueError("AI clip duration 0 se 600 seconds ke beech honi chahiye.")
+        if not math.isfinite(duration) or duration <= 0 or duration > 600:
+            raise ValueError("AI clip duration finite aur 0 se 600 seconds ke beech honi chahiye.")
         clip_info.append({"duration": duration, "has_audio": has_audio})
         total_duration += duration
     if total_duration > 1800:
@@ -496,16 +496,25 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
             if kind == "video":
                 if not isinstance(path, Path) or not path.is_file():
                     raise ValueError("Timeline AI video clip nahi mili.")
-                trim_start=float(item.get("trim_start",0) or 0); trim_end=item.get("trim_end")
-                if trim_start<0 or (trim_end is not None and float(trim_end)<=trim_start):
-                    raise ValueError("Video trim end, start se bada hona chahiye.")
+                try:
+                    trim_start = float(item.get("trim_start", 0) or 0)
+                    trim_end = float(item["trim_end"]) if item.get("trim_end") is not None else None
+                except (TypeError, ValueError):
+                    raise ValueError("Video trim start/end valid numbers hone chahiye.") from None
+                if (not math.isfinite(trim_start) or trim_start < 0
+                        or (trim_end is not None and (not math.isfinite(trim_end) or trim_end <= trim_start))):
+                    raise ValueError("Video trim start/end finite hone chahiye aur end, start se bada hona chahiye.")
                 ffprobe=shutil.which("ffprobe")
                 if not ffprobe: raise RendererUnavailable("Video trimming ke liye FFprobe installed hona chahiye.")
                 probe=subprocess.run([ffprobe,"-v","error","-show_entries","format=duration","-of","default=noprint_wrappers=1:nokey=1",str(path)],capture_output=True,text=True,timeout=30,check=False)
                 if probe.returncode!=0: raise RenderFailed("Source video duration read nahi ho saki.")
-                try: source_duration=float(probe.stdout.strip())
-                except ValueError: raise RenderFailed("Source video duration invalid hai.") from None
-                effective_end=source_duration if trim_end is None else float(trim_end)
+                try:
+                    source_duration = float(probe.stdout.strip())
+                except ValueError:
+                    raise RenderFailed("Source video duration invalid hai.") from None
+                if not math.isfinite(source_duration) or source_duration <= 0:
+                    raise RenderFailed("Source video duration finite aur positive honi chahiye.")
+                effective_end = source_duration if trim_end is None else trim_end
                 if trim_start>=source_duration or effective_end>source_duration+0.05:
                     raise ValueError("Video trim range source clip ki duration ke andar hona chahiye.")
                 segment_duration=effective_end-trim_start

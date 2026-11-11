@@ -61,3 +61,45 @@ def test_ai_clip_renderer_creates_verified_final_mp4(tmp_path, monkeypatch):
     assert result["resolution"] == "720x1280"
     assert result["duration_seconds"] == pytest.approx(1.0, abs=0.1)
 
+
+
+@pytest.mark.parametrize("duration", ["nan", "inf", "-inf"])
+def test_ai_clip_renderer_rejects_non_finite_source_duration(tmp_path, monkeypatch, duration):
+    from types import SimpleNamespace
+
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"not-probed-because-metadata-is-mocked")
+    monkeypatch.setattr(video_renderer.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        video_renderer.subprocess, "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=0,
+            stdout='{"format":{"duration":"' + duration + '"},"streams":[{"codec_type":"video"}]}',
+            stderr="",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="finite"):
+        video_renderer.render_ai_clips([source])
+
+
+@pytest.mark.parametrize("trim", [
+    {"trim_start": float("nan")},
+    {"trim_start": float("inf")},
+    {"trim_end": float("nan")},
+    {"trim_end": float("inf")},
+])
+def test_mixed_timeline_rejects_non_finite_trim_values(tmp_path, monkeypatch, trim):
+    from types import SimpleNamespace
+
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"source")
+    monkeypatch.setattr(video_renderer.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        video_renderer.subprocess, "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="10.0", stderr=""),
+    )
+
+    item = {"kind": "video", "path": source, **trim}
+    with pytest.raises(ValueError, match="finite"):
+        video_renderer.render_mixed_timeline([item], "test", ["scene"])
