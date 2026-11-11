@@ -1,4 +1,4 @@
-"""Assemble portrait MP4 videos from scene cards/images, narration and optional music."""
+"""Assemble clean MP4 videos with optional audio and mandatory SINTU branding."""
 from pathlib import Path
 import os
 import shutil
@@ -231,7 +231,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                     subtitles: list[str] | None = None, transition: str = "cut", transitions: list[str] | None = None,
                     clip_audio_volumes: list[float] | None = None, resolution: str = "720x1280",
                     fps: int = 30, quality: str = "high") -> dict:
-    """Join AI MP4 clips, preserving source audio and optionally mixing narration/music/captions."""
+    """Join AI MP4 clips, preserve audio, mix optional narration/music and add SINTU branding."""
     import json
 
     ffmpeg = shutil.which("ffmpeg")
@@ -368,29 +368,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                 mix_labels.append("[music]")
             filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,atrim=duration={total_duration:.3f}[aout]")
 
-            if False and any(line.strip() for line in subtitles):
-                srt_path = work / "captions.srt"
-                def stamp(seconds):
-                    millis = int(round(seconds * 1000))
-                    hours, millis = divmod(millis, 3600000)
-                    minutes, millis = divmod(millis, 60000)
-                    secs, millis = divmod(millis, 1000)
-                    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
-                entries = []
-                elapsed = 0.0
-                for line, info in zip(subtitles, clip_info):
-                    if line.strip():
-                        entries.append(f"{len(entries)+1}\n{stamp(elapsed)} --> {stamp(elapsed+info['duration'])}\n{line.replace(chr(13), ' ').replace(chr(10), ' ')}\n")
-                    elapsed += info["duration"]
-                srt_path.write_text("\n".join(entries), encoding="utf-8")
-                filter_check = subprocess.run([ffmpeg, "-filters"], capture_output=True, text=True, timeout=20, check=False)
-                if " subtitles " not in (filter_check.stdout + filter_check.stderr):
-                    raise RendererUnavailable("Is FFmpeg build mein subtitles filter available nahi hai.")
-                safe_srt = str(srt_path).replace("\\", "/").replace(":", r"\:")
-                filters.append(f"[vout]subtitles=filename='{safe_srt}':force_style='FontSize=22,Outline=2,Shadow=0,MarginV=70'[vcaption]")
-                video_map = "[vcaption]"
-            else:
-                video_map = "[vbrand]"
+            video_map = "[vbrand]"
 
             command += ["-filter_complex", ";".join(filters), "-map", video_map, "-map", "[aout]",
                         "-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
