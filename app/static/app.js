@@ -330,6 +330,14 @@ $("youtubeCommentsList")?.addEventListener("click",async event=>{
  const draft=row.querySelector(".youtube-reply-draft")?.value||"";
  try{await navigator.clipboard.writeText(draft);button.textContent="Copied";}catch(e){button.textContent="Copy unavailable";}
 });
+$("youtubeSavedReviewsExport")?.addEventListener("click",()=>{
+ const params=new URLSearchParams({sort:$("youtubeSavedReviewsSort")?.value||"newest"});
+ const status=$("youtubeSavedReviewsFilter")?.value||"",category=$("youtubeSavedReviewsCategory")?.value||"",search=$("youtubeSavedReviewsSearch")?.value.trim()||"";
+ if(status)params.set("review_status",status);
+ if(category)params.set("classification",category);
+ if(search)params.set("search",search);
+ window.location.href="/api/admin/youtube/comments/reviews/export?"+params.toString();
+});
 $("youtubeSavedReviewsRefresh")?.addEventListener("click",()=>loadYouTubeSavedReviews(false));
 $("youtubeSavedReviewsFilter")?.addEventListener("change",()=>loadYouTubeSavedReviews(false));
 $("youtubeSavedReviewsCategory")?.addEventListener("change",()=>loadYouTubeSavedReviews(false));
