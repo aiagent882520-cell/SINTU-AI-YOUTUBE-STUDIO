@@ -295,5 +295,7 @@ Follow-up workload CSV export: the community review workload panel can download 
 - सभी gates PASS होकर run `completed` होने के बाद ही `POST /api/production/runs/{run_id}/render` final MP4 export कर सकता है।
 - Render request में उसी format का `format_id`, scene descriptions और उपलब्ध scene image IDs / AI video IDs / voiceover ID / music ID दें। Existing FFmpeg renderer SINTU watermark लगाकर MP4 बनाएगा।
 - Render result production run में attach होता है; `GET /api/production/runs/{run_id}` में render metadata दिखाई देता है।
+- Mixed timeline के लिए अब structured `timeline_items` भी उपलब्ध है: हर item में `kind` (`image` या `video`), `asset_id`, image के लिए `duration`, video के लिए `trim_start` / optional `trim_end`, `audio_volume` और `transition` दें। पुराने string-based `timeline` requests backward-compatible हैं।
+- उदाहरण: `{"timeline_items":[{"kind":"image","asset_id":"<32-char-image-id>","duration":5,"transition":"fade"},{"kind":"video","asset_id":"<32-char-video-id>","trim_start":1.5,"trim_end":6,"audio_volume":0.25,"transition":"cut"}]}`. यह केवल पहले से generated assets को जोड़ता है; AI video generation engine अपने-आप नहीं चलाता।
 - यह final assembly stage supplied media पर निर्भर है। AI image/video assets अपने-आप generate नहीं होते; उनके local engines/workflows पहले configure और run करने होंगे।
 - YouTube publishing इस endpoint से नहीं होती; अलग OAuth connection और explicit human approval जरूरी है।
