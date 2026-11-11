@@ -1,4 +1,6 @@
-import pytest\n\nfrom app.production_runtime import _checker_payload, _review_payload
+import pytest
+
+from app.production_runtime import _checker_payload, _review_payload
 from app.studio_scope import video_formats
 
 
