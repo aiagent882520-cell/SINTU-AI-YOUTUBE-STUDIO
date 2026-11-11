@@ -2209,9 +2209,10 @@ def test_storyboard_frame_rejects_subtitle_overlay(tmp_path):
         )
 
 
-def test_video_voiceover_requires_at_least_95_percent_hindi():
+def test_video_voiceover_requires_at_least_95_percent_hindi(monkeypatch):
     from app import voice_generator
 
     assert voice_generator.hindi_letter_ratio("नमस्ते, आज हम कहानी सुनेंगे।") == 1.0
+    monkeypatch.setattr(voice_generator, "voice_status", lambda: {"local_available": True})
     with pytest.raises(ValueError, match="95% Hindi"):
         voice_generator.generate_voiceover("Hello world, this is an English narration.")
