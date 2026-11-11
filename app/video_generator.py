@@ -10,6 +10,7 @@ import uuid
 import time
 
 from .image_generator import IMAGE_DIR
+from .comfyui_client import video_workflow_status, generate_video_bytes, ComfyUIUnavailable
 from .policy import paid_upgrades_allowed
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -31,8 +32,13 @@ class VideoGenerationFailed(Exception):
 def video_status():
     enabled = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "").lower() == "true" and paid_upgrades_allowed()
     key_set = bool(os.getenv("GEMINI_API_KEY"))
+    local = video_workflow_status()
     return {
-        "available": enabled and key_set,
+        "available": local["available"] or (enabled and key_set),
+        "local_available": local["available"],
+        "local_engine": "ComfyUI" if local["available"] else None,
+        "local_workflow_configured": local["workflow_configured"],
+        "paid_available": enabled and key_set,
         "provider": "Google Gemini API",
         "model": MODEL,
         "enabled": enabled,
@@ -131,8 +137,6 @@ def _download_video_file(file_id: str, api_key: str) -> bytes:
 def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "720p",
                    style: str = "cinematic", reference_image_id: str | None = None, duration_seconds: int = 8) -> dict:
     status = video_status()
-    if not status["available"]:
-        raise VideoUnavailable("AI video generation disabled hai. Server admin ko paid media enable karke GEMINI_API_KEY secure secret mein set karna hoga.")
     prompt = prompt.strip()
     if not prompt or len(prompt) > 3000:
         raise ValueError("Video prompt 1 se 3000 characters ka hona chahiye.")
@@ -153,6 +157,25 @@ def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "7
     if style not in styles:
         raise ValueError("Unsupported video style.")
     full_prompt = f"{styles[style]} {prompt}. Target duration: approximately {duration_seconds} seconds. Create one coherent short clip with intentional subject movement, camera movement, lighting and a clear visual composition. Do not add captions, logos or watermarks."
+    if status["local_available"]:
+        if reference_image_id:
+            raise VideoUnavailable("Current free ComfyUI workflow supports text-to-video. Remove the reference image or configure an image-to-video workflow connector later.")
+        width, height = (768, 1360) if aspect_ratio == "9:16" else (1360, 768)
+        try:
+            video_bytes = _validate_video(generate_video_bytes(full_prompt, width, height, duration_seconds * 24, 24))
+        except ComfyUIUnavailable as exc:
+            raise VideoUnavailable(str(exc)) from None
+        AI_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+        video_id = uuid.uuid4().hex
+        output = AI_VIDEO_DIR / f"{video_id}.mp4"
+        output.write_bytes(video_bytes)
+        return {"video_id": video_id, "url": f"/api/ai-videos/{video_id}", "filename": output.name,
+                "format": "MP4", "size_bytes": output.stat().st_size, "duration_seconds": duration_seconds,
+                "aspect_ratio": aspect_ratio, "resolution": resolution, "style": style,
+                "provider": "ComfyUI (local)", "local": True,
+                "notice": "Generated locally by your configured ComfyUI video workflow. Review quality and model license."}
+    if not status["paid_available"]:
+        raise VideoUnavailable("Free video generation needs a local ComfyUI video workflow. Paid generation remains locked until revenue and approval.")
     user_input = [{"type": "text", "text": full_prompt}]
     if reference_image_id:
         if not re.fullmatch(r"[a-f0-9]{32}", reference_image_id):
