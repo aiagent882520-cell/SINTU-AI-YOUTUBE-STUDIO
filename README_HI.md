@@ -204,3 +204,9 @@ Follow-up workload CSV export: the community review workload panel can download 
 
 
 - AI generation is linked to a saved project through `POST /api/projects/{project_id}/generate`; the generated task ID and latest status are recorded on that project. The generation endpoint enforces the existing workflow catalog and provider configuration.
+
+
+### PWA Offline Shell
+
+- The service worker cache version is incremented when the shell changes and includes the production studio JavaScript/CSS plus a static offline fallback page.
+- Authenticated dashboard HTML and API responses are not cached. Offline mode shows a safe reconnect page rather than caching private account data.
