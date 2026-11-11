@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#20D9FF"/><stop offset=".55" stop-color="#397BFF"/><stop offset="1" stop-color="#B33CFF"/></linearGradient><linearGradient id="r" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FF4545"/><stop offset="1" stop-color="#C90032"/></linearGradient></defs>
+<circle cx="256" cy="256" r="226" fill="#101827" stroke="url(#g)" stroke-width="18"/>
+<path d="M132 130 H355 Q401 130 401 176 Q401 222 355 222 H207 Q166 222 166 260 Q166 298 207 298 H320 Q401 298 401 374 Q401 450 320 450 H126" fill="none" stroke="url(#g)" stroke-width="54" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="151" y="188" width="210" height="136" rx="34" fill="url(#r)" stroke="#FFC3CB" stroke-width="5"/>
+<path d="M236 220 L300 256 L236 292Z" fill="#FFF"/>
+<circle cx="369" cy="119" r="55" fill="#101827" stroke="#2BDFFF" stroke-width="9"/>
+<text x="369" y="134" text-anchor="middle" font-family="Arial,sans-serif" font-size="43" font-weight="900" fill="#55E8FF">AI</text>
+</svg>
