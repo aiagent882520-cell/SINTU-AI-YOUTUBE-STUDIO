@@ -50,7 +50,7 @@ def hindi_letter_ratio(text: str) -> float:
     letters = [char for char in text if char.isalpha()]
     if not letters:
         return 0.0
-    hindi_letters = sum("\\u0900" <= char <= "\\u097F" for char in letters)
+    hindi_letters = sum("\u0900" <= char <= "\u097F" for char in letters)
     return hindi_letters / len(letters)
 
 
