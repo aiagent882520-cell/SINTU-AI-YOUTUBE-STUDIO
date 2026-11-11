@@ -152,11 +152,11 @@ def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "7
         "3d-animation": "High-quality 3D animated film style, dimensional characters, realistic materials, cinematic lighting.",
         "documentary": "Realistic documentary footage style, natural camera movement and authentic environmental detail.",
         "anime": "High-quality anime animation style, expressive character motion and detailed illustrated backgrounds.",
-        "motion-graphics": "Professional animated motion-graphics style, clean shapes, dynamic transitions and readable visual hierarchy; avoid rendering text unless requested.",
+        "motion-graphics": "Professional animated motion-graphics style, clean geometric shapes, dynamic transitions and clear visual hierarchy without typography or words.",
     }
     if style not in styles:
         raise ValueError("Unsupported video style.")
-    full_prompt = f"{styles[style]} {prompt}. Target duration: approximately {duration_seconds} seconds. Create one coherent short clip with intentional subject movement, camera movement, lighting and a clear visual composition. Do not add captions, logos or watermarks."
+    full_prompt = f"{styles[style]} {prompt}. Target duration: approximately {duration_seconds} seconds. Create one coherent short clip with intentional subject movement, camera movement, lighting and a clear visual composition. Do not render any visible text, letters, words, subtitles, captions, logos or watermarks. The final SINTU AI YOUTUBE STUDIO logo is added later by the renderer."
     if status["local_available"]:
         if reference_image_id:
             raise VideoUnavailable("Current free ComfyUI workflow supports text-to-video. Remove the reference image or configure an image-to-video workflow connector later.")
