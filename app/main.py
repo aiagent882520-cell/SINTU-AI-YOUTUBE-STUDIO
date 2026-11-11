@@ -1623,6 +1623,9 @@ def list_youtube_comment_reviews(
     classification: str = Query(default="", regex=r"^(|possible_spam|positive|negative|question|other)$"),
     search: str = Query(default="", max_length=200),
     sort: str = Query(default="newest", regex=r"^(newest|likes|spam)$"),
+    assigned_to: str = Query(default="", max_length=120),
+    follow_up_filter: str = Query(default="", pattern=r"^(|overdue|today|upcoming|unscheduled)$"),
+    as_of: str = Query(default="", max_length=10),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=1000000),
 ):
@@ -1635,6 +1638,26 @@ def list_youtube_comment_reviews(
     if classification:
         clauses.append("classification=?")
         params.append(classification)
+    if assigned_to.strip():
+        clauses.append("assigned_to=?")
+        params.append(assigned_to.strip())
+    if follow_up_filter:
+        today = as_of or datetime.now(timezone.utc).date().isoformat()
+        try:
+            datetime.strptime(today, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=422, detail="as_of must use YYYY-MM-DD")
+        if follow_up_filter == "overdue":
+            clauses.append("follow_up_at<>'' AND follow_up_at<?")
+            params.append(today)
+        elif follow_up_filter == "today":
+            clauses.append("follow_up_at=?")
+            params.append(today)
+        elif follow_up_filter == "upcoming":
+            clauses.append("follow_up_at>?")
+            params.append(today)
+        else:
+            clauses.append("follow_up_at=''")
     if search.strip():
         clauses.append("(author LIKE ? OR comment_text LIKE ? OR notes LIKE ? OR video_id LIKE ?)")
         term = f"%{search.strip()}%"
@@ -1659,6 +1682,38 @@ def list_youtube_comment_reviews(
             "note": "Yeh SINTU mein save kiye gaye internal review records hain; YouTube par koi moderation action nahi hota."}
 
 
+@app.get("/api/admin/youtube/comments/reviews/follow-ups/summary")
+def youtube_comment_follow_up_summary(as_of: str = Query(default="", max_length=10)):
+    """Return due/overdue follow-up counts and internal assignee workload."""
+    today = as_of or datetime.now(timezone.utc).date().isoformat()
+    try:
+        datetime.strptime(today, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=422, detail="as_of must use YYYY-MM-DD")
+    with db() as conn:
+        totals = conn.execute(
+            """SELECT COUNT(*) AS total,
+               SUM(CASE WHEN follow_up_at<>'' AND follow_up_at<? THEN 1 ELSE 0 END) AS overdue,
+               SUM(CASE WHEN follow_up_at=? THEN 1 ELSE 0 END) AS due_today,
+               SUM(CASE WHEN follow_up_at>? THEN 1 ELSE 0 END) AS upcoming,
+               SUM(CASE WHEN follow_up_at='' THEN 1 ELSE 0 END) AS unscheduled,
+               SUM(CASE WHEN review_status='resolved' THEN 1 ELSE 0 END) AS resolved
+               FROM youtube_comment_reviews""", (today,today,today)
+        ).fetchone()
+        owners = conn.execute(
+            """SELECT CASE WHEN assigned_to='' THEN 'Unassigned' ELSE assigned_to END AS owner,
+               COUNT(*) AS total,
+               SUM(CASE WHEN follow_up_at<>'' AND follow_up_at<? THEN 1 ELSE 0 END) AS overdue,
+               SUM(CASE WHEN follow_up_at=? THEN 1 ELSE 0 END) AS due_today,
+               SUM(CASE WHEN review_status='resolved' THEN 1 ELSE 0 END) AS resolved
+               FROM youtube_comment_reviews GROUP BY assigned_to ORDER BY total DESC,owner ASC""",
+            (today,today)
+        ).fetchall()
+    return {"as_of":today,"totals":{key:(value or 0) for key,value in dict(totals).items()},
+            "owners":[{key:(value or 0) for key,value in dict(row).items()} for row in owners],
+            "note":"Yeh internal SINTU workload summary hai; koi automatic reminder ya YouTube action nahi hota."}
+
+
 @app.get("/api/admin/youtube/comments/reviews/{comment_id}/history")
 def get_youtube_comment_review_history(comment_id: str):
     """Return internal status-change history for one saved comment."""
@@ -1671,7 +1726,8 @@ def get_youtube_comment_review_history(comment_id: str):
         if not exists:
             raise HTTPException(status_code=404, detail="Saved comment review not found")
         rows = conn.execute(
-            """SELECT event_type,previous_status,new_status,note_changed,changed_at
+            """SELECT event_type,previous_status,new_status,note_changed,changed_at,
+                      previous_assigned_to,new_assigned_to,previous_follow_up_at,new_follow_up_at
                FROM youtube_comment_review_history WHERE comment_id=?
                ORDER BY changed_at DESC,id DESC LIMIT 100""",
             (comment_id,),
