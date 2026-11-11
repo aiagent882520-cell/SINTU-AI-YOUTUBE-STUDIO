@@ -160,3 +160,6 @@ Review History / Audit Trail records each saved comment review creation and upda
 
 
 Bulk Community Review lets admins select up to 100 saved comments from the visible queue pages and apply one internal review status (Pending, Follow-up, Reviewed or Resolved). Every affected comment receives an audit-history event. The operation validates that every selected record exists before changing any record; if one is missing, no partial update is applied. A confirmation is shown before the bulk update. This feature never deletes, hides, approves or replies to comments on YouTube.
+
+
+Community assignment and follow-up: admins can assign selected saved comment reviews to an internal owner/team label and set an optional follow-up date. The operation is limited to 100 selected records, validates all IDs before updating any, and records old/new owner and follow-up date in the internal audit history. These are internal SINTU fields only; no YouTube moderation or reply action is triggered.
