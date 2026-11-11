@@ -289,3 +289,11 @@ Follow-up workload CSV export: the community review workload panel can download 
 - 360°, VR, AR और virtual-production formats को specialised pipeline बनने तक स्पष्ट रूप से blocked दिखाया जाता है। बाकी formats के लिए भी native generation को अभी ready नहीं बताया गया है।
 - 3D/film/hybrid formats में Blender optional native engine है; Blender installation और configured scene workflow जरूरी है।
 - Format profiles का automated test है; सभी 60 formats का full production shoot/render QA अभी complete नहीं है।
+
+### Production run से final MP4 export
+- `POST /api/production/runs` से format-specific Builder/Checker और पाँच final reviewer gates वाला package बनता है।
+- सभी gates PASS होकर run `completed` होने के बाद ही `POST /api/production/runs/{run_id}/render` final MP4 export कर सकता है।
+- Render request में उसी format का `format_id`, scene descriptions और उपलब्ध scene image IDs / AI video IDs / voiceover ID / music ID दें। Existing FFmpeg renderer SINTU watermark लगाकर MP4 बनाएगा।
+- Render result production run में attach होता है; `GET /api/production/runs/{run_id}` में render metadata दिखाई देता है।
+- यह final assembly stage supplied media पर निर्भर है। AI image/video assets अपने-आप generate नहीं होते; उनके local engines/workflows पहले configure और run करने होंगे।
+- YouTube publishing इस endpoint से नहीं होती; अलग OAuth connection और explicit human approval जरूरी है।
