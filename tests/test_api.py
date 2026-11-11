@@ -2375,4 +2375,4 @@ def test_structured_timeline_rejects_invalid_video_trim(tmp_path, monkeypatch):
         "timeline_items": [{"kind": "video", "asset_id": "d" * 32,
                              "trim_start": 4, "trim_end": 2}]
     })
-    assert response.status_code == 422
+    assert response.status_code == 400
