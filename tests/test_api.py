@@ -2182,3 +2182,28 @@ def test_background_run_can_be_started_and_resumed_after_pause(tmp_path, monkeyp
     assert resumed.json()["run"]["status"] == "in_progress"
 
 
+
+
+def test_storyboard_frames_are_clean_and_include_sintu_branding(tmp_path):
+    from PIL import Image
+    from app import video_renderer
+
+    frame = tmp_path / "clean-frame.png"
+    video_renderer._make_frame(
+        frame, "DO NOT SHOW TITLE", "DO NOT SHOW SCENE TEXT", 1, 1,
+        width=360, height=640
+    )
+    with Image.open(frame) as image:
+        assert image.size == (360, 640)
+        assert image.getpixel((180, 300))[:3] == (16, 24, 39)
+        assert image.getpixel((105, 566))[:3] != (16, 24, 39)
+
+
+def test_storyboard_frame_rejects_subtitle_overlay(tmp_path):
+    from app import video_renderer
+
+    with pytest.raises(ValueError, match="subtitles are disabled"):
+        video_renderer._make_frame(
+            tmp_path / "should-not-exist.png", "Title", "Scene", 1, 1,
+            subtitle="spoken words"
+        )
