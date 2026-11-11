@@ -2196,7 +2196,7 @@ def test_storyboard_frames_are_clean_and_include_sintu_branding(tmp_path):
     with Image.open(frame) as image:
         assert image.size == (360, 640)
         assert image.getpixel((180, 300))[:3] == (16, 24, 39)
-        assert image.getpixel((105, 566))[:3] != (16, 24, 39)
+        assert image.getpixel((200, 590))[:3] != (16, 24, 39)
 
 
 def test_storyboard_frame_rejects_subtitle_overlay(tmp_path):
