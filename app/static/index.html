@@ -238,6 +238,13 @@
       <h3>Top videos by impressions</h3><div id="youtubeReachVideos" class="calendar-list"></div>
       <p id="youtubeReachNotice" class="muted" role="status" aria-live="polite">Enable daily reports to start collecting official thumbnail impressions and CTR.</p>
     </section>
+    <section class="panel" id="youtubeRetentionPanel" hidden>
+      <div class="panel-head"><div><h2>Video Audience Retention</h2><p>Official retention curve · one video at a time</p></div><button id="youtubeRetentionLoad" class="secondary" type="button">Load retention</button></div>
+      <label for="youtubeRetentionVideoId">YouTube video ID</label><input id="youtubeRetentionVideoId" maxlength="20" placeholder="Example: dQw4w9WgXcQ">
+      <div id="youtubeRetentionSummary" class="integration-cards" aria-live="polite"></div>
+      <div id="youtubeRetentionPoints" class="calendar-list"></div>
+      <p id="youtubeRetentionNotice" class="muted" role="status" aria-live="polite">Video ID daal kar retention curve load karein.</p>
+    </section>
     <section class="panel" id="analyticsOverviewPanel" hidden>
       <div class="panel-head"><div><h2>Publishing Performance Overview</h2><p>Recorded SINTU publishing events only; platform views and revenue are not fabricated.</p></div><button id="analyticsRefresh" class="secondary" type="button">Refresh</button></div>
       <div id="analyticsTotals" class="integration-cards" aria-live="polite"></div>
