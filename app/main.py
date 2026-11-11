@@ -18,7 +18,7 @@ import urllib.error
 from datetime import datetime, timedelta, timezone
 from cryptography.fernet import Fernet, InvalidToken
 
-from fastapi import FastAPI, HTTPException, Header, Request, Query
+from fastapi import FastAPI, HTTPException, Header, Request, Query, BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -974,38 +974,45 @@ def studio_revise_worker(run_id: str, task_id: str, payload: StudioWorkerOutputI
         raise HTTPException(status_code=404, detail="Run or task not found.")
     return {"run": result}
 
-@app.post("/api/studio/runs/{run_id}/execute-next")
-def studio_execute_next(run_id: str, request: Request):
-    owner = _studio_owner(request)
+def _execute_studio_task_pair(owner: str, run_id: str):
     run = studio_engine.get_run(owner, run_id)
     if not run:
-        raise HTTPException(status_code=404, detail="Production run not found.")
+        return {"error":"Production run not found."}
     task = next((item for item in run["tasks"] if item["id"] == run["current_task_id"]), None)
-    if not task or task["status"] not in {"pending", "needs_revision"}:
-        raise HTTPException(status_code=409, detail="No worker task is ready to execute.")
-    project = _studio_project_or_404(run["project_id"], request)
-    worker_prompt = (
-        "Act as the specialist role: " + task["specialist"] + ".\nProject: " + project["name"] +
-        "\nFormat: " + run["format_id"] + "\nLanguage: " + project["language"] +
-        "\nDuration seconds: " + str(project["duration_seconds"]) + "\nProject brief:\n" + project["brief"] +
-        "\n\nCreate only your department deliverable. Be specific and practical. Do not claim external tools, live research, media generation or publishing unless actually done.\n"
-        "Previous independent checker revision instructions:\n" + (task.get("checker_issues") or "")
-    )
+    if not task or task["status"] not in {"pending","needs_revision","waiting_checker"}:
+        return {"error":"No worker/checker task is ready."}
+    _ensure_production_projects_table()
+    with db() as conn:
+        project_row = conn.execute("SELECT * FROM production_projects WHERE id=? AND owner_username=?",
+                                   (run["project_id"], owner)).fetchone()
+    if not project_row:
+        return {"error":"Project not found for this production run."}
+    project = dict(project_row)
+    worker = None
     try:
-        worker = generate_text(worker_prompt, "content", "local")
-        studio_engine.submit_worker_output(owner, run_id, task["id"], worker["output"])
+        if task["status"] == "waiting_checker":
+            worker = {"output":task["worker_output"],"model":"existing submitted worker output"}
+        else:
+            worker_prompt = (
+                "Act as the specialist role: " + task["specialist"] + ".\nProject: " + project["name"] +
+                "\nFormat: " + run["format_id"] + "\nLanguage: " + project["language"] +
+                "\nDuration seconds: " + str(project["duration_seconds"]) + "\nProject brief:\n" + project["brief"] +
+                "\n\nCreate only your department deliverable. Be specific and practical. Do not claim external tools, live research, media generation or publishing unless actually done.\n"
+                "Previous independent checker revision instructions:\n" + (task.get("checker_issues") or "")
+            )
+            worker = generate_text(worker_prompt, "content", "local")
+            studio_engine.submit_worker_output(owner, run_id, task["id"], worker["output"])
         checker_prompt = (
             "You are the independent checker role " + task["checker"] + ". You did not create this work. "
             "Strictly review the output of " + task["specialist"] + " against the project brief. "
             "Return ONLY valid JSON: decision (PASS or FAIL), evidence (specific checks performed), "
             "issues (empty for PASS; actionable corrections for FAIL). PASS only when requirements are met.\n\n"
-            "Project brief:\n" + project["brief"] + "\n\nWorker output:\n" + worker["output"][:30000]
+            "Project brief:\n" + project["brief"] + "\n\nWorker output:\n" + str(worker["output"])[:30000]
         )
         checker = generate_text(checker_prompt, "content", "local")
-    except ProviderNotConfigured as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
-    except ProviderRequestError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+    except (ProviderNotConfigured, ProviderRequestError, ValueError) as exc:
+        studio_engine.set_run_status(owner, run_id, "paused", str(exc))
+        return {"error":str(exc),"run":studio_engine.get_run(owner,run_id)}
     parsed = None
     match = re.search(r"\{[\s\S]*\}", checker["output"])
     if match:
@@ -1013,18 +1020,52 @@ def studio_execute_next(run_id: str, request: Request):
             parsed = json.loads(match.group(0))
         except json.JSONDecodeError:
             parsed = None
-    if not isinstance(parsed, dict) or str(parsed.get("decision", "")).upper() not in {"PASS", "FAIL"} or not str(parsed.get("evidence", "")).strip():
+    if not isinstance(parsed, dict) or str(parsed.get("decision","")).upper() not in {"PASS","FAIL"} or not str(parsed.get("evidence","")).strip():
         decision, evidence, issues = "FAIL", checker["output"][:10000] or "No structured checker evidence returned.", "Checker response was not valid strict JSON. Review manually and resubmit checker result."
     else:
         decision = str(parsed["decision"]).upper()
         evidence = str(parsed["evidence"])[:12000]
-        issues = str(parsed.get("issues", ""))[:12000]
+        issues = str(parsed.get("issues",""))[:12000]
         if decision == "FAIL" and not issues:
             issues = "Checker reported FAIL but omitted revision instructions."
     result = studio_engine.submit_checker_result(owner, run_id, task["id"], decision, evidence, issues)
-    return {"run": result, "worker": {"role": task["specialist"], "model": worker["model"], "output": worker["output"]},
-            "checker": {"role": task["checker"], "model": checker["model"], "decision": decision, "evidence": evidence, "issues": issues},
-            "note": "Worker and checker used separate local-model requests. Human judgment remains necessary for factual, legal and copyright decisions."}
+    return {"run":result,
+            "worker":{"role":task["specialist"],"model":worker.get("model","local"),"output":worker["output"]},
+            "checker":{"role":task["checker"],"model":checker["model"],"decision":decision,"evidence":evidence,"issues":issues}}
+
+def _run_studio_background(owner: str, run_id: str):
+    while True:
+        run = studio_engine.get_run(owner, run_id)
+        if not run or run["status"] in {"awaiting_human_approval","completed","approval_rejected"}:
+            return
+        result = _execute_studio_task_pair(owner, run_id)
+        if result.get("error"):
+            return
+        if result.get("checker",{}).get("decision") == "FAIL":
+            return
+
+@app.post("/api/studio/runs/{run_id}/execute-next")
+def studio_execute_next(run_id: str, request: Request):
+    result = _execute_studio_task_pair(_studio_owner(request), run_id)
+    if result.get("error"):
+        raise HTTPException(status_code=503, detail=result["error"])
+    result["note"] = "Worker and checker used separate local-model requests. Human judgment remains necessary for factual, legal and copyright decisions."
+    return result
+
+@app.post("/api/studio/runs/{run_id}/execute-all")
+def studio_execute_all(run_id: str, background_tasks: BackgroundTasks, request: Request):
+    owner = _studio_owner(request)
+    run = studio_engine.get_run(owner, run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Production run not found.")
+    try:
+        run = studio_engine.start_run(owner, run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    if run["status"] == "awaiting_human_approval":
+        return {"run":run,"started":False,"note":"All checker gates already passed; final human approval is pending."}
+    background_tasks.add_task(_run_studio_background, owner, run_id)
+    return {"run":run,"started":True,"note":"All specialist/checker pairs will run sequentially through the free local model. The run pauses on provider errors or the first checker FAIL."}
 
 @app.post("/api/studio/runs/{run_id}/approve")
 def studio_approve_run(run_id: str, payload: StudioApprovalInput, request: Request):
