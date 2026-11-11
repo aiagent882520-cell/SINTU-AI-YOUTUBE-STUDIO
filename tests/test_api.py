@@ -2376,3 +2376,38 @@ def test_structured_timeline_rejects_invalid_video_trim(tmp_path, monkeypatch):
                              "trim_start": 4, "trim_end": 2}]
     })
     assert response.status_code == 400
+
+
+def test_firewall_ip_allowlist_and_origin_validation():
+    from app.security import client_address_allowed, same_origin_request
+    assert client_address_allowed("192.0.2.10", "192.0.2.0/24")
+    assert not client_address_allowed("192.0.3.10", "192.0.2.0/24")
+    assert client_address_allowed("127.0.0.1", "")
+    assert not client_address_allowed("127.0.0.1", "not-a-cidr")
+    assert same_origin_request("https://studio.example.com", "studio.example.com")
+    assert same_origin_request("https://studio.example.com:8443", "studio.example.com:8443")
+    assert not same_origin_request("https://evil.example", "studio.example.com")
+    assert not same_origin_request("null", "studio.example.com")
+
+
+def test_application_firewall_blocks_cross_origin_mutations(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.post(
+        "/api/tasks",
+        json={"prompt": "cross-site request", "workflow": "shorts"},
+        headers={"Origin": "https://attacker.example"},
+    )
+    assert response.status_code == 403
+    assert "Cross-origin" in response.json()["detail"]
+
+
+def test_application_firewall_rate_limits_api_requests(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    main._FIREWALL_LIMITER.reset()
+    monkeypatch.setenv("SINTU_RATE_LIMIT_PER_MINUTE", "1")
+    assert client.get("/api/agents").status_code == 200
+    limited = client.get("/api/agents")
+    assert limited.status_code == 429
+    assert int(limited.headers["Retry-After"]) >= 1
+    assert client.get("/api/health").status_code == 200
+    main._FIREWALL_LIMITER.reset()
