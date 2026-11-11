@@ -299,6 +299,11 @@ class YouTubeCommentReviewInput(BaseModel):
     classification: str = Field(default="other", pattern=r"^(possible_spam|positive|negative|question|other)$")
 
 
+class YouTubeCommentBulkReviewInput(BaseModel):
+    comment_ids: list[str] = Field(min_length=1, max_length=100)
+    review_status: str = Field(pattern=r"^(pending|reviewed|follow_up|resolved)$")
+
+
 class CalendarItemInput(BaseModel):
     title: str = Field(min_length=1, max_length=160)
     platform: str = Field(pattern=r"^(youtube|youtube_shorts|instagram|facebook|tiktok|website)$")
@@ -1523,6 +1528,36 @@ def save_youtube_comment_review(item: YouTubeCommentReviewInput):
     return {"saved": True, "comment_id": item.comment_id, "review_status": item.review_status,
             "notes": item.notes.strip(), "updated_at": now, "author": item.author.strip(),
             "note": "Review SINTU mein save hua hai. YouTube comment par koi action nahi hua."}
+
+
+@app.post("/api/admin/youtube/comments/reviews/bulk")
+def bulk_update_youtube_comment_reviews(item: YouTubeCommentBulkReviewInput):
+    """Apply an internal review status to selected saved comments; never modifies YouTube."""
+    comment_ids = list(dict.fromkeys(value.strip() for value in item.comment_ids))
+    if len(comment_ids) != len(item.comment_ids) or any(not value or len(value) > 200 for value in comment_ids):
+        raise HTTPException(status_code=422, detail="Invalid or duplicate comment IDs")
+    now = datetime.now(timezone.utc).isoformat()
+    placeholders = ",".join("?" for _ in comment_ids)
+    with db() as conn:
+        rows = conn.execute(
+            f"SELECT comment_id,video_id,review_status FROM youtube_comment_reviews WHERE comment_id IN ({placeholders})",
+            comment_ids,
+        ).fetchall()
+        if len(rows) != len(comment_ids):
+            raise HTTPException(status_code=404, detail="One or more saved comments were not found; no changes applied")
+        for row in rows:
+            conn.execute(
+                "UPDATE youtube_comment_reviews SET review_status=?,updated_at=? WHERE comment_id=?",
+                (item.review_status,now,row["comment_id"]),
+            )
+            conn.execute(
+                """INSERT INTO youtube_comment_review_history(
+                     comment_id,video_id,event_type,previous_status,new_status,note_changed,changed_at
+                   ) VALUES(?,?,?,?,?,?,?)""",
+                (row["comment_id"],row["video_id"],"bulk_updated",row["review_status"],item.review_status,0,now),
+            )
+    return {"updated":len(rows),"review_status":item.review_status,"updated_at":now,
+            "note":"Bulk review SINTU ke internal records mein save hua. YouTube par koi action nahi hua."}
 
 
 @app.get("/api/admin/youtube/comments/reviews")
