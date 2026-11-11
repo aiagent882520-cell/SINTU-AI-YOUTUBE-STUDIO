@@ -277,11 +277,6 @@ $("youtubeCommentsSearch")?.addEventListener("input",renderYouTubeComments);
 $("youtubeCommentsFilter")?.addEventListener("change",renderYouTubeComments);
 $("youtubeCommentsReviewFilter")?.addEventListener("change",renderYouTubeComments);
 $("youtubeCommentsSort")?.addEventListener("change",renderYouTubeComments);
-$("youtubeCommentsList")?.addEventListener("change",event=>{
- const select=event.target.closest(".youtube-review-status");if(!select)return;
- const row=select.closest(".admin-row");const item=youtubeCommentsItems[Number(row?.dataset.commentIndex)];
- if(item){item.review_status=select.value;renderYouTubeCommentTotals();}
-});
 $("youtubeCommentsList")?.addEventListener("click",async event=>{
  const row=event.target.closest(".admin-row");if(!row)return;
  const reviewButton=event.target.closest(".youtube-save-review");
@@ -295,7 +290,8 @@ $("youtubeCommentsList")?.addEventListener("click",async event=>{
    })});
    item.review_status=result.review_status;item.review_notes=result.notes;
    renderYouTubeCommentTotals();
-   row.querySelector(".youtube-review-state").textContent="Saved: "+result.review_status;
+   $("youtubeCommentsNotice").textContent="Review status saved in SINTU. YouTube comment par koi action nahi hua.";
+   renderYouTubeComments();
   }catch(e){row.querySelector(".youtube-review-state").textContent=e.message;}
   finally{reviewButton.disabled=false;}
   return;
