@@ -1335,8 +1335,10 @@ $("loadYoutubeAnalytics")?.addEventListener("click",async()=>{
  const notice=$("youtubeAnalyticsNotice"),output=$("youtubeAnalyticsOutput"),days=Number($("youtubeAnalyticsDays").value||28);
  notice.textContent="Connected YouTube Analytics report load ho rahi hai…";output.hidden=true;
  try{
-  const report=await request("/api/admin/youtube/analytics?days="+days);
-  output.textContent="Channel: "+report.channel+"\nRange: "+report.start_date+" to "+report.end_date+"\n\nColumns:\n"+JSON.stringify(report.headers,null,2)+"\n\nDaily rows:\n"+JSON.stringify(report.rows,null,2)+"\n\nTotals:\n"+JSON.stringify(report.totals,null,2);
+  const end=new Date();end.setUTCDate(end.getUTCDate()-1);const start=new Date(end);start.setUTCDate(start.getUTCDate()-(days-1));
+  const startDate=start.toISOString().slice(0,10),endDate=end.toISOString().slice(0,10);
+  const report=await request("/api/admin/youtube/analytics?start_date="+startDate+"&end_date="+endDate);
+  output.textContent=JSON.stringify(report,null,2);
   output.hidden=false;notice.textContent=report.note||"Analytics loaded.";
  }catch(error){notice.textContent=error.message;}
 });
