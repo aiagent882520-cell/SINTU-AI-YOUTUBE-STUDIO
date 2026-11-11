@@ -1940,7 +1940,7 @@ def test_windows_bootstrap_generates_secure_local_login_without_api_keys(tmp_pat
     module.main()
     assert module.ENV_FILE.read_text(encoding="utf-8") == content
     weak_env = tmp_path / "weak.env"
-    weak_env.write_text("SINTU_ADMIN_USERNAME=admin\\nSINTU_ADMIN_PASSWORD=short\\nSINTU_SESSION_SECRET=" + "a" * 64 + "\\n", encoding="utf-8")
+    weak_env.write_text("SINTU_ADMIN_USERNAME=admin\nSINTU_ADMIN_PASSWORD=short\nSINTU_SESSION_SECRET=" + "a" * 64 + "\n", encoding="utf-8")
     module.ENV_FILE = weak_env
     module.main()
     upgraded = weak_env.read_text(encoding="utf-8")
