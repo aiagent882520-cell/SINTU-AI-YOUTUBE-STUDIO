@@ -73,6 +73,10 @@ class RequestRateLimiter:
                     self._events.pop(next(iter(self._events)))
             return True, 0
 
-    def reset(self) -> None:
+    def reset(self, key: str | None = None) -> None:
+        """Clear one client's window, or all windows when no key is supplied."""
         with self._lock:
-            self._events.clear()
+            if key is None:
+                self._events.clear()
+            else:
+                self._events.pop(key, None)

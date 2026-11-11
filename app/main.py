@@ -92,7 +92,7 @@ async def application_firewall(request: Request, call_next):
 
 SESSION_COOKIE = "sintu_admin_session"
 SESSION_TTL_SECONDS = 12 * 60 * 60
-_LOGIN_ATTEMPTS = {}
+_LOGIN_LIMITER = RequestRateLimiter()
 
 
 def _auth_required():
@@ -466,16 +466,14 @@ def admin_login(payload: AdminLoginInput, request: Request):
     _ensure_bootstrap_admin()
     client_ip = request.client.host if request.client else "unknown"
     now = time.time()
-    attempts = [stamp for stamp in _LOGIN_ATTEMPTS.get(client_ip, []) if now - stamp < 900]
-    if len(attempts) >= 10:
-        raise HTTPException(status_code=429, detail="Too many login attempts. 15 minutes baad try karein.")
+    allowed, retry_after = _LOGIN_LIMITER.check(client_ip, 10, 900)
+    if not allowed:
+        raise HTTPException(status_code=429, detail=f"Too many login attempts. {retry_after} seconds baad try karein.")
     with db() as conn:
         user = conn.execute("SELECT id,username,password_hash,role,is_active FROM admin_users WHERE username=?", (payload.username,)).fetchone()
     if not user or not user["is_active"] or not _verify_password(payload.password, user["password_hash"]):
-        attempts.append(now)
-        _LOGIN_ATTEMPTS[client_ip] = attempts
         raise HTTPException(status_code=401, detail="Username ya password galat hai.")
-    _LOGIN_ATTEMPTS.pop(client_ip, None)
+    _LOGIN_LIMITER.reset(client_ip)
     actor = dict(user)
     request.state.user = actor
     response = JSONResponse({"authenticated": True, "username": actor["username"], "role": actor["role"], "expires_in": SESSION_TTL_SECONDS})

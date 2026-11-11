@@ -12,6 +12,8 @@ def client_for_test(tmp_path, monkeypatch):
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "false")
     monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "test.sqlite3")
+    main._LOGIN_LIMITER.reset()
+    main._FIREWALL_LIMITER.reset()
     main.init_db()
     return TestClient(main.app)
 
@@ -2418,3 +2420,25 @@ def test_application_firewall_rate_limits_api_requests(tmp_path, monkeypatch):
     assert int(limited.headers["Retry-After"]) >= 1
     assert client.get("/api/health").status_code == 200
     main._FIREWALL_LIMITER.reset()
+
+
+
+def test_admin_login_rate_limit_is_bounded_and_resets_after_success(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+
+    for _ in range(10):
+        response = client.post("/api/auth/login", json={"username": "owner", "password": "wrong-password"})
+        assert response.status_code == 401
+    locked = client.post("/api/auth/login", json={"username": "owner", "password": "a-strong-test-password"})
+    assert locked.status_code == 429
+
+    main._LOGIN_LIMITER.reset("testclient")
+    login = client.post("/api/auth/login", json={"username": "owner", "password": "a-strong-test-password"})
+    assert login.status_code == 200
+    assert len(main._LOGIN_LIMITER._events) == 0
