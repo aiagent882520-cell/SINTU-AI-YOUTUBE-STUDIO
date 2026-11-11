@@ -211,8 +211,8 @@ def execute_run(run_id: str) -> None:
                 "You are an independent final video production reviewer. Review the assembled production package "
                 "for your discipline. Return ONLY JSON with decision (PASS or FAIL), evidence (array), "
                 "issues (array), and revision_instructions (array). PASS only when evidence supports every "
-                "critical acceptance criterion. Do not claim a rendered video.\\n"
-                f"Reviewer: {reviewer}\\nTopic: {run['topic']}\\n"
+                "critical acceptance criterion. Do not claim a rendered video.\n"
+                f"Reviewer: {reviewer}\nTopic: {run['topic']}\n"
                 f"Package summary: {json.dumps({k:v[:3500] for k,v in deliverables.items()}, ensure_ascii=False)}"
             )
             review = generate_text(review_prompt, "content", "local")
