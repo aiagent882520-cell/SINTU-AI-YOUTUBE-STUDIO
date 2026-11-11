@@ -2112,7 +2112,7 @@ def test_piper_voice_is_free_and_does_not_need_media_token(tmp_path, monkeypatch
             audio.writeframes(b"\x00\x00" * 2205)
         return type("Result", (), {"returncode":0,"stderr":""})()
     monkeypatch.setattr(voice_generator.subprocess, "run", fake_run)
-    result = voice_generator.generate_voiceover("Namaste SINTU", "alloy")
+    result = voice_generator.generate_voiceover("नमस्ते सीन्टू, आज हम एक नई कहानी सुनेंगे।", "alloy")
     assert result["local"] is True
     assert result["format"] == "WAV"
     assert (output_dir / result["filename"]).is_file()
@@ -2207,3 +2207,11 @@ def test_storyboard_frame_rejects_subtitle_overlay(tmp_path):
             tmp_path / "should-not-exist.png", "Title", "Scene", 1, 1,
             subtitle="spoken words"
         )
+
+
+def test_video_voiceover_requires_at_least_95_percent_hindi():
+    from app import voice_generator
+
+    assert voice_generator.hindi_letter_ratio("नमस्ते, आज हम कहानी सुनेंगे।") == 1.0
+    with pytest.raises(ValueError, match="95% Hindi"):
+        voice_generator.generate_voiceover("Hello world, this is an English narration.")
