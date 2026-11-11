@@ -242,6 +242,8 @@ async function loadYouTubeSavedReviews(loadMore=false){
  const category=$("youtubeSavedReviewsCategory")?.value||"";
  const sort=$("youtubeSavedReviewsSort")?.value||"newest";
  const search=$("youtubeSavedReviewsSearch")?.value.trim()||"";
+ const owner=$("youtubeSavedReviewsOwnerFilter")?.value.trim()||"";
+ const due=$("youtubeSavedReviewsDueFilter")?.value||"";
  if(!loadMore){youtubeSavedReviewsOffset=0;youtubeSavedReviewsItems=[];youtubeSavedReviewSelectedIds.clear();}
  notice.textContent="Saved review queue load ho rahi hai…";
  if(more)more.disabled=true;
@@ -250,6 +252,8 @@ async function loadYouTubeSavedReviews(loadMore=false){
   if(status)params.set("review_status",status);
   if(category)params.set("classification",category);
   if(search)params.set("search",search);
+  if(owner)params.set("assigned_to",owner);
+  if(due)params.set("follow_up_filter",due);
   const data=await request("/api/admin/youtube/comments/reviews?"+params.toString());
   youtubeSavedReviewsTotal=Number(data.total)||0;
   youtubeSavedReviewsItems=youtubeSavedReviewsItems.concat(data.items||[]);
@@ -446,6 +450,19 @@ $("youtubeSavedReviewsList")?.addEventListener("click",async event=>{
  }catch(e){notice.textContent=e.message;}
  finally{button.disabled=false;}
 });
+async function loadYouTubeFollowUpSummary(){
+ const box=$("youtubeSavedReviewsWorkload");if(!box)return;
+ box.textContent="Workload summary load ho raha hai…";
+ try{
+  const data=await request("/api/admin/youtube/comments/reviews/follow-ups/summary");
+  const totals=data.totals||{};
+  const owners=(data.owners||[]).map(row=>'<div>'+analyticsEscape(row.owner)+': '+Number(row.total||0)+' total · '+Number(row.overdue||0)+' overdue · '+Number(row.due_today||0)+' due today · '+Number(row.resolved||0)+' resolved</div>').join("");
+  box.innerHTML='<strong>Follow-up workload</strong><div>'+Number(totals.total||0)+' total · '+Number(totals.overdue||0)+' overdue · '+Number(totals.due_today||0)+' due today · '+Number(totals.upcoming||0)+' upcoming · '+Number(totals.unscheduled||0)+' unscheduled · '+Number(totals.resolved||0)+' resolved</div><strong>Team workload</strong>'+ (owners||'<div>No assigned reviews yet.</div>');
+ }catch(e){box.textContent=e.message;}
+}
+$("youtubeSavedReviewsSummaryRefresh")?.addEventListener("click",loadYouTubeFollowUpSummary);
+$("youtubeSavedReviewsOwnerFilter")?.addEventListener("change",()=>loadYouTubeSavedReviews(false));
+$("youtubeSavedReviewsDueFilter")?.addEventListener("change",()=>loadYouTubeSavedReviews(false));
 $("youtubeCommentsRefresh")?.addEventListener("click",async()=>{await loadYouTubeComments(false);await loadYouTubeSavedReviews(false);});
 $("youtubeCommentsMore")?.addEventListener("click",()=>loadYouTubeComments(true));
 async function loadYouTubeRetention(){
