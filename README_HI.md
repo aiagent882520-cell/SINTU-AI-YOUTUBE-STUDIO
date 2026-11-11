@@ -154,3 +154,6 @@ Saved Community Review Queue controls now support searching across author, saved
 Saved Community Review Queue CSV export downloads every matching saved review, not only the currently visible page. Export respects the selected review status, category, search text and sorting order.
 
 Admins can update the status and internal note of previously saved queue entries directly from the Saved Community Review Queue. Saving updates only SINTU's internal record and never deletes, hides, approves or replies to a YouTube comment.
+
+
+Review History / Audit Trail records each saved comment review creation and update with UTC timestamp, previous and new status, and whether the internal note changed. Admins can inspect the latest 100 events per saved comment from the queue. History stores change metadata rather than duplicating private note contents; it is an internal SINTU audit trail and does not reflect or trigger YouTube moderation actions.
