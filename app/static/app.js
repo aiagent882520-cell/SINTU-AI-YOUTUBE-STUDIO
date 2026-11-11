@@ -226,14 +226,28 @@ async function loadYouTubeComments(loadMore=false){
   const totals=youtubeCommentsCounts;
   $("youtubeCommentsTotals").innerHTML=[["Total",totals.total],["Possible spam",totals.possible_spam],["Positive",totals.positive],["Negative",totals.negative],["Questions",totals.questions]]
    .map(([label,value])=>'<div class="integration-card"><strong>'+analyticsEscape(value)+'</strong><span>'+analyticsEscape(label)+'</span></div>').join("");
-  $("youtubeCommentsList").innerHTML=youtubeCommentsItems.map(item=>{
-   return '<div class="admin-row"><strong>'+analyticsEscape(item.author)+' · '+analyticsEscape(item.classification.replace("_"," "))+'</strong><span>'+analyticsEscape(item.text)+'</span><span>'+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+(item.video_id?' · <a href="https://www.youtube.com/watch?v='+encodeURIComponent(item.video_id)+'" target="_blank" rel="noopener noreferrer">Open video</a>':'')+'</span><p class="muted">Suggested reply (draft only): '+analyticsEscape(item.suggested_reply)+'</p></div>';
-  }).join("")||'<p class="muted">Recent comments nahi mile.</p>';
+  renderYouTubeComments();
   if(more)more.hidden=!youtubeCommentsNextPageToken;
   notice.textContent=data.note+" Loaded "+youtubeCommentsItems.length+" comments.";
  }catch(e){notice.textContent=e.message;}
  finally{button.disabled=false;if(more)more.disabled=false;}
 }
+function renderYouTubeComments(){
+ const query=($("youtubeCommentsSearch")?.value||"").trim().toLowerCase();
+ const category=$("youtubeCommentsFilter")?.value||"";
+ const visible=youtubeCommentsItems.filter(item=>(!category||item.classification===category)&&(!query||(item.text+" "+item.author).toLowerCase().includes(query)));
+ $("youtubeCommentsList").innerHTML=visible.map((item,index)=>{
+  const originalIndex=youtubeCommentsItems.indexOf(item);
+  return '<div class="admin-row" data-comment-index="'+originalIndex+'"><strong>'+analyticsEscape(item.author)+' · '+analyticsEscape(item.classification.replace("_"," "))+'</strong><span>'+analyticsEscape(item.text)+'</span><span>'+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+(item.video_id?' · <a href="https://www.youtube.com/watch?v='+encodeURIComponent(item.video_id)+'" target="_blank" rel="noopener noreferrer">Open video</a>':'')+'</span><label>Reply draft (edit before copying)<textarea class="youtube-reply-draft" rows="2">'+analyticsEscape(item.suggested_reply)+'</textarea></label><button class="secondary youtube-copy-reply" type="button">Copy reply draft</button></div>';
+ }).join("")||'<p class="muted">Is filter mein comments nahi mile.</p>';
+}
+$("youtubeCommentsSearch")?.addEventListener("input",renderYouTubeComments);
+$("youtubeCommentsFilter")?.addEventListener("change",renderYouTubeComments);
+$("youtubeCommentsList")?.addEventListener("click",async event=>{
+ const button=event.target.closest(".youtube-copy-reply");if(!button)return;
+ const draft=button.closest(".admin-row")?.querySelector(".youtube-reply-draft")?.value||"";
+ try{await navigator.clipboard.writeText(draft);button.textContent="Copied";}catch(e){button.textContent="Copy unavailable";}
+});
 $("youtubeCommentsRefresh")?.addEventListener("click",()=>loadYouTubeComments(false));
 $("youtubeCommentsMore")?.addEventListener("click",()=>loadYouTubeComments(true));
 async function loadYouTubeRetention(){
