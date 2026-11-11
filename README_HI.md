@@ -236,9 +236,9 @@ Follow-up workload CSV export: the community review workload panel can download 
 ## Full studio execution
 - Production Studio shows all 60 formats, 15 modules and every specialist/checker pair.
 - Save a project, then create a production run. Each worker task is queued in order and later tasks stay blocked until the independent checker passes the current task.
-- The local Execute button sends one request to the specialist and a separate request to its checker through Ollama. A failed checker sends the task back for revision; final completion requires explicit human approval.
+- Use Run All Specialists + Checkers for one-click sequential background execution through Ollama. Each specialist and checker receives a separate local-model request. The run pauses on the first checker FAIL or local-model error, can be resumed, and final completion requires explicit human approval.
 - Project memory, asset metadata, version snapshots and render queue are stored in the local SQLite database and scoped to the signed-in owner.
-- The render queue is a durable queue/metadata system; actual rendering is performed by the FFmpeg renderer when a render job is explicitly started. It is not represented as an always-running background worker.
+- The render queue is durable and can execute jobs through the existing FFmpeg renderer. The one-click agent pipeline runs as an in-process background task; its progress is persisted in SQLite and can be resumed after a server restart.
 
 ## Windows setup
 1. Run START_SINTU_WINDOWS.bat to create the virtual environment, install Python dependencies and start the dashboard.

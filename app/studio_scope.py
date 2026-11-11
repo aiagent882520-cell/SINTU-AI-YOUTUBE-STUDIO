@@ -159,7 +159,7 @@ def production_plan(format_id):
         tasks.append({"order":index,"stage":stage["id"],"name":stage["name"],"description":stage["description"],
           "required":True,"worker_checker_pairs":pairs,"gate":"PASS required; FAIL returns work for revision and independent re-check."})
     return {"format":selected,"pipeline":tasks,"approval_required_before_publish":True,"paid_services_enabled":False,
-      "execution_status":"plan_only_no_external_agents_started"}
+      "execution_status":"persistent_worker_checker_queue_available_local_ollama_required_for_automatic_execution"}
 def scope_summary():
     return {"video_format_count":len(_FORMAT_ROWS),"studio_module_count":len(STUDIO_MODULES),
       "specialist_count":len(SPECIALIST_ROLES),"independent_checker_count":len(AGENT_PAIRS),

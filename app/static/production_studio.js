@@ -24,6 +24,10 @@
   const select=document.getElementById("formatCategory"),cats=[...new Set(state.catalog.formats.map(x=>x.category))].sort();
   select.innerHTML='<option value="">All categories</option>'+cats.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join("");
  }
+ async function loadLatestRun(){
+  try{const response=await fetch("/api/studio/runs",{credentials:"same-origin"});const data=await response.json();if(response.ok&&data.runs&&data.runs.length)renderRun(data.runs[0]);}
+  catch(error){console.warn("Could not restore latest production run",error);}
+ }
  function renderRun(run){
   state.activeRun=run;const p=run.progress||{};const errorLine=run.last_error?'<small>'+esc(run.last_error)+'</small>':'';
   document.getElementById("productionRunStatus").innerHTML='<b>Run '+esc(run.id)+'</b> · '+esc(run.status)+' · '+(p.approved||0)+' / '+(p.total||0)+' approved'+errorLine+'<div class="run-task-list">'+(run.tasks||[]).map(t=>'<div class="agent-pair"><b>'+esc(t.specialist)+'</b> → '+esc(t.checker)+'<span> · '+esc(t.stage_id)+' · '+esc(t.status)+(t.checker_decision?' · '+esc(t.checker_decision):'')+'</span>'+(t.checker_issues?'<small>'+esc(t.checker_issues)+'</small>':'')+'</div>').join("")+'</div>';
@@ -158,7 +162,7 @@
    if(localOpen){const d=state.localDrafts[Number(localOpen.dataset.openLocal)];if(d){fillForm(d,false);window.SINTU_ACTIVE_PROJECT_ID="";}}
    if(localDelete){state.localDrafts.splice(Number(localDelete.dataset.deleteLocal),1);saveLocal();}
   });
-  readLocal();renderDrafts();renderPipeline();renderFormats();renderArchitecture();loadProjects();
+  readLocal();renderDrafts();renderPipeline();renderFormats();renderArchitecture();loadProjects();loadLatestRun();
  }
  fetch("/api/production-catalog").then(r=>{if(!r.ok)throw new Error("catalog unavailable");return r.json();}).then(data=>{state.catalog=data;init();}).catch(()=>{root.querySelector("#catalogNotice").textContent="Production catalog load nahi ho paya. Page refresh karein.";});
 })();
