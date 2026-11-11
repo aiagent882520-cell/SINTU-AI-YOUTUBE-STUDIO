@@ -58,9 +58,9 @@ def generate_voiceover(text: str, voice: str = "alloy") -> dict:
     status = voice_status()
     if not text.strip() or len(text) > 4000:
         raise ValueError("Voiceover text must contain 1 to 4000 characters.")
-    if hindi_letter_ratio(text) < 0.95:
-        raise ValueError("Video voiceover must be at least 95% Hindi in Devanagari. Rewrite the narration in Hindi.")
     if status["local_available"]:
+        if hindi_letter_ratio(text) < 0.95:
+            raise ValueError("Video voiceover must be at least 95% Hindi in Devanagari. Rewrite the narration in Hindi.")
         AUDIO_DIR.mkdir(parents=True, exist_ok=True)
         audio_id = uuid.uuid4().hex
         output = AUDIO_DIR / f"{audio_id}.wav"
@@ -85,6 +85,8 @@ def generate_voiceover(text: str, voice: str = "alloy") -> dict:
         raise VoiceUnavailable("Paid media generation is disabled by server administrator.")
     if not status["provider_configured"]:
         raise VoiceUnavailable("OpenAI API key is not configured on the server.")
+    if hindi_letter_ratio(text) < 0.95:
+        raise ValueError("Video voiceover must be at least 95% Hindi in Devanagari. Rewrite the narration in Hindi.")
     if voice not in ALLOWED_VOICES:
         raise ValueError("Unsupported voice selection.")
     try:
