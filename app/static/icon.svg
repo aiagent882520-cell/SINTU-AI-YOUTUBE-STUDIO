@@ -1,12 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#36d6bb"/>
-      <stop offset="1" stop-color="#2686d9"/>
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" rx="112" fill="#101827"/>
-  <rect x="76" y="76" width="360" height="360" rx="92" fill="url(#brand)" opacity=".16"/>
-  <path d="M350 145c-24-22-58-34-98-34-75 0-126 39-126 98 0 54 40 77 112 94 55 13 76 22 76 44 0 25-25 40-65 40-42 0-78-16-105-44l-50 54c37 40 91 63 154 63 83 0 139-41 139-107 0-56-39-81-116-100-54-13-73-21-73-41 0-18 20-29 53-29 33 0 61 11 85 31z" fill="url(#brand)"/>
-  <path d="M365 108l54 31v62l-54-31z" fill="#f6c85f"/>
-</svg>
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#20D9FF"/><stop offset=".55" stop-color="#397BFF"/><stop offset="1" stop-color="#B33CFF"/></linearGradient><linearGradient id="r" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FF4545"/><stop offset="1" stop-color="#C90032"/></linearGradient></defs>
+<circle cx="256" cy="256" r="226" fill="#101827" stroke="url(#g)" stroke-width="18"/>
+<path d="M132 130 H355 Q401 130 401 176 Q401 222 355 222 H207 Q166 222 166 260 Q166 298 207 298 H320 Q401 298 401 374 Q401 450 320 450 H126" fill="none" stroke="url(#g)" stroke-width="54" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="151" y="188" width="210" height="136" rx="34" fill="url(#r)" stroke="#FFC3CB" stroke-width="5"/>
+<path d="M236 220 L300 256 L236 292Z" fill="#FFF"/>
+<circle cx="369" cy="119" r="55" fill="#101827" stroke="#2BDFFF" stroke-width="9"/>
+<text x="369" y="134" text-anchor="middle" font-family="Arial,sans-serif" font-size="43" font-weight="900" fill="#55E8FF">AI</text></svg>
