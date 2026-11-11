@@ -158,6 +158,46 @@ def generate_image_bytes(prompt, width, height, timeout_seconds=240):
 
 
 
+
+def _video_output_items(history_entry):
+    """Return supported video files from ComfyUI history output nodes."""
+    outputs = history_entry.get("outputs", {}) if isinstance(history_entry, dict) else {}
+    found = []
+    if not isinstance(outputs, dict):
+        return found
+    for node in outputs.values():
+        if not isinstance(node, dict):
+            continue
+        for field in ("videos", "gifs"):
+            items = node.get(field, [])
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                filename = item.get("filename")
+                if isinstance(filename, str) and filename.lower().endswith((".mp4", ".webm", ".gif")):
+                    found.append(item)
+    return found
+
+
+def _video_history_error(history_entry):
+    """Extract a concise execution failure from ComfyUI history/status."""
+    if not isinstance(history_entry, dict):
+        return None
+    status = history_entry.get("status", {})
+    if not isinstance(status, dict):
+        return None
+    messages = status.get("messages", [])
+    for message in messages if isinstance(messages, list) else []:
+        if not isinstance(message, (list, tuple)) or len(message) < 2:
+            continue
+        detail = message[1]
+        if isinstance(detail, dict) and detail.get("exception_message"):
+            return str(detail["exception_message"])[:300]
+    return None
+
+
 def generate_video_bytes(prompt, width, height, frames, fps=24, timeout_seconds=600):
     status = video_workflow_status()
     if not status["available"]:
@@ -189,18 +229,18 @@ def generate_video_bytes(prompt, width, height, frames, fps=24, timeout_seconds=
         while time.monotonic() < deadline:
             time.sleep(2)
             history = json.loads(_request(base + "/history/" + urllib.parse.quote(prompt_id), timeout=20))
-            outputs = history.get(prompt_id, {}).get("outputs", {})
-            for node in outputs.values():
-                if not isinstance(node, dict):
-                    continue
-                candidates = node.get("videos", []) + node.get("gifs", [])
-                for item in candidates:
-                    filename = str(item.get("filename", ""))
-                    if not filename.lower().endswith((".mp4", ".webm", ".gif")):
-                        continue
-                    query = urllib.parse.urlencode({"filename": filename,
-                        "subfolder": item.get("subfolder", ""), "type": item.get("type", "output")})
-                    return _request(base + "/view?" + query, timeout=90)
+            history_item = history.get(prompt_id, {})
+            failure = _video_history_error(history_item)
+            if failure:
+                raise ComfyUIUnavailable("ComfyUI video workflow execution failed: " + failure)
+            candidates = _video_output_items(history_item)
+            # The studio currently stores and serves generated clips as MP4.
+            mp4_items = [item for item in candidates if item["filename"].lower().endswith(".mp4")]
+            if mp4_items:
+                item = mp4_items[0]
+                query = urllib.parse.urlencode({"filename": item["filename"],
+                    "subfolder": item.get("subfolder", ""), "type": item.get("type", "output")})
+                return _request(base + "/view?" + query, timeout=90)
         raise ComfyUIUnavailable("ComfyUI video generation timed out.")
     except ComfyUIUnavailable:
         raise
