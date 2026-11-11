@@ -118,3 +118,11 @@ Admin dashboard mein YouTube, Facebook/Instagram aur TikTok ke connection status
 
 ### Scheduled Publishing Queue
 Admin dashboard mein approval-pending, agle 24 ghante ke approved posts, due posts aur future schedule alag counters ke saath dikhte hain. Queue UTC timestamps ko browser ke local timezone mein display karti hai. Yeh scheduler abhi reminder/queue mode mein hai; public publishing apne-aap nahi hoti. Har platform par publish karne ke liye admin ka separate confirmation aur connected official account zaroori hai.
+
+
+### YouTube Audience Retention
+- Admin-only endpoint: `GET /api/admin/youtube/retention?video_id=VIDEO_ID`.
+- Returns the official per-video audience-retention curve using `elapsedVideoTimeRatio`, `audienceWatchRatio`, `relativeRetentionPerformance`, `startedWatching`, and `stoppedWatching`.
+- One video ID per query; defaults to the latest 28 complete days and accepts a maximum 365-day date range.
+- Requires an authenticated admin, connected YouTube channel, and YouTube Analytics API access. Retention availability depends on YouTube's reporting for that video.
+- Audience watch ratio is not a unique-viewer percentage and can exceed 100% when viewers rewind; relative retention is a 0–1 comparison against videos of similar length.
