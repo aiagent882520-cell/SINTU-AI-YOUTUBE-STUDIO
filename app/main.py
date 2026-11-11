@@ -3203,3 +3203,28 @@ def status():
         "video_generation": "Not configured",
         "publishing": "Not configured",
     }
+
+
+class ProductionRunInput(BaseModel):
+    format_id: str = Field(min_length=1, max_length=80)
+    topic: str = Field(min_length=1, max_length=5000)
+
+
+@app.post("/api/production/runs")
+def start_production_run(payload: ProductionRunInput, background_tasks: BackgroundTasks):
+    try:
+        run = create_production_run(payload.format_id, payload.topic)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    background_tasks.add_task(execute_production_run, run["id"])
+    return {"run_id": run["id"], "status": run["status"], "detail": "Format-specific builder/checker production run queued."}
+
+
+@app.get("/api/production/runs/{run_id}")
+def production_run_status(run_id: str):
+    if not re.fullmatch(r"[a-f0-9]{32}", run_id):
+        raise HTTPException(status_code=400, detail="Invalid production run ID.")
+    run = get_production_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Production run not found.")
+    return run
