@@ -96,8 +96,9 @@ def _engine_status(env_name):
             if isinstance(object_info, dict):
                 nodes_verified = True
                 missing_nodes = [node_type for node_type in node_types if node_type not in object_info]
-                if not missing_nodes:
-                    missing_models = _missing_model_files(workflow, object_info)
+                # Check every installed node independently: one missing custom node
+                # must not hide a separate missing checkpoint/LoRA on another node.
+                missing_models = _missing_model_files(workflow, object_info)
         except Exception:
             nodes_verified = False
     if not reachable:
