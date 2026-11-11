@@ -241,6 +241,18 @@ function renderYouTubeComments(){
   return '<div class="admin-row" data-comment-index="'+originalIndex+'"><strong>'+analyticsEscape(item.author)+' · '+analyticsEscape(item.classification.replace("_"," "))+'</strong><span>'+analyticsEscape(item.text)+'</span><span>'+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+(item.video_id?' · <a href="https://www.youtube.com/watch?v='+encodeURIComponent(item.video_id)+'" target="_blank" rel="noopener noreferrer">Open video</a>':'')+'</span><label>Reply draft (edit before copying)<textarea class="youtube-reply-draft" rows="2">'+analyticsEscape(item.suggested_reply)+'</textarea></label><button class="secondary youtube-copy-reply" type="button">Copy reply draft</button></div>';
  }).join("")||'<p class="muted">Is filter mein comments nahi mile.</p>';
 }
+function exportYouTubeCommentsCsv(){
+ const query=($("youtubeCommentsSearch")?.value||"").trim().toLowerCase();
+ const category=$("youtubeCommentsFilter")?.value||"";
+ const rows=youtubeCommentsItems.filter(item=>(!category||item.classification===category)&&(!query||(item.text+" "+item.author).toLowerCase().includes(query)));
+ if(!rows.length){const n=$("youtubeCommentsNotice");if(n)n.textContent="Export karne ke liye comments nahi hain.";return;}
+ const columns=["author","classification","text","published_at","likes","video_id","suggested_reply"];
+ const quote=value=>'"'+String(value??"").replace(/"/g,'""')+'"';
+ const csv="\\uFEFF"+[columns.join(","),...rows.map(item=>columns.map(key=>quote(item[key])).join(","))].join("\\r\\n");
+ const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+ const link=document.createElement("a");link.href=url;link.download="sintu-youtube-comments.csv";document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);
+}
+$("youtubeCommentsExport")?.addEventListener("click",exportYouTubeCommentsCsv);
 $("youtubeCommentsSearch")?.addEventListener("input",renderYouTubeComments);
 $("youtubeCommentsFilter")?.addEventListener("change",renderYouTubeComments);
 $("youtubeCommentsList")?.addEventListener("click",async event=>{
