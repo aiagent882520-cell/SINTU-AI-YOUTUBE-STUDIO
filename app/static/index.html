@@ -356,6 +356,14 @@
  <div id="blenderRenderResult" hidden><video id="blenderRenderVideo" controls playsinline style="width:100%;max-height:520px;background:#000;border-radius:12px"></video><p><a id="blenderRenderDownload" download="sintu-3d-render.mp4">Download 3D MP4</a></p></div>
 </section>
 
+
+<section class="panel" id="youtubeAnalyticsPanel">
+ <h2>YouTube Channel Analytics</h2>
+ <p>Connected channel ke views, watch time, average view duration, subscribers, likes aur comments dekhein. OAuth credentials baad mein add kiye ja sakte hain.</p>
+ <div class="actions"><label for="youtubeAnalyticsDays">Date range</label><select id="youtubeAnalyticsDays"><option value="7">Last 7 days</option><option value="28" selected>Last 28 days</option><option value="90">Last 90 days</option></select><button id="loadYoutubeAnalytics" type="button">Load channel analytics</button></div>
+ <p id="youtubeAnalyticsNotice" class="muted" role="status"></p><pre id="youtubeAnalyticsOutput" hidden></pre>
+</section>
+
 </main>
   <script src="/static/app.js"></script>
   <script src="/static/production_studio.js"></script>

@@ -1329,3 +1329,14 @@ $("executeRenderQueueButton")?.addEventListener("click",async()=>{
  }catch(error){notice.textContent=error.message;}
  finally{button.disabled=false;}
 });
+
+
+$("loadYoutubeAnalytics")?.addEventListener("click",async()=>{
+ const notice=$("youtubeAnalyticsNotice"),output=$("youtubeAnalyticsOutput"),days=Number($("youtubeAnalyticsDays").value||28);
+ notice.textContent="Connected YouTube Analytics report load ho rahi hai…";output.hidden=true;
+ try{
+  const report=await request("/api/admin/youtube/analytics?days="+days);
+  output.textContent="Channel: "+report.channel+"\nRange: "+report.start_date+" to "+report.end_date+"\n\nColumns:\n"+JSON.stringify(report.headers,null,2)+"\n\nDaily rows:\n"+JSON.stringify(report.rows,null,2)+"\n\nTotals:\n"+JSON.stringify(report.totals,null,2);
+  output.hidden=false;notice.textContent=report.note||"Analytics loaded.";
+ }catch(error){notice.textContent=error.message;}
+});
