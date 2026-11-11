@@ -831,9 +831,10 @@ checkRenderer();
 async function checkAIMusicService() {
   try {
     const info = await request("/api/music/capabilities");
-    $("aiMusicStatus").textContent = info.available
-      ? "Ready: " + info.provider + " · max " + info.max_duration_seconds + " sec · paid generation; check provider pricing."
-      : "AI music disabled: server admin must set ENABLE_PAID_MEDIA_GENERATION=true and STABILITY_API_KEY. API charges may apply.";
+    window.SINTU_MUSIC_PAID_SELECTED=!!info.paid_selected;
+    $("aiMusicStatus").textContent = info.local_available
+      ? "Ready: free local procedural soundtrack · WAV · no API key or media token."
+      : info.paid_available ? "Ready: optional Stability AI · paid generation." : "Free local soundtrack unavailable; optional paid provider remains locked until revenue and approval.";
     $("aiMusicButton").disabled = !info.available;
   } catch (error) {
     $("aiMusicStatus").textContent = "AI music provider status unavailable.";
@@ -847,8 +848,8 @@ $("aiMusicButton").addEventListener("click", async () => {
   if (duration_seconds < 5 || duration_seconds > 360) {
     $("aiMusicNotice").textContent = "Duration 5 se 360 seconds honi chahiye."; return;
   }
-  if (!$("mediaToken").value.trim()) {
-    $("aiMusicNotice").textContent = "Media access token enter karein."; return;
+  if (window.SINTU_MUSIC_PAID_SELECTED && !$("mediaToken").value.trim()) {
+    $("aiMusicNotice").textContent = "Optional paid provider ke liye media access token enter karein."; return;
   }
   $("aiMusicButton").disabled = true;
   $("aiMusicNotice").textContent = "Stable Audio music generate kar raha hai. Ismein kuch minute lag sakte hain…";
@@ -856,7 +857,7 @@ $("aiMusicButton").addEventListener("click", async () => {
   try {
     const result = await request("/api/music/generate", {
       method: "POST",
-      headers: {"X-Media-Token": $("mediaToken").value},
+      headers: window.SINTU_MUSIC_PAID_SELECTED ? {"X-Media-Token": $("mediaToken").value} : {},
       body: JSON.stringify({prompt, duration_seconds})
     });
     $("renderMusicId").value = result.music_id;
@@ -876,11 +877,10 @@ checkAIMusicService();
 async function checkVoiceService() {
   try {
     const info = await request("/api/voice/capabilities");
-    $("voiceNotice").textContent = info.available
-      ? "Ready: " + info.provider + " · " + info.model + " · MP3. Paid API usage."
-      : !info.enabled_by_admin
-        ? "Voiceover server administrator ke explicit paid-media enable karne ka wait kar raha hai."
-        : "OpenAI API key server par configured nahi hai.";
+    window.SINTU_VOICE_LOCAL_AVAILABLE=!!info.local_available;
+    $("voiceNotice").textContent = info.local_available
+      ? "Ready: free local Piper TTS · WAV · no API key or media token."
+      : info.available ? "Ready: optional paid voice provider." : "Free voice needs Piper executable + voice model. Paid provider remains locked until revenue and approval.";
     $("voiceButton").disabled = !info.available;
   } catch (error) {
     $("voiceNotice").textContent = "Voice service status unavailable.";
@@ -895,7 +895,7 @@ $("voiceButton").addEventListener("click", async () => {
   $("voiceResult").hidden = true;
   try {
     const result = await request("/api/voice", {
-      method: "POST", headers: {"X-Media-Token": $("mediaToken").value}, body: JSON.stringify({text, voice: $("voiceChoice").value})
+      method: "POST", headers: window.SINTU_VOICE_LOCAL_AVAILABLE ? {} : {"X-Media-Token": $("mediaToken").value}, body: JSON.stringify({text, voice: $("voiceChoice").value})
     });
     $("voiceAudio").src = result.url;
     $("voiceAssetId").textContent = "Audio ID: " + result.audio_id + " · Is ID ko final MP4 panel mein paste karein.";
@@ -930,13 +930,10 @@ checkVoiceService();
 async function checkImageService() {
   try {
     const info = await request("/api/images/capabilities");
-    $("imageNotice").textContent = info.available
-      ? "Ready: " + info.provider + " · " + info.model + " · PNG source / JPEG download. Paid API usage."
-      : !info.enabled_by_admin
-        ? "AI image generation server administrator ke explicit paid-media enable karne ka wait kar raha hai."
-        : !info.access_token_configured
-          ? "Server par MEDIA_GENERATION_TOKEN configure nahi hai."
-          : "OpenAI API key server par configured nahi hai.";
+    window.SINTU_IMAGE_LOCAL_AVAILABLE=!!info.local_available;
+    $("imageNotice").textContent = info.local_available
+      ? "Ready: free local ComfyUI image workflow · no API key or media token."
+      : info.available ? "Ready: optional paid image provider." : "Free image generation needs a local ComfyUI API workflow. Paid provider remains locked until revenue and approval.";
     $("imageButton").disabled = !info.available;
   } catch (error) {
     $("imageNotice").textContent = "Image service status unavailable.";
@@ -960,7 +957,7 @@ $("imageButton").addEventListener("click", async () => {
   try {
     const result = await request("/api/images", {
       method: "POST",
-      headers: {"X-Media-Token": $("mediaToken").value},
+      headers: window.SINTU_IMAGE_LOCAL_AVAILABLE ? {} : {"X-Media-Token": $("mediaToken").value},
       body: JSON.stringify({prompt, kind, aspect})
     });
     $("generatedImage").src = result.url;
@@ -978,9 +975,10 @@ checkImageService();
 async function checkAIVideoService() {
   try {
     const info = await request("/api/video/capabilities");
-    $("aiVideoStatus").textContent = info.available
-      ? "Ready: " + info.provider + " · " + info.model + " · text/image-to-video · paid API usage."
-      : "AI video disabled: server admin must set ENABLE_PAID_MEDIA_GENERATION=true and GEMINI_API_KEY. Paid provider charges apply.";
+    window.SINTU_VIDEO_LOCAL_AVAILABLE=!!info.local_available;
+    $("aiVideoStatus").textContent = info.local_available
+      ? "Ready: free local ComfyUI text-to-video workflow · no API key or media token."
+      : info.available ? "Ready: optional paid Gemini video provider." : "Free video generation needs a local ComfyUI video workflow. Paid provider remains locked until revenue and approval.";
     $("aiVideoButton").disabled = !info.available;
   } catch (error) {
     $("aiVideoStatus").textContent = "AI video provider status unavailable.";
@@ -990,14 +988,14 @@ async function checkAIVideoService() {
 $("aiVideoButton").addEventListener("click", async () => {
   const prompt = $("aiVideoPrompt").value.trim();
   if (!prompt) { $("aiVideoNotice").textContent = "Video scene prompt likhein."; return; }
-  if (!$("mediaToken").value.trim()) { $("aiVideoNotice").textContent = "Media access token enter karein."; return; }
+  if (!window.SINTU_VIDEO_LOCAL_AVAILABLE && !$("mediaToken").value.trim()) { $("aiVideoNotice").textContent = "Optional paid provider ke liye media access token enter karein."; return; }
   $("aiVideoButton").disabled = true;
-  $("aiVideoNotice").textContent = "Gemini AI video clip generate kar raha hai. Ismein kai minute lag sakte hain…";
+  $("aiVideoNotice").textContent = window.SINTU_VIDEO_LOCAL_AVAILABLE ? "Local ComfyUI video workflow render kar raha hai…" : "Optional paid Gemini video clip generate kar raha hai…";
   $("aiVideoResult").hidden = true;
   try {
     const result = await request("/api/video/generate", {
       method: "POST",
-      headers: {"X-Media-Token": $("mediaToken").value},
+      headers: window.SINTU_VIDEO_LOCAL_AVAILABLE ? {} : {"X-Media-Token": $("mediaToken").value},
       body: JSON.stringify({
         prompt,
         style: $("aiVideoStyle").value,

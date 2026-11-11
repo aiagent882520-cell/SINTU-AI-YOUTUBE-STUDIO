@@ -32,6 +32,7 @@ def music_status():
         "available": True,
         "local_available": True,
         "paid_available": enabled and key_set,
+        "paid_selected": os.getenv("MUSIC_PROVIDER", "local").strip().lower() == "stability" and enabled and key_set,
         "local_engine": "SINTU Procedural Composer",
         "provider": "SINTU Procedural Composer / optional Stability AI",
         "model": MODEL,

@@ -173,7 +173,7 @@ def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "7
         return {"video_id": video_id, "url": f"/api/ai-videos/{video_id}", "filename": output.name,
                 "format": "MP4", "size_bytes": output.stat().st_size, "duration_seconds": duration_seconds,
                 "aspect_ratio": aspect_ratio, "resolution": resolution, "style": style,
-                "provider": "ComfyUI (local)", "local": True,
+                "provider": "ComfyUI (local)", "model": "Configured ComfyUI workflow", "requested_duration_seconds": duration_seconds, "local": True,
                 "notice": "Generated locally by your configured ComfyUI video workflow. Review quality and model license."}
     if not status["paid_available"]:
         raise VideoUnavailable("Free video generation needs a local ComfyUI video workflow. Paid generation remains locked until revenue and approval.")

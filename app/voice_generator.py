@@ -68,7 +68,7 @@ def generate_voiceover(text: str, voice: str = "alloy") -> dict:
             output.unlink(missing_ok=True)
             raise VoiceGenerationFailed("Piper local TTS failed. Check the selected voice model.")
         return {"audio_id": audio_id, "filename": output.name, "url": f"/api/audio/{audio_id}",
-                "format": "WAV", "provider": "Piper (local)", "model": Path(model).name,
+                "format": "WAV", "voice": "Piper local", "provider": "Piper (local)", "model": Path(model).name,
                 "size_bytes": output.stat().st_size, "local": True,
                 "notice": "Locally generated speech. Review pronunciation and voice-model license before publishing."}
     if not status["enabled_by_admin"]:
