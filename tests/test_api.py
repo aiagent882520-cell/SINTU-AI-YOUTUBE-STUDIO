@@ -1915,3 +1915,38 @@ def test_project_generation_marks_provider_missing_without_fake_output(tmp_path,
     saved = client.get(f"/api/projects/{project_id}").json()["project"]
     assert saved["last_task_status"] == "Blocked"
     assert saved["last_task_id"] is None
+
+
+def test_windows_bootstrap_generates_secure_local_login_without_api_keys(tmp_path, monkeypatch, capsys):
+    import importlib.util
+    from pathlib import Path
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "bootstrap_local.py"
+    spec = importlib.util.spec_from_file_location("sintu_bootstrap_local", script_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.ENV_FILE = tmp_path / ".env"
+    module.EXAMPLE_FILE = Path(__file__).resolve().parents[1] / ".env.example"
+    module.main()
+    content = module.ENV_FILE.read_text(encoding="utf-8")
+    assert "SINTU_AUTH_REQUIRED=true" in content
+    assert "SINTU_ADMIN_PASSWORD=CHANGE-THIS" not in content
+    assert "SINTU_SESSION_SECRET=CHANGE-THIS" not in content
+    assert "OPENAI_API_KEY=\n" in content
+    assert "GEMINI_API_KEY=\n" in content
+    password = next(line.split("=", 1)[1] for line in content.splitlines()
+                    if line.startswith("SINTU_ADMIN_PASSWORD="))
+    assert len(password) >= 24
+    capsys.readouterr()
+    module.main()
+    assert module.ENV_FILE.read_text(encoding="utf-8") == content
+
+
+def test_windows_launcher_is_in_repo_and_uses_bootstrap():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    launcher = (root / "START_SINTU_WINDOWS.bat").read_text(encoding="utf-8")
+    assert "scripts\\bootstrap_local.py" in launcher
+    assert "requirements.txt" in launcher
+    assert "uvicorn app.main:app" in launcher
+    gitignore = (root / ".gitignore").read_text(encoding="utf-8")
+    assert ".env" in gitignore and ".venv/" in gitignore
