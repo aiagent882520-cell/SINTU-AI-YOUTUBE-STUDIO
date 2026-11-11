@@ -198,10 +198,35 @@ async function loadYouTubeReach(){
 $("youtubeReachRefresh")?.addEventListener("click",loadYouTubeReach);
 $("youtubeReachSetup")?.addEventListener("click",async()=>{
  const button=$("youtubeReachSetup");button.disabled=true;
- try{const result=await request("/api/admin/youtube/reach/setup",{method:"POST"});$("youtubeReachNotice").textContent=result.note;await loadYouTubeReach();}
+ try{const result=await request("/api/admin/youtube/reach/setup",{method:"POST"});$("youtubeReachNotice").textContent=result.note;await loadYouTubeReach();
+if($("youtubeRetentionPanel")){$("youtubeRetentionPanel").hidden=false;}}
  catch(e){$("youtubeReachNotice").textContent=e.message;}
  finally{button.disabled=false;}
 });
+async function loadYouTubeRetention(){
+ const panel=$("youtubeRetentionPanel");if(!panel)return;
+ const notice=$("youtubeRetentionNotice"),button=$("youtubeRetentionLoad");
+ const videoId=$("youtubeRetentionVideoId").value.trim();
+ if(!/^[A-Za-z0-9_-]{11,20}$/.test(videoId)){notice.textContent="Valid YouTube video ID daalein.";return;}
+ button.disabled=true;notice.textContent="Audience retention load ho rahi hai…";
+ try{
+  const session=await request("/api/auth/session");
+  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  panel.hidden=false;
+  const data=await request("/api/admin/youtube/retention?video_id="+encodeURIComponent(videoId));
+  const points=data.points||[];
+  const first=points[0]||{},last=points[points.length-1]||{};
+  $("youtubeRetentionSummary").innerHTML=[["Segments",points.length],["Start watch ratio",(Number(first.audience_watch_ratio||0)*100).toFixed(1)+"%"],["Final watch ratio",(Number(last.audience_watch_ratio||0)*100).toFixed(1)+"%"]]
+   .map(([label,value])=>'<div class="integration-card"><strong>'+analyticsEscape(value)+'</strong><span>'+analyticsEscape(label)+'</span></div>').join("");
+  $("youtubeRetentionPoints").innerHTML=points.map(p=>{
+   const pct=Math.max(0,Math.min(100,Number(p.audience_watch_ratio||0)*100));
+   return '<div class="admin-row"><strong>'+(Number(p.elapsed_ratio)*100).toFixed(0)+'% video elapsed</strong><span>Watch ratio '+(Number(p.audience_watch_ratio)*100).toFixed(1)+'% · relative '+(Number(p.relative_retention_performance)*100).toFixed(0)+'% · stopped '+Number(p.stopped_watching||0).toLocaleString()+'</span><div style="height:7px;background:#263246;border-radius:8px;overflow:hidden;margin-top:6px"><div style="height:7px;width:'+pct+'%;background:#54b8ff"></div></div></div>';
+  }).join("")||'<p class="muted">Retention data abhi available nahi.</p>';
+  notice.textContent=data.note+' · <a href="'+analyticsEscape(data.video_url)+'" target="_blank" rel="noopener noreferrer">Open video</a>';
+ }catch(e){notice.textContent=e.message;}
+ finally{button.disabled=false;}
+}
+$("youtubeRetentionLoad")?.addEventListener("click",loadYouTubeRetention);
 async function loadAnalyticsOverview(){
  const panel=$("analyticsOverviewPanel");if(!panel)return;
  try{
