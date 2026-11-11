@@ -3,7 +3,13 @@ services:
     build: .
     container_name: sintu-ai-studio
     ports:
-      - "8000:8000"
+      - "${SINTU_BIND_ADDRESS:-127.0.0.1}:8000:8000"
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
     environment:
       PORT: "8000"
       SINTU_DATA_DIR: /data
@@ -12,6 +18,8 @@ services:
       SINTU_ADMIN_PASSWORD: ${SINTU_ADMIN_PASSWORD:-}
       SINTU_SESSION_SECRET: ${SINTU_SESSION_SECRET:-}
       SINTU_COOKIE_SECURE: ${SINTU_COOKIE_SECURE:-false}
+      SINTU_ALLOWED_IPS: ${SINTU_ALLOWED_IPS:-}
+      SINTU_RATE_LIMIT_PER_MINUTE: ${SINTU_RATE_LIMIT_PER_MINUTE:-300}
       AI_PROVIDER: ${AI_PROVIDER:-local}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}

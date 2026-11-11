@@ -15,7 +15,9 @@ docker compose up --build -d
 ```
 
 4. Before first start, copy `.env.example` to `.env` and set a unique long `SINTU_ADMIN_PASSWORD` plus a random `SINTU_SESSION_SECRET` (at least 32 characters). Never commit this file.
-5. Run `docker compose up --build -d` and open `http://localhost:8000`. Sign in with the admin username/password you set. The health endpoint `/api/health` remains public for container health checks.
+5. Safe default: `SINTU_BIND_ADDRESS=127.0.0.1` binds the app to this computer only. Open `http://localhost:8000`. Sign in with the admin username/password you set. The health endpoint `/api/health` remains public for container health checks.
+6. For a trusted private LAN only, set `SINTU_BIND_ADDRESS=0.0.0.0`, configure `SINTU_ALLOWED_IPS` with trusted client IP/CIDR ranges, and allow port 8000 only on the Private network in the OS firewall. Never expose this direct HTTP port to the public internet; use an HTTPS reverse proxy/WAF for remote access.
+7. Compose drops all Linux capabilities, enables `no-new-privileges`, starts with a minimal init process, and limits process count.
 
 Docker Compose stores SQLite, generated images, audio, music, and videos in the named `sintu-data` volume mounted at `/data`. Back up this volume. Do not delete it when updating the container.
 
@@ -33,6 +35,7 @@ Set secrets in the host's secret manager or a protected `.env` file (never commi
 - `MEDIA_GENERATION_TOKEN`
 - `ENABLE_PAID_MEDIA_GENERATION=false` (keep false until paid provider costs and credentials are intentionally configured)
 - `SINTU_AUTH_REQUIRED=true`, `SINTU_ADMIN_USERNAME`, `SINTU_ADMIN_PASSWORD`, `SINTU_SESSION_SECRET` (minimum 32 random characters)
+- `SINTU_BIND_ADDRESS=127.0.0.1` (safe local-only default), `SINTU_ALLOWED_IPS` (optional comma-separated IP/CIDR allowlist), and `SINTU_RATE_LIMIT_PER_MINUTE=300`.
 - Set `SINTU_COOKIE_SECURE=true` behind HTTPS; Compose defaults to false only for local HTTP testing.
 
 API keys are optional for opening the dashboard and using non-provider parts. Paid media generation stays disabled by default.
