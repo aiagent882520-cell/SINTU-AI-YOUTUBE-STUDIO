@@ -1451,7 +1451,7 @@ def test_youtube_comment_reviews_export_respects_filters_and_csv_encoding(tmp_pa
     assert response.status_code == 200
     assert "text/csv" in response.headers["content-type"]
     assert "sintu-community-review-queue.csv" in response.headers["content-disposition"]
-    assert response.content.startswith(b"\\xef\\xbb\\xbf")
+    assert response.content.startswith(bytes([0xEF, 0xBB, 0xBF]))
     assert b"csv-review-2" in response.content
     assert b"csv-review-1" not in response.content
 
