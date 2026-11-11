@@ -1340,6 +1340,22 @@ def test_youtube_comments_returns_heuristic_triage_and_reply_drafts(tmp_path, mo
     assert "draft-only" in data["note"].lower()
 
 
+def test_youtube_comments_paginates_with_youtube_page_token(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    from app import main as app_main
+    monkeypatch.setattr(app_main, "_youtube_access_token", lambda: "test-token")
+    monkeypatch.setattr(app_main, "_youtube_connection", lambda: {"channel_id":"UC123","channel_title":"Test Channel"})
+    captured = []
+    def fake_request(url, data=None, headers=None, method=None):
+        captured.append(url)
+        return 200, {}, json.dumps({"items": [], "nextPageToken": "NEXT_TOKEN"}).encode()
+    monkeypatch.setattr(app_main, "_youtube_request", fake_request)
+    response = client.get("/api/admin/youtube/comments?limit=25&page_token=NEXT_TOKEN")
+    assert response.status_code == 200
+    assert "pageToken=NEXT_TOKEN" in captured[0]
+    assert response.json()["next_page_token"] == "NEXT_TOKEN"
+
+
 def test_youtube_comments_requires_connected_channel(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     from app import main as app_main
