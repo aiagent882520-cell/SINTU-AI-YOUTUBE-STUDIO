@@ -757,6 +757,30 @@ def generate_production_project(project_id: str, payload: ProductionProjectGener
     return {"project": _production_project_dict(updated), "task": task}
 
 
+
+@app.get("/api/projects/{project_id}/task-output")
+def get_production_project_task_output(project_id: str, request: Request):
+    if not re.fullmatch(r"[a-f0-9]{32}", project_id):
+        raise HTTPException(status_code=400, detail="Invalid project ID.")
+    _ensure_production_projects_table()
+    with db() as conn:
+        project = conn.execute(
+            "SELECT last_task_id FROM production_projects WHERE id=? AND owner_username=?",
+            (project_id, _production_project_owner(request))
+        ).fetchone()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found.")
+        if not project["last_task_id"]:
+            raise HTTPException(status_code=404, detail="This project has no generated task yet.")
+        task = conn.execute(
+            "SELECT id,prompt,workflow,status,output,created_at FROM tasks WHERE id=?",
+            (project["last_task_id"],)
+        ).fetchone()
+    if not task:
+        raise HTTPException(status_code=404, detail="Generated task output not found.")
+    return {"task": dict(task)}
+
+
 @app.get("/api/projects/{project_id}/export")
 def export_production_project(project_id: str, request: Request):
     if not re.fullmatch(r"[a-f0-9]{32}", project_id):
