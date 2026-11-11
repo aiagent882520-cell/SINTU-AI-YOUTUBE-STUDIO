@@ -230,6 +230,27 @@ async function loadYouTubeComments(loadMore=false){
  }catch(e){notice.textContent=e.message;}
  finally{button.disabled=false;if(more)more.disabled=false;}
 }
+let youtubeSavedReviewsOffset=0;
+let youtubeSavedReviewsTotal=0;
+let youtubeSavedReviewsItems=[];
+async function loadYouTubeSavedReviews(loadMore=false){
+ const list=$("youtubeSavedReviewsList"),notice=$("youtubeSavedReviewsNotice"),more=$("youtubeSavedReviewsMore");
+ if(!list||!notice)return;
+ const status=$("youtubeSavedReviewsFilter")?.value||"";
+ if(!loadMore){youtubeSavedReviewsOffset=0;youtubeSavedReviewsItems=[];}
+ notice.textContent="Saved review queue load ho rahi hai…";
+ if(more)more.disabled=true;
+ try{
+  const data=await request("/api/admin/youtube/comments/reviews?limit=50&offset="+youtubeSavedReviewsOffset+(status?"&review_status="+encodeURIComponent(status):""));
+  youtubeSavedReviewsTotal=Number(data.total)||0;
+  youtubeSavedReviewsItems=youtubeSavedReviewsItems.concat(data.items||[]);
+  youtubeSavedReviewsOffset+=((data.items||[]).length);
+  list.innerHTML=youtubeSavedReviewsItems.map(item=>'<div class="admin-row"><strong>'+analyticsEscape(item.author||"Unknown author")+' · '+analyticsEscape(item.review_status)+'</strong><span>'+analyticsEscape(item.text||"Comment text not stored")+'</span><span>'+analyticsEscape(item.video_id)+' · '+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+'</span><span>Internal note: '+analyticsEscape(item.notes||"—")+'</span><span>Last reviewed: '+analyticsEscape(item.updated_at||"")+'</span></div>').join("")||'<p class="muted">Saved review queue empty hai.</p>';
+  if(more)more.hidden=youtubeSavedReviewsOffset>=youtubeSavedReviewsTotal;
+  notice.textContent="Saved reviews: "+youtubeSavedReviewsItems.length+" / "+youtubeSavedReviewsTotal+".";
+ }catch(e){notice.textContent=e.message;}
+ finally{if(more)more.disabled=false;}
+}
 function renderYouTubeCommentTotals(){
  const totals=youtubeCommentsCounts;
  const reviewTotals={pending:0,reviewed:0,follow_up:0,resolved:0};
@@ -286,7 +307,8 @@ $("youtubeCommentsList")?.addEventListener("click",async event=>{
   try{
    const result=await request("/api/admin/youtube/comments/review",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
     comment_id:item.comment_id,video_id:item.video_id,review_status:row.querySelector(".youtube-review-status").value,
-    notes:row.querySelector(".youtube-review-notes").value
+    notes:row.querySelector(".youtube-review-notes").value,author:item.author,text:item.text,
+    published_at:item.published_at,likes:item.likes,classification:item.classification
    })});
    item.review_status=result.review_status;item.review_notes=result.notes;item.review_updated_at=result.updated_at;
    renderYouTubeCommentTotals();
@@ -300,7 +322,10 @@ $("youtubeCommentsList")?.addEventListener("click",async event=>{
  const draft=row.querySelector(".youtube-reply-draft")?.value||"";
  try{await navigator.clipboard.writeText(draft);button.textContent="Copied";}catch(e){button.textContent="Copy unavailable";}
 });
-$("youtubeCommentsRefresh")?.addEventListener("click",()=>loadYouTubeComments(false));
+$("youtubeSavedReviewsRefresh")?.addEventListener("click",()=>loadYouTubeSavedReviews(false));
+$("youtubeSavedReviewsFilter")?.addEventListener("change",()=>loadYouTubeSavedReviews(false));
+$("youtubeSavedReviewsMore")?.addEventListener("click",()=>loadYouTubeSavedReviews(true));
+$("youtubeCommentsRefresh")?.addEventListener("click",async()=>{await loadYouTubeComments(false);await loadYouTubeSavedReviews(false);});
 $("youtubeCommentsMore")?.addEventListener("click",()=>loadYouTubeComments(true));
 async function loadYouTubeRetention(){
  const panel=$("youtubeRetentionPanel");if(!panel)return;
