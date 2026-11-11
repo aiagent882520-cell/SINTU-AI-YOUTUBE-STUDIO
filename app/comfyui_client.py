@@ -42,6 +42,30 @@ def _load_api_workflow(env_name, required_placeholders=None):
     return workflow, True, None
 
 
+
+def _missing_model_files(workflow, object_info):
+    """Check configured model-name inputs against ComfyUI's advertised choices."""
+    model_input_tokens = ("model", "checkpoint", "ckpt", "vae", "lora", "control_net", "upscale")
+    missing = []
+    for node_id, node in workflow.items():
+        node_type = node.get("class_type")
+        info = object_info.get(node_type, {})
+        input_info = info.get("input", {}) if isinstance(info, dict) else {}
+        for section in ("required", "optional"):
+            definitions = input_info.get(section, {}) if isinstance(input_info, dict) else {}
+            for input_name, value in node.get("inputs", {}).items():
+                if not any(token in input_name.lower() for token in model_input_tokens):
+                    continue
+                definition = definitions.get(input_name) if isinstance(definitions, dict) else None
+                if not isinstance(definition, list) or len(definition) < 2 or not isinstance(definition[1], dict):
+                    continue
+                choices = definition[1].get("options")
+                if isinstance(choices, list) and isinstance(value, str) and not value.startswith("__SINTU_") and value not in choices:
+                    missing.append({"node_id": str(node_id), "node_type": node_type,
+                                    "input": input_name, "configured": value})
+    return missing
+
+
 def _engine_status(env_name):
     required = ("__SINTU_PROMPT__", "__SINTU_WIDTH__", "__SINTU_HEIGHT__")
     if env_name == "COMFYUI_VIDEO_WORKFLOW_PATH":
@@ -65,12 +89,15 @@ def _engine_status(env_name):
     node_types = sorted({node["class_type"] for node in workflow.values()})
     nodes_verified = False
     missing_nodes = []
+    missing_models = []
     if reachable:
         try:
             object_info = json.loads(_request(base + "/object_info", timeout=10))
             if isinstance(object_info, dict):
                 nodes_verified = True
                 missing_nodes = [node_type for node_type in node_types if node_type not in object_info]
+                if not missing_nodes:
+                    missing_models = _missing_model_files(workflow, object_info)
         except Exception:
             nodes_verified = False
     if not reachable:
@@ -79,12 +106,15 @@ def _engine_status(env_name):
         reason = "ComfyUI is online, but its installed node types could not be verified."
     elif missing_nodes:
         reason = "ComfyUI is missing required workflow nodes: " + ", ".join(missing_nodes)
+    elif missing_models:
+        reason = "ComfyUI does not list configured model files: " + ", ".join(item["configured"] for item in missing_models)
     else:
         reason = None
-    available = bool(configured and reachable and nodes_verified and not missing_nodes)
+    available = bool(configured and reachable and nodes_verified and not missing_nodes and not missing_models)
     return {"available": available, "server_reachable": reachable,
             "workflow_configured": configured, "workflow_valid": configured,
             "nodes_verified": nodes_verified, "missing_nodes": missing_nodes,
+            "missing_models": missing_models,
             "workflow_node_types": node_types, "base_url": base, "reason": reason}
 
 def image_workflow_status():
