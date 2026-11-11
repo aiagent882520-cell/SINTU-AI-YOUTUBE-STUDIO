@@ -1754,6 +1754,30 @@ def youtube_comment_follow_up_summary(as_of: str = Query(default="", max_length=
             "note":"Performance metrics SINTU ke saved internal review records par aadharit hain; yeh YouTube analytics ya individual employee evaluation nahi hain."}
 
 
+@app.get("/api/admin/youtube/comments/reviews/follow-ups/export")
+def export_youtube_comment_follow_up_workload(as_of: str = Query(default="", max_length=10)):
+    """Export internal follow-up totals and owner workload as CSV."""
+    summary = youtube_comment_follow_up_summary(as_of=as_of)
+    totals = summary["totals"]
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["report_type","as_of","owner","total","open","resolved","overdue","due_today",
+                     "upcoming","unscheduled","resolution_rate_percent","follow_up_coverage_percent"])
+    writer.writerow(["overall",summary["as_of"],"All owners",totals["total"],totals["open"],
+                     totals["resolved"],totals["overdue"],totals["due_today"],totals["upcoming"],
+                     totals["unscheduled"],totals["resolution_rate"],""])
+    for owner in summary["owners"]:
+        writer.writerow(["owner",summary["as_of"],owner["owner"],owner["total"],owner["open"],
+                         owner["resolved"],owner["overdue"],owner["due_today"],owner["upcoming"],
+                         owner["total"]-owner["scheduled"],owner["resolution_rate"],
+                         owner["follow_up_coverage"]])
+    content = "\ufeff" + output.getvalue()
+    return StreamingResponse(
+        iter([content]), media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="sintu-community-follow-up-workload.csv"'},
+    )
+
+
 @app.get("/api/admin/youtube/comments/reviews/{comment_id}/history")
 def get_youtube_comment_review_history(comment_id: str):
     """Return internal status-change history for one saved comment."""
