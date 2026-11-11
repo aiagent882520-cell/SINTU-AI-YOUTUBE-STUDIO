@@ -2053,3 +2053,23 @@ def test_complete_studio_api_worker_checker_memory_assets_versions_and_queue(tmp
     item_id = queue.json()["item"]["id"]
     assert client.patch(f"/api/studio/render-queue/{item_id}", json={"status":"running"}).status_code == 200
     assert client.patch(f"/api/studio/render-queue/{item_id}", json={"status":"completed","result":{"video_id":"a"*32}}).status_code == 200
+
+
+def test_render_queue_executes_existing_ffmpeg_renderer(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    project_response = client.post("/api/projects", json={
+        "name":"Queued render test","brief":"A short test video","format_id":"youtube-shorts",
+        "language":"Hindi","duration_seconds":15
+    })
+    project_id = project_response.json()["project"]["id"]
+    monkeypatch.setattr(main, "render_video", lambda payload: {
+        "video_id":"f"*32,"url":"/api/videos/"+"f"*32,"format":"MP4","duration_seconds":8
+    })
+    queued = client.post("/api/studio/render-queue", json={
+        "project_id":project_id,"payload":{"title":"Queued render","scenes":["Scene one"]}
+    })
+    item_id = queued.json()["item"]["id"]
+    executed = client.post(f"/api/studio/render-queue/{item_id}/execute")
+    assert executed.status_code == 200
+    assert executed.json()["item"]["status"] == "completed"
+    assert executed.json()["render"]["video_id"] == "f"*32

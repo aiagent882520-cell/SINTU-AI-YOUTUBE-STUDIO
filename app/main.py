@@ -1047,6 +1047,37 @@ def studio_create_version(payload: StudioVersionInput, request: Request):
                 "assets": studio_engine.list_assets(_studio_owner(request), payload.project_id)}
     return {"version": studio_engine.create_version(_studio_owner(request), payload.project_id, snapshot)}
 
+@app.post("/api/studio/render-queue/{item_id}/execute")
+def studio_execute_render_queue(item_id: str, request: Request):
+    owner = _studio_owner(request)
+    item = next((entry for entry in studio_engine.list_render_queue(owner) if entry["id"] == item_id), None)
+    if not item:
+        raise HTTPException(status_code=404, detail="Render queue item not found.")
+    try:
+        studio_engine.update_render_item(owner, item_id, "running")
+        render_payload = RenderInput(**item["payload"])
+        result = render_video(render_payload)
+        completed = studio_engine.update_render_item(owner, item_id, "completed", result)
+        return {"item": completed, "render": result}
+    except HTTPException as exc:
+        try:
+            studio_engine.update_render_item(owner, item_id, "failed", {"status_code": exc.status_code, "error": str(exc.detail)})
+        except ValueError:
+            pass
+        raise
+    except (ValueError, TypeError) as exc:
+        try:
+            studio_engine.update_render_item(owner, item_id, "failed", {"error": str(exc)})
+        except ValueError:
+            pass
+        raise HTTPException(status_code=400, detail="Render queue payload invalid: " + str(exc))
+    except Exception as exc:
+        try:
+            studio_engine.update_render_item(owner, item_id, "failed", {"error": type(exc).__name__})
+        except ValueError:
+            pass
+        raise HTTPException(status_code=500, detail="Render queue item failed (" + type(exc).__name__ + ").") from None
+
 @app.get("/api/studio/render-queue")
 def studio_get_render_queue(request: Request, project_id: str | None = None):
     if project_id:
