@@ -1504,23 +1504,42 @@ def save_youtube_comment_review(item: YouTubeCommentReviewInput):
 @app.get("/api/admin/youtube/comments/reviews")
 def list_youtube_comment_reviews(
     review_status: str = Query(default="", regex=r"^(|pending|reviewed|follow_up|resolved)$"),
+    classification: str = Query(default="", regex=r"^(|possible_spam|positive|negative|question|other)$"),
+    search: str = Query(default="", max_length=200),
+    sort: str = Query(default="newest", regex=r"^(newest|likes|spam)$"),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=1000000),
 ):
-    """List saved internal review records, including comments no longer on the current API page."""
-    where = "WHERE review_status=?" if review_status else ""
-    params = (review_status,) if review_status else ()
+    """Search, filter and page through saved internal review records."""
+    clauses = []
+    params = []
+    if review_status:
+        clauses.append("review_status=?")
+        params.append(review_status)
+    if classification:
+        clauses.append("classification=?")
+        params.append(classification)
+    if search.strip():
+        clauses.append("(author LIKE ? OR comment_text LIKE ? OR notes LIKE ? OR video_id LIKE ?)")
+        term = f"%{search.strip()}%"
+        params.extend([term, term, term, term])
+    where = "WHERE " + " AND ".join(clauses) if clauses else ""
+    ordering = {
+        "newest": "updated_at DESC, comment_id ASC",
+        "likes": "likes DESC, updated_at DESC",
+        "spam": "CASE WHEN classification='possible_spam' THEN 0 ELSE 1 END, updated_at DESC",
+    }[sort]
     with db() as conn:
         total = conn.execute(f"SELECT COUNT(*) FROM youtube_comment_reviews {where}", params).fetchone()[0]
         rows = conn.execute(
             f"""SELECT comment_id,video_id,review_status,notes,updated_at,author,
                        comment_text AS text,published_at,likes,classification
                 FROM youtube_comment_reviews {where}
-                ORDER BY updated_at DESC LIMIT ? OFFSET ?""",
+                ORDER BY {ordering} LIMIT ? OFFSET ?""",
             (*params, limit, offset),
         ).fetchall()
     return {"items": [dict(row) for row in rows], "total": total,
-            "limit": limit, "offset": offset,
+            "limit": limit, "offset": offset, "sort": sort,
             "note": "Yeh SINTU mein save kiye gaye internal review records hain; YouTube par koi moderation action nahi hota."}
 
 
