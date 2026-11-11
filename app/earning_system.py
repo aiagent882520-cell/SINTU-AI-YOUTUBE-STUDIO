@@ -9,6 +9,7 @@ import csv
 import io
 import os
 import sqlite3
+from contextlib import contextmanager
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -23,6 +24,7 @@ def _db_path() -> Path:
     root.mkdir(parents=True, exist_ok=True)
     return root / "sintu_earnings.sqlite3"
 
+@contextmanager
 def _connect():
     conn = sqlite3.connect(_db_path())
     conn.row_factory = sqlite3.Row
@@ -40,7 +42,14 @@ def _connect():
         created_at TEXT NOT NULL
     )""")
     conn.commit()
-    return conn
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 class RecordInput(BaseModel):
     kind: str = Field(pattern=r"^(income|expense)$")
