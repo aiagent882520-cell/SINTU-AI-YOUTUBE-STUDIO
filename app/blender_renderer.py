@@ -13,7 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT))).expanduser().resolve()
 BLENDER_DIR = DATA_DIR / "blender_renders"
-ALLOWED_SHAPES = {"cube", "sphere", "cylinder", "cone", "torus", "monkey", "text"}
+ALLOWED_SHAPES = {"cube", "sphere", "cylinder", "cone", "torus", "monkey"}
 MAX_OBJECTS = 20
 
 class BlenderUnavailable(Exception):
@@ -104,10 +104,6 @@ for index, item in enumerate(cfg["objects"]):
     elif shape == "cone": bpy.ops.mesh.primitive_cone_add(vertices=48, radius1=1, depth=2, location=loc)
     elif shape == "torus": bpy.ops.mesh.primitive_torus_add(major_segments=48, minor_segments=12, location=loc)
     elif shape == "monkey": bpy.ops.mesh.primitive_monkey_add(location=loc)
-    else:
-        bpy.ops.object.text_add(location=loc)
-        bpy.context.object.data.body = item["name"]
-        bpy.context.object.data.extrude = 0.04
     obj = bpy.context.object
     obj.name = item["name"]
     obj.scale = scale
@@ -179,7 +175,38 @@ def render_scene(title, objects, duration_seconds=8, resolution="1280x720", fps=
     if completed.returncode != 0 or not output_path.is_file() or output_path.stat().st_size < 16:
         detail = (completed.stderr or completed.stdout or "")[-1200:]
         raise BlenderRenderFailed("Blender render failed. " + detail)
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        output_path.unlink(missing_ok=True)
+        raise BlenderUnavailable("FFmpeg is required to apply the mandatory SINTU watermark to Blender MP4 exports.")
+    from .video_renderer import _make_watermark_image
+    width, _ = [int(value) for value in resolution.split("x")]
+    watermark_path = job_dir / "sintu-watermark.png"
+    _make_watermark_image(width=max(240, int(width * 0.34)), height=max(58, int(width * 0.08))).save(watermark_path, format="PNG")
+    branded_path = job_dir / (render_id + "-branded.mp4")
+    brand_command = [
+        ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+        "-i", str(output_path), "-loop", "1", "-i", str(watermark_path),
+        "-filter_complex", "[0:v][1:v]overlay=x=W-w-28:y=H-h-28:format=auto[vbrand]",
+        "-map", "[vbrand]", "-map", "0:a?", "-c:v", "libx264", "-preset", "veryfast",
+        "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "copy",
+        "-t", str(duration_seconds), "-movflags", "+faststart", str(branded_path)
+    ]
+    try:
+        branded = subprocess.run(brand_command, capture_output=True, text=True, timeout=600, check=False)
+    except subprocess.TimeoutExpired:
+        branded_path.unlink(missing_ok=True)
+        output_path.unlink(missing_ok=True)
+        raise BlenderRenderFailed("FFmpeg watermark pass timed out.") from None
+    if branded.returncode != 0 or not branded_path.is_file() or branded_path.stat().st_size < 16:
+        detail = (branded.stderr or branded.stdout or "")[-1200:]
+        branded_path.unlink(missing_ok=True)
+        output_path.unlink(missing_ok=True)
+        raise BlenderRenderFailed("Could not apply the mandatory SINTU watermark. " + detail)
+    os.replace(branded_path, output_path)
     return {"render_id":render_id,"video_id":render_id,"url":f"/api/blender-renders/{render_id}",
             "filename":output_path.name,"format":"MP4 / H.264","size_bytes":output_path.stat().st_size,
             "duration_seconds":duration_seconds,"resolution":resolution,"fps":fps,
-            "provider":"Blender (local, free)","local":True,"note":"3D scene rendered locally. Review output and assets before publishing."}
+            "provider":"Blender (local, free)","local":True,"brand_watermark":"SINTU AI YOUTUBE STUDIO",
+            "note":"3D scene rendered locally with the mandatory SINTU AI YOUTUBE STUDIO logo watermark. Text objects and subtitles are disabled."}
