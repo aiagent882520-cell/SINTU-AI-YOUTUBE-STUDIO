@@ -2,7 +2,7 @@
 
 ## Docker deployment (generic container host)
 
-The repository now includes a Docker image with Python 3.11, FFmpeg, and DejaVu fonts. It listens on `PORT` (default 8000).
+The repository now includes a Docker image with Python 3.11, FFmpeg, and DejaVu fonts. It listens on `PORT` (default 8000). Docker Compose forwards the optional OpenAI, Gemini, Stability, YouTube, Meta and TikTok server-side environment variables into the container; empty credentials keep those integrations disconnected.
 
 ### Run locally or on a Docker-capable server
 
@@ -28,6 +28,8 @@ Set secrets in the host's secret manager or a protected `.env` file (never commi
 - `GEMINI_API_KEY`, `GEMINI_MODEL`
 - `STABILITY_API_KEY`
 - `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REDIRECT_URI`, `YOUTUBE_TOKEN_ENCRYPTION_KEY`
+- `META_APP_ID`, `META_APP_SECRET`, `META_REDIRECT_URI`, `META_GRAPH_API_VERSION`
+- `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REDIRECT_URI`
 - `MEDIA_GENERATION_TOKEN`
 - `ENABLE_PAID_MEDIA_GENERATION=false` (keep false until paid provider costs and credentials are intentionally configured)
 - `SINTU_AUTH_REQUIRED=true`, `SINTU_ADMIN_USERNAME`, `SINTU_ADMIN_PASSWORD`, `SINTU_SESSION_SECRET` (minimum 32 random characters)
