@@ -32,7 +32,8 @@ def test_download_video_file_waits_for_active_then_downloads(monkeypatch):
     result = video_generator._download_video_file("file_123", "test-key")
     assert result == b"verified-mp4-bytes"
     assert len(calls) == 2
-    assert all(timeout <= 30 for _, timeout in calls)
+    assert calls[0][1] <= 30  # Status polling uses a short bounded timeout.
+    assert calls[1][1] == 120  # Large MP4 download gets its separate transfer timeout.
     assert calls[0][0].endswith("/files/file_123")
     assert calls[1][0].endswith("/files/file_123:download?alt=media")
 

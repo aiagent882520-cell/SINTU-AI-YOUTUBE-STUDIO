@@ -403,6 +403,7 @@ def test_renderer_builds_music_mix_and_fade_filter(tmp_path, monkeypatch):
     monkeypatch.setattr(video_renderer, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(video_renderer.shutil, "which", lambda name: "/usr/bin/ffmpeg")
     monkeypatch.setattr(video_renderer.subprocess, "run", fake_run)
+    monkeypatch.setattr(video_renderer, "_verify_rendered_output", lambda *args, **kwargs: {"duration_seconds": 6.0})
     result = video_renderer.render_storyboard(
         "Cinematic", ["Scene one", "Scene two"], 3,
         audio_path=voice, music_path=music, music_volume=0.2, transition="fade",
@@ -460,6 +461,7 @@ def test_renderer_builds_slow_zoom_filter(tmp_path, monkeypatch):
     monkeypatch.setattr(video_renderer, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(video_renderer.shutil, "which", lambda name: "/usr/bin/ffmpeg")
     monkeypatch.setattr(video_renderer.subprocess, "run", fake_run)
+    monkeypatch.setattr(video_renderer, "_verify_rendered_output", lambda *args, **kwargs: {"duration_seconds": 3.0})
     result = video_renderer.render_storyboard(
         "Motion", ["Scene one"], 3, motion="slow-zoom-in"
     )
@@ -624,9 +626,11 @@ def test_video_generator_validates_config_and_prompt(monkeypatch):
         video_generator.generate_video("A city", duration_seconds=11)
 
 
-def test_video_generator_extracts_mp4_from_rest_steps():
+def test_video_generator_extracts_mp4_from_rest_steps(monkeypatch):
     import base64
-    from app.video_generator import _extract_video
+    from app import video_generator
+    monkeypatch.setattr(video_generator, "_validate_video", lambda raw: raw)
+    _extract_video = video_generator._extract_video
     mp4 = b"1234ftypmp42fake-mp4-video-data"
     payload = {"steps": [{"type": "model_output", "content": [
         {"type": "video", "mime_type": "video/mp4", "data": base64.b64encode(mp4).decode()}
@@ -638,6 +642,7 @@ def test_video_generator_calls_gemini_and_saves_mp4(tmp_path, monkeypatch):
     import base64
     import json
     from app import video_generator
+    monkeypatch.setattr(video_generator, "_validate_video", lambda raw: raw)
     mp4 = b"1234ftypmp42valid-video-content"
     response_body = json.dumps({"id": "interaction-test", "status": "completed", "steps": [
         {"type": "model_output", "content": [
@@ -677,6 +682,7 @@ def test_video_generator_calls_gemini_and_saves_mp4(tmp_path, monkeypatch):
 def test_video_generator_extracts_and_downloads_uri_delivery(monkeypatch):
     import json
     from app import video_generator
+    monkeypatch.setattr(video_generator, "_validate_video", lambda raw: raw)
     mp4 = b"1234ftypmp42uri-video-content"
     uri = "https://generativelanguage.googleapis.com/v1beta/files/abc-123:download?alt=media"
     payload = {"steps": [{"type": "model_output", "content": [
@@ -703,6 +709,7 @@ def test_video_generator_extracts_and_downloads_uri_delivery(monkeypatch):
 def test_video_generator_uses_uri_delivery_for_large_clips(tmp_path, monkeypatch):
     import json
     from app import video_generator
+    monkeypatch.setattr(video_generator, "_validate_video", lambda raw: raw)
     mp4 = b"1234ftypmp42large-uri-mp4-content"
     uri = "https://generativelanguage.googleapis.com/v1beta/files/large-123:download?alt=media"
     creation = json.dumps({"id": "uri-interaction", "status": "completed", "steps": [

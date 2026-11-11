@@ -246,7 +246,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                 command += ["-map", "0:v:0", "-an"]
             if video_filter:
                 command += ["-vf", video_filter]
-            command += ["-t", str(duration), "-c:v", "libx264", "-preset", preset,
+            # The concat demuxer needs the duplicated final still to establish the last\n            # frame duration. Include one frame interval; otherwise -t cuts that\n            # duplicate at exactly the timeline boundary and can leave only one frame.\n            command += ["-t", f"{duration + (1 / fps):.6f}", "-c:v", "libx264", "-preset", preset,
                         "-crf", str(crf), "-pix_fmt", "yuv420p", "-r", str(fps),
                         "-movflags", "+faststart", str(output_path)]
             completed = subprocess.run(command, capture_output=True, text=True, timeout=180, check=False)
