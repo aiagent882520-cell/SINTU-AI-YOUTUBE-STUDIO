@@ -31,6 +31,7 @@ def music_status():
     return {
         "available": True,
         "local_available": True,
+        "paid_available": enabled and key_set,
         "local_engine": "SINTU Procedural Composer",
         "provider": "Stability AI Stable Audio 3.0",
         "model": MODEL,
@@ -101,7 +102,7 @@ def generate_music(prompt: str, duration: int = 30) -> dict:
     if not 5 <= duration <= 360:
         raise ValueError("Music duration 5 se 360 seconds ke beech honi chahiye.")
     status = music_status()
-    if not (status["enabled"] and status["api_key_configured"]):
+    if os.getenv("MUSIC_PROVIDER", "local").strip().lower() != "stability" or not status["paid_available"]:
         return _generate_procedural(prompt, duration)
 
     boundary = "----SINTUStableAudio" + uuid.uuid4().hex

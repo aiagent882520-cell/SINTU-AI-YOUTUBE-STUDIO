@@ -489,6 +489,7 @@ def test_ai_music_generation_requires_media_token(tmp_path, monkeypatch):
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
     monkeypatch.setenv("STABILITY_API_KEY", "stability-test-key")
     monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "media-secret")
+    monkeypatch.setenv("MUSIC_PROVIDER", "stability")
     response = client.post("/api/music/generate", json={"prompt": "Ambient score"})
     assert response.status_code == 403
 
@@ -500,6 +501,7 @@ def test_ai_music_generation_endpoint_contract(tmp_path, monkeypatch):
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
     monkeypatch.setenv("STABILITY_API_KEY", "stability-test-key")
     monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "media-secret")
+    monkeypatch.setenv("MUSIC_PROVIDER", "stability")
     monkeypatch.setattr(main, "generate_music", lambda prompt, duration: {
         "music_id": "9" * 32, "url": "/api/music/" + "9" * 32,
         "format": "MP3", "size_bytes": 2048, "duration_seconds": duration,
