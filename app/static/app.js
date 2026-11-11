@@ -1305,7 +1305,7 @@ $("queueRenderButton")?.addEventListener("click",async()=>{
   if(!payload.title||!payload.scenes.length)throw new Error("Title aur kam se kam ek scene likhein.");
   let projectId=window.SINTU_ACTIVE_PROJECT_ID||"";
   if(!projectId){
-   const format=payload.resolution.includes("1280")||payload.resolution.includes("1920x1080")?"youtube-long":"youtube-shorts";
+   const format=["720x1280","1080x1920"].includes(payload.resolution)?"youtube-shorts":"youtube-long";
    const created=await request("/api/projects",{method:"POST",body:JSON.stringify({
     name:payload.title,brief:payload.scenes.join("\n"),format_id:format,language:"Hindi",
     duration_seconds:Math.max(1,payload.scenes.length*payload.seconds_per_scene)

@@ -2915,6 +2915,8 @@ def render_video(payload: RenderInput):
             raise HTTPException(status_code=400, detail="Invalid voiceover audio ID.")
         audio_path = AUDIO_DIR / f"{payload.audio_id}.mp3"
         if not audio_path.is_file():
+            audio_path = AUDIO_DIR / f"{payload.audio_id}.wav"
+        if not audio_path.is_file():
             raise HTTPException(status_code=404, detail="Voiceover audio not found.")
     try:
         if payload.timeline:

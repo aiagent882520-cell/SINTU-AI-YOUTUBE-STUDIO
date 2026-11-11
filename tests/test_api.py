@@ -2125,3 +2125,23 @@ def test_blender_3d_render_api_adds_result_to_project_assets(tmp_path, monkeypat
     assert response.json()["render"]["local"] is True
     assets = client.get("/api/studio/assets", params={"project_id":project_id}).json()["assets"]
     assert assets[0]["kind"] == "render"
+
+
+def test_storyboard_renderer_accepts_local_piper_wav_voiceover(tmp_path, monkeypatch):
+    import wave
+    client = client_for_test(tmp_path, monkeypatch)
+    audio_id = "a" * 32
+    audio_dir = tmp_path / "generated_audio"
+    audio_dir.mkdir()
+    with wave.open(str(audio_dir / (audio_id + ".wav")), "wb") as audio:
+        audio.setnchannels(1); audio.setsampwidth(2); audio.setframerate(22050)
+        audio.writeframes(b"\x00\x00" * 2205)
+    monkeypatch.setattr(main, "AUDIO_DIR", audio_dir)
+    called = {}
+    def fake_render(title, scenes, seconds_per_scene, image_paths=None, audio_path=None, **kwargs):
+        called["audio_path"] = audio_path
+        return {"video_id":"b"*32,"url":"/api/videos/"+"b"*32,"resolution":"720x1280","duration_seconds":4}
+    monkeypatch.setattr(main, "render_storyboard", fake_render)
+    response = client.post("/api/render", json={"title":"Piper WAV test","scenes":["One scene"],"audio_id":audio_id})
+    assert response.status_code == 200
+    assert called["audio_path"].suffix == ".wav"
