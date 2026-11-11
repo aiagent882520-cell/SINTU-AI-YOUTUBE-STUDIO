@@ -937,8 +937,11 @@ async function checkImageService() {
     const info = await request("/api/images/capabilities");
     window.SINTU_IMAGE_LOCAL_AVAILABLE=!!info.local_available;
     const diagnostic = info.local_diagnostics || {};
-    const issues = [...(diagnostic.missing_nodes || []), ...(diagnostic.missing_models || []).map(item => item.configured)];
-    const detail = diagnostic.reason || (issues.length ? "Missing: " + issues.join(", ") : "");
+    const issues = [
+      ...(diagnostic.missing_nodes || []).map(node => "Missing node: " + node),
+      ...(diagnostic.missing_models || []).map(item => "Missing model (" + item.node_type + "." + item.input + "): " + item.configured)
+    ];
+    const detail = issues.length ? issues.join(" · ") : (diagnostic.reason || "");
     $("imageNotice").textContent = info.local_available
       ? "Ready: free local ComfyUI image workflow · no API key or media token."
       : info.available ? "Ready: optional paid image provider. Local ComfyUI: " + (detail || "not ready.")
@@ -986,8 +989,11 @@ async function checkAIVideoService() {
     const info = await request("/api/video/capabilities");
     window.SINTU_VIDEO_LOCAL_AVAILABLE=!!info.local_available;
     const diagnostic = info.local_diagnostics || {};
-    const issues = [...(diagnostic.missing_nodes || []), ...(diagnostic.missing_models || []).map(item => item.configured)];
-    const detail = diagnostic.reason || (issues.length ? "Missing: " + issues.join(", ") : "");
+    const issues = [
+      ...(diagnostic.missing_nodes || []).map(node => "Missing node: " + node),
+      ...(diagnostic.missing_models || []).map(item => "Missing model (" + item.node_type + "." + item.input + "): " + item.configured)
+    ];
+    const detail = issues.length ? issues.join(" · ") : (diagnostic.reason || "");
     $("aiVideoStatus").textContent = info.local_available
       ? "Ready: free local ComfyUI text-to-video workflow · no API key or media token."
       : info.available ? "Ready: optional paid Gemini video provider. Local ComfyUI: " + (detail || "not ready.")
