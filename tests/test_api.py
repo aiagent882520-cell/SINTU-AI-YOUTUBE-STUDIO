@@ -1099,6 +1099,39 @@ def test_admin_provider_settings_persist_and_never_expose_secrets(tmp_path, monk
     assert client.get("/api/admin/provider-settings").status_code == 401
 
 
+
+def test_admin_integrations_reports_truthful_engine_readiness(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "admin_provider_settings", lambda: {
+        "selected_provider": "local",
+        "providers": {
+            "local": {"configured": False, "model": "qwen2.5:3b"},
+            "openai": {"configured": True, "model": "test"},
+            "gemini": {"configured": False, "model": "test"},
+        },
+    })
+    monkeypatch.setattr(main, "paid_upgrades_allowed", lambda: False)
+    monkeypatch.setattr(main, "image_status", lambda: {"available": False, "local_available": False, "local_diagnostics": {"reason": "workflow missing"}, "provider": "ComfyUI local"})
+    monkeypatch.setattr(main, "video_status", lambda: {"available": False, "local_available": False, "local_diagnostics": {"reason": "workflow missing"}, "provider": "ComfyUI local"})
+    monkeypatch.setattr(main, "voice_status", lambda: {"available": False, "local_available": False, "provider": "Piper local", "local_engine": "Piper TTS"})
+    monkeypatch.setattr(main, "music_status", lambda: {"available": True, "local_available": True, "provider": "SINTU Procedural Composer", "max_duration_seconds": 360})
+    monkeypatch.setattr(main, "blender_status", lambda: {"available": False, "engine": "Blender (free/open-source)"})
+    monkeypatch.setattr(main.shutil, "which", lambda name: None if name == "ffmpeg" else shutil.which(name))
+    integrations = client.get("/api/admin/integrations")
+    assert integrations.status_code == 200
+    body = integrations.json()
+    assert body["text_ai"]["status"] == "needs_local_model"
+    assert body["text_ai"]["paid_upgrades_allowed"] is False
+    assert body["image_generation"]["status"] == "needs_local_workflow"
+    assert body["video_generation"]["status"] == "needs_local_workflow"
+    assert body["voiceover"]["status"] == "needs_piper_model"
+    assert body["music_generation"]["status"] == "ready_local"
+    assert body["three_d_rendering"]["status"] == "needs_blender"
+    assert body["video_rendering"]["status"] == "needs_ffmpeg"
+    assert body["tiktok_publishing"]["status"] in {"needs_credentials", "not_connected"}
+    assert body["runtime_truth"]["independent_autonomous_agents_running"] == 0
+    assert "not 61 continuously running autonomous agents" in body["runtime_truth"]["note"]
+
 def test_admin_cannot_select_unconfigured_provider(tmp_path, monkeypatch):
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
     monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")

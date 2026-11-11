@@ -591,19 +591,65 @@ def update_admin_provider_settings(payload: ProviderSettingsInput):
 @app.get("/api/admin/integrations")
 def admin_integrations():
     providers = admin_provider_settings()
-    paid_media = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "false").lower() == "true" and paid_upgrades_allowed()
+    paid_allowed = paid_upgrades_allowed()
+    paid_media = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "false").lower() == "true" and paid_allowed
     media_token = bool(os.getenv("MEDIA_GENERATION_TOKEN"))
     ffmpeg = bool(shutil.which("ffmpeg"))
+    selected = providers["selected_provider"]
+    selected_config = providers["providers"].get(selected, {}).get("configured", False)
+    if selected == "local":
+        text_status = "ready" if selected_config else "needs_local_model"
+    elif selected in {"openai", "gemini"}:
+        text_status = "paid_upgrade_locked" if not paid_allowed else ("ready" if selected_config else "needs_server_key")
+    else:
+        text_status = "unsupported_provider"
+
+    image = image_status()
+    video = video_status()
+    voice = voice_status()
+    music = music_status()
+    blender = blender_status()
+    image_state = "ready_local" if image["local_available"] else ("paid_available" if image["available"] else "needs_local_workflow")
+    video_state = "ready_local" if video["local_available"] else ("paid_available" if video["available"] else "needs_local_workflow")
+    voice_state = "ready_local" if voice["local_available"] else ("paid_available" if voice["available"] else "needs_piper_model")
+    youtube_cfg = _youtube_config()
+    meta_cfg = _meta_config()
+    tiktok_cfg = _tiktok_config()
+    youtube_connected = bool(_youtube_connection())
+    meta_connected = bool(_meta_connection())
+    tiktok_connected = bool(_tiktok_connection())
+
+    def platform_state(connected, configured):
+        return "connected" if connected else ("needs_credentials" if not configured else "not_connected")
+
     return {
-        "text_ai": {"status": "ready" if any(x["configured"] for x in providers["providers"].values()) else "needs_server_key", "selected": providers["selected_provider"], "providers": providers["providers"]},
-        "video_rendering": {"status": "ready" if ffmpeg else "needs_ffmpeg"},
+        "text_ai": {
+            "status": text_status,
+            "selected": selected,
+            "providers": providers["providers"],
+            "paid_upgrades_allowed": paid_allowed,
+            "note": "Free local Ollama is the default. Paid providers never auto-fallback and remain locked until revenue plus explicit approval."
+        },
+        "video_rendering": {"status": "ready" if ffmpeg else "needs_ffmpeg", "engine": "FFmpeg", "ffmpeg_available": ffmpeg},
+        "image_generation": {"status": image_state, "local_available": image["local_available"], "local_diagnostics": image.get("local_diagnostics"), "provider": image.get("provider")},
+        "video_generation": {"status": video_state, "local_available": video["local_available"], "local_diagnostics": video.get("local_diagnostics"), "provider": video.get("provider")},
+        "voiceover": {"status": voice_state, "local_available": voice["local_available"], "provider": voice.get("provider"), "local_engine": voice.get("local_engine")},
+        "music_generation": {"status": "ready_local" if music["local_available"] else "unavailable", "local_available": music["local_available"], "provider": music.get("provider"), "max_duration_seconds": music.get("max_duration_seconds")},
+        "three_d_rendering": {"status": "ready" if blender["available"] else "needs_blender", "engine": blender.get("engine"), "executable_available": blender["available"]},
         "paid_media_generation": {"status": "enabled" if paid_media and media_token else "disabled", "provider_keys_present": {"openai": bool(os.getenv("OPENAI_API_KEY")), "gemini": bool(os.getenv("GEMINI_API_KEY")), "stability": bool(os.getenv("STABILITY_API_KEY"))}},
-        "youtube_publishing": {"status": "connected" if _youtube_connection() else ("needs_credentials" if not (_youtube_config()["client_id"] and _youtube_config()["client_secret"] and _youtube_config()["redirect_uri"] and _youtube_config()["encryption_key"]) else "not_connected"), "note": "Google OAuth channel connection and manual approved MP4 upload endpoints are available; server credentials required."},
-        "social_publishing": {"status": "connected" if _meta_connection() else ("needs_credentials" if not (_meta_config()["app_id"] and _meta_config()["app_secret"] and _meta_config()["redirect_uri"] and _meta_config()["encryption_key"]) else "not_connected"), "note": "Meta OAuth: Facebook Page video upload and Instagram Reels (public HTTPS video URL) are available; server app credentials and Meta permissions required."},
-        "analytics": {"status": "ready" if _youtube_connection() else "needs_youtube_connection", "endpoint": "/api/admin/youtube/analytics", "note": "Official YouTube Analytics API integration is implemented. Connect the channel and grant analytics scopes; estimated revenue additionally requires YPP eligibility and monetary permission."},
+        "youtube_publishing": {"status": platform_state(youtube_connected, all(youtube_cfg.values())), "note": "Google OAuth channel connection and manual approved MP4 upload endpoints are available; server credentials required."},
+        "social_publishing": {"status": platform_state(meta_connected, all(meta_cfg[key] for key in ("app_id", "app_secret", "redirect_uri", "encryption_key"))), "note": "Meta OAuth: Facebook Page video upload and Instagram Reels (public HTTPS video URL) are available; server app credentials and Meta permissions required."},
+        "tiktok_publishing": {"status": platform_state(tiktok_connected, all(tiktok_cfg.values())), "note": "TikTok Content Posting API approval and video.publish scope required. Unaudited apps can only post privately."},
+        "analytics": {"status": "ready" if youtube_connected else "needs_youtube_connection", "endpoint": "/api/admin/youtube/analytics", "note": "Official YouTube Analytics API integration is implemented. Connect the channel and grant analytics scopes; estimated revenue additionally requires YPP eligibility and monetary permission."},
+        "runtime_truth": {
+            "registered_roles": scope_summary()["specialist_count"] + scope_summary()["independent_checker_count"] + scope_summary().get("reviewer_count", 0),
+            "independent_autonomous_agents_running": 0,
+            "orchestration_mode": orchestration_summary()["execution_mode"],
+            "roles_routed": orchestration_summary()["roles_routed"],
+            "note": "Registered specialist/checker roles are orchestrated workflows, not 61 continuously running autonomous agents."
+        },
         "other_text_providers": {"status": "not_connected", "providers": ["Claude", "DeepSeek", "GLM", "Doubao", "Kimi"]}
     }
-
 
 @app.get("/api/admin/audit")
 def admin_audit(limit: int = 50):
