@@ -1732,15 +1732,26 @@ def youtube_comment_follow_up_summary(as_of: str = Query(default="", max_length=
         owners = conn.execute(
             """SELECT CASE WHEN assigned_to='' THEN 'Unassigned' ELSE assigned_to END AS owner,
                COUNT(*) AS total,
-               SUM(CASE WHEN follow_up_at<>'' AND follow_up_at<? THEN 1 ELSE 0 END) AS overdue,
-               SUM(CASE WHEN follow_up_at=? THEN 1 ELSE 0 END) AS due_today,
+               SUM(CASE WHEN follow_up_at<>'' AND follow_up_at<? AND review_status<>'resolved' THEN 1 ELSE 0 END) AS overdue,
+               SUM(CASE WHEN follow_up_at=? AND review_status<>'resolved' THEN 1 ELSE 0 END) AS due_today,
+               SUM(CASE WHEN follow_up_at>? AND review_status<>'resolved' THEN 1 ELSE 0 END) AS upcoming,
+               SUM(CASE WHEN follow_up_at<>'' THEN 1 ELSE 0 END) AS scheduled,
                SUM(CASE WHEN review_status='resolved' THEN 1 ELSE 0 END) AS resolved
                FROM youtube_comment_reviews GROUP BY assigned_to ORDER BY total DESC,owner ASC""",
-            (today,today)
+            (today,today,today)
         ).fetchall()
-    return {"as_of":today,"totals":{key:(value or 0) for key,value in dict(totals).items()},
-            "owners":[{key:(value or 0) for key,value in dict(row).items()} for row in owners],
-            "note":"Yeh internal SINTU workload summary hai; koi automatic reminder ya YouTube action nahi hota."}
+    total_values={key:(value or 0) for key,value in dict(totals).items()}
+    owner_values=[]
+    for row in owners:
+        item={key:(value or 0) for key,value in dict(row).items()}
+        item["open"]=item["total"]-item["resolved"]
+        item["resolution_rate"]=round(item["resolved"]*100/item["total"],1) if item["total"] else 0
+        item["follow_up_coverage"]=round(item["scheduled"]*100/item["total"],1) if item["total"] else 0
+        owner_values.append(item)
+    total_values["open"]=total_values["total"]-total_values["resolved"]
+    total_values["resolution_rate"]=round(total_values["resolved"]*100/total_values["total"],1) if total_values["total"] else 0
+    return {"as_of":today,"totals":total_values,"owners":owner_values,
+            "note":"Performance metrics SINTU ke saved internal review records par aadharit hain; yeh YouTube analytics ya individual employee evaluation nahi hain."}
 
 
 @app.get("/api/admin/youtube/comments/reviews/{comment_id}/history")
