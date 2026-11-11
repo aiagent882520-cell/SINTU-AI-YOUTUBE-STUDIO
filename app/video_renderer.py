@@ -209,7 +209,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                 lines.append(f"duration {seconds_per_scene}")
             lines.append(f"file '{(work / f'frame-{len(scenes):03d}.png').as_posix()}'")
             concat = work / "frames.txt"
-            concat.write_text("\\n".join(lines) + "\\n", encoding="utf-8")
+            concat.write_text("\n".join(lines) + "\n", encoding="utf-8")
             duration = len(scenes) * seconds_per_scene
             filters = []
             if transition == "fade" and len(scenes) > 1:

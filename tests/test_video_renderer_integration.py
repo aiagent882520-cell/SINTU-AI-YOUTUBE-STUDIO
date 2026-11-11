@@ -103,3 +103,31 @@ def test_mixed_timeline_rejects_non_finite_trim_values(tmp_path, monkeypatch, tr
     item = {"kind": "video", "path": source, **trim}
     with pytest.raises(ValueError, match="finite"):
         video_renderer.render_mixed_timeline([item], "test", ["scene"])
+
+def test_mixed_timeline_renders_ordered_still_and_video_items(tmp_path, monkeypatch):
+    _ffmpeg_tools()
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
+    image_path = tmp_path / "still.png"
+    Image.new("RGB", (160, 284), (180, 80, 30)).save(image_path)
+    source = _make_source_clip(tmp_path / "source.mp4")
+
+    result = video_renderer.render_mixed_timeline(
+        [
+            {"kind": "image", "path": image_path, "duration": 2},
+            {"kind": "video", "path": source, "trim_start": 0, "trim_end": 1},
+        ],
+        "Mixed timeline",
+        ["Still scene", "Video scene"],
+        resolution="720x1280",
+        fps=24,
+        quality="standard",
+        transition="cut",
+    )
+
+    output = tmp_path / result["filename"]
+    assert output.is_file() and output.stat().st_size > 1000
+    assert result["timeline_order"] == ["image", "video"]
+    assert result["timeline_items"] == 2
+    assert result["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
+    assert result["subtitles_burned_in"] is False
+    assert result["duration_seconds"] == pytest.approx(3.0, abs=0.15)
