@@ -3,6 +3,7 @@
 Paid generation is disabled unless ENABLE_PAID_MEDIA_GENERATION=true.
 """
 from pathlib import Path
+from .policy import paid_upgrades_allowed
 import os
 import uuid
 
@@ -20,7 +21,7 @@ class VoiceGenerationFailed(Exception):
 
 
 def voice_status():
-    enabled = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "false").strip().lower() == "true"
+    enabled = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "false").strip().lower() == "true" and paid_upgrades_allowed()
     configured = bool(os.getenv("OPENAI_API_KEY"))
     token_configured = bool(os.getenv("MEDIA_GENERATION_TOKEN"))
     return {
@@ -32,7 +33,7 @@ def voice_status():
         "provider": "OpenAI",
         "model": os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
         "format": "MP3",
-        "notice": "Paid API usage may incur charges. Enable explicitly on the server; do not expose API keys.",
+        "notice": "Paid APIs remain locked until revenue is confirmed and the user explicitly approves upgrades.",
     }
 
 

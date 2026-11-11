@@ -10,6 +10,7 @@ import uuid
 import time
 
 from .image_generator import IMAGE_DIR
+from .policy import paid_upgrades_allowed
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT))).expanduser().resolve()
@@ -28,7 +29,7 @@ class VideoGenerationFailed(Exception):
 
 
 def video_status():
-    enabled = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "").lower() == "true"
+    enabled = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "").lower() == "true" and paid_upgrades_allowed()
     key_set = bool(os.getenv("GEMINI_API_KEY"))
     return {
         "available": enabled and key_set,
@@ -40,7 +41,7 @@ def video_status():
         "aspect_ratios": ["9:16", "16:9"],
         "resolutions": ["360p", "720p", "1080p", "4k"],
         "max_clip_seconds": 10,
-        "note": "Paid video generation is off unless ENABLE_PAID_MEDIA_GENERATION=true and GEMINI_API_KEY are configured. Provider pricing and regional availability apply.",
+        "note": "Paid video generation remains locked until revenue is confirmed and the user explicitly approves upgrades.",
     }
 
 

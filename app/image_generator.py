@@ -4,6 +4,7 @@ import os
 import uuid
 from io import BytesIO
 from pathlib import Path
+from .policy import paid_upgrades_allowed
 
 from PIL import Image, UnidentifiedImageError
 
@@ -21,7 +22,7 @@ class ImageGenerationFailed(Exception):
 
 
 def image_status():
-    enabled = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "false").strip().lower() == "true"
+    enabled = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "false").strip().lower() == "true" and paid_upgrades_allowed()
     configured = bool(os.getenv("OPENAI_API_KEY"))
     token_configured = bool(os.getenv("MEDIA_GENERATION_TOKEN"))
     return {
@@ -32,7 +33,7 @@ def image_status():
         "provider": "OpenAI",
         "model": os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
         "formats": ["png"],
-        "notice": "Image generation may incur paid API charges. Disabled unless explicitly enabled by the server administrator.",
+        "notice": "Paid image generation remains locked until revenue is confirmed and the user explicitly approves upgrades.",
     }
 
 
