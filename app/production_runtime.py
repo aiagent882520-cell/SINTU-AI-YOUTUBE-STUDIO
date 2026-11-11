@@ -116,22 +116,30 @@ def _save_step(run_id: str, sequence: int, role: str, step_type: str,
 
 
 def _checker_payload(text: str) -> dict:
-    candidate = text.strip()
-    match = re.search(r"\{[\s\S]*\}", candidate)
+    """Require machine-readable verdicts and evidence; fail closed on ambiguity."""
+    candidate = (text or "").strip()
+    match = re.search(r"\\{[\\s\\S]*\\}", candidate)
     if match:
         try:
             data = json.loads(match.group(0))
             decision = str(data.get("decision", "")).upper()
-            if decision in {"PASS", "FAIL"}:
-                return {
-                    "decision": decision,
-                    "evidence": data.get("evidence", []) if isinstance(data.get("evidence", []), list) else [],
-                    "issues": data.get("issues", []) if isinstance(data.get("issues", []), list) else [],
-                    "revision_instructions": data.get("revision_instructions", []) if isinstance(data.get("revision_instructions", []), list) else [],
-                }
+            evidence = data.get("evidence")
+            issues = data.get("issues")
+            instructions = data.get("revision_instructions", [])
+            valid_lists = (isinstance(evidence, list) and all(isinstance(x, str) for x in evidence)
+                           and isinstance(issues, list) and all(isinstance(x, str) for x in issues)
+                           and isinstance(instructions, list) and all(isinstance(x, str) for x in instructions))
+            if decision in {"PASS", "FAIL"} and valid_lists:
+                if decision == "PASS" and (not evidence or issues):
+                    return {"decision": "FAIL", "evidence": evidence,
+                            "issues": ["PASS requires non-empty evidence and zero reported issues."],
+                            "revision_instructions": ["Provide verifiable evidence and resolve all issues before PASS."]}
+                return {"decision": decision, "evidence": evidence, "issues": issues,
+                        "revision_instructions": instructions}
         except (ValueError, TypeError):
             pass
-    return {"decision": "FAIL", "evidence": [], "issues": ["Checker did not return valid PASS/FAIL JSON."],
+    return {"decision": "FAIL", "evidence": [],
+            "issues": ["Checker did not return valid PASS/FAIL JSON with evidence."],
             "revision_instructions": ["Return the required JSON schema exactly."]}
 
 
@@ -139,10 +147,10 @@ def _checker_payload(text: str) -> dict:
 def _review_payload(text: str) -> dict:
     """Parse a final reviewer verdict; malformed or ambiguous output fails closed."""
     verdict = _checker_payload(text)
-    if verdict["decision"] == "FAIL" and "Checker did not return valid PASS/FAIL JSON." in verdict["issues"]:
+    if verdict["decision"] == "FAIL" and any("valid PASS/FAIL JSON" in issue for issue in verdict["issues"]):
         return {"decision": "FAIL", "evidence": [],
-                "issues": ["Reviewer did not return valid PASS/FAIL JSON."],
-                "revision_instructions": ["Return JSON with decision, evidence and issues."]}
+                "issues": ["Reviewer did not return valid PASS/FAIL JSON with evidence."],
+                "revision_instructions": ["Return JSON with decision, non-empty evidence, empty issues for PASS, and revision_instructions."]}
     return verdict
 
 
