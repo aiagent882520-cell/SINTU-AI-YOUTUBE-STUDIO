@@ -72,8 +72,8 @@ def _make_watermark_image(width: int = 320, height: int = 76) -> Image.Image:
     icon_size = height - 18
     draw.rounded_rectangle((9, 9, 9 + icon_size, 9 + icon_size), radius=13, fill=(14, 165, 140, 235))
     draw.text((17, 7), "S", font=_font(int(height * 0.72)), fill=(255, 255, 255, 255))
-    draw.text((icon_size + 25, 10), "SINTU AI", font=_font(int(height * 0.31)), fill=(255, 255, 255, 255))
-    draw.text((icon_size + 25, int(height * 0.53)), "YOUTUBE STUDIO", font=_font(int(height * 0.16)), fill=(215, 230, 240, 255))
+    draw.text((icon_size + 25, 10), "SINTU AI", font=_font(int(height * 0.36)), fill=(255, 255, 255, 255))
+    draw.text((icon_size + 25, int(height * 0.53)), "YOUTUBE STUDIO", font=_font(int(height * 0.20)), fill=(215, 230, 240, 255))
     return logo
 
 
