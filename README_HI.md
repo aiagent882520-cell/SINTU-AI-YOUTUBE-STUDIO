@@ -261,8 +261,8 @@ Follow-up workload CSV export: the community review workload panel can download 
 
 
 ## Mandatory video branding and clean-frame policy
-- Every MP4 exported through the storyboard, AI-clip assembly, or mixed-timeline renderer receives the SINTU AI YOUTUBE STUDIO logo watermark automatically in the lower-right corner.
-- Scene titles, descriptions, spoken words, subtitles, captions, transcripts, karaoke highlights and other text overlays are not burned into exported video frames. The render API rejects subtitle/caption payloads.
+- Every MP4 exported through the storyboard, AI-clip assembly, mixed-timeline renderer, or Blender 3D renderer receives the SINTU AI YOUTUBE STUDIO logo watermark automatically in the lower-right corner.
+- Scene titles, descriptions, spoken words, subtitles, captions, transcripts, karaoke highlights and other text overlays are not burned into exported video frames. The render API rejects subtitle/caption payloads, and the Blender scene builder rejects 3D text objects.
 - AI visual prompts request clean frames with no generated logos or watermarks; the final renderer adds the official SINTU brand mark after the visual is generated.
 - Thumbnail and YouTube metadata text are separate assets and are not burned into video frames.
 - SRT sidecar generation, if used, creates a separate file; it is not included in the MP4.
