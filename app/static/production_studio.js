@@ -2,7 +2,7 @@
 (() => {
  const root=document.getElementById("productionStudio");
  if(!root)return;
- const state={catalog:null,format:"youtube-shorts",preset:"mystery-short",localDrafts:[],projects:[]};
+ const state={catalog:null,format:"youtube-shorts",preset:"mystery-short",localDrafts:[],projects:[],editingProjectId:null};
  const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
  const storeKey="sintu.production.drafts.v1";
  function readLocal(){try{state.localDrafts=JSON.parse(localStorage.getItem(storeKey)||"[]");if(!Array.isArray(state.localDrafts))state.localDrafts=[];}catch{state.localDrafts=[];}}
@@ -22,7 +22,7 @@
   const local=state.localDrafts.map((d,i)=>'<article class="local-draft"><b>'+esc(d.name)+'</b><small>Only this device · '+esc(d.formatName)+' · '+new Date(d.updatedAt).toLocaleString()+'</small><p>'+esc(d.topic.slice(0,220))+'</p><div class="actions"><button type="button" class="secondary" data-open-local="'+i+'">Open</button><button type="button" class="secondary" data-delete-local="'+i+'">Delete</button></div></article>').join("");
   el.innerHTML=remote+local||'<p class="muted">Abhi koi saved project nahi hai.</p>';
  }
- function fillForm(d){document.getElementById("projectName").value=d.name||"";document.getElementById("projectTopic").value=d.brief||d.topic||"";document.getElementById("projectLanguage").value=d.language||"Hindi";document.getElementById("projectDuration").value=d.duration_seconds||d.duration||60;state.format=d.format_id||d.format||"youtube-shorts";renderFormats();}
+ function fillForm(d,remote=false){state.editingProjectId=remote?d.id:null;document.getElementById("projectName").value=d.name||"";document.getElementById("projectTopic").value=d.brief||d.topic||"";document.getElementById("projectLanguage").value=d.language||"Hindi";document.getElementById("projectDuration").value=d.duration_seconds||d.duration||60;state.format=d.format_id||d.format||"youtube-shorts";renderFormats();}
  function formPayload(){return {name:document.getElementById("projectName").value.trim()||"Untitled Project",brief:document.getElementById("projectTopic").value.trim(),format_id:state.format,language:document.getElementById("projectLanguage").value.trim()||"Hindi",duration_seconds:Number(document.getElementById("projectDuration").value)||60};}
  function applyPreset(id){const p=state.catalog.presets.find(x=>x.id===id);if(!p)return;state.preset=id;state.format=p.format;document.getElementById("projectName").value=p.name;document.getElementById("projectTopic").value=p.prompt;document.getElementById("projectLanguage").value=p.language;document.getElementById("projectDuration").value=p.duration_seconds;renderFormats();document.getElementById("presetSelect").value=id;}
  async function loadProjects(){try{const r=await fetch("/api/projects",{credentials:"same-origin"});if(!r.ok)throw new Error("Server project sync unavailable");const d=await r.json();state.projects=d.projects||[];document.getElementById("draftNotice").textContent="Server sync connected. Saved projects are available after login on this account.";renderDrafts();}catch{document.getElementById("draftNotice").textContent="Server sync abhi available nahi; local device drafts kaam karenge.";}}
@@ -30,19 +30,20 @@
   document.getElementById("formatCards").addEventListener("click",e=>{const b=e.target.closest("[data-format]");if(b){state.format=b.dataset.format;renderFormats();}});
   document.getElementById("formatSearch").addEventListener("input",renderFormats);
   document.getElementById("formatCategory").addEventListener("change",renderFormats);
-  document.getElementById("presetSelect").addEventListener("change",e=>applyPreset(e.target.value));
+  document.getElementById("presetSelect").addEventListener("change",e=>{state.editingProjectId=null;applyPreset(e.target.value);});
+  document.getElementById("newProjectDraft").addEventListener("click",()=>{state.editingProjectId=null;document.getElementById("projectName").value="My SINTU Video Project";document.getElementById("projectTopic").value="";document.getElementById("projectLanguage").value="Hindi";document.getElementById("projectDuration").value=60;state.format="youtube-shorts";renderFormats();document.getElementById("draftNotice").textContent="New project brief ready.";});
   document.getElementById("saveProjectDraft").addEventListener("click",async()=>{
    const payload=formPayload();if(!payload.brief){alert("Pehle topic ya brief likhein.");return;}
    const notice=document.getElementById("draftNotice");notice.textContent="Project save ho raha hai…";
-   try{const r=await fetch("/api/projects",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||"Server save failed");}const data=await r.json();state.projects.unshift(data.project);renderDrafts();notice.textContent="Project server par save ho gaya. Ab isi account se doosre device par bhi khol sakte hain.";}
+   try{const editing=state.editingProjectId;const r=await fetch(editing?("/api/projects/"+encodeURIComponent(editing)):"/api/projects",{method:editing?"PUT":"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||"Server save failed");}const data=await r.json();if(editing){state.projects=state.projects.map(x=>x.id===editing?data.project:x);}else{state.projects.unshift(data.project);}state.editingProjectId=null;renderDrafts();notice.textContent="Project server par save ho gaya. Ab isi account se doosre device par bhi khol sakte hain.";}
    catch(err){state.localDrafts.unshift({id:crypto.randomUUID(),name:payload.name,topic:payload.brief,format:payload.format_id,formatName:selectedFormat().name,language:payload.language,duration:payload.duration_seconds,updatedAt:new Date().toISOString()});saveLocal();notice.textContent="Server save nahi hua; draft is device par save kiya gaya. "+err.message;}
   });
   document.getElementById("exportProjectBrief").addEventListener("click",()=>{const d={...formPayload(),format:selectedFormat(),pipeline:state.catalog.pipeline};const blob=new Blob([JSON.stringify(d,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="sintu-project-brief.json";a.click();URL.revokeObjectURL(a.href);});
   document.getElementById("localDrafts").addEventListener("click",async e=>{
    const remoteOpen=e.target.closest("[data-open-project]"),remoteDelete=e.target.closest("[data-delete-project]"),localOpen=e.target.closest("[data-open-local]"),localDelete=e.target.closest("[data-delete-local]");
-   if(remoteOpen){const d=state.projects.find(x=>x.id===remoteOpen.dataset.openProject);if(d)fillForm(d);}
+   if(remoteOpen){const d=state.projects.find(x=>x.id===remoteOpen.dataset.openProject);if(d)fillForm(d,true);}
    if(remoteDelete){const id=remoteDelete.dataset.deleteProject;if(!confirm("Is saved project ko delete karna hai?"))return;try{const r=await fetch("/api/projects/"+encodeURIComponent(id),{method:"DELETE",credentials:"same-origin"});if(!r.ok)throw new Error("Delete failed");state.projects=state.projects.filter(x=>x.id!==id);renderDrafts();}catch(err){alert(err.message);}}
-   if(localOpen){const d=state.localDrafts[Number(localOpen.dataset.openLocal)];if(d)fillForm(d);}
+   if(localOpen){const d=state.localDrafts[Number(localOpen.dataset.openLocal)];if(d)fillForm(d,false);}
    if(localDelete){state.localDrafts.splice(Number(localDelete.dataset.deleteLocal),1);saveLocal();}
   });
   readLocal();renderDrafts();renderPipeline();renderFormats();loadProjects();
