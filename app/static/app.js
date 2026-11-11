@@ -204,26 +204,38 @@ if($("youtubeRetentionPanel")){$("youtubeRetentionPanel").hidden=false;}}
  catch(e){$("youtubeReachNotice").textContent=e.message;}
  finally{button.disabled=false;}
 });
-async function loadYouTubeComments(){
+let youtubeCommentsNextPageToken = "";
+let youtubeCommentsCounts = {total:0,possible_spam:0,positive:0,negative:0,questions:0,other:0};
+let youtubeCommentsItems = [];
+async function loadYouTubeComments(loadMore=false){
  const panel=$("youtubeCommentsPanel");if(!panel)return;
- const button=$("youtubeCommentsRefresh"),notice=$("youtubeCommentsNotice");
- button.disabled=true;notice.textContent="Recent YouTube comments analyze ho rahe hain…";
+ const button=$("youtubeCommentsRefresh"),more=$("youtubeCommentsMore"),notice=$("youtubeCommentsNotice");
+ if(loadMore&&!youtubeCommentsNextPageToken)return;
+ button.disabled=true;if(more)more.disabled=true;
+ notice.textContent=loadMore?"Aur comments load ho rahe hain…":"Recent YouTube comments analyze ho rahe hain…";
  try{
   const session=await request("/api/auth/session");
   if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
   panel.hidden=false;
-  const data=await request("/api/admin/youtube/comments?limit=50");
-  const c=data.counts||{};
-  $("youtubeCommentsTotals").innerHTML=[["Total",c.total||0],["Possible spam",c.possible_spam||0],["Positive",c.positive||0],["Negative",c.negative||0],["Questions",c.questions||0]]
+  if(!loadMore){youtubeCommentsNextPageToken="";youtubeCommentsCounts={total:0,possible_spam:0,positive:0,negative:0,questions:0,other:0};youtubeCommentsItems=[];}
+  const query="/api/admin/youtube/comments?limit=50"+(loadMore?"&page_token="+encodeURIComponent(youtubeCommentsNextPageToken):"");
+  const data=await request(query),c=data.counts||{};
+  Object.keys(youtubeCommentsCounts).forEach(key=>youtubeCommentsCounts[key]+=(Number(c[key])||0));
+  youtubeCommentsItems=youtubeCommentsItems.concat(data.comments||[]);
+  youtubeCommentsNextPageToken=data.next_page_token||"";
+  const totals=youtubeCommentsCounts;
+  $("youtubeCommentsTotals").innerHTML=[["Total",totals.total],["Possible spam",totals.possible_spam],["Positive",totals.positive],["Negative",totals.negative],["Questions",totals.questions]]
    .map(([label,value])=>'<div class="integration-card"><strong>'+analyticsEscape(value)+'</strong><span>'+analyticsEscape(label)+'</span></div>').join("");
-  $("youtubeCommentsList").innerHTML=(data.comments||[]).map(item=>{
+  $("youtubeCommentsList").innerHTML=youtubeCommentsItems.map(item=>{
    return '<div class="admin-row"><strong>'+analyticsEscape(item.author)+' · '+analyticsEscape(item.classification.replace("_"," "))+'</strong><span>'+analyticsEscape(item.text)+'</span><span>'+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+(item.video_id?' · <a href="https://www.youtube.com/watch?v='+encodeURIComponent(item.video_id)+'" target="_blank" rel="noopener noreferrer">Open video</a>':'')+'</span><p class="muted">Suggested reply (draft only): '+analyticsEscape(item.suggested_reply)+'</p></div>';
   }).join("")||'<p class="muted">Recent comments nahi mile.</p>';
-  notice.textContent=data.note;
+  if(more)more.hidden=!youtubeCommentsNextPageToken;
+  notice.textContent=data.note+" Loaded "+youtubeCommentsItems.length+" comments.";
  }catch(e){notice.textContent=e.message;}
- finally{button.disabled=false;}
+ finally{button.disabled=false;if(more)more.disabled=false;}
 }
-$("youtubeCommentsRefresh")?.addEventListener("click",loadYouTubeComments);
+$("youtubeCommentsRefresh")?.addEventListener("click",()=>loadYouTubeComments(false));
+$("youtubeCommentsMore")?.addEventListener("click",()=>loadYouTubeComments(true));
 async function loadYouTubeRetention(){
  const panel=$("youtubeRetentionPanel");if(!panel)return;
  const notice=$("youtubeRetentionNotice"),button=$("youtubeRetentionLoad");
