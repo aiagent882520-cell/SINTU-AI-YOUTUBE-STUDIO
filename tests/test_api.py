@@ -1721,3 +1721,23 @@ def test_youtube_reach_setup_creates_job_once(tmp_path, monkeypatch):
     assert response.json()["created"] is True
 
 
+
+
+def test_complete_production_catalog_and_project_studio(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.get("/api/production-catalog")
+    assert response.status_code == 200
+    data = response.json()
+    formats = {item["id"]: item for item in data["formats"]}
+    assert len(formats) >= 20
+    assert formats["youtube-shorts"]["aspect_ratio"] == "9:16"
+    assert formats["documentary"]["aspect_ratio"] == "16:9"
+    assert formats["3d-animation"]["stage"] == "prompt_and_storyboard"
+    assert len(data["pipeline"]) == 8
+    assert {item["id"] for item in data["presets"]} >= {"mystery-short", "documentary", "faceless"}
+    page = client.get("/")
+    assert 'id="productionStudio"' in page.text
+    assert "/static/production_studio.js" in page.text
+    assert "/static/production_studio.css" in page.text
+    assert client.get("/static/production_studio.js").status_code == 200
+    assert client.get("/static/production_studio.css").status_code == 200
