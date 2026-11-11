@@ -185,3 +185,12 @@ Follow-up workload CSV export: the community review workload panel can download 
 - Ready-made Hindi presets and a project brief builder are available without provider API keys.
 - Drafts are saved locally in the current browser/device and can be exported as JSON. They are not cloud-synced.
 - The catalog is a target-format list, not a promise that every format can already be rendered. Native 2D/3D rigs, talking-avatar rendering, autonomous agents and platform publishing still need their dedicated engines and approvals.
+
+
+### Server-synced Production Projects
+
+- Production Studio briefs can be saved to the authenticated user's SQLite workspace through `POST /api/projects`; drafts are no longer limited to one browser.
+- List, open, update, delete and JSON export endpoints are available. Project records are scoped to the signed-in username; project IDs are random 128-bit hex identifiers.
+- The UI keeps an offline local-browser fallback if server sync is unavailable. Local fallback drafts remain on that browser and are not automatically synchronized.
+- Server project data is stored in the configured SINTU data directory. Use a persistent volume and backups in deployment.
+- These project records store planning briefs and pipeline metadata; they do not imply that AI generation, video rendering or social publishing has occurred.
