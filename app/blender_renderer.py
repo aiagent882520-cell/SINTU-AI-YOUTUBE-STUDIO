@@ -183,7 +183,7 @@ def render_scene(title, objects, duration_seconds=8, resolution="1280x720", fps=
     from .video_renderer import _make_watermark_image
     width, _ = [int(value) for value in resolution.split("x")]
     watermark_path = job_dir / "sintu-watermark.png"
-    _make_watermark_image(width=max(240, int(width * 0.34)), height=max(58, int(width * 0.08))).save(watermark_path, format="PNG")
+    _make_watermark_image(width=max(180, int(width * 0.22)), height=max(44, int(width * 0.05))).save(watermark_path, format="PNG")
     branded_path = job_dir / (render_id + "-branded.mp4")
     brand_command = [
         ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
