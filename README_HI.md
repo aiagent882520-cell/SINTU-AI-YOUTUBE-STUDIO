@@ -11,6 +11,8 @@ SINTU AI YOUTUBE STUDIO is a responsive web/PWA creator workspace. It currently 
 5. `uvicorn app.main:app --host 0.0.0.0 --port 8000`
 6. Browser mein `http://127.0.0.1:8000` kholein.
 
+- Android phone par same Wi-Fi se access ke liye `START_SINTU_NETWORK.bat` chalayein, Windows Firewall mein sirf Private network par Python allow karein, aur phone browser mein PC ka IPv4 address `http://PC-IP:8000` kholein. LAN HTTP par PWA installation ke liye HTTPS hosting/certificate alag se chahiye.
+
 ## AI provider
 
 - `AI_PROVIDER=local` (default): local Ollama model; no API key, subscription, or paid request.
