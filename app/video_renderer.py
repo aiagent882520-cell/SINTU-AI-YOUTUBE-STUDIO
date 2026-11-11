@@ -1,6 +1,7 @@
 """Assemble clean MP4 videos with optional audio and mandatory SINTU branding."""
 from pathlib import Path
 import os
+import math
 import shutil
 import subprocess
 import tempfile
@@ -35,6 +36,47 @@ class RendererUnavailable(Exception):
 class RenderFailed(Exception):
     pass
 
+
+def _verify_rendered_output(path: Path, expected_width: int, expected_height: int,
+                            expected_duration: float, require_audio: bool | None = None) -> dict:
+    """Verify the finished MP4 on disk before exposing it to the user."""
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        raise RendererUnavailable("Final video verification ke liye FFprobe installed hona chahiye.")
+    try:
+        result = subprocess.run(
+            [ffprobe, "-v", "error", "-show_entries",
+             "format=format_name,duration:stream=codec_type,codec_name,width,height",
+             "-of", "json", str(path)],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise RenderFailed("Final MP4 quality verification fail ya timeout ho gaya.") from None
+    if result.returncode != 0:
+        raise RenderFailed("Final MP4 corrupt hai; FFprobe verify nahi kar saka.")
+    try:
+        import json
+        metadata = json.loads(result.stdout)
+        streams = metadata.get("streams", [])
+        video = next(item for item in streams if item.get("codec_type") == "video")
+        fmt = metadata.get("format", {})
+        duration = float(fmt.get("duration", 0))
+        width, height = int(video.get("width", 0)), int(video.get("height", 0))
+        codec = str(video.get("codec_name", "")).lower()
+        names = str(fmt.get("format_name", "")).lower().split(",")
+        has_audio = any(item.get("codec_type") == "audio" for item in streams)
+    except (AttributeError, TypeError, ValueError, StopIteration, json.JSONDecodeError):
+        raise RenderFailed("Final MP4 mein valid video stream/duration metadata nahi hai.") from None
+    if not any(name in {"mov", "mp4", "m4a", "3gp", "3g2", "mj2"} for name in names):
+        raise RenderFailed("Final output MP4 container nahi hai.")
+    if codec != "h264" or (width, height) != (expected_width, expected_height):
+        raise RenderFailed("Final video codec ya resolution expected profile se match nahi karta.")
+    if not math.isfinite(duration) or duration <= 0 or abs(duration - expected_duration) > max(1.0, expected_duration * 0.03):
+        raise RenderFailed("Final video duration expected timeline se match nahi karti.")
+    if require_audio is not None and has_audio != require_audio:
+        raise RenderFailed("Final video audio stream expected setting se match nahi karti.")
+    return {"duration_seconds": duration, "resolution": f"{width}x{height}",
+            "video_codec": codec, "audio": has_audio}
 
 def _font(size: int):
     candidates = [
@@ -211,6 +253,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             if completed.returncode != 0 or not output_path.exists():
                 detail = (completed.stderr or "FFmpeg render failed")[-1200:]
                 raise RenderFailed(detail)
+            _verify_rendered_output(output_path, width, height, duration, require_audio=bool(audio_path or music_path))
     except subprocess.TimeoutExpired:
         output_path.unlink(missing_ok=True)
         raise RenderFailed("Video render timeout ho gaya. Scenes kam karke dobara try karein.") from None
@@ -392,6 +435,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             if completed.returncode != 0 or not output_path.exists():
                 detail = (completed.stderr or "FFmpeg AI clip assembly failed")[-1600:]
                 raise RenderFailed(detail)
+            _verify_rendered_output(output_path, width, height, total_duration, require_audio=True)
     except subprocess.TimeoutExpired:
         output_path.unlink(missing_ok=True)
         raise RenderFailed("AI clips assemble karne mein timeout ho gaya.") from None
