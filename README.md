@@ -22,6 +22,14 @@ Free-first, local-first AI creator workspace for planning, producing, reviewing,
 5. Start the app: `uvicorn app.main:app --host 127.0.0.1 --port 8000`.
 6. Open `http://127.0.0.1:8000`. After login, use the **Earning System** link or visit `/earnings`.
 
+## Application firewall and security
+
+- Admin authentication is required by default; password hashes use PBKDF2, sessions are signed and HttpOnly, and role-based access is enforced.
+- Application firewall supports optional IP/CIDR allowlisting (`SINTU_ALLOWED_IPS`), per-client API rate limiting (`SINTU_RATE_LIMIT_PER_MINUTE`), same-origin checks for state-changing browser requests, security headers, and HTTPS HSTS.
+- Login has a separate failed-attempt throttle; security-relevant state-changing requests are written to the audit log.
+- The in-process limiter is per worker and resets on restart. For internet-facing deployments, also use a maintained OS/network firewall and a TLS reverse proxy/WAF with shared rate limiting; do not expose the app directly to the public internet.
+- IP allowlisting is optional; set it only when the deployment has stable trusted client IPs. Do not trust arbitrary `X-Forwarded-For` headers.
+
 ## Free-first policy
 
 - No paid API, subscription or cloud GPU is required for the core local-first setup.
