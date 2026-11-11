@@ -1543,6 +1543,51 @@ def list_youtube_comment_reviews(
             "note": "Yeh SINTU mein save kiye gaye internal review records hain; YouTube par koi moderation action nahi hota."}
 
 
+@app.get("/api/admin/youtube/comments/reviews/export")
+def export_youtube_comment_reviews(
+    review_status: str = Query(default="", regex=r"^(|pending|reviewed|follow_up|resolved)$"),
+    classification: str = Query(default="", regex=r"^(|possible_spam|positive|negative|question|other)$"),
+    search: str = Query(default="", max_length=200),
+    sort: str = Query(default="newest", regex=r"^(newest|likes|spam)$"),
+):
+    """Export every saved review matching the queue filters as CSV."""
+    clauses = []
+    params = []
+    if review_status:
+        clauses.append("review_status=?")
+        params.append(review_status)
+    if classification:
+        clauses.append("classification=?")
+        params.append(classification)
+    if search.strip():
+        clauses.append("(author LIKE ? OR comment_text LIKE ? OR notes LIKE ? OR video_id LIKE ?)")
+        term = f"%{search.strip()}%"
+        params.extend([term, term, term, term])
+    where = "WHERE " + " AND ".join(clauses) if clauses else ""
+    ordering = {
+        "newest": "updated_at DESC, comment_id ASC",
+        "likes": "likes DESC, updated_at DESC",
+        "spam": "CASE WHEN classification='possible_spam' THEN 0 ELSE 1 END, updated_at DESC",
+    }[sort]
+    with db() as conn:
+        rows = conn.execute(
+            f"""SELECT author,classification,review_status,notes,updated_at,comment_text,
+                       published_at,likes,video_id,comment_id
+                FROM youtube_comment_reviews {where} ORDER BY {ordering}""",
+            params,
+        ).fetchall()
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["author","classification","review_status","review_notes","review_updated_at",
+                     "comment_text","published_at","likes","video_id","comment_id"])
+    writer.writerows([tuple(row) for row in rows])
+    content = "\ufeff" + output.getvalue()
+    return StreamingResponse(
+        iter([content]), media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="sintu-community-review-queue.csv"'},
+    )
+
+
 @app.get("/api/admin/youtube/retention")
 def youtube_video_retention(
     video_id: str = Query(..., min_length=11, max_length=20, regex=r"^[A-Za-z0-9_-]+$"),
