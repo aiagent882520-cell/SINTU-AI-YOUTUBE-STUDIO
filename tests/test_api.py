@@ -666,6 +666,9 @@ def test_video_generator_calls_gemini_and_saves_mp4(tmp_path, monkeypatch):
     assert body["model"] == "gemini-omni-1.1-flash"
     assert body["response_format"]["aspect_ratio"] == "9:16"
     assert body["response_format"]["delivery"] == "uri"
+    assert "no text" in body["input"].lower()
+    assert "no subtitles" in body["input"].lower()
+    assert "SINTU AI YOUTUBE STUDIO logo" in body["input"]
     assert captured["timeout"] == 360
     assert result["interaction_id"] == "interaction-test"
     assert (output_dir / (result["video_id"] + ".mp4")).read_bytes() == mp4
@@ -2216,3 +2219,23 @@ def test_video_voiceover_requires_at_least_95_percent_hindi(monkeypatch):
     monkeypatch.setattr(voice_generator, "voice_status", lambda: {"local_available": True})
     with pytest.raises(ValueError, match="95% Hindi"):
         voice_generator.generate_voiceover("Hello world, this is an English narration.")
+
+
+def test_scene_image_prompts_are_text_free_and_thumbnail_prompts_are_not_forced_text_free(tmp_path, monkeypatch):
+    import io
+    from PIL import Image
+    from app import image_generator
+
+    output = io.BytesIO()
+    Image.new("RGB", (16, 16), (20, 30, 40)).save(output, format="PNG")
+    captured = {}
+    monkeypatch.setattr(image_generator, "IMAGE_DIR", tmp_path / "images")
+    monkeypatch.setattr(image_generator, "image_workflow_status", lambda: {"available": True, "workflow_configured": True})
+    def fake_generate(prompt, width, height):
+        captured["prompt"] = prompt
+        return output.getvalue()
+    monkeypatch.setattr(image_generator, "generate_image_bytes", fake_generate)
+    image_generator.generate_image("A mysterious ancient stepwell", kind="scene", aspect="portrait")
+    assert "no text" in captured["prompt"].lower()
+    assert "no subtitles" in captured["prompt"].lower()
+    assert "SINTU AI YOUTUBE STUDIO watermark" in captured["prompt"]
