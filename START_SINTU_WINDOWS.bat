@@ -41,6 +41,8 @@ where ffmpeg >nul 2>nul
 if errorlevel 1 echo WARNING: FFmpeg not found. MP4 export requires FFmpeg on PATH.
 where ollama >nul 2>nul
 if errorlevel 1 echo NOTE: Install Ollama and run ollama pull qwen2.5:3b for free local AI.
+where blender >nul 2>nul
+if errorlevel 1 echo NOTE: Install Blender and add blender to PATH for local 3D rendering.
 echo Paid APIs remain locked until revenue and explicit approval.
 python scripts\bootstrap_local.py
 if errorlevel 1 goto failed
