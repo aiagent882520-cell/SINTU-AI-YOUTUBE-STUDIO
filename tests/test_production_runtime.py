@@ -1,4 +1,4 @@
-from app.production_runtime import _checker_payload, _review_payload
+import pytest\n\nfrom app.production_runtime import _checker_payload, _review_payload
 from app.studio_scope import video_formats
 
 
@@ -112,3 +112,31 @@ def test_runtime_stops_after_first_checker_failure(tmp_path, monkeypatch):
     assert result["current_role"].endswith("Checker")
     assert len(calls) == 2
     assert result["steps"][-1]["status"] == "fail"
+
+
+def test_render_result_attaches_only_to_completed_run(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    run = runtime.create_run("youtube-shorts", "Hindi topic")
+    runtime._set_run(run["id"], "completed", result={
+        "deliverables": {"Script Writer": "Narration"},
+        "video_rendered": False, "published": False
+    })
+    attached = runtime.attach_render_result(run["id"], {
+        "video_id": "a" * 32, "url": "/api/videos/" + "a" * 32,
+        "format": "MP4 / H.264"
+    })
+    assert attached["status"] == "completed"
+    assert attached["result"]["video_rendered"] is True
+    assert attached["result"]["render"]["video_id"] == "a" * 32
+    assert attached["result"]["published"] is False
+
+
+def test_render_result_cannot_attach_to_unapproved_run(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    run = runtime.create_run("youtube-shorts", "Hindi topic")
+    with pytest.raises(ValueError, match="completed"):
+        runtime.attach_render_result(run["id"], {"video_id": "a" * 32})
