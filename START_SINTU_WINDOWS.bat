@@ -1,0 +1,49 @@
+@echo off
+setlocal
+cd /d "%~dp0"
+title SINTU AI STUDIO
+
+where py >nul 2>nul
+if %errorlevel%==0 (
+  set "PYTHON=py -3"
+) else (
+  where python >nul 2>nul
+  if errorlevel 1 (
+    echo Python 3.10 or newer is required. Install Python from https://www.python.org/downloads/
+    pause
+    exit /b 1
+  )
+  set "PYTHON=python"
+)
+
+if not exist ".venv\Scripts\python.exe" (
+  echo Creating the local Python environment...
+  %PYTHON% -m venv .venv
+  if errorlevel 1 goto failed
+)
+
+call ".venv\Scripts\activate.bat"
+echo Installing or updating SINTU dependencies...
+python -m pip install --upgrade pip
+if errorlevel 1 goto failed
+python -m pip install -r requirements.txt
+if errorlevel 1 goto failed
+
+echo Preparing secure local login...
+python scripts\bootstrap_local.py
+if errorlevel 1 goto failed
+
+echo.
+echo SINTU AI STUDIO is starting at http://127.0.0.1:8000
+echo Keep this window open while using the studio.
+start "" "http://127.0.0.1:8000"
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+goto end
+
+:failed
+echo.
+echo Setup failed. Check the message above and try again.
+pause
+
+:end
+endlocal
