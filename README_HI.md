@@ -20,6 +20,7 @@ SINTU AI STUDIO is a responsive web/PWA creator workspace. It currently provides
 - Default local model: `qwen2.5:3b`; configure `OLLAMA_MODEL` and `OLLAMA_BASE_URL` as needed.
 - Free voice: optional local Piper executable plus a downloaded voice model at `PIPER_MODEL_PATH`.
 - Free images: optional local ComfyUI with an API-format workflow JSON at `COMFYUI_IMAGE_WORKFLOW_PATH`. Replace workflow input values with `__SINTU_PROMPT__`, `__SINTU_NEGATIVE__`, `__SINTU_WIDTH__`, `__SINTU_HEIGHT__`, and `__SINTU_SEED__` placeholders.
+- Free short video clips: optional local ComfyUI video workflow at `COMFYUI_VIDEO_WORKFLOW_PATH`; use the same placeholders plus `__SINTU_FRAMES__` and `__SINTU_FPS__`. The workflow must export an MP4/WebM/GIF output node. Text-to-video is supported by this connector; image-to-video needs a separate configured workflow connector.
 - Free music: local original procedural ambient soundtrack is the default. `MUSIC_PROVIDER=stability` selects the optional paid provider only after revenue and approval.
 
 If Ollama is not installed/running, generation displays setup guidance and does not call a paid provider. Free local models still require compatible hardware.
@@ -250,4 +251,4 @@ Follow-up workload CSV export: the community review workload panel can download 
 - Piper TTS: set PIPER_EXECUTABLE and PIPER_MODEL_PATH to an installed Piper binary and compatible voice model. The API serves local WAV output without a media token.
 - ComfyUI images: export a workflow in API format, set COMFYUI_IMAGE_WORKFLOW_PATH, and replace prompt/negative/width/height/seed inputs with the documented SINTU placeholders. ComfyUI is restricted to localhost.
 - Procedural music: original ambient WAV generation works without a model or API. It is a procedural soundtrack, not a trained generative music model.
-- Video AI: the existing Gemini connector is optional and paid; local FFmpeg/Blender can handle editing/rendering, but no unlimited free text-to-video model is promised for low-memory hardware.
+- Video AI: local ComfyUI video workflow support is available when you install/configure a compatible open model and workflow. Gemini remains an optional paid connector. FFmpeg/Blender handle editing/rendering; no unlimited free cloud text-to-video model is promised for low-memory hardware.
