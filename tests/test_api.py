@@ -1546,6 +1546,31 @@ def test_youtube_comment_review_assignment_missing_id_is_atomic(tmp_path, monkey
     assert saved["assigned_to"] == ""
 
 
+
+
+def test_youtube_comment_follow_up_workload_csv_export(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    for cid,owner,due,status in [
+        ("csv-overdue","Team A","2026-11-10","follow_up"),
+        ("csv-today","Team A","2026-11-11","pending"),
+        ("csv-resolved","Team B","2026-11-15","resolved"),
+    ]:
+        payload={"comment_id":cid,"video_id":"abcdefghijk","review_status":status,
+                 "assigned_to":owner,"follow_up_at":due}
+        assert client.post("/api/admin/youtube/comments/review",json=payload).status_code==200
+    response=client.get("/api/admin/youtube/comments/reviews/follow-ups/export?as_of=2026-11-11")
+    assert response.status_code==200
+    assert "text/csv" in response.headers["content-type"]
+    assert "sintu-community-follow-up-workload.csv" in response.headers["content-disposition"]
+    rows=list(csv.reader(io.StringIO(response.text.lstrip("\\ufeff"))))
+    assert rows[1][0:3]==["overall","2026-11-11","All owners"]
+    team_a=next(row for row in rows[2:] if row[2]=="Team A")
+    assert team_a[3:10]==["2","2","0","1","1","0","0"]
+    team_b=next(row for row in rows[2:] if row[2]=="Team B")
+    assert team_b[3:6]==["1","0","1"]
+    invalid=client.get("/api/admin/youtube/comments/reviews/follow-ups/export?as_of=bad")
+    assert invalid.status_code==422
+
 def test_youtube_comment_follow_up_due_inbox_excludes_resolved_and_future(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     for cid,due,status in [
