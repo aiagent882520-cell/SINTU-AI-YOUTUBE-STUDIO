@@ -37,6 +37,7 @@ from .image_generator import generate_image, image_status, ImageUnavailable, Ima
 from .music_generator import generate_music, music_status, MusicUnavailable, MusicGenerationFailed
 from .video_generator import generate_video, video_status, VideoUnavailable, VideoGenerationFailed, AI_VIDEO_DIR
 from .production_runtime import create_run as create_production_run, get_run as get_production_run, execute_run as execute_production_run
+from .earning_system import router as earning_router
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT.parent))).expanduser().resolve()
@@ -48,6 +49,7 @@ ALLOWED_MUSIC_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".ogg"}
 
 app = FastAPI(title="SINTU AI YOUTUBE STUDIO", version="0.3.0")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
+app.include_router(earning_router)
 
 SESSION_COOKIE = "sintu_admin_session"
 SESSION_TTL_SECONDS = 12 * 60 * 60
