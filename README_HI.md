@@ -166,3 +166,6 @@ Community assignment and follow-up: admins can assign selected saved comment rev
 
 
 Follow-up dashboard: the saved community review queue can be filtered by internal owner and follow-up date (overdue, today, upcoming or unscheduled). The workload summary reports total, overdue, due-today, upcoming, unscheduled and resolved counts, with counts grouped by internal assignee. This is a dashboard summary, not a push notification or scheduled reminder; no YouTube action is performed.
+
+
+Due follow-up inbox: the community review dashboard now lists open overdue and due-today follow-ups (resolved and future-dated items are excluded), shows the owner and due date, and lets an operator open the matching filtered queue. This is an in-app internal work queue, not a push notification, and it does not perform moderation or publishing actions on YouTube.
