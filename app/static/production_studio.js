@@ -37,7 +37,7 @@
   const r=await fetch(editing?("/api/projects/"+encodeURIComponent(editing)):"/api/projects",{method:editing?"PUT":"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
   const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Project save failed.");
   if(editing)state.projects=state.projects.map(x=>x.id===editing?data.project:x);else state.projects.unshift(data.project);
-  state.editingProjectId=data.project.id;renderDrafts();return data.project;
+  state.editingProjectId=data.project.id;window.SINTU_ACTIVE_PROJECT_ID=data.project.id;renderDrafts();return data.project;
  }
  function renderDrafts(){
   const el=document.getElementById("localDrafts");if(!el)return;
@@ -71,7 +71,7 @@
     const saveResponse=await fetch(projectId?("/api/projects/"+encodeURIComponent(projectId)):"/api/projects",{method:projectId?"PUT":"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
     const saved=await saveResponse.json().catch(()=>({}));if(!saveResponse.ok)throw new Error(saved.detail||"Project save failed");
     if(projectId){state.projects=state.projects.map(x=>x.id===projectId?saved.project:x);}else{projectId=saved.project.id;state.projects.unshift(saved.project);}
-    state.editingProjectId=projectId;renderDrafts();
+    state.editingProjectId=projectId;window.SINTU_ACTIVE_PROJECT_ID=projectId;renderDrafts();
     const r=await fetch("/api/projects/"+encodeURIComponent(projectId)+"/generate",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({workflow})});
     const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"AI generation failed");
     state.projects=state.projects.map(x=>x.id===projectId?data.project:x);renderDrafts();

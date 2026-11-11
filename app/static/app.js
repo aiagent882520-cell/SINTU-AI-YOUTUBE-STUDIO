@@ -1240,3 +1240,42 @@ $("tiktokRefresh")?.addEventListener("click",loadTikTokAdminPanel);
 loadTikTokAdminPanel();
 loadAdminPanel();
 loadProviderAdminPanel();
+
+
+async function checkBlenderStudio(){
+ try{
+  const status=await request("/api/studio/blender/status");
+  $("blenderStatus").textContent=status.available
+   ?"Ready: "+status.engine+" · "+status.output+" · local render"
+   :"Blender not installed. Install Blender and add blender to PATH or set BLENDER_EXECUTABLE. Core studio remains usable.";
+  $("blenderRenderButton").disabled=!status.available;
+ }catch(error){$("blenderStatus").textContent="Blender status unavailable: "+error.message;}
+}
+$("blenderRenderButton")?.addEventListener("click",async()=>{
+ const button=$("blenderRenderButton"),notice=$("blenderRenderNotice");
+ let projectId=window.SINTU_ACTIVE_PROJECT_ID||"";
+ button.disabled=true;notice.textContent="3D scene validation aur Blender render start ho raha hai…";
+ try{
+  const objects=JSON.parse($("blenderObjects").value);
+  if(!Array.isArray(objects))throw new Error("Objects JSON ek array hona chahiye.");
+  if(!projectId){
+   const created=await request("/api/projects",{method:"POST",body:JSON.stringify({
+    name:$("blenderSceneTitle").value.trim()||"SINTU 3D Scene",
+    brief:"Local Blender 3D scene: "+$("blenderSceneTitle").value.trim(),
+    format_id:"3d-animation",language:"Hindi",duration_seconds:Number($("blenderDuration").value||8)
+   })});
+   projectId=created.project.id;window.SINTU_ACTIVE_PROJECT_ID=projectId;
+  }
+  const result=await request("/api/studio/blender/render",{method:"POST",body:JSON.stringify({
+   project_id:projectId,title:$("blenderSceneTitle").value,objects,
+   duration_seconds:Number($("blenderDuration").value||8),
+   resolution:$("blenderResolution").value,fps:24
+  })});
+  $("blenderRenderVideo").src=result.render.url;
+  $("blenderRenderDownload").href=result.render.url;
+  $("blenderRenderResult").hidden=false;
+  notice.textContent="Rendered: "+result.render.resolution+" · "+result.render.duration_seconds+" sec · "+result.render.size_bytes+" bytes.";
+ }catch(error){notice.textContent=error.message;}
+ finally{button.disabled=false;checkBlenderStudio();}
+});
+checkBlenderStudio();

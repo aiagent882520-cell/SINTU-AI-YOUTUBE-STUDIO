@@ -338,6 +338,23 @@
  <div class="actions"><button id="newProjectDraft" class="secondary" type="button">New project</button><button id="saveProjectDraft" type="button">Save / update project</button><button id="generateProductionPackage" class="secondary" type="button">Generate AI production package</button><button id="startProductionRun" type="button">Create complete production run</button><button id="executeNextAgent" class="secondary" type="button" disabled>Run next Specialist + Checker</button><button id="approveProductionRun" class="secondary" type="button" disabled>Approve completed run</button><button id="saveProjectVersion" class="secondary" type="button">Save project version</button><button id="exportProjectBrief" class="secondary" type="button">Export project brief JSON</button></div><p id="draftNotice" role="status" class="muted"></p><div id="productionRunStatus" class="format-detail" aria-live="polite">No production run created yet.</div><pre id="productionPackageOutput" class="production-output" hidden></pre><h3>Saved projects</h3><div id="localDrafts" class="draft-grid"></div>
  <p class="muted small-note">Projects login account ke server par sync hote hain; server unavailable ho to local device fallback use hota hai. External OAuth, advanced video/image models, 3D/VR/AR engines aur platform approvals baad mein connect honge. Core project, plans, local rendering, memory, assets, versions aur independent checker queue abhi available hain.</p>
 </section>
+
+<section class="panel" id="blenderStudioPanel">
+ <div class="panel-head"><div><h2>Free Local Blender 3D Studio</h2><p>JSON scene se local Blender 3D animation MP4 render karein. Blender install hone par koi API key nahi chahiye.</p></div></div>
+ <p id="blenderStatus" class="muted" role="status">Blender engine status checking…</p>
+ <label for="blenderSceneTitle">3D scene title</label><input id="blenderSceneTitle" maxlength="100" value="SINTU 3D Scene">
+ <label for="blenderObjects">3D objects JSON (1–20 objects)</label>
+ <textarea id="blenderObjects" rows="7">[
+  {"shape":"sphere","name":"Hero","location":[0,0,1.3],"scale":[1,1,1],"color":[0.15,0.45,0.9,1]},
+  {"shape":"torus","name":"Orbit Ring","location":[0,0,1.3],"scale":[1.8,1.8,1.8],"color":[0.95,0.55,0.12,1]},
+  {"shape":"cube","name":"Platform","location":[0,0,0],"scale":[1.8,1.8,0.15],"color":[0.12,0.16,0.24,1]}
+ ]</textarea>
+ <div class="grid-two"><div><label for="blenderDuration">Duration (seconds)</label><input id="blenderDuration" type="number" min="1" max="30" value="8"></div><div><label for="blenderResolution">Resolution</label><select id="blenderResolution"><option value="1280x720">720p Landscape</option><option value="1920x1080">1080p Landscape</option><option value="720x1280">720p Portrait</option><option value="1080x1920">1080p Portrait</option><option value="1080x1080">Square</option></select></div></div>
+ <div class="actions"><button id="blenderRenderButton" type="button" disabled>Render 3D MP4</button></div>
+ <p id="blenderRenderNotice" class="muted" role="status" aria-live="polite"></p>
+ <div id="blenderRenderResult" hidden><video id="blenderRenderVideo" controls playsinline style="width:100%;max-height:520px;background:#000;border-radius:12px"></video><p><a id="blenderRenderDownload" download="sintu-3d-render.mp4">Download 3D MP4</a></p></div>
+</section>
+
 </main>
   <script src="/static/app.js"></script>
   <script src="/static/production_studio.js"></script>
