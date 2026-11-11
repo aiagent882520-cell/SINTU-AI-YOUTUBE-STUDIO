@@ -156,3 +156,66 @@ def test_comfyui_video_history_error_extracts_execution_failure():
 
 def test_comfyui_video_history_without_failure_returns_none():
     assert comfyui_client._video_history_error({"status": {"messages": [["execution_success", {}]]}}) is None
+
+
+def test_comfyui_video_generation_polls_history_and_downloads_mp4(tmp_path, monkeypatch):
+    workflow = tmp_path / "video.json"
+    workflow.write_text(json.dumps({
+        "1": {"class_type": "TextEncode", "inputs": {"text": "__SINTU_PROMPT__"}},
+        "2": {"class_type": "VideoSampler", "inputs": {
+            "width": "__SINTU_WIDTH__", "height": "__SINTU_HEIGHT__",
+            "length": "__SINTU_FRAMES__", "fps": "__SINTU_FPS__",
+        }},
+    }), encoding="utf-8")
+    monkeypatch.setenv("COMFYUI_VIDEO_WORKFLOW_PATH", str(workflow))
+    monkeypatch.setattr(comfyui_client, "video_workflow_status", lambda: {
+        "available": True, "base_url": "http://127.0.0.1:8188"
+    })
+    monkeypatch.setattr(comfyui_client.time, "sleep", lambda *_: None)
+    calls = []
+    def fake_request(url, data=None, timeout=30):
+        calls.append(url)
+        if url.endswith("/prompt"):
+            return b'{"prompt_id":"job-123"}'
+        if "/history/" in url:
+            return json.dumps({"job-123": {"outputs": {
+                "9": {"gifs": [{"filename": "final.mp4", "subfolder": "sintu", "type": "output"}]}
+            }}}).encode()
+        if "/view?" in url:
+            return b"fake-mp4-bytes"
+        raise AssertionError("Unexpected ComfyUI URL: " + url)
+    monkeypatch.setattr(comfyui_client, "_request", fake_request)
+    result = comfyui_client.generate_video_bytes("A moving scene", 720, 1280, 96, 24, timeout_seconds=5)
+    assert result == b"fake-mp4-bytes"
+    assert any("/history/job-123" in url for url in calls)
+    assert any("/view?" in url and "final.mp4" in url for url in calls)
+
+
+def test_comfyui_video_generation_stops_on_history_execution_error(tmp_path, monkeypatch):
+    workflow = tmp_path / "video.json"
+    workflow.write_text(json.dumps({
+        "1": {"class_type": "TextEncode", "inputs": {"text": "__SINTU_PROMPT__"}},
+        "2": {"class_type": "VideoSampler", "inputs": {
+            "width": "__SINTU_WIDTH__", "height": "__SINTU_HEIGHT__",
+            "length": "__SINTU_FRAMES__", "fps": "__SINTU_FPS__",
+        }},
+    }), encoding="utf-8")
+    monkeypatch.setenv("COMFYUI_VIDEO_WORKFLOW_PATH", str(workflow))
+    monkeypatch.setattr(comfyui_client, "video_workflow_status", lambda: {
+        "available": True, "base_url": "http://127.0.0.1:8188"
+    })
+    monkeypatch.setattr(comfyui_client.time, "sleep", lambda *_: None)
+    def fake_request(url, data=None, timeout=30):
+        if url.endswith("/prompt"):
+            return b'{"prompt_id":"job-err"}'
+        if "/history/" in url:
+            return json.dumps({"job-err": {"status": {"messages": [
+                ["execution_error", {"exception_message": "Missing video model"}]
+            ]}, "outputs": {}}}).encode()
+        raise AssertionError("Failed execution must not request an output file")
+    monkeypatch.setattr(comfyui_client, "_request", fake_request)
+    try:
+        comfyui_client.generate_video_bytes("A moving scene", 720, 1280, 96, 24, timeout_seconds=5)
+        assert False, "Expected workflow execution failure"
+    except comfyui_client.ComfyUIUnavailable as exc:
+        assert "Missing video model" in str(exc)
