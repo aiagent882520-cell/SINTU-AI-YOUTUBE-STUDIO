@@ -104,3 +104,8 @@ Admin dashboard ke **AI Provider Settings** section mein `auto`, `openai`, ya `g
 7. Video transfer ke baad **Check TikTok status** dabayein. Calendar tabhi Published hoga jab TikTok `PUBLISH_COMPLETE` return kare.
 8. TikTok Content Posting API ka app audit required hai public visibility restrictions hatane ke liye. Unaudited client ka Direct Post private-only hota hai. Scope approval, app audit, user authorization aur TikTok rate/creator limits apply.
 9. Scheduling ke time automatic publish enabled nahi hai; admin explicit publish action deta hai.
+
+
+## Local Windows quick start
+
+For a local Windows computer, double-click `START_SINTU_WINDOWS.bat`. It creates the virtual environment, installs requirements, bootstraps a random admin login in `.env`, and opens the local dashboard. No AI/social API key is required just to open the workspace and save production briefs. The command window must remain open while the local server is running.
