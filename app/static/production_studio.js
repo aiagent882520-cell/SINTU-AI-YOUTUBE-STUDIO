@@ -25,8 +25,8 @@
   select.innerHTML='<option value="">All categories</option>'+cats.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join("");
  }
  function renderRun(run){
-  state.activeRun=run;const p=run.progress||{};
-  document.getElementById("productionRunStatus").innerHTML='<b>Run '+esc(run.id)+'</b> · '+esc(run.status)+' · '+(p.approved||0)+' / '+(p.total||0)+' approved<div class="run-task-list">'+(run.tasks||[]).map(t=>'<div class="agent-pair"><b>'+esc(t.specialist)+'</b> → '+esc(t.checker)+'<span> · '+esc(t.stage_id)+' · '+esc(t.status)+(t.checker_decision?' · '+esc(t.checker_decision):'')+'</span>'+(t.checker_issues?'<small>'+esc(t.checker_issues)+'</small>':'')+'</div>').join("")+'</div>';
+  state.activeRun=run;const p=run.progress||{};const errorLine=run.last_error?'<small>'+esc(run.last_error)+'</small>':'';
+  document.getElementById("productionRunStatus").innerHTML='<b>Run '+esc(run.id)+'</b> · '+esc(run.status)+' · '+(p.approved||0)+' / '+(p.total||0)+' approved'+errorLine+'<div class="run-task-list">'+(run.tasks||[]).map(t=>'<div class="agent-pair"><b>'+esc(t.specialist)+'</b> → '+esc(t.checker)+'<span> · '+esc(t.stage_id)+' · '+esc(t.status)+(t.checker_decision?' · '+esc(t.checker_decision):'')+'</span>'+(t.checker_issues?'<small>'+esc(t.checker_issues)+'</small>':'')+'</div>').join("")+'</div>';
   const active=(run.tasks||[]).find(t=>t.id===run.current_task_id);
   document.getElementById("executeNextAgent").disabled=run.status==="in_progress"||!(active&&["pending","needs_revision"].includes(active.status));
   document.getElementById("executeAllAgents").disabled=!run.current_task_id||["in_progress","awaiting_human_approval","completed","approval_rejected"].includes(run.status);
