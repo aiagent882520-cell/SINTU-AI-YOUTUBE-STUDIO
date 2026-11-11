@@ -1732,9 +1732,9 @@ def youtube_comment_follow_up_summary(as_of: str = Query(default="", max_length=
         owners = conn.execute(
             """SELECT CASE WHEN assigned_to='' THEN 'Unassigned' ELSE assigned_to END AS owner,
                COUNT(*) AS total,
-               SUM(CASE WHEN follow_up_at<>'' AND follow_up_at<? AND review_status<>'resolved' THEN 1 ELSE 0 END) AS overdue,
-               SUM(CASE WHEN follow_up_at=? AND review_status<>'resolved' THEN 1 ELSE 0 END) AS due_today,
-               SUM(CASE WHEN follow_up_at>? AND review_status<>'resolved' THEN 1 ELSE 0 END) AS upcoming,
+               SUM(CASE WHEN follow_up_at<>'' AND follow_up_at<? THEN 1 ELSE 0 END) AS overdue,
+               SUM(CASE WHEN follow_up_at=? THEN 1 ELSE 0 END) AS due_today,
+               SUM(CASE WHEN follow_up_at>? THEN 1 ELSE 0 END) AS upcoming,
                SUM(CASE WHEN follow_up_at<>'' THEN 1 ELSE 0 END) AS scheduled,
                SUM(CASE WHEN review_status='resolved' THEN 1 ELSE 0 END) AS resolved
                FROM youtube_comment_reviews GROUP BY assigned_to ORDER BY total DESC,owner ASC""",
