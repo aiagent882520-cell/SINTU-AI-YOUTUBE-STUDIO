@@ -248,7 +248,7 @@ function exportYouTubeCommentsCsv(){
  const category=$("youtubeCommentsFilter")?.value||"";
  const rows=youtubeCommentsItems.filter(item=>(!category||item.classification===category)&&(!query||(item.text+" "+item.author).toLowerCase().includes(query)));
  if(!rows.length){const n=$("youtubeCommentsNotice");if(n)n.textContent="Export karne ke liye comments nahi hain.";return;}
- const columns=["author","classification","text","published_at","likes","video_id","suggested_reply"];
+ const columns=["author","classification","review_status","review_notes","text","published_at","likes","video_id","suggested_reply"];
  const quote=value=>'"'+String(value??"").replace(/"/g,'""')+'"';
  const csv="\uFEFF"+[columns.join(","),...rows.map(item=>columns.map(key=>quote(item[key])).join(","))].join("\r\n");
  const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
