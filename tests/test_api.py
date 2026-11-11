@@ -1376,6 +1376,22 @@ def test_youtube_comment_review_is_saved_and_returned(tmp_path, monkeypatch):
     assert comment["review_notes"] == "Check context before replying"
 
 
+def test_youtube_comment_review_updates_existing_record(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    base = {"comment_id":"comment-123","video_id":"abcdefghijk","review_status":"follow_up","notes":"Needs context"}
+    first = client.post("/api/admin/youtube/comments/review", json=base)
+    assert first.status_code == 200
+    updated = {**base, "review_status":"resolved", "notes":"Checked; no action needed"}
+    second = client.post("/api/admin/youtube/comments/review", json=updated)
+    assert second.status_code == 200
+    assert second.json()["review_status"] == "resolved"
+    with main.db() as conn:
+        rows = conn.execute("SELECT review_status,notes FROM youtube_comment_reviews WHERE comment_id=?", ("comment-123",)).fetchall()
+    assert len(rows) == 1
+    assert rows[0]["review_status"] == "resolved"
+    assert rows[0]["notes"] == "Checked; no action needed"
+
+
 def test_youtube_comment_review_rejects_invalid_status(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     response = client.post("/api/admin/youtube/comments/review", json={
