@@ -27,7 +27,7 @@ def main() -> None:
         content = replace_or_add(content, "SINTU_ADMIN_USERNAME", "admin")
     password_line = next((line.split("=", 1)[1].strip() for line in content.splitlines()
                           if line.startswith("SINTU_ADMIN_PASSWORD=")), "")
-    if not password_line or password_line.startswith("CHANGE-THIS"):
+    if not password_line or password_line.startswith("CHANGE-THIS") or len(password_line) < 12:
         password = secrets.token_urlsafe(24)
         content = replace_or_add(content, "SINTU_ADMIN_PASSWORD", password)
         generated.append(("Admin password", password))
