@@ -210,3 +210,12 @@ Follow-up workload CSV export: the community review workload panel can download 
 
 - The service worker cache version is incremented when the shell changes and includes the production studio JavaScript/CSS plus a static offline fallback page.
 - Authenticated dashboard HTML and API responses are not cached. Offline mode shows a safe reconnect page rather than caching private account data.
+
+
+## One-click Windows start
+
+1. Install Python 3.10 or newer on Windows.
+2. Download/clone the repository and double-click `START_SINTU_WINDOWS.bat`.
+3. The launcher creates a private `.venv`, installs Python packages, creates a random local admin password/session secret in the ignored `.env`, and starts the dashboard at `http://127.0.0.1:8000`.
+4. The first run prints the admin username and newly generated password in the command window. Save that password. The launcher does not create API keys; add provider credentials to `.env` later if/when needed.
+5. Keep the command window open while using SINTU. FFmpeg is optional for video rendering; install it separately if local MP4 rendering is needed.
