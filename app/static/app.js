@@ -478,6 +478,10 @@ async function loadYouTubeFollowUpSummary(){
  }catch(e){box.textContent=e.message;}
 }
 $("youtubeSavedReviewsSummaryRefresh")?.addEventListener("click",loadYouTubeFollowUpSummary);
+$("youtubeSavedReviewsWorkloadExport")?.addEventListener("click",()=>{
+ const params=new URLSearchParams();
+ window.location.href="/api/admin/youtube/comments/reviews/follow-ups/export"+(params.toString()?"?"+params.toString():"");
+});
 $("youtubeSavedReviewsOwnerFilter")?.addEventListener("change",()=>loadYouTubeSavedReviews(false));
 $("youtubeSavedReviewsDueFilter")?.addEventListener("change",()=>loadYouTubeSavedReviews(false));
 $("youtubeCommentsRefresh")?.addEventListener("click",async()=>{await loadYouTubeComments(false);await loadYouTubeSavedReviews(false);});
