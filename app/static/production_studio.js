@@ -28,7 +28,9 @@
   state.activeRun=run;const p=run.progress||{};
   document.getElementById("productionRunStatus").innerHTML='<b>Run '+esc(run.id)+'</b> · '+esc(run.status)+' · '+(p.approved||0)+' / '+(p.total||0)+' approved<div class="run-task-list">'+(run.tasks||[]).map(t=>'<div class="agent-pair"><b>'+esc(t.specialist)+'</b> → '+esc(t.checker)+'<span> · '+esc(t.stage_id)+' · '+esc(t.status)+(t.checker_decision?' · '+esc(t.checker_decision):'')+'</span>'+(t.checker_issues?'<small>'+esc(t.checker_issues)+'</small>':'')+'</div>').join("")+'</div>';
   const active=(run.tasks||[]).find(t=>t.id===run.current_task_id);
-  document.getElementById("executeNextAgent").disabled=!(active&&["pending","needs_revision"].includes(active.status));
+  document.getElementById("executeNextAgent").disabled=run.status==="in_progress"||!(active&&["pending","needs_revision"].includes(active.status));
+  document.getElementById("executeAllAgents").disabled=!run.current_task_id||["in_progress","awaiting_human_approval","completed","approval_rejected"].includes(run.status);
+  document.getElementById("executeAllAgents").textContent=run.status==="paused"||run.status==="revision_required"?"Resume All Specialists + Checkers":"Run All Specialists + Checkers";
   document.getElementById("approveProductionRun").disabled=run.status!=="awaiting_human_approval";
  }
  async function saveCurrentProject(){
@@ -113,6 +115,25 @@
    const box=document.getElementById("productionRunStatus");box.textContent="Project save aur complete production task queue ban rahi hai…";
    try{const project=await saveCurrentProject();const r=await fetch("/api/studio/runs",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({project_id:project.id,format_id:project.format_id})});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Run create failed");renderRun(data.run);}
    catch(err){box.textContent=err.message;}
+  });
+  document.getElementById("executeAllAgents").addEventListener("click",async()=>{
+   if(!state.activeRun)return;const box=document.getElementById("productionRunStatus");
+   try{
+    const r=await fetch("/api/studio/runs/"+encodeURIComponent(state.activeRun.id)+"/execute-all",{method:"POST",credentials:"same-origin"});
+    const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Background execution failed");
+    renderRun(data.run);
+    if(data.started){
+     box.scrollIntoView({behavior:"smooth",block:"nearest"});
+     if(window.SINTU_RUN_POLL)clearInterval(window.SINTU_RUN_POLL);
+     window.SINTU_RUN_POLL=setInterval(async()=>{
+      try{
+       const poll=await fetch("/api/studio/runs/"+encodeURIComponent(state.activeRun.id),{credentials:"same-origin"});
+       const latest=await poll.json();if(poll.ok)renderRun(latest.run);
+       if(!poll.ok||!["in_progress","queued"].includes(latest.run?.status)){clearInterval(window.SINTU_RUN_POLL);window.SINTU_RUN_POLL=null;}
+      }catch(e){clearInterval(window.SINTU_RUN_POLL);window.SINTU_RUN_POLL=null;}
+     },3000);
+    }
+   }catch(err){box.textContent=err.message;}
   });
   document.getElementById("executeNextAgent").addEventListener("click",async()=>{
    if(!state.activeRun)return;const b=document.getElementById("executeNextAgent"),box=document.getElementById("productionRunStatus");b.disabled=true;box.textContent="Local AI specialist aur independent checker alag-alag run ho rahe hain…";
