@@ -1,13 +1,13 @@
 {
-  "name": "SINTU AI STUDIO",
-  "short_name": "SINTU STUDIO",
+  "name": "SINTU AI YOUTUBE STUDIO",
+  "short_name": "SINTU AI",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#0b1220",
   "theme_color": "#101827",
-  "description": "AI creator platform workspace for scripts, research, courses and production planning.",
+  "description": "Hindi-first AI video production studio with branded MP4 export and a mobile-ready creator workspace.",
   "icons": [
     {
       "src": "/static/icon.svg",
