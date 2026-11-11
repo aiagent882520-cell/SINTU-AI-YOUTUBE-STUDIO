@@ -34,3 +34,11 @@ def test_free_first_upgrade_policy():
     assert policy["required_paid_services"] is False
     assert policy["paid_upgrades_allowed_before_revenue"] is False
     assert policy["paid_upgrades_require_user_approval"] is True
+
+
+def test_every_format_preset_routes_every_selected_role_to_a_stage():
+    from app.studio_scope import video_formats
+    for item in video_formats():
+        plan = production_plan(item["id"])
+        routed = {pair["worker"] for stage in plan["pipeline"] for pair in stage["worker_checker_pairs"]}
+        assert set(item["roles"]).issubset(routed), item["id"]

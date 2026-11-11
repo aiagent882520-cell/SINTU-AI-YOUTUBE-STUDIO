@@ -111,7 +111,7 @@ _STAGE_ROLES = {
  "research":{"Topic Researcher","Research Analyst","Story Researcher","Fact Checker","R&D Agent","Trend Detector","Competitor Analyst","Keyword Research","Topic Predictor"},
  "script":{"Topic Writer","Story Writer","Script Writer","Screenplay Writer","Dialogue Writer","Prompt Writer","Storyboard Artist","Voice Director","Documentary Producer"},
  "design":{"Concept Artist","Layout Agent","Graphic Designer","Thumbnail Designer","Background Designer","Visual Designer","Logo Designer","Infographic Designer","Character Designer","Image Generation Agent","Scene Generation Agent","Background Generation Agent","Product Designer","Creative Director"},
- "production":{"Modeling Agent","3D Modeler","Texturing Agent","Text Training Agent","Rigging Setup Agent","Rigging Agent","2D Animator","3D Animator","Character Animator","Motion Graphics Artist","Lighting Agent","Recording Agent","Visual Effects Agent","VFX Agent","AI Avatar Agent","Lip Sync Agent","Animation Director","Cinematographer","Film Director","Camera Movement Planner","Character Consistency Agent"},
+ "production":{"Modeling Agent","3D Modeler","Texturing Agent","Text Training Agent","Rigging Setup Agent","Rigging Agent","2D Animator","3D Animator","Character Animator","Motion Graphics Artist","Lighting Agent","Recording Agent","Visual Effects Agent","VFX Agent","Video Generation Agent","AI Avatar Agent","Lip Sync Agent","Animation Director","Cinematographer","Film Director","Camera Movement Planner","Character Consistency Agent","Rendering Specialist"},
  "post":{"Compositing Agent","2D VFX Agent","Color Correction Agent","Video Editor","Visual Editor","Cinematic Editor","Colorist","Transition Designer","VFX Compositor","Sound Designer","Audio Editor","Audio Mixer","Music Composer","Voice Generation Agent","Subtitle Agent"},
  "quality":{"Script Quality Agent","Video Quality Agent","Audio Quality Agent","Visual Consistency Agent","Copyright Checker Agent","Subtitle Quality Agent","Final Approval Agent","Security & Privacy Agent","Testing & QA Agent"},
  "delivery":{"Final Output Agent","Final Render Agent","YouTube SEO Agent","Title Writer","Description Writer","Tags Researcher","Hashtag Researcher","Thumbnail Optimizer","Upload Agent","Scheduling Agent","Analytics Agent","Growth Strategist","Asset Manager","Memory Agent","Automation Agent"}
@@ -154,8 +154,6 @@ def production_plan(format_id):
     tasks=[]
     for index,stage in enumerate(PIPELINE,1):
         applicable=[role for role in selected["roles"] if role in _STAGE_ROLES[stage["id"]]]
-        if stage["id"]=="research" and selected["stage"] not in {"research_required"}:
-            applicable=[role for role in applicable if role in {"Topic Researcher","Research Analyst","Fact Checker","Audience Analyst"}]
         pairs=[{"worker":role,"checker":role+CHECKER_SUFFIX,"worker_status":"pending",
           "checker_status":"blocked_until_worker_submission","gate":"checker_must_pass"} for role in applicable]
         tasks.append({"order":index,"stage":stage["id"],"name":stage["name"],"description":stage["description"],
