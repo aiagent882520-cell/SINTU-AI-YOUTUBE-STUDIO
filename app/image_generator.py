@@ -32,6 +32,7 @@ def image_status():
         "local_available": local["available"],
         "local_engine": "ComfyUI" if local["available"] else None,
         "local_workflow_configured": local["workflow_configured"],
+        "local_diagnostics": {key: local.get(key) for key in ("server_reachable", "workflow_valid", "nodes_verified", "missing_nodes", "missing_models", "reason")},
         "enabled_by_admin": enabled,
         "provider_configured": configured,
         "access_token_configured": token_configured,
