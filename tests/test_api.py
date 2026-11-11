@@ -1316,6 +1316,37 @@ def test_youtube_analytics_rejects_invalid_date_range(tmp_path, monkeypatch):
 
 
 
+def test_youtube_comments_returns_heuristic_triage_and_reply_drafts(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    from app import main as app_main
+    monkeypatch.setattr(app_main, "_youtube_access_token", lambda: "test-token")
+    monkeypatch.setattr(app_main, "_youtube_connection", lambda: {"channel_id":"UC123","channel_title":"Test Channel"})
+    def fake_request(url, data=None, headers=None, method=None):
+        assert "allThreadsRelatedToChannelId=UC123" in url
+        body = {"items":[
+            {"snippet":{"topLevelComment":{"id":"c1","snippet":{"authorDisplayName":"A","textDisplay":"Great video, thanks!","videoId":"abcdefghijk","likeCount":2}}}},
+            {"snippet":{"topLevelComment":{"id":"c2","snippet":{"authorDisplayName":"B","textDisplay":"Join my Telegram for guaranteed profit","videoId":"abcdefghijk","likeCount":0}}}},
+            {"snippet":{"topLevelComment":{"id":"c3","snippet":{"authorDisplayName":"C","textDisplay":"How does this work?","videoId":"abcdefghijk","likeCount":1}}}},
+        ]}
+        return 200, {}, json.dumps(body).encode()
+    monkeypatch.setattr(app_main, "_youtube_request", fake_request)
+    response = client.get("/api/admin/youtube/comments")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["counts"]["total"] == 3
+    assert data["counts"]["possible_spam"] == 1
+    assert data["counts"]["positive"] == 1
+    assert data["counts"]["questions"] == 1
+    assert "draft-only" in data["note"].lower()
+
+
+def test_youtube_comments_requires_connected_channel(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    from app import main as app_main
+    monkeypatch.setattr(app_main, "_youtube_connection", lambda: None)
+    assert client.get("/api/admin/youtube/comments").status_code == 409
+
+
 def test_youtube_video_retention_returns_curve(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setattr(main, "_youtube_access_token", lambda: "test-token")
