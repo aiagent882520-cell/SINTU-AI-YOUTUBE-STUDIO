@@ -1803,7 +1803,9 @@ def test_production_studio_has_direct_generation_action(tmp_path, monkeypatch):
     assert script.status_code == 200
     assert 'workflowMap' in script.text
     assert 'data-view-task' in script.text
-    assert 'fetch("/api/generate"' in script.text
+    assert 'fetch("/api/projects/"' in script.text
+    assert '"/generate"' in script.text
+    assert 'data-view-task' in script.text
 
 
 def test_docker_compose_forwards_optional_integration_secrets():
