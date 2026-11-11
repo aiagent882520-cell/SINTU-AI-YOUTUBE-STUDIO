@@ -243,7 +243,7 @@ Follow-up workload CSV export: the community review workload panel can download 
 ## Windows setup
 1. Run START_SINTU_WINDOWS.bat to create the virtual environment, install Python dependencies and start the dashboard.
 2. Install Ollama separately, then run `ollama pull qwen2.5:3b` in CMD. On an 8 GB RAM computer, use a small quantized model and keep expectations modest.
-3. Install FFmpeg and ensure `ffmpeg` is on PATH for MP4 export. Blender, ComfyUI and Piper can be installed later as needed.
+3. Install FFmpeg and ensure `ffmpeg` is on PATH for MP4 export. Blender can be installed and added to PATH for local 3D scene rendering; ComfyUI and Piper can be installed later as needed.
 4. Keep `.env` private. API keys, OAuth credentials, paid models, cloud GPUs and subscriptions are not required to start the core studio.
 
 
@@ -252,3 +252,9 @@ Follow-up workload CSV export: the community review workload panel can download 
 - ComfyUI images: export a workflow in API format, set COMFYUI_IMAGE_WORKFLOW_PATH, and replace prompt/negative/width/height/seed inputs with the documented SINTU placeholders. ComfyUI is restricted to localhost.
 - Procedural music: original ambient WAV generation works without a model or API. It is a procedural soundtrack, not a trained generative music model.
 - Video AI: local ComfyUI video workflow support is available when you install/configure a compatible open model and workflow. Gemini remains an optional paid connector. FFmpeg/Blender handle editing/rendering; no unlimited free cloud text-to-video model is promised for low-memory hardware.
+
+
+### Free local Blender 3D rendering
+- The dashboard includes a Local Blender 3D Studio panel. It accepts a validated JSON list of primitive objects (cube, sphere, cylinder, cone, torus, monkey head or text) and renders an animated H.264 MP4 through Blender in background mode.
+- No Python code from the user is executed; only supported JSON shapes, positions, scales and colors are accepted.
+- Install Blender, add its executable to PATH, or set BLENDER_EXECUTABLE. This creates starter 3D scenes and turntable-style object animation; advanced character modeling/rigging still needs compatible Blender assets and specialist workflows.
