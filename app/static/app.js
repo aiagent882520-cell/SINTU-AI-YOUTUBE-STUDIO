@@ -32,6 +32,11 @@ function parseTimelineEntry(entry) {
  return {kind:legacy[1].toLowerCase(),id:legacy[2].toLowerCase(),duration:legacy[1].toLowerCase()==="image"?Number(legacy[3]):0,trimStart:0,trimEnd:null,audioVolume:.25,transition:legacy[4]};
 }
 function timelineRows(){const entries=$("renderTimeline").value.split("\n").map(parseTimelineEntry).filter(Boolean),scenes=$("renderScenes").value.split("\n");return entries.map((x,i)=>({...x,scene:scenes[i]||""}));}
+function structuredTimelineItems(rows=timelineRows()){
+ return rows.map(x=>x.kind==="image"
+  ?{kind:"image",asset_id:x.id,duration:x.duration,transition:x.transition}
+  :{kind:"video",asset_id:x.id,trim_start:x.trimStart||0,trim_end:x.trimEnd??null,audio_volume:x.audioVolume??.25,transition:x.transition});
+}
 function syncTimelineFields(rows){
  $("renderTimeline").value=rows.map(x=>x.kind==="image"?"image:"+x.id+":"+x.duration+":"+x.transition:"video:"+x.id+":"+(x.trimStart||0)+":"+(x.trimEnd??"")+":"+(x.audioVolume??.25)+":"+x.transition).join("\n");
  $("renderScenes").value=rows.map(x=>x.scene||"").join("\n");$("renderSubtitles").value="";
@@ -778,9 +783,9 @@ $("renderButton").addEventListener("click", async () => {
       method: "POST",
       body: JSON.stringify({
         title, scenes, seconds_per_scene: seconds,
-        timeline: $("renderTimeline").value.split("\n").map(x => x.trim()).filter(Boolean),
-        image_ids: $("renderTimeline").value.trim() ? [] : $("renderImageIds").value.split(",").map(x => x.trim()).filter(Boolean),
-        video_ids: $("renderTimeline").value.trim() ? [] : $("renderVideoIds").value.split(",").map(x => x.trim()).filter(Boolean),
+        timeline_items: structuredTimelineItems(),
+        image_ids: timelineRows().length ? [] : $("renderImageIds").value.split(",").map(x => x.trim()).filter(Boolean),
+        video_ids: timelineRows().length ? [] : $("renderVideoIds").value.split(",").map(x => x.trim()).filter(Boolean),
         audio_id: $("renderAudioId").value.trim() || null,
         music_id: $("renderMusicId").value.trim() || null,
         music_volume: Number($("musicVolume").value || 0.18),
@@ -1285,9 +1290,9 @@ function currentStudioRenderPayload(){
  const timelineText=$("renderTimeline").value.trim();
  return {
   title,scenes,seconds_per_scene:Number($("sceneSeconds").value||4),
-  timeline:timelineText?timelineText.split("\n").map(x=>x.trim()).filter(Boolean):[],
-  image_ids:timelineText?[]:$("renderImageIds").value.split(",").map(x=>x.trim()).filter(Boolean),
-  video_ids:timelineText?[]:$("renderVideoIds").value.split(",").map(x=>x.trim()).filter(Boolean),
+  timeline_items:structuredTimelineItems(),
+  image_ids:timelineRows().length?[]:$("renderImageIds").value.split(",").map(x=>x.trim()).filter(Boolean),
+  video_ids:timelineRows().length?[]:$("renderVideoIds").value.split(",").map(x=>x.trim()).filter(Boolean),
   audio_id:$("renderAudioId").value.trim()||null,music_id:$("renderMusicId").value.trim()||null,
   music_volume:Number($("musicVolume").value||0.18),resolution:$("renderResolution").value,
   fps:Number($("renderFps").value),quality:$("renderQuality").value,
