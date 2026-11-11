@@ -134,3 +134,7 @@ Admin dashboard mein approval-pending, agle 24 ghante ke approved posts, due pos
 - Shows simple keyword-based possible-spam, positive, negative and question labels plus suggested reply drafts.
 - Labels are heuristic triage, not an AI verdict. Reply suggestions are drafts only; this feature does not publish replies, delete, hide or approve comments.
 - Requires YouTube Data API v3 enabled and an authenticated connected channel with comment-read access.
+
+
+### YouTube Comments pagination
+The admin comments analyzer loads 50 comments per page from the official YouTube Data API. Use **Load more comments** to continue with the API-provided page token; counts and displayed comments accumulate for the current refresh session. Labels remain keyword heuristics and reply suggestions remain draft-only.
