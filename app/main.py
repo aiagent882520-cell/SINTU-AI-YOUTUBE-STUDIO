@@ -1546,7 +1546,8 @@ def save_youtube_comment_review(item: YouTubeCommentReviewInput):
                  previous_assigned_to,new_assigned_to,previous_follow_up_at,new_follow_up_at
                ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
             (item.comment_id,item.video_id,event_type,previous_status,item.review_status,int(note_changed),now,
-             previous["assigned_to"],item.assigned_to.strip(),previous["follow_up_at"],item.follow_up_at.strip()),
+             previous["assigned_to"] if previous else "",item.assigned_to.strip(),
+             previous["follow_up_at"] if previous else "",item.follow_up_at.strip()),
         )
     return {"saved": True, "comment_id": item.comment_id, "review_status": item.review_status,
             "notes": item.notes.strip(), "updated_at": now, "author": item.author.strip(),
