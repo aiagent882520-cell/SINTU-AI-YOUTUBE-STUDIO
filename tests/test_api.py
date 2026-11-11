@@ -1517,6 +1517,35 @@ def test_youtube_comment_reviews_bulk_rejects_missing_ids_without_partial_update
     assert client.get("/api/admin/youtube/comments/reviews?review_status=resolved").json()["total"] == 0
 
 
+def test_youtube_comment_review_assignment_and_follow_up_history(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    payload = {"comment_id":"assign-review-1","video_id":"abcdefghijk","review_status":"pending"}
+    assert client.post("/api/admin/youtube/comments/review",json=payload).status_code == 200
+    response = client.post("/api/admin/youtube/comments/reviews/assign",json={
+        "comment_ids":["assign-review-1"],"assigned_to":"Community Team","follow_up_at":"2026-11-15"
+    })
+    assert response.status_code == 200
+    saved = client.get("/api/admin/youtube/comments/reviews?review_status=pending").json()["items"][0]
+    assert saved["assigned_to"] == "Community Team"
+    assert saved["follow_up_at"] == "2026-11-15"
+    history = client.get("/api/admin/youtube/comments/reviews/assign-review-1/history").json()["items"][0]
+    assert history["event_type"] == "assignment_updated"
+    assert history["new_assigned_to"] == "Community Team"
+    assert history["new_follow_up_at"] == "2026-11-15"
+
+
+def test_youtube_comment_review_assignment_missing_id_is_atomic(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    payload = {"comment_id":"assign-existing-1","video_id":"abcdefghijk","review_status":"pending"}
+    assert client.post("/api/admin/youtube/comments/review",json=payload).status_code == 200
+    response = client.post("/api/admin/youtube/comments/reviews/assign",json={
+        "comment_ids":["assign-existing-1","assign-missing-2"],"assigned_to":"Team","follow_up_at":""
+    })
+    assert response.status_code == 404
+    saved = client.get("/api/admin/youtube/comments/reviews?review_status=pending").json()["items"][0]
+    assert saved["assigned_to"] == ""
+
+
 def test_youtube_comment_review_rejects_invalid_status(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     response = client.post("/api/admin/youtube/comments/review", json={
