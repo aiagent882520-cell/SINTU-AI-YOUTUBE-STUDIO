@@ -37,7 +37,7 @@ from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable,
 from .image_generator import generate_image, image_status, ImageUnavailable, ImageGenerationFailed, IMAGE_DIR
 from .music_generator import generate_music, music_status, MusicUnavailable, MusicGenerationFailed
 from .video_generator import generate_video, video_status, VideoUnavailable, VideoGenerationFailed, AI_VIDEO_DIR
-from .production_runtime import create_run as create_production_run, get_run as get_production_run, execute_run as execute_production_run
+from .production_runtime import create_run as create_production_run, get_run as get_production_run, execute_run as execute_production_run, attach_render_result
 from .earning_system import router as earning_router
 
 ROOT = Path(__file__).resolve().parent
@@ -3246,6 +3246,30 @@ def start_production_run(payload: ProductionRunInput, background_tasks: Backgrou
         raise HTTPException(status_code=400, detail=str(exc)) from None
     background_tasks.add_task(execute_production_run, run["id"])
     return {"run_id": run["id"], "status": run["status"], "detail": "Format-specific builder/checker production run queued."}
+
+
+class ProductionRenderInput(RenderInput):
+    format_id: str = Field(min_length=1, max_length=80)
+
+
+@app.post("/api/production/runs/{run_id}/render")
+def render_approved_production_run(run_id: str, payload: ProductionRenderInput):
+    if not re.fullmatch(r"[a-f0-9]{32}", run_id):
+        raise HTTPException(status_code=400, detail="Invalid production run ID.")
+    run = get_production_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Production run not found.")
+    if run["status"] != "completed":
+        raise HTTPException(status_code=409, detail="Production run must pass all builder/checker and final reviewer gates before rendering.")
+    if run["format_id"] != payload.format_id:
+        raise HTTPException(status_code=400, detail="Render format must match the approved production run format.")
+    rendered = render_video(payload)
+    try:
+        updated = attach_render_result(run_id, rendered)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    return {"run_id": run_id, "status": updated["status"], "render": rendered,
+            "published": False, "detail": "Final MP4 rendered and attached. YouTube publishing still requires separate approval."}
 
 
 @app.get("/api/production/runs/{run_id}")
