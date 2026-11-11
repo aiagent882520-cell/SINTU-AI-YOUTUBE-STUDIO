@@ -40,12 +40,12 @@ description, chapters, hashtags and tags; fact-check notes. Clearly label any
 estimated runtime.""",
     "thumbnail": """Create 3 distinct high-click-potential thumbnail concepts.
 For each provide: one focal subject, composition, background, facial/emotional
-direction if relevant, 2-5 word readable text, contrast and color direction,
-mobile readability check, and a precise image-generation prompt. Do not promise
+direction if relevant, contrast and color direction, mobile readability check,
+and a precise image-generation prompt. Thumbnail text stays separate from video frames. Do not promise
 a CTR; explain that performance must be tested with real analytics.""",
     "script": """Write a polished, engaging script in the requested language.
-Include audience, tone, hook, complete spoken narration, scene/visual cues,
-transitions, pacing, ending and optional CTA. Avoid filler and unsupported claims.""",
+Include audience, tone, hook, complete Hindi spoken narration, scene/visual cues,
+transitions, pacing, ending and optional CTA. Do not request visible text overlays. Avoid filler and unsupported claims.""",
     "research": """Prepare a research brief, not fabricated live research.
 Separate established background knowledge, claims requiring current verification,
 and open questions. Give search queries and trustworthy source types to consult.
@@ -125,14 +125,20 @@ def generate_text(prompt: str, workflow: str, provider_override=None) -> dict:
     workflow_key = (workflow or "content").strip().lower()
     guide = WORKFLOW_GUIDES.get(workflow_key, WORKFLOW_GUIDES["content"])
     user_input = (
-        "MANDATORY VIDEO LANGUAGE AND VISUAL POLICY (overrides generic templates):\\n"\n        "- Default language is Hindi (Devanagari). At least 95% Hindi; English maximum 5%, only essential terms/proper nouns.\\n"\n        "- Voiceover, dialogue, narration and spoken lines must be Hindi.\\n"\n        "- NO text overlay in the video: no subtitles, captions, transcript, karaoke, labels, titles, lower-thirds, logos, watermarks or speech-to-text.\\n"\n        "- Every visual/image/video prompt must include: clean frame, no text, no letters, no subtitles, no watermark, no logo.\\n"\n        "- Metadata may be provided separately as plain text outside the video.\\n"\n        "- Never burn narration or subtitles into the video. Only enable visible text if the user explicitly requests it for this project.\\n\\n"\n        f"Selected workflow: {workflow_key}\n"
-        f"Workflow production requirements:\n{guide}\n\n"
-        f"Assigned specialist roles and responsibilities:\n{json.dumps(workflow_team(workflow_key), ensure_ascii=False, indent=2)}\n\n"
-        f"Orchestration mode: {orchestration_summary()['execution_mode']}. This is one model request guided by specialist roles, not separate autonomous agents.\n\n"
-        f"User topic / prompt / script:\n{prompt.strip()}\n\n"
-        "Follow the workflow requirements while honoring the user's exact topic, "
-        "language, audience, duration and constraints. If a detail is missing, "
-        "make a sensible clearly stated assumption instead of blocking."
+        "MANDATORY VIDEO LANGUAGE AND VISUAL POLICY (overrides generic templates):\\n"
+        "- Default language is Hindi (Devanagari). At least 95% Hindi; English maximum 5%, only essential terms/proper nouns.\\n"
+        "- Voiceover, dialogue, narration and spoken lines must be Hindi.\\n"
+        "- NO text overlay in the video: no subtitles, captions, transcript, karaoke, labels, titles, lower-thirds or speech-to-text.\\n"
+        "- The ONLY permitted visible overlay is the SINTU AI YOUTUBE STUDIO brand watermark logo, added by the renderer.\\n"
+        "- Every visual/image/video prompt must include: clean frame, no text, no letters, no subtitles, no watermark, no logo.\\n"
+        "- Metadata may be provided separately as plain text outside the video.\\n"
+        "- Never burn narration or subtitles into the video.\\n\\n"
+        f"Selected workflow: {workflow_key}\\n"
+        f"Workflow production requirements:\\n{guide}\\n\\n"
+        f"Assigned specialist roles and responsibilities:\\n{json.dumps(workflow_team(workflow_key), ensure_ascii=False, indent=2)}\\n\\n"
+        f"Orchestration mode: {orchestration_summary().get(chr(101)+chr(120)+chr(101)+chr(99)+chr(117)+chr(116)+chr(105)+chr(111)+chr(110)+chr(95)+chr(109)+chr(111)+chr(100)+chr(101))}. This is one model request guided by specialist roles, not separate autonomous agents.\\n\\n"
+        f"User topic / prompt / script:\\n{prompt.strip()}\\n\\n"
+        "Follow the workflow requirements while honoring the user topic, language, audience, duration and constraints. If a detail is missing, make a sensible clearly stated assumption instead of blocking."
     )
     try:
         if provider == "local":
