@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 640" role="img" aria-labelledby="title desc">
+  <title id="title">SINTU AI YOUTUBE STUDIO</title>
+  <desc id="desc">Futuristic S mark with a play button and AI accents, in blue, violet, red and silver.</desc>
+  <defs>
+    <linearGradient id="s" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#20D9FF"/><stop offset=".52" stop-color="#367BFF"/><stop offset="1" stop-color="#B33CFF"/></linearGradient>
+    <linearGradient id="silver" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#FFF"/><stop offset="1" stop-color="#9FB3CC"/></linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FF4545"/><stop offset="1" stop-color="#C90032"/></linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="9" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <g transform="translate(480 245)">
+    <circle r="192" fill="none" stroke="#202E4A" stroke-width="14"/>
+    <circle r="192" fill="none" stroke="url(#s)" stroke-width="8" stroke-dasharray="850 360" transform="rotate(-35)" filter="url(#glow)"/>
+    <path d="M-112 -126 H104 Q145 -126 145 -87 Q145 -48 104 -48 H-40 Q-75 -48 -75 -15 Q-75 17 -40 17 H67 Q144 17 144 88 Q144 158 67 158 H-125" fill="none" stroke="url(#s)" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="-86" y="-67" width="172" height="134" rx="34" fill="url(#red)" stroke="#FFB5C1" stroke-width="5"/>
+    <path d="M-20 -35 L43 0 L-20 35Z" fill="#FFF"/>
+    <circle cx="119" cy="-126" r="47" fill="#111D35" stroke="#25CFFF" stroke-width="7"/>
+    <text x="119" y="-113" text-anchor="middle" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#4DE5FF">AI</text>
+    <path d="M-160 -150 l-26 -34 h75 l25 34 M-145 -150 l-25 -34" fill="none" stroke="url(#silver)" stroke-width="10" stroke-linecap="round"/>
+  </g>
+  <text x="480" y="510" text-anchor="middle" font-family="Arial,sans-serif" font-size="100" font-weight="900" letter-spacing="2" fill="url(#silver)">SINTU <tspan fill="#FFC72C">AI</tspan></text>
+  <rect x="178" y="535" width="604" height="66" rx="18" fill="url(#red)"/>
+  <text x="480" y="581" text-anchor="middle" font-family="Arial,sans-serif" font-size="39" font-weight="800" letter-spacing="4" fill="#FFF">YOUTUBE STUDIO</text>
+  <text x="480" y="630" text-anchor="middle" font-family="Arial,sans-serif" font-size="19" letter-spacing="6" fill="#9FB3CC">CREATE • DIRECT • PRODUCE</text>
+</svg>
