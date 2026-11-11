@@ -2905,7 +2905,7 @@ def upload_music(payload: MusicUploadInput, media_token: str = Header(default=""
 def render_video(payload: RenderInput):
     title = payload.title.strip()
     scenes = [scene.strip() for scene in payload.scenes]
-    resolution = resolution or "720x1280"
+    resolution = payload.resolution or "720x1280"
     if payload.format_id:
         try:
             render_profile = format_render_profile(payload.format_id)
@@ -2913,7 +2913,7 @@ def render_video(payload: RenderInput):
             raise HTTPException(status_code=400, detail="Unknown video format.") from None
         if not render_profile["generic_export_available"]:
             raise HTTPException(status_code=501, detail=render_profile["limitations"][0])
-        resolution = resolution or render_profile["default_resolution"]
+        resolution = payload.resolution or render_profile["default_resolution"]
     if not title or any(not scene or len(scene) > 500 for scene in scenes):
         raise HTTPException(status_code=400, detail="Title and all scenes must contain valid text (max 500 characters per scene).")
     if payload.image_ids and len(payload.image_ids) != len(scenes):
