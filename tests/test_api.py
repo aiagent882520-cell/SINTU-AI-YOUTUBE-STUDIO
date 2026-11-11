@@ -2166,3 +2166,21 @@ def test_background_run_can_be_started_and_resumed_after_pause(tmp_path, monkeyp
     resumed = client.post(f"/api/studio/runs/{run_id}/execute-all")
     assert resumed.status_code == 200
     assert resumed.json()["run"]["status"] == "in_progress"
+
+
+def test_youtube_analytics_uses_connected_channel_token_and_date_range(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "_youtube_access_token", lambda: "test-access-token")
+    monkeypatch.setattr(main, "_youtube_connection", lambda: {"channel_title":"SINTU Test Channel"})
+    captured = {}
+    def fake_request(url, data=None, headers=None, method=None):
+        captured["url"] = url
+        captured["headers"] = headers
+        return 200, {}, json.dumps({"columnHeaders":[{"name":"views"}],"rows":[["2026-01-01",12]],"totals":[["views",12]]}).encode()
+    monkeypatch.setattr(main, "_youtube_request", fake_request)
+    response = client.get("/api/admin/youtube/analytics?days=7")
+    assert response.status_code == 200
+    assert response.json()["channel"] == "SINTU Test Channel"
+    assert response.json()["rows"]
+    assert captured["headers"]["Authorization"] == "Bearer test-access-token"
+    assert "metrics=views" in captured["url"]

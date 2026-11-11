@@ -1364,6 +1364,35 @@ def youtube_admin_status():
     }
 
 
+
+@app.get("/api/admin/youtube/analytics")
+def youtube_channel_analytics(days: int = Query(default=28, ge=1, le=90), video_id: str = ""):
+    token = _youtube_access_token()
+    end_date = datetime.now(timezone.utc).date() - timedelta(days=2)
+    start_date = end_date - timedelta(days=days - 1)
+    params = {
+        "ids":"channel==MINE",
+        "startDate":start_date.isoformat(),
+        "endDate":end_date.isoformat(),
+        "metrics":"views,estimatedMinutesWatched,averageViewDuration,subscribersGained,subscribersLost,likes,comments",
+        "dimensions":"day",
+        "sort":"day"
+    }
+    if video_id:
+        if not re.fullmatch(r"[A-Za-z0-9_-]{6,32}", video_id):
+            raise HTTPException(status_code=400, detail="Invalid YouTube video ID.")
+        params["filters"] = "video==" + video_id
+    url = "https://youtubeanalytics.googleapis.com/v2/reports?" + urllib.parse.urlencode(params)
+    _, _, body = _youtube_request(url, headers={"Authorization":"Bearer " + token})
+    try:
+        report = json.loads(body.decode("utf-8"))
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail="YouTube Analytics returned invalid JSON.") from None
+    return {"channel":_youtube_connection()["channel_title"],"start_date":start_date.isoformat(),
+            "end_date":end_date.isoformat(),"headers":report.get("columnHeaders",[]),
+            "rows":report.get("rows",[]),"totals":report.get("totals",[]),
+            "note":"YouTube Analytics data may be delayed by the platform. Values are returned directly from the connected channel."}
+
 @app.post("/api/admin/youtube/oauth/start")
 def youtube_oauth_start(request: Request):
     config = _youtube_config()
