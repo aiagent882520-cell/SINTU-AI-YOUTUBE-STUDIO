@@ -163,3 +163,6 @@ Bulk Community Review lets admins select up to 100 saved comments from the visib
 
 
 Community assignment and follow-up: admins can assign selected saved comment reviews to an internal owner/team label and set an optional follow-up date. The operation is limited to 100 selected records, validates all IDs before updating any, and records old/new owner and follow-up date in the internal audit history. These are internal SINTU fields only; no YouTube moderation or reply action is triggered.
+
+
+Follow-up dashboard: the saved community review queue can be filtered by internal owner and follow-up date (overdue, today, upcoming or unscheduled). The workload summary reports total, overdue, due-today, upcoming, unscheduled and resolved counts, with counts grouped by internal assignee. This is a dashboard summary, not a push notification or scheduled reminder; no YouTube action is performed.
