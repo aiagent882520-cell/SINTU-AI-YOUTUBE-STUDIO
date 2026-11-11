@@ -1859,3 +1859,37 @@ def test_saved_production_project_generation_rejects_unknown_workflow(tmp_path, 
     project_id = created.json()["project"]["id"]
     response = client.post(f"/api/projects/{project_id}/generate", json={"workflow": "unknown"})
     assert response.status_code == 400
+
+
+def test_production_projects_are_scoped_to_signed_in_owner(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "_production_project_owner",
+                        lambda request: request.headers.get("x-test-owner", "local"))
+    created = client.post("/api/projects", json={
+        "name": "Private project", "brief": "Private brief.",
+        "format_id": "youtube-shorts", "language": "Hindi", "duration_seconds": 60
+    })
+    project_id = created.json()["project"]["id"]
+    assert client.get("/api/projects").json()["total"] == 1
+    other_headers = {"x-test-owner": "another-user"}
+    assert client.get("/api/projects", headers=other_headers).json()["total"] == 0
+    assert client.get(f"/api/projects/{project_id}", headers=other_headers).status_code == 404
+    assert client.delete(f"/api/projects/{project_id}", headers=other_headers).status_code == 404
+
+
+def test_production_project_schema_upgrades_existing_installation(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    with main.db() as conn:
+        conn.execute("DROP TABLE IF EXISTS production_projects")
+        conn.execute("""
+            CREATE TABLE production_projects (
+                id TEXT PRIMARY KEY, owner_username TEXT NOT NULL, name TEXT NOT NULL,
+                brief TEXT NOT NULL, format_id TEXT NOT NULL, language TEXT NOT NULL,
+                duration_seconds INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'Draft',
+                version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+            )
+        """)
+    assert client.get("/api/projects").status_code == 200
+    with main.db() as conn:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(production_projects)").fetchall()}
+    assert {"last_task_id", "last_task_status", "last_task_updated_at"} <= columns
