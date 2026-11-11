@@ -34,3 +34,15 @@ def test_owner_isolation_and_human_publish_gate(tmp_path, monkeypatch):
     assert studio_engine.get_run("other", run["id"]) is None
     with pytest.raises(ValueError):
         studio_engine.approve_run("owner", run["id"], True)
+
+
+def test_full_run_requires_every_checker_and_final_human_approval(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    run = studio_engine.create_run("tester", "project-1", "youtube-shorts")
+    while run["current_task_id"]:
+        task = next(item for item in run["tasks"] if item["id"] == run["current_task_id"])
+        run = studio_engine.submit_worker_output("tester", run["id"], task["id"], "Complete specialist deliverable.")
+        run = studio_engine.submit_checker_result("tester", run["id"], task["id"], "PASS", "Independent criteria verified.")
+    assert run["status"] == "awaiting_human_approval"
+    completed = studio_engine.approve_run("tester", run["id"], True, "Final review passed.")
+    assert completed["status"] == "completed"

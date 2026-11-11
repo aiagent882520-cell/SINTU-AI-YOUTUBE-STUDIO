@@ -10,6 +10,7 @@ from app import main, video_renderer
 
 def client_for_test(tmp_path, monkeypatch):
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "false")
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "test.sqlite3")
     main.init_db()
     return TestClient(main.app)
@@ -2009,3 +2010,46 @@ def test_production_projects_reject_whitespace_only_fields(tmp_path, monkeypatch
     valid = {**payload, "name": "Project", "brief": "Brief"}
     project_id = client.post("/api/projects", json=valid).json()["project"]["id"]
     assert client.put(f"/api/projects/{project_id}", json={**valid, "language": "   "}).status_code == 400
+
+
+def test_complete_studio_api_worker_checker_memory_assets_versions_and_queue(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    project_response = client.post("/api/projects", json={
+        "name": "Studio integration test", "brief": "Create a concise Hindi 3D character animation.",
+        "format_id": "3d-animation", "language": "Hindi", "duration_seconds": 60
+    })
+    assert project_response.status_code == 201
+    project_id = project_response.json()["project"]["id"]
+    run_response = client.post("/api/studio/runs", json={"project_id": project_id, "format_id": "3d-animation"})
+    assert run_response.status_code == 201
+    run = run_response.json()["run"]
+    assert run["tasks"][0]["status"] == "pending"
+    assert any(t["specialist"] == "Rigging Setup Agent" for t in run["tasks"])
+    assert any(t["checker"] == "Texturing Agent Checker" for t in run["tasks"])
+    first = run["tasks"][0]
+    submitted = client.post(f"/api/studio/runs/{run['id']}/tasks/{first['id']}/submit", json={"output":"Initial specialist output"})
+    assert submitted.status_code == 200
+    rejected = client.post(f"/api/studio/runs/{run['id']}/tasks/{first['id']}/check",
+                           json={"decision":"FAIL","evidence":"Missing required details","issues":"Add scene continuity and timing."})
+    assert rejected.status_code == 200
+    assert rejected.json()["run"]["tasks"][0]["status"] == "needs_revision"
+    revised = client.post(f"/api/studio/runs/{run['id']}/tasks/{first['id']}/revise", json={"output":"Revised specialist output"})
+    assert revised.status_code == 200
+    passed = client.post(f"/api/studio/runs/{run['id']}/tasks/{first['id']}/check",
+                          json={"decision":"PASS","evidence":"All role criteria checked."})
+    assert passed.status_code == 200
+    assert passed.json()["run"]["tasks"][1]["status"] == "pending"
+    memory = client.put("/api/studio/memory", json={"project_id":project_id,"key":"character_style","value":"Consistent blue jacket"})
+    assert memory.status_code == 200
+    assert client.get(f"/api/studio/memory/{project_id}").json()["memory"][0]["value"] == "Consistent blue jacket"
+    asset = client.post("/api/studio/assets", json={"project_id":project_id,"kind":"reference","name":"Character sheet","uri":"local://character-sheet","metadata":{"version":1}})
+    assert asset.status_code == 201
+    assert len(client.get("/api/studio/assets", params={"project_id":project_id}).json()["assets"]) == 1
+    version = client.post("/api/studio/versions", json={"project_id":project_id})
+    assert version.status_code == 201
+    assert version.json()["version"]["version"] == 1
+    queue = client.post("/api/studio/render-queue", json={"project_id":project_id,"payload":{"profile":"portrait_full_hd"}})
+    assert queue.status_code == 201
+    item_id = queue.json()["item"]["id"]
+    assert client.patch(f"/api/studio/render-queue/{item_id}", json={"status":"running"}).status_code == 200
+    assert client.patch(f"/api/studio/render-queue/{item_id}", json={"status":"completed","result":{"video_id":"a"*32}}).status_code == 200
