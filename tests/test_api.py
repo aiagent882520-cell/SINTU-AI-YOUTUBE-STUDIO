@@ -2162,7 +2162,7 @@ def test_background_run_can_be_started_and_resumed_after_pause(tmp_path, monkeyp
     assert started.json()["started"] is True
     assert started.json()["run"]["status"] == "in_progress"
     studio_engine = __import__("app.studio_engine", fromlist=["set_run_status"])
-    studio_engine.set_run_status("test-admin", run_id, "paused", "Test pause")
+    studio_engine.set_run_status("local", run_id, "paused", "Test pause")
     resumed = client.post(f"/api/studio/runs/{run_id}/execute-all")
     assert resumed.status_code == 200
     assert resumed.json()["run"]["status"] == "in_progress"
