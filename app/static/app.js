@@ -223,21 +223,39 @@ async function loadYouTubeComments(loadMore=false){
   Object.keys(youtubeCommentsCounts).forEach(key=>youtubeCommentsCounts[key]+=(Number(c[key])||0));
   youtubeCommentsItems=youtubeCommentsItems.concat(data.comments||[]);
   youtubeCommentsNextPageToken=data.next_page_token||"";
-  const totals=youtubeCommentsCounts;
-  const reviewTotals={pending:0,reviewed:0,follow_up:0,resolved:0};
-  youtubeCommentsItems.forEach(item=>{const status=item.review_status||"pending";if(Object.prototype.hasOwnProperty.call(reviewTotals,status))reviewTotals[status]++;});
-  $("youtubeCommentsTotals").innerHTML=[["Total",totals.total],["Possible spam",totals.possible_spam],["Positive",totals.positive],["Negative",totals.negative],["Questions",totals.questions],["Pending review",reviewTotals.pending],["Reviewed",reviewTotals.reviewed],["Follow-up",reviewTotals.follow_up],["Resolved",reviewTotals.resolved]]
-   .map(([label,value])=>'<div class="integration-card"><strong>'+analyticsEscape(value)+'</strong><span>'+analyticsEscape(label)+'</span></div>').join("");
+  renderYouTubeCommentTotals();
   renderYouTubeComments();
   if(more)more.hidden=!youtubeCommentsNextPageToken;
   notice.textContent=data.note+" Loaded "+youtubeCommentsItems.length+" comments.";
  }catch(e){notice.textContent=e.message;}
  finally{button.disabled=false;if(more)more.disabled=false;}
 }
-function renderYouTubeComments(){
+function renderYouTubeCommentTotals(){
+ const totals=youtubeCommentsCounts;
+ const reviewTotals={pending:0,reviewed:0,follow_up:0,resolved:0};
+ youtubeCommentsItems.forEach(item=>{const status=item.review_status||"pending";if(Object.prototype.hasOwnProperty.call(reviewTotals,status))reviewTotals[status]++;});
+ $("youtubeCommentsTotals").innerHTML=[["Total",totals.total],["Possible spam",totals.possible_spam],["Positive",totals.positive],["Negative",totals.negative],["Questions",totals.questions],["Pending review",reviewTotals.pending],["Reviewed",reviewTotals.reviewed],["Follow-up",reviewTotals.follow_up],["Resolved",reviewTotals.resolved]]
+  .map(([label,value])=>'<div class="integration-card"><strong>'+analyticsEscape(value)+'</strong><span>'+analyticsEscape(label)+'</span></div>').join("");
+}
+function getFilteredYouTubeComments(){
  const query=($("youtubeCommentsSearch")?.value||"").trim().toLowerCase();
  const category=$("youtubeCommentsFilter")?.value||"";
- const visible=youtubeCommentsItems.filter(item=>(!category||item.classification===category)&&(!query||(item.text+" "+item.author).toLowerCase().includes(query)));
+ const reviewStatus=$("youtubeCommentsReviewFilter")?.value||"";
+ const sort=$("youtubeCommentsSort")?.value||"newest";
+ const visible=youtubeCommentsItems.filter(item=>
+  (!category||item.classification===category)&&
+  (!reviewStatus||(item.review_status||"pending")===reviewStatus)&&
+  (!query||(item.text+" "+item.author+" "+(item.review_notes||"")).toLowerCase().includes(query))
+ );
+ visible.sort((a,b)=>{
+  if(sort==="likes")return Number(b.likes||0)-Number(a.likes||0);
+  if(sort==="spam")return Number(b.classification==="possible_spam")-Number(a.classification==="possible_spam")||Date.parse(b.published_at||"")-Date.parse(a.published_at||"");
+  return Date.parse(b.published_at||"")-Date.parse(a.published_at||"");
+ });
+ return visible;
+}
+function renderYouTubeComments(){
+ const visible=getFilteredYouTubeComments();
  $("youtubeCommentsList").innerHTML=visible.map((item,index)=>{
   const originalIndex=youtubeCommentsItems.indexOf(item);
   const reviewStatus=item.review_status||"pending";
@@ -246,9 +264,7 @@ function renderYouTubeComments(){
  }).join("")||'<p class="muted">Is filter mein comments nahi mile.</p>';
 }
 function exportYouTubeCommentsCsv(){
- const query=($("youtubeCommentsSearch")?.value||"").trim().toLowerCase();
- const category=$("youtubeCommentsFilter")?.value||"";
- const rows=youtubeCommentsItems.filter(item=>(!category||item.classification===category)&&(!query||(item.text+" "+item.author).toLowerCase().includes(query)));
+ const rows=getFilteredYouTubeComments();
  if(!rows.length){const n=$("youtubeCommentsNotice");if(n)n.textContent="Export karne ke liye comments nahi hain.";return;}
  const columns=["author","classification","review_status","review_notes","text","published_at","likes","video_id","suggested_reply"];
  const quote=value=>'"'+String(value??"").replace(/"/g,'""')+'"';
@@ -259,10 +275,12 @@ function exportYouTubeCommentsCsv(){
 $("youtubeCommentsExport")?.addEventListener("click",exportYouTubeCommentsCsv);
 $("youtubeCommentsSearch")?.addEventListener("input",renderYouTubeComments);
 $("youtubeCommentsFilter")?.addEventListener("change",renderYouTubeComments);
+$("youtubeCommentsReviewFilter")?.addEventListener("change",renderYouTubeComments);
+$("youtubeCommentsSort")?.addEventListener("change",renderYouTubeComments);
 $("youtubeCommentsList")?.addEventListener("change",event=>{
  const select=event.target.closest(".youtube-review-status");if(!select)return;
  const row=select.closest(".admin-row");const item=youtubeCommentsItems[Number(row?.dataset.commentIndex)];
- if(item)item.review_status=select.value;
+ if(item){item.review_status=select.value;renderYouTubeCommentTotals();}
 });
 $("youtubeCommentsList")?.addEventListener("click",async event=>{
  const row=event.target.closest(".admin-row");if(!row)return;
@@ -276,6 +294,7 @@ $("youtubeCommentsList")?.addEventListener("click",async event=>{
     notes:row.querySelector(".youtube-review-notes").value
    })});
    item.review_status=result.review_status;item.review_notes=result.notes;
+   renderYouTubeCommentTotals();
    row.querySelector(".youtube-review-state").textContent="Saved: "+result.review_status;
   }catch(e){row.querySelector(".youtube-review-state").textContent=e.message;}
   finally{reviewButton.disabled=false;}
