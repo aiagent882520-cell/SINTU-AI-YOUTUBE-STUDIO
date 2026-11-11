@@ -1546,6 +1546,41 @@ def test_youtube_comment_review_assignment_missing_id_is_atomic(tmp_path, monkey
     assert saved["assigned_to"] == ""
 
 
+def test_youtube_comment_follow_up_summary_and_owner_workload(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    for cid,owner,due,status in [
+        ("due-overdue","Team A","2026-11-10","follow_up"),
+        ("due-today","Team A","2026-11-11","pending"),
+        ("due-future","Team B","2026-11-15","resolved"),
+        ("due-none","","","pending"),
+    ]:
+        payload={"comment_id":cid,"video_id":"abcdefghijk","review_status":status,
+                 "assigned_to":owner,"follow_up_at":due}
+        assert client.post("/api/admin/youtube/comments/review",json=payload).status_code==200
+    summary=client.get("/api/admin/youtube/comments/reviews/follow-ups/summary?as_of=2026-11-11").json()
+    assert summary["totals"]["overdue"]==1
+    assert summary["totals"]["due_today"]==1
+    assert summary["totals"]["upcoming"]==1
+    assert summary["totals"]["unscheduled"]==1
+    assert summary["totals"]["resolved"]==1
+    team_a=next(row for row in summary["owners"] if row["owner"]=="Team A")
+    assert team_a["total"]==2 and team_a["overdue"]==1
+
+
+def test_youtube_comment_follow_up_queue_filters_and_invalid_date(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    for cid,due in [("filter-overdue","2026-11-10"),("filter-today","2026-11-11"),("filter-none","")]:
+        payload={"comment_id":cid,"video_id":"abcdefghijk","review_status":"pending",
+                 "assigned_to":"Community Team","follow_up_at":due}
+        assert client.post("/api/admin/youtube/comments/review",json=payload).status_code==200
+    overdue=client.get("/api/admin/youtube/comments/reviews?follow_up_filter=overdue&as_of=2026-11-11")
+    assert overdue.json()["total"]==1
+    owner=client.get("/api/admin/youtube/comments/reviews?assigned_to=Community%20Team")
+    assert owner.json()["total"]==3
+    invalid=client.get("/api/admin/youtube/comments/reviews/follow-ups/summary?as_of=11-11-2026")
+    assert invalid.status_code==422
+
+
 def test_youtube_comment_review_rejects_invalid_status(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     response = client.post("/api/admin/youtube/comments/review", json={
