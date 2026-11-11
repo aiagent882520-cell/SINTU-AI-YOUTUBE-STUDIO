@@ -199,10 +199,31 @@ $("youtubeReachRefresh")?.addEventListener("click",loadYouTubeReach);
 $("youtubeReachSetup")?.addEventListener("click",async()=>{
  const button=$("youtubeReachSetup");button.disabled=true;
  try{const result=await request("/api/admin/youtube/reach/setup",{method:"POST"});$("youtubeReachNotice").textContent=result.note;await loadYouTubeReach();
+loadYouTubeComments();
 if($("youtubeRetentionPanel")){$("youtubeRetentionPanel").hidden=false;}}
  catch(e){$("youtubeReachNotice").textContent=e.message;}
  finally{button.disabled=false;}
 });
+async function loadYouTubeComments(){
+ const panel=$("youtubeCommentsPanel");if(!panel)return;
+ const button=$("youtubeCommentsRefresh"),notice=$("youtubeCommentsNotice");
+ button.disabled=true;notice.textContent="Recent YouTube comments analyze ho rahe hain…";
+ try{
+  const session=await request("/api/auth/session");
+  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  panel.hidden=false;
+  const data=await request("/api/admin/youtube/comments?limit=50");
+  const c=data.counts||{};
+  $("youtubeCommentsTotals").innerHTML=[["Total",c.total||0],["Possible spam",c.possible_spam||0],["Positive",c.positive||0],["Negative",c.negative||0],["Questions",c.questions||0]]
+   .map(([label,value])=>'<div class="integration-card"><strong>'+analyticsEscape(value)+'</strong><span>'+analyticsEscape(label)+'</span></div>').join("");
+  $("youtubeCommentsList").innerHTML=(data.comments||[]).map(item=>{
+   return '<div class="admin-row"><strong>'+analyticsEscape(item.author)+' · '+analyticsEscape(item.classification.replace("_"," "))+'</strong><span>'+analyticsEscape(item.text)+'</span><span>'+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+(item.video_id?' · <a href="https://www.youtube.com/watch?v='+encodeURIComponent(item.video_id)+'" target="_blank" rel="noopener noreferrer">Open video</a>':'')+'</span><p class="muted">Suggested reply (draft only): '+analyticsEscape(item.suggested_reply)+'</p></div>';
+  }).join("")||'<p class="muted">Recent comments nahi mile.</p>';
+  notice.textContent=data.note;
+ }catch(e){notice.textContent=e.message;}
+ finally{button.disabled=false;}
+}
+$("youtubeCommentsRefresh")?.addEventListener("click",loadYouTubeComments);
 async function loadYouTubeRetention(){
  const panel=$("youtubeRetentionPanel");if(!panel)return;
  const notice=$("youtubeRetentionNotice"),button=$("youtubeRetentionLoad");
