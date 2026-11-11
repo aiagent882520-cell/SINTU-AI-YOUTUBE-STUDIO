@@ -238,6 +238,12 @@
       <h3>Top videos by impressions</h3><div id="youtubeReachVideos" class="calendar-list"></div>
       <p id="youtubeReachNotice" class="muted" role="status" aria-live="polite">Enable daily reports to start collecting official thumbnail impressions and CTR.</p>
     </section>
+    <section class="panel" id="youtubeCommentsPanel" hidden>
+      <div class="panel-head"><div><h2>YouTube Comments Analyzer</h2><p>Recent comments · spam flags · reply drafts (manual review only)</p></div><button id="youtubeCommentsRefresh" class="secondary" type="button">Analyze comments</button></div>
+      <div id="youtubeCommentsTotals" class="integration-cards" aria-live="polite"></div>
+      <div id="youtubeCommentsList" class="calendar-list"></div>
+      <p id="youtubeCommentsNotice" class="muted" role="status" aria-live="polite">Connect YouTube to review recent channel comments.</p>
+    </section>
     <section class="panel" id="youtubeRetentionPanel" hidden>
       <div class="panel-head"><div><h2>Video Audience Retention</h2><p>Official retention curve · one video at a time</p></div><button id="youtubeRetentionLoad" class="secondary" type="button">Load retention</button></div>
       <label for="youtubeRetentionVideoId">YouTube video ID</label><input id="youtubeRetentionVideoId" maxlength="20" placeholder="Example: dQw4w9WgXcQ">
