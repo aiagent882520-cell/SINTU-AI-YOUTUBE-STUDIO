@@ -257,7 +257,7 @@ async function loadYouTubeSavedReviews(loadMore=false){
   list.innerHTML=youtubeSavedReviewsItems.map((item,index)=>{
    const status=item.review_status||"pending";
    const option=value=>'<option value="'+value+'"'+(status===value?" selected":"")+'>'+({pending:"Pending",reviewed:"Reviewed",follow_up:"Follow-up",resolved:"Resolved"}[value])+'</option>';
-   return '<div class="admin-row" data-saved-review-index="'+index+'"><label><input type="checkbox" class="youtube-saved-review-select" data-comment-id="'+analyticsEscape(item.comment_id)+'"'+(youtubeSavedReviewSelectedIds.has(item.comment_id)?" checked":"")+'> Select for bulk review</label><strong>'+analyticsEscape(item.author||"Unknown author")+' · '+analyticsEscape(item.classification||"other")+'</strong><span>'+analyticsEscape(item.text||"Comment text not stored")+'</span><span>'+analyticsEscape(item.video_id)+' · '+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+'</span><label>Review status<select class="youtube-saved-review-status">'+["pending","reviewed","follow_up","resolved"].map(option).join("")+'</select></label><label>Internal review note<textarea class="youtube-saved-review-notes" rows="2" maxlength="1000">'+analyticsEscape(item.notes||"")+'</textarea></label><div class="button-row"><button class="secondary youtube-saved-review-save" type="button">Save changes</button><button class="secondary youtube-saved-review-history" type="button">View history</button></div><div class="muted youtube-saved-review-history-list" aria-live="polite"></div><span class="muted">Last reviewed: '+analyticsEscape(item.updated_at||"")+'</span></div>';
+   return '<div class="admin-row" data-saved-review-index="'+index+'"><label><input type="checkbox" class="youtube-saved-review-select" data-comment-id="'+analyticsEscape(item.comment_id)+'"'+(youtubeSavedReviewSelectedIds.has(item.comment_id)?" checked":"")+'> Select for bulk review</label><strong>'+analyticsEscape(item.author||"Unknown author")+' · '+analyticsEscape(item.classification||"other")+'</strong><span>'+analyticsEscape(item.text||"Comment text not stored")+'</span><span>'+analyticsEscape(item.video_id)+' · '+Number(item.likes||0).toLocaleString()+' likes · '+analyticsEscape(item.published_at||"")+'</span><label>Assigned to<input class="youtube-saved-review-assignee" maxlength="120" value="'+analyticsEscape(item.assigned_to||"")+'" placeholder="Owner / team member"></label><label>Follow-up date<input class="youtube-saved-review-followup" type="date" value="'+analyticsEscape((item.follow_up_at||"").slice(0,10))+'"></label><label>Review status<select class="youtube-saved-review-status">'+["pending","reviewed","follow_up","resolved"].map(option).join("")+'</select></label><label>Internal review note<textarea class="youtube-saved-review-notes" rows="2" maxlength="1000">'+analyticsEscape(item.notes||"")+'</textarea></label><div class="button-row"><button class="secondary youtube-saved-review-save" type="button">Save changes</button><button class="secondary youtube-saved-review-history" type="button">View history</button></div><div class="muted youtube-saved-review-history-list" aria-live="polite"></div><span class="muted">Last reviewed: '+analyticsEscape(item.updated_at||"")+'</span></div>';
   }).join("")||'<p class="muted">Saved review queue empty hai.</p>';
   if(more)more.hidden=youtubeSavedReviewsOffset>=youtubeSavedReviewsTotal;
   updateYouTubeSavedReviewBulkControls();
@@ -362,6 +362,7 @@ function updateYouTubeSavedReviewBulkControls(){
  if(count)count.textContent=youtubeSavedReviewSelectedIds.size+" selected";
  const apply=$("youtubeSavedReviewsBulkApply");
  if(apply)apply.disabled=youtubeSavedReviewSelectedIds.size===0;
+ const assign=$("youtubeSavedReviewsBulkAssign");if(assign)assign.disabled=youtubeSavedReviewSelectedIds.size===0;
 }
 $("youtubeSavedReviewsList")?.addEventListener("change",event=>{
  const checkbox=event.target.closest(".youtube-saved-review-select");
@@ -383,6 +384,20 @@ $("youtubeSavedReviewsSelectVisible")?.addEventListener("change",event=>{
  }
  document.querySelectorAll(".youtube-saved-review-select").forEach(box=>{box.checked=youtubeSavedReviewSelectedIds.has(box.dataset.commentId);});
  updateYouTubeSavedReviewBulkControls();
+});
+$("youtubeSavedReviewsBulkAssign")?.addEventListener("click",async()=>{
+ const ids=Array.from(youtubeSavedReviewSelectedIds);if(!ids.length)return;
+ const owner=$("youtubeSavedReviewsBulkAssignee").value.trim();
+ const due=$("youtubeSavedReviewsBulkFollowUp").value;
+ if(!owner&&!due){$("youtubeSavedReviewsNotice").textContent="Owner ya follow-up date mein se kam se kam ek bharein.";return;}
+ if(!window.confirm(ids.length+" saved comments ke liye assignment / follow-up save karein? Sirf SINTU records badlenge."))return;
+ const button=$("youtubeSavedReviewsBulkAssign"),notice=$("youtubeSavedReviewsNotice");button.disabled=true;
+ try{
+  const result=await request("/api/admin/youtube/comments/reviews/assign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({comment_ids:ids,assigned_to:owner,follow_up_at:due})});
+  youtubeSavedReviewSelectedIds.clear();await loadYouTubeSavedReviews(false);
+  notice.textContent=result.updated+" comments assigned; follow-up details saved internally.";
+ }catch(e){notice.textContent=e.message;}
+ finally{button.disabled=youtubeSavedReviewSelectedIds.size===0;}
 });
 $("youtubeSavedReviewsBulkApply")?.addEventListener("click",async()=>{
  const ids=Array.from(youtubeSavedReviewSelectedIds);
@@ -410,7 +425,7 @@ $("youtubeSavedReviewsList")?.addEventListener("click",async event=>{
   historyButton.disabled=true;historyBox.textContent="History load ho rahi hai…";
   try{
    const data=await request("/api/admin/youtube/comments/reviews/"+encodeURIComponent(item.comment_id)+"/history");
-   historyBox.innerHTML=(data.items||[]).map(entry=>'<div>'+analyticsEscape(entry.event_type==="created"?"Created":"Updated")+' · '+analyticsEscape(entry.previous_status||"—")+' → '+analyticsEscape(entry.new_status)+' · Note changed: '+(entry.note_changed?"Yes":"No")+' · '+analyticsEscape(entry.changed_at)+'</div>').join("")||"No history available.";
+   historyBox.innerHTML=(data.items||[]).map(entry=>'<div>'+analyticsEscape(({created:"Created",bulk_updated:"Bulk status update",assignment_updated:"Assignment update"}[entry.event_type]||"Updated"))+' · '+analyticsEscape(entry.previous_status||"—")+' → '+analyticsEscape(entry.new_status)+' · Owner: '+analyticsEscape(entry.previous_assigned_to||"—")+' → '+analyticsEscape(entry.new_assigned_to||"—")+' · Follow-up: '+analyticsEscape(entry.new_follow_up_at||"—")+' · Note changed: '+(entry.note_changed?"Yes":"No")+' · '+analyticsEscape(entry.changed_at)+'</div>').join("")||"No history available.";
   }catch(e){historyBox.textContent=e.message;}
   finally{historyButton.disabled=false;}
   return;
@@ -422,10 +437,10 @@ $("youtubeSavedReviewsList")?.addEventListener("click",async event=>{
  try{
   const result=await request("/api/admin/youtube/comments/review",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
    comment_id:item.comment_id,video_id:item.video_id,review_status:row.querySelector(".youtube-saved-review-status").value,
-   notes:row.querySelector(".youtube-saved-review-notes").value,author:item.author,text:item.text,
+   notes:row.querySelector(".youtube-saved-review-notes").value,assigned_to:row.querySelector(".youtube-saved-review-assignee").value,follow_up_at:row.querySelector(".youtube-saved-review-followup").value,author:item.author,text:item.text,
    published_at:item.published_at,likes:item.likes,classification:item.classification
   })});
-  item.review_status=result.review_status;item.notes=result.notes;item.updated_at=result.updated_at;
+  item.review_status=result.review_status;item.notes=result.notes;item.assigned_to=result.assigned_to;item.follow_up_at=result.follow_up_at;item.updated_at=result.updated_at;
   await loadYouTubeSavedReviews(false);
   notice.textContent="Saved comment review updated in SINTU. YouTube par koi action nahi hua.";
  }catch(e){notice.textContent=e.message;}
