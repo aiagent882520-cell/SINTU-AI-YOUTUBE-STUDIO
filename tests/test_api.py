@@ -1456,6 +1456,34 @@ def test_youtube_comment_reviews_export_respects_filters_and_csv_encoding(tmp_pa
     assert b"csv-review-1" not in response.content
 
 
+def test_youtube_comment_review_history_records_status_and_note_changes(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    payload = {"comment_id":"history-comment-1","video_id":"abcdefghijk","review_status":"pending",
+               "notes":"First note","author":"Asha","text":"Hello","classification":"positive"}
+    first = client.post("/api/admin/youtube/comments/review", json=payload)
+    assert first.status_code == 200
+    updated = {**payload,"review_status":"follow_up","notes":"Updated note"}
+    second = client.post("/api/admin/youtube/comments/review", json=updated)
+    assert second.status_code == 200
+    history = client.get("/api/admin/youtube/comments/reviews/history-comment-1/history")
+    assert history.status_code == 200
+    assert len(history.json()["items"]) == 2
+    latest = history.json()["items"][0]
+    assert latest["event_type"] == "updated"
+    assert latest["previous_status"] == "pending"
+    assert latest["new_status"] == "follow_up"
+    assert latest["note_changed"] == 1
+    created = history.json()["items"][1]
+    assert created["event_type"] == "created"
+    assert created["previous_status"] == ""
+
+
+def test_youtube_comment_review_history_returns_404_for_unknown_comment(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.get("/api/admin/youtube/comments/not-saved/history")
+    assert response.status_code == 404
+
+
 def test_youtube_comment_review_rejects_invalid_status(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     response = client.post("/api/admin/youtube/comments/review", json={
