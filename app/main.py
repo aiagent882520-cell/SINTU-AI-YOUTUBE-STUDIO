@@ -253,6 +253,11 @@ def init_db():
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_publishing_history_created ON publishing_history(id DESC)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_publishing_history_platform_status ON publishing_history(platform,status)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS youtube_comment_reviews (
+            comment_id TEXT PRIMARY KEY, video_id TEXT NOT NULL, review_status TEXT NOT NULL,
+            notes TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_youtube_comment_reviews_status ON youtube_comment_reviews(review_status,updated_at DESC)")
     _ensure_bootstrap_admin()
 
 init_db()
@@ -260,6 +265,13 @@ init_db()
 class TaskInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=10000)
     workflow: str = Field(default="content", max_length=80)
+
+class YouTubeCommentReviewInput(BaseModel):
+    comment_id: str = Field(min_length=1, max_length=200)
+    video_id: str = Field(min_length=11, max_length=20, pattern=r"^[A-Za-z0-9_-]+$")
+    review_status: str = Field(pattern=r"^(pending|reviewed|follow_up|resolved)$")
+    notes: str = Field(default="", max_length=1000)
+
 
 class CalendarItemInput(BaseModel):
     title: str = Field(min_length=1, max_length=160)
@@ -1431,12 +1443,43 @@ def youtube_channel_comments(limit: int = Query(default=50, ge=1, le=100), page_
             "suggested_reply": suggested_reply,
         })
     counts["total"] = len(comments)
+    if comments:
+        ids = [item["comment_id"] for item in comments if item.get("comment_id")]
+        if ids:
+            placeholders = ",".join("?" for _ in ids)
+            with db() as conn:
+                saved = {row["comment_id"]: row for row in conn.execute(
+                    f"SELECT comment_id,review_status,notes,updated_at FROM youtube_comment_reviews WHERE comment_id IN ({placeholders})",
+                    ids,
+                ).fetchall()}
+            for item in comments:
+                review = saved.get(item.get("comment_id"))
+                item["review_status"] = review["review_status"] if review else "pending"
+                item["review_notes"] = review["notes"] if review else ""
+                item["review_updated_at"] = review["updated_at"] if review else None
     return {
         "source": "YouTube Data API v3", "channel": connection.get("channel_title"),
         "comments": comments, "counts": counts,
         "next_page_token": payload.get("nextPageToken", ""),
         "note": "Spam aur sentiment labels simple keyword heuristics hain, AI verdict nahi. Suggestions draft-only hain. Koi comment delete, hide, approve ya reply nahi kiya gaya.",
     }
+
+
+@app.post("/api/admin/youtube/comments/review")
+def save_youtube_comment_review(item: YouTubeCommentReviewInput):
+    """Save an internal review decision only; does not modify anything on YouTube."""
+    now = datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        conn.execute(
+            """INSERT INTO youtube_comment_reviews(comment_id,video_id,review_status,notes,updated_at)
+               VALUES(?,?,?,?,?)
+               ON CONFLICT(comment_id) DO UPDATE SET video_id=excluded.video_id,
+               review_status=excluded.review_status,notes=excluded.notes,updated_at=excluded.updated_at""",
+            (item.comment_id, item.video_id, item.review_status, item.notes.strip(), now),
+        )
+    return {"saved": True, "comment_id": item.comment_id, "review_status": item.review_status,
+            "notes": item.notes.strip(), "updated_at": now,
+            "note": "Review SINTU mein save hua hai. YouTube comment par koi action nahi hua."}
 
 
 @app.get("/api/admin/youtube/retention")
