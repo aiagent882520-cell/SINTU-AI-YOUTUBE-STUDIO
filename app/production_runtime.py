@@ -135,6 +135,17 @@ def _checker_payload(text: str) -> dict:
             "revision_instructions": ["Return the required JSON schema exactly."]}
 
 
+
+def _review_payload(text: str) -> dict:
+    """Parse a final reviewer verdict; malformed or ambiguous output fails closed."""
+    verdict = _checker_payload(text)
+    if verdict["decision"] == "FAIL" and "Checker did not return valid PASS/FAIL JSON." in verdict["issues"]:
+        return {"decision": "FAIL", "evidence": [],
+                "issues": ["Reviewer did not return valid PASS/FAIL JSON."],
+                "revision_instructions": ["Return JSON with decision, evidence and issues."]}
+    return verdict
+
+
 def execute_run(run_id: str) -> None:
     run = get_run(run_id)
     if not run:
@@ -184,20 +195,34 @@ def execute_run(run_id: str) -> None:
                 _set_run(run_id, "paused", current_role=checker,
                          error="Independent checker failed. Run paused; revise this specialist output and re-check.")
                 return
+
         review_results = {}
         for reviewer in REVIEWERS:
             _set_run(run_id, "reviewing", current_role=reviewer)
             review_prompt = (
                 "You are an independent final video production reviewer. Review the assembled production package "
-                "for your discipline. Return concise PASS or FAIL, evidence and issues. Do not claim a rendered video.\n"
-                f"Reviewer: {reviewer}\nTopic: {run['topic']}\n"
+                "for your discipline. Return ONLY JSON with decision (PASS or FAIL), evidence (array), "
+                "issues (array), and revision_instructions (array). PASS only when evidence supports every "
+                "critical acceptance criterion. Do not claim a rendered video.\\n"
+                f"Reviewer: {reviewer}\\nTopic: {run['topic']}\\n"
                 f"Package summary: {json.dumps({k:v[:3500] for k,v in deliverables.items()}, ensure_ascii=False)}"
             )
             review = generate_text(review_prompt, "content", "local")
-            review_results[reviewer] = review["output"]
+            verdict = _review_payload(review["output"])
+            review_results[reviewer] = {
+                "decision": verdict["decision"],
+                "evidence": verdict["evidence"],
+                "issues": verdict["issues"],
+                "revision_instructions": verdict["revision_instructions"],
+                "raw_output": review["output"],
+            }
             sequence += 1
-            _save_step(run_id, sequence, reviewer, "reviewer", "completed",
-                       review_prompt, review["output"])
+            _save_step(run_id, sequence, reviewer, "reviewer", verdict["decision"].lower(),
+                       review_prompt, review["output"], verdict["evidence"], verdict["issues"])
+            if verdict["decision"] != "PASS":
+                _set_run(run_id, "paused", current_role=reviewer,
+                         error=f"Final reviewer failed: {reviewer}. Production run paused for correction.")
+                return
         result = {
             "format": selected,
             "deliverables": deliverables,
