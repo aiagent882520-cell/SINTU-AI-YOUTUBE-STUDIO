@@ -341,6 +341,7 @@ class CalendarItemInput(BaseModel):
 class RenderInput(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     scenes: list[str] = Field(min_length=1, max_length=25)
+    format_id: str | None = Field(default=None, max_length=80)
     seconds_per_scene: int = Field(default=4, ge=2, le=12)
     image_ids: list[str] = Field(default_factory=list, max_length=25)
     video_ids: list[str] = Field(default_factory=list, max_length=25)
@@ -351,7 +352,7 @@ class RenderInput(BaseModel):
     music_volume: float = Field(default=0.18, ge=0, le=1)
     transition: str = Field(default="fade", max_length=10)
     motion: str = Field(default="none", max_length=20)
-    resolution: str = Field(default="720x1280", max_length=12)
+    resolution: str | None = Field(default=None, max_length=12)
     fps: int = Field(default=30, ge=24, le=60)
     quality: str = Field(default="high", max_length=12)
 
@@ -2904,6 +2905,15 @@ def upload_music(payload: MusicUploadInput, media_token: str = Header(default=""
 def render_video(payload: RenderInput):
     title = payload.title.strip()
     scenes = [scene.strip() for scene in payload.scenes]
+    resolution = resolution or "720x1280"
+    if payload.format_id:
+        try:
+            render_profile = format_render_profile(payload.format_id)
+        except KeyError:
+            raise HTTPException(status_code=400, detail="Unknown video format.") from None
+        if not render_profile["generic_export_available"]:
+            raise HTTPException(status_code=501, detail=render_profile["limitations"][0])
+        resolution = resolution or render_profile["default_resolution"]
     if not title or any(not scene or len(scene) > 500 for scene in scenes):
         raise HTTPException(status_code=400, detail="Title and all scenes must contain valid text (max 500 characters per scene).")
     if payload.image_ids and len(payload.image_ids) != len(scenes):
@@ -2939,7 +2949,7 @@ def render_video(payload: RenderInput):
         raise HTTPException(status_code=400, detail="Transition cut ya fade hona chahiye.")
     if payload.motion not in {"none", "slow-zoom-in", "slow-zoom-out"}:
         raise HTTPException(status_code=400, detail="Unsupported motion preset.")
-    if payload.resolution not in {"720x1280", "1080x1920", "1080x1080", "1280x720", "1920x1080"}:
+    if resolution not in {"720x1280", "1080x1920", "1080x1080", "1280x720", "1920x1080"}:
         raise HTTPException(status_code=400, detail="Unsupported output resolution profile.")
     if payload.fps not in {24, 30, 60}:
         raise HTTPException(status_code=400, detail="FPS 24, 30 ya 60 hona chahiye.")
@@ -3020,19 +3030,19 @@ def render_video(payload: RenderInput):
                                          audio_path=audio_path, music_path=music_path,
                                          music_volume=payload.music_volume,
                                          subtitles=payload.subtitles, transition=payload.transition, transitions=scene_transitions,
-                                         resolution=payload.resolution, fps=payload.fps, quality=payload.quality)
+                                         resolution=resolution, fps=payload.fps, quality=payload.quality)
         if video_paths:
             if payload.motion != "none":
                 raise HTTPException(status_code=400, detail="AI clip assembly mode mein source clips ka original motion use hota hai; extra zoom effects abhi supported nahi hain.")
             return render_ai_clips(video_paths, audio_path=audio_path, music_path=music_path,
                                    music_volume=payload.music_volume, subtitles=payload.subtitles,
-                                   transition=payload.transition, resolution=payload.resolution,
+                                   transition=payload.transition, resolution=resolution,
                                    fps=payload.fps, quality=payload.quality)
         return render_storyboard(title, scenes, payload.seconds_per_scene,
                                  image_paths=image_paths, audio_path=audio_path,
                                  subtitles=payload.subtitles, music_path=music_path,
                                  music_volume=payload.music_volume, transition=payload.transition, motion=payload.motion,
-                                 resolution=payload.resolution, fps=payload.fps, quality=payload.quality)
+                                 resolution=resolution, fps=payload.fps, quality=payload.quality)
     except RendererUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except RenderFailed as exc:
