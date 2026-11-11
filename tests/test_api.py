@@ -2102,3 +2102,26 @@ def test_piper_voice_is_free_and_does_not_need_media_token(tmp_path, monkeypatch
     assert result["local"] is True
     assert result["format"] == "WAV"
     assert (output_dir / result["filename"]).is_file()
+
+
+def test_blender_3d_render_api_adds_result_to_project_assets(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    project_response = client.post("/api/projects", json={
+        "name":"3D scene test","brief":"Make a simple animated 3D scene",
+        "format_id":"3d-animation","language":"Hindi","duration_seconds":8
+    })
+    project_id = project_response.json()["project"]["id"]
+    monkeypatch.setattr(main, "render_scene", lambda title, objects, duration_seconds, resolution, fps: {
+        "render_id":"e"*32,"video_id":"e"*32,"url":"/api/blender-renders/"+"e"*32,
+        "format":"MP4 / H.264","size_bytes":1000,"duration_seconds":duration_seconds,
+        "resolution":resolution,"fps":fps,"provider":"Blender (local, free)","local":True
+    })
+    response = client.post("/api/studio/blender/render", json={
+        "project_id":project_id,"title":"Hero turntable",
+        "objects":[{"shape":"sphere","name":"Hero","color":[0.2,0.5,0.8,1]}],
+        "duration_seconds":5,"resolution":"1280x720","fps":24
+    })
+    assert response.status_code == 201
+    assert response.json()["render"]["local"] is True
+    assets = client.get("/api/studio/assets", params={"project_id":project_id}).json()["assets"]
+    assert assets[0]["kind"] == "render"
