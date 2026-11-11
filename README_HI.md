@@ -152,3 +152,5 @@ Persistent Community Review Queue: saved comment reviews now keep a snapshot of 
 Saved Community Review Queue controls now support searching across author, saved comment text, internal notes and video ID; category filtering for spam/sentiment/question labels; and sorting by most recently reviewed, most liked, or possible-spam first. Filters and search work with server-side pagination.
 
 Saved Community Review Queue CSV export downloads every matching saved review, not only the currently visible page. Export respects the selected review status, category, search text and sorting order.
+
+Admins can update the status and internal note of previously saved queue entries directly from the Saved Community Review Queue. Saving updates only SINTU's internal record and never deletes, hides, approves or replies to a YouTube comment.
