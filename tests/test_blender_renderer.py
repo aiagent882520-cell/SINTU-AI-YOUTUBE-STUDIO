@@ -25,7 +25,7 @@ def test_blender_scene_render_uses_local_executable_and_validated_json(tmp_path,
     assert result["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
     assert "--background" in captured["commands"][0]
     assert "overlay=x=W-w-28:y=H-h-28" in " ".join(captured["commands"][1])
-    assert Path(captured["commands"][1][-1]).is_file()
+    assert Path(captured["commands"][0][-1]).is_file()
 
 
 def test_blender_embedded_script_has_valid_python_syntax():
