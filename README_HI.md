@@ -145,3 +145,6 @@ Admins can assign an internal review status (Pending, Reviewed, Follow-up, Resol
 
 
 Community review queue controls: admins can filter loaded comments by category and internal review status, search comment text/author/private notes, and sort by newest, likes, or possible-spam heuristic. CSV export uses the same active filters and sort order. These are internal triage controls; YouTube-side moderation remains manual and separate.
+
+
+Persistent Community Review Queue: saved comment reviews now keep a snapshot of author, comment text, video ID, publication time, likes, heuristic category, internal status, private note and last-updated timestamp. Admins can retrieve the queue independently of the currently loaded YouTube comment page, filter by status and page through saved records. This snapshot is internal to SINTU and does not perform YouTube moderation actions.
