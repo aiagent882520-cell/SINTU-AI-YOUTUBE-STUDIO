@@ -247,3 +247,32 @@ def test_comfyui_accepts_installed_checkpoint_from_object_info():
         }
     }
     assert comfyui_client._missing_model_files(workflow, object_info) == []
+
+
+def test_comfyui_reports_missing_nodes_and_model_files_together(tmp_path, monkeypatch):
+    workflow = tmp_path / "video.json"
+    data = api_workflow()
+    data["1"]["inputs"]["ckpt_name"] = "missing-model.safetensors"
+    data["4"] = {"class_type": "VHS_VideoCombine", "inputs": {"images": ["3", 0]}}
+    workflow.write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setenv("COMFYUI_BASE_URL", "http://127.0.0.1:8188")
+    monkeypatch.setenv("COMFYUI_VIDEO_WORKFLOW_PATH", str(workflow))
+
+    def request_with_partial_node_info(url, data=None, timeout=30):
+        if url.endswith("/system_stats"):
+            return b'{"system":{}}'
+        return json.dumps({
+            "CheckpointLoaderSimple": {
+                "input": {"required": {"ckpt_name": ["COMBO", {"options": ["installed.safetensors"]}]}}
+            },
+            "CLIPTextEncode": {}, "SaveImage": {},
+        }).encode()
+
+    monkeypatch.setattr(comfyui_client, "_request", request_with_partial_node_info)
+    status = comfyui_client.video_workflow_status()
+    assert status["missing_nodes"] == ["VHS_VideoCombine"]
+    assert status["missing_models"] == [{
+        "node_id": "1", "node_type": "CheckpointLoaderSimple",
+        "input": "ckpt_name", "configured": "missing-model.safetensors"
+    }]
+    assert status["available"] is False
