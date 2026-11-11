@@ -65,15 +65,28 @@ def _wrap(draw, text, font, max_width):
 
 
 def _make_watermark_image(width: int = 320, height: int = 76) -> Image.Image:
-    """Create the mandatory SINTU brand mark used on every exported video."""
+    """Create a compact SINTU mark: blue-violet S, red play tile and wordmark."""
     logo = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(logo)
-    draw.rounded_rectangle((1, 1, width - 2, height - 2), radius=18, fill=(8, 15, 28, 150), outline=(255, 255, 255, 115), width=2)
-    icon_size = height - 18
-    draw.rounded_rectangle((9, 9, 9 + icon_size, 9 + icon_size), radius=13, fill=(14, 165, 140, 235))
-    draw.text((17, 7), "S", font=_font(int(height * 0.72)), fill=(255, 255, 255, 255))
-    draw.text((icon_size + 25, 10), "SINTU AI", font=_font(int(height * 0.36)), fill=(255, 255, 255, 255))
-    draw.text((icon_size + 25, int(height * 0.53)), "YOUTUBE STUDIO", font=_font(int(height * 0.20)), fill=(215, 230, 240, 255))
+    draw.rounded_rectangle((1, 1, width - 2, height - 2), radius=max(10, int(height * .22)),
+                           fill=(8, 15, 28, 178), outline=(90, 170, 255, 190), width=max(1, int(height * .025)))
+    icon_size = height - 12
+    left, top = 7, 6
+    draw.rounded_rectangle((left, top, left + icon_size, top + icon_size), radius=max(8, int(icon_size * .22)),
+                           fill=(14, 24, 48, 255), outline=(72, 170, 255, 255), width=max(1, int(height * .035)))
+    # A clean, high-contrast play tile keeps the mark legible at watermark scale.
+    tile_w, tile_h = int(icon_size * .72), int(icon_size * .50)
+    tx = left + (icon_size - tile_w) // 2
+    ty = top + (icon_size - tile_h) // 2
+    draw.rounded_rectangle((tx, ty, tx + tile_w, ty + tile_h), radius=max(4, int(tile_h * .25)),
+                           fill=(222, 25, 58, 255))
+    cy = ty + tile_h // 2
+    draw.polygon([(tx + tile_w * .42, cy - tile_h * .25),
+                  (tx + tile_w * .42, cy + tile_h * .25),
+                  (tx + tile_w * .68, cy)], fill=(255, 255, 255, 255))
+    text_x = left + icon_size + 10
+    draw.text((text_x, int(height * .12)), "SINTU AI", font=_font(max(10, int(height * .34))), fill=(255, 255, 255, 255))
+    draw.text((text_x, int(height * .56)), "YOUTUBE STUDIO", font=_font(max(7, int(height * .18))), fill=(145, 205, 255, 255))
     return logo
 
 
