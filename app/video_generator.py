@@ -4,6 +4,8 @@ import base64
 import json
 import os
 import re
+import math
+import subprocess
 import urllib.error
 import urllib.request
 import uuid
@@ -53,8 +55,40 @@ def video_status():
 
 
 def _validate_video(raw: bytes) -> bytes:
+    """Reject corrupt, empty, audio-only or implausibly large MP4s before storing them."""
     if len(raw) < 16 or len(raw) > MAX_VIDEO_BYTES or raw[4:8] != b"ftyp":
         raise VideoGenerationFailed("Generated video invalid hai ya 100 MB size limit se badi hai.")
+    try:
+        probe = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=codec_type,codec_name,width,height:format=format_name,duration",
+                "-of", "json", "pipe:0",
+            ],
+            input=raw, capture_output=True, check=False, timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise VideoGenerationFailed(
+            "Video verification ke liye FFprobe available nahi hai ya timeout hua. FFmpeg/FFprobe install karein."
+        ) from None
+    if probe.returncode != 0:
+        raise VideoGenerationFailed("Generated MP4 corrupt hai: FFprobe decode/inspect nahi kar saka.")
+    try:
+        metadata = json.loads(probe.stdout.decode("utf-8"))
+        streams = metadata.get("streams", [])
+        fmt = metadata.get("format", {})
+        video = next((item for item in streams if item.get("codec_type") == "video"), None)
+        duration = float(fmt.get("duration", 0))
+        width, height = int(video.get("width", 0)), int(video.get("height", 0))
+        format_names = str(fmt.get("format_name", "")).lower().split(",")
+    except (AttributeError, TypeError, ValueError, StopIteration, json.JSONDecodeError):
+        raise VideoGenerationFailed("Generated MP4 mein valid video stream metadata nahi mila.") from None
+    if not any(name in {"mov", "mp4", "m4a", "3gp", "3g2", "mj2"} for name in format_names):
+        raise VideoGenerationFailed("Generated file MP4-compatible container nahi hai.")
+    if not video or not video.get("codec_name") or width < 16 or height < 16 or width > 7680 or height > 4320:
+        raise VideoGenerationFailed("Generated MP4 mein valid supported-size video stream nahi hai.")
+    if not math.isfinite(duration) or duration <= 0 or duration > 600:
+        raise VideoGenerationFailed("Generated MP4 ki duration invalid hai.")
     return raw
 
 
