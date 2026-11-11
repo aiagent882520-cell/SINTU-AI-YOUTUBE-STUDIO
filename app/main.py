@@ -619,6 +619,11 @@ def _ensure_production_projects_table():
                 conn.execute(f"ALTER TABLE production_projects ADD COLUMN {column} {declaration}")
 
 
+def _validate_production_project_payload(payload: ProductionProjectInput):
+    if not payload.name.strip() or not payload.brief.strip() or not payload.language.strip():
+        raise HTTPException(status_code=400, detail="Project name, brief and language cannot be blank.")
+
+
 def _production_project_owner(request: Request) -> str:
     user = getattr(request.state, "user", None) or {}
     return str(user.get("username") or "local")[:120]
@@ -642,6 +647,7 @@ def list_production_projects(request: Request, limit: int = Query(default=100, g
 
 @app.post("/api/projects", status_code=201)
 def create_production_project(payload: ProductionProjectInput, request: Request):
+    _validate_production_project_payload(payload)
     _ensure_production_projects_table()
     valid_formats = {item["id"] for item in production_catalog()["formats"]}
     if payload.format_id not in valid_formats:
@@ -677,6 +683,7 @@ def get_production_project(project_id: str, request: Request):
 
 @app.put("/api/projects/{project_id}")
 def update_production_project(project_id: str, payload: ProductionProjectInput, request: Request):
+    _validate_production_project_payload(payload)
     if not re.fullmatch(r"[a-f0-9]{32}", project_id):
         raise HTTPException(status_code=400, detail="Invalid project ID.")
     _ensure_production_projects_table()
