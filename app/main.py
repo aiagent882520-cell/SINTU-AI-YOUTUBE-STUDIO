@@ -1363,6 +1363,78 @@ def youtube_channel_analytics(
     }
 
 
+@app.get("/api/admin/youtube/comments")
+def youtube_channel_comments(limit: int = Query(default=50, ge=1, le=100)):
+    """Read recent channel comments and provide transparent heuristic triage; never moderates or replies."""
+    connection = _youtube_connection()
+    if not connection:
+        raise HTTPException(status_code=409, detail="Pehle YouTube channel connect karein.")
+    token = _youtube_access_token()
+    params = {
+        "part": "snippet", "allThreadsRelatedToChannelId": connection["channel_id"],
+        "order": "time", "textFormat": "plainText", "maxResults": str(limit),
+    }
+    url = "https://www.googleapis.com/youtube/v3/commentThreads?" + urllib.parse.urlencode(params)
+    try:
+        _, _, body = _youtube_request(url, headers={"Authorization": "Bearer " + token})
+        payload = json.loads(body.decode("utf-8"))
+    except HTTPException as exc:
+        if exc.status_code == 502:
+            raise HTTPException(status_code=424, detail="YouTube comments nahi mil paaye. YouTube Data API v3 enable karein aur channel permissions check karein.") from None
+        raise
+    except (ValueError, KeyError, TypeError):
+        raise HTTPException(status_code=502, detail="YouTube comments response samajh nahi aaya.") from None
+
+    spam_patterns = [
+        r"\b(whatsapp|telegram)\b.{0,40}\b(contact|dm|message|join)\b",
+        r"\b(crypto|forex|investment)\b.{0,50}\b(profit|guaranteed|double|signals)\b",
+        r"\b(subscribers?\s*for\s*subscribers?|sub4sub|follow\s*for\s*follow)\b",
+        r"https?://|www\.",
+        r"\b(earn money fast|work from home|giveaway winner|claim your prize)\b",
+    ]
+    positive = {"good", "great", "awesome", "excellent", "love", "thanks", "thank", "helpful", "शानदार", "अच्छा", "धन्यवाद", "बढ़िया", "बहुत"}
+    negative = {"bad", "worst", "fake", "hate", "useless", "boring", "गलत", "बकवास", "बेकार", "झूठ"}
+    comments = []
+    counts = {"total": 0, "possible_spam": 0, "positive": 0, "negative": 0, "questions": 0, "other": 0}
+    for thread in payload.get("items", []):
+        top = (thread.get("snippet") or {}).get("topLevelComment") or {}
+        snippet = top.get("snippet") or {}
+        text_value = str(snippet.get("textOriginal") or snippet.get("textDisplay") or "")[:5000]
+        lowered = text_value.lower()
+        words = set(re.findall(r"[a-zA-Z]+|[\u0900-\u097f]+", lowered))
+        spam = any(re.search(pattern, lowered, re.I) for pattern in spam_patterns)
+        sentiment = "positive" if words & positive else "negative" if words & negative else "question" if "?" in text_value or any(w in words for w in {"how", "what", "why", "when", "kaise", "kya", "क्यों", "कैसे", "क्या"}) else "other"
+        if spam:
+            counts["possible_spam"] += 1
+            suggested_reply = "Is comment ko manually review karein; suspicious links/promotions par click na karein."
+        elif sentiment == "question":
+            counts["questions"] += 1
+            suggested_reply = "Achha sawal hai! Hum is par detail mein jawab denge."
+        elif sentiment == "positive":
+            counts["positive"] += 1
+            suggested_reply = "Bahut shukriya! Aapka support humein aur achha content banane ke liye motivate karta hai."
+        elif sentiment == "negative":
+            counts["negative"] += 1
+            suggested_reply = "Feedback ke liye shukriya. Hum ise review karke sudhar karne ki koshish karenge."
+        else:
+            counts["other"] += 1
+            suggested_reply = "Comment karne ke liye shukriya!"
+        comments.append({
+            "comment_id": top.get("id"), "video_id": snippet.get("videoId"),
+            "author": snippet.get("authorDisplayName", "YouTube user"),
+            "text": text_value, "published_at": snippet.get("publishedAt"),
+            "likes": int(snippet.get("likeCount", 0) or 0),
+            "classification": "possible_spam" if spam else sentiment,
+            "suggested_reply": suggested_reply,
+        })
+    counts["total"] = len(comments)
+    return {
+        "source": "YouTube Data API v3", "channel": connection.get("channel_title"),
+        "comments": comments, "counts": counts,
+        "note": "Spam aur sentiment labels simple keyword heuristics hain, AI verdict nahi. Suggestions draft-only hain. Koi comment delete, hide, approve ya reply nahi kiya gaya.",
+    }
+
+
 @app.get("/api/admin/youtube/retention")
 def youtube_video_retention(
     video_id: str = Query(..., min_length=11, max_length=20, regex=r"^[A-Za-z0-9_-]+$"),
