@@ -2986,8 +2986,8 @@ def image_capabilities():
 def create_image(payload: ImageInput, media_token: str = Header(default="", alias="X-Media-Token")):
     import hmac, os
     expected = os.getenv("MEDIA_GENERATION_TOKEN", "")
-    if not expected or not hmac.compare_digest(media_token, expected):
-        raise HTTPException(status_code=403, detail="Valid media access token required.")
+    if not image_status().get("local_available") and (not expected or not hmac.compare_digest(media_token, expected)):
+        raise HTTPException(status_code=403, detail="Valid media access token required for the optional paid image provider.")
     try:
         return generate_image(payload.prompt, payload.kind, payload.aspect)
     except ImageUnavailable as exc:

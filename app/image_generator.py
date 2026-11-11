@@ -7,6 +7,7 @@ from pathlib import Path
 from .policy import paid_upgrades_allowed
 
 from PIL import Image, UnidentifiedImageError
+from .comfyui_client import image_workflow_status, generate_image_bytes, ComfyUIUnavailable
 
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(Path(__file__).resolve().parent.parent))).expanduser().resolve()
 IMAGE_DIR = DATA_DIR / "generated_images"
@@ -25,8 +26,12 @@ def image_status():
     enabled = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "false").strip().lower() == "true" and paid_upgrades_allowed()
     configured = bool(os.getenv("OPENAI_API_KEY"))
     token_configured = bool(os.getenv("MEDIA_GENERATION_TOKEN"))
+    local = image_workflow_status()
     return {
-        "available": enabled and configured and token_configured,
+        "available": local["available"] or (enabled and configured and token_configured),
+        "local_available": local["available"],
+        "local_engine": "ComfyUI" if local["available"] else None,
+        "local_workflow_configured": local["workflow_configured"],
         "enabled_by_admin": enabled,
         "provider_configured": configured,
         "access_token_configured": token_configured,
@@ -39,12 +44,6 @@ def image_status():
 
 def generate_image(prompt: str, kind: str = "scene", aspect: str = "portrait") -> dict:
     status = image_status()
-    if not status["enabled_by_admin"]:
-        raise ImageUnavailable("Paid media generation is disabled by server administrator.")
-    if not status["provider_configured"]:
-        raise ImageUnavailable("OpenAI API key is not configured on the server.")
-    if not status["access_token_configured"]:
-        raise ImageUnavailable("Media access token is not configured on the server.")
     if kind not in {"scene", "thumbnail"}:
         raise ValueError("Image kind must be scene or thumbnail.")
     if aspect not in {"portrait", "landscape", "square"}:
@@ -55,6 +54,29 @@ def generate_image(prompt: str, kind: str = "scene", aspect: str = "portrait") -
     size = {"portrait": "1024x1536", "landscape": "1536x1024", "square": "1024x1024"}[aspect]
     if kind == "thumbnail" and aspect != "landscape":
         raise ValueError("YouTube thumbnails must use landscape aspect ratio.")
+    if status["local_available"]:
+        width, height = {"portrait": (768, 1152), "landscape": (1152, 768), "square": (1024, 1024)}[aspect]
+        try:
+            raw = generate_image_bytes(prompt, width, height)
+            with Image.open(BytesIO(raw)) as source:
+                source.verify()
+            with Image.open(BytesIO(raw)) as source:
+                source.load(); image = source.convert("RGB")
+                IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+                image_id = uuid.uuid4().hex; output = IMAGE_DIR / f"{image_id}.jpg"
+                image.save(output, format="JPEG", quality=92, optimize=True)
+            return {"image_id": image_id, "url": f"/api/images/{image_id}", "kind": kind,
+                    "aspect": aspect, "width": image.width, "height": image.height, "format": "JPEG",
+                    "size_bytes": output.stat().st_size, "provider": "ComfyUI (local)", "local": True,
+                    "notice": "Locally generated image. Review model license and likeness rights before publishing."}
+        except ComfyUIUnavailable as exc:
+            raise ImageUnavailable(str(exc)) from None
+        except (UnidentifiedImageError, OSError):
+            raise ImageGenerationFailed("ComfyUI returned invalid image data.") from None
+    if not status["enabled_by_admin"]:
+        raise ImageUnavailable("Free image generation needs a local ComfyUI API workflow. Paid generation remains locked until revenue and approval.")
+    if not status["provider_configured"] or not status["access_token_configured"]:
+        raise ImageUnavailable("Optional paid image provider credentials are not configured.")
     try:
         from openai import OpenAI
         client = OpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=120.0, max_retries=1)
