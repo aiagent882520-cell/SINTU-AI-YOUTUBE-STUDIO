@@ -224,7 +224,9 @@ async function loadYouTubeComments(loadMore=false){
   youtubeCommentsItems=youtubeCommentsItems.concat(data.comments||[]);
   youtubeCommentsNextPageToken=data.next_page_token||"";
   const totals=youtubeCommentsCounts;
-  $("youtubeCommentsTotals").innerHTML=[["Total",totals.total],["Possible spam",totals.possible_spam],["Positive",totals.positive],["Negative",totals.negative],["Questions",totals.questions]]
+  const reviewTotals={pending:0,reviewed:0,follow_up:0,resolved:0};
+  youtubeCommentsItems.forEach(item=>{const status=item.review_status||"pending";if(Object.prototype.hasOwnProperty.call(reviewTotals,status))reviewTotals[status]++;});
+  $("youtubeCommentsTotals").innerHTML=[["Total",totals.total],["Possible spam",totals.possible_spam],["Positive",totals.positive],["Negative",totals.negative],["Questions",totals.questions],["Pending review",reviewTotals.pending],["Reviewed",reviewTotals.reviewed],["Follow-up",reviewTotals.follow_up],["Resolved",reviewTotals.resolved]]
    .map(([label,value])=>'<div class="integration-card"><strong>'+analyticsEscape(value)+'</strong><span>'+analyticsEscape(label)+'</span></div>').join("");
   renderYouTubeComments();
   if(more)more.hidden=!youtubeCommentsNextPageToken;
