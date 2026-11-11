@@ -520,6 +520,8 @@ def test_music_generator_validates_configuration_and_prompt(monkeypatch):
     monkeypatch.delenv("STABILITY_API_KEY", raising=False)
     with pytest.raises(music_generator.MusicUnavailable):
         music_generator.generate_music("Ambient score", 30)
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
     monkeypatch.setenv("STABILITY_API_KEY", "test-key")
     with pytest.raises(ValueError):
@@ -595,6 +597,8 @@ def test_video_generator_validates_config_and_prompt(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     with pytest.raises(video_generator.VideoUnavailable):
         video_generator.generate_video("A cinematic city")
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     with pytest.raises(ValueError):
@@ -640,6 +644,8 @@ def test_video_generator_calls_gemini_and_saves_mp4(tmp_path, monkeypatch):
     output_dir = tmp_path / "ai-videos"
     monkeypatch.setattr(video_generator, "AI_VIDEO_DIR", output_dir)
     monkeypatch.setattr(video_generator.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
     monkeypatch.setenv("GEMINI_API_KEY", "test-secret")
     result = video_generator.generate_video("A cinematic forest", "9:16", "720p", "cinematic")
@@ -701,6 +707,8 @@ def test_video_generator_uses_uri_delivery_for_large_clips(tmp_path, monkeypatch
     monkeypatch.setattr(video_generator, "AI_VIDEO_DIR", output_dir)
     monkeypatch.setattr(video_generator.urllib.request, "urlopen", fake_urlopen)
     monkeypatch.setattr(video_generator.time, "sleep", lambda seconds: None)
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     result = video_generator.generate_video("A cinematic sky")
@@ -1028,6 +1036,8 @@ def test_admin_provider_settings_persist_and_never_expose_secrets(tmp_path, monk
     monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-secret")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-secret")
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
     assert client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"}).status_code == 200
@@ -1054,6 +1064,8 @@ def test_admin_cannot_select_unconfigured_provider(tmp_path, monkeypatch):
     monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
     client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"})
