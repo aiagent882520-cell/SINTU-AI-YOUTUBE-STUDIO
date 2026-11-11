@@ -238,11 +238,18 @@ async function loadYouTubeSavedReviews(loadMore=false){
  const list=$("youtubeSavedReviewsList"),notice=$("youtubeSavedReviewsNotice"),more=$("youtubeSavedReviewsMore");
  if(!list||!notice)return;
  const status=$("youtubeSavedReviewsFilter")?.value||"";
+ const category=$("youtubeSavedReviewsCategory")?.value||"";
+ const sort=$("youtubeSavedReviewsSort")?.value||"newest";
+ const search=$("youtubeSavedReviewsSearch")?.value.trim()||"";
  if(!loadMore){youtubeSavedReviewsOffset=0;youtubeSavedReviewsItems=[];}
  notice.textContent="Saved review queue load ho rahi hai…";
  if(more)more.disabled=true;
  try{
-  const data=await request("/api/admin/youtube/comments/reviews?limit=50&offset="+youtubeSavedReviewsOffset+(status?"&review_status="+encodeURIComponent(status):""));
+  const params=new URLSearchParams({limit:"50",offset:String(youtubeSavedReviewsOffset),sort});
+  if(status)params.set("review_status",status);
+  if(category)params.set("classification",category);
+  if(search)params.set("search",search);
+  const data=await request("/api/admin/youtube/comments/reviews?"+params.toString());
   youtubeSavedReviewsTotal=Number(data.total)||0;
   youtubeSavedReviewsItems=youtubeSavedReviewsItems.concat(data.items||[]);
   youtubeSavedReviewsOffset+=((data.items||[]).length);
@@ -325,6 +332,10 @@ $("youtubeCommentsList")?.addEventListener("click",async event=>{
 });
 $("youtubeSavedReviewsRefresh")?.addEventListener("click",()=>loadYouTubeSavedReviews(false));
 $("youtubeSavedReviewsFilter")?.addEventListener("change",()=>loadYouTubeSavedReviews(false));
+$("youtubeSavedReviewsCategory")?.addEventListener("change",()=>loadYouTubeSavedReviews(false));
+$("youtubeSavedReviewsSort")?.addEventListener("change",()=>loadYouTubeSavedReviews(false));
+$("youtubeSavedReviewsSearchButton")?.addEventListener("click",()=>loadYouTubeSavedReviews(false));
+$("youtubeSavedReviewsSearch")?.addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();loadYouTubeSavedReviews(false);}});
 $("youtubeSavedReviewsMore")?.addEventListener("click",()=>loadYouTubeSavedReviews(true));
 $("youtubeCommentsRefresh")?.addEventListener("click",async()=>{await loadYouTubeComments(false);await loadYouTubeSavedReviews(false);});
 $("youtubeCommentsMore")?.addEventListener("click",()=>loadYouTubeComments(true));
