@@ -2298,3 +2298,34 @@ def test_render_api_blocks_unimplemented_specialized_formats(tmp_path, monkeypat
     })
     assert response.status_code == 501
     assert "VR-specific" in response.json()["detail"]
+
+
+def test_production_run_render_requires_approved_matching_format(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    run_id = "a" * 32
+    state = {"status": "paused", "format_id": "youtube-shorts"}
+    monkeypatch.setattr(main, "get_production_run", lambda value: state if value == run_id else None)
+    monkeypatch.setattr(main, "render_video", lambda payload: {
+        "video_id": "b" * 32, "url": "/api/videos/" + "b" * 32,
+        "format": "MP4 / H.264"
+    })
+    monkeypatch.setattr(main, "attach_render_result", lambda value, result: {
+        "status": "completed", "result": {"video_rendered": True}
+    })
+    payload = {"title": "Hindi short", "scenes": ["Opening"], "format_id": "youtube-shorts"}
+    assert client.post(f"/api/production/runs/{run_id}/render", json=payload).status_code == 409
+    state["status"] = "completed"
+    mismatch = dict(payload, format_id="documentary")
+    assert client.post(f"/api/production/runs/{run_id}/render", json=mismatch).status_code == 400
+    response = client.post(f"/api/production/runs/{run_id}/render", json=payload)
+    assert response.status_code == 200
+    assert response.json()["render"]["video_id"] == "b" * 32
+    assert response.json()["published"] is False
+
+
+def test_production_run_render_rejects_unknown_run(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.post(f"/api/production/runs/{'c' * 32}/render", json={
+        "title": "Hindi short", "scenes": ["Opening"], "format_id": "youtube-shorts"
+    })
+    assert response.status_code == 404
