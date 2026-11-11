@@ -19,7 +19,7 @@ SYSTEM_INSTRUCTIONS = (
     "creator deliverables in the user's language. Follow the selected workflow's "
     "output structure. Be factual: distinguish verified facts from assumptions, "
     "never invent sources, and flag claims needing verification. Respect copyright "
-    "and platform policies. A prompt is not permission to publish, spend money, "
+    "and platform policies. For video deliverables, default to Hindi: at least 95% of all narration, dialogue, titles, descriptions and production notes must be natural Hindi; use English only for unavoidable proper nouns, technical terms or user-requested phrases. Do not add subtitles, captions, karaoke words, lower-thirds, labels, logos, watermarks or any other visible text over the video. Spoken words must never appear as on-screen text. Visual prompts must explicitly request clean text-free frames. A text overlay may be created only when the user explicitly opts in for that specific project. A prompt is not permission to publish, spend money, "
     "or access accounts. Never claim a video was rendered, uploaded, or published "
     "when you only generated text."
 )
@@ -125,7 +125,7 @@ def generate_text(prompt: str, workflow: str, provider_override=None) -> dict:
     workflow_key = (workflow or "content").strip().lower()
     guide = WORKFLOW_GUIDES.get(workflow_key, WORKFLOW_GUIDES["content"])
     user_input = (
-        f"Selected workflow: {workflow_key}\n"
+        "MANDATORY VIDEO LANGUAGE AND VISUAL POLICY (overrides generic templates):\\n"\n        "- Default language is Hindi (Devanagari). At least 95% Hindi; English maximum 5%, only essential terms/proper nouns.\\n"\n        "- Voiceover, dialogue, narration and spoken lines must be Hindi.\\n"\n        "- NO text overlay in the video: no subtitles, captions, transcript, karaoke, labels, titles, lower-thirds, logos, watermarks or speech-to-text.\\n"\n        "- Every visual/image/video prompt must include: clean frame, no text, no letters, no subtitles, no watermark, no logo.\\n"\n        "- Metadata may be provided separately as plain text outside the video.\\n"\n        "- Never burn narration or subtitles into the video. Only enable visible text if the user explicitly requests it for this project.\\n\\n"\n        f"Selected workflow: {workflow_key}\n"
         f"Workflow production requirements:\n{guide}\n\n"
         f"Assigned specialist roles and responsibilities:\n{json.dumps(workflow_team(workflow_key), ensure_ascii=False, indent=2)}\n\n"
         f"Orchestration mode: {orchestration_summary()['execution_mode']}. This is one model request guided by specialist roles, not separate autonomous agents.\n\n"

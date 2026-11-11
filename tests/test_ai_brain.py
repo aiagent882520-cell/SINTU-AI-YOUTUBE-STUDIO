@@ -34,3 +34,11 @@ def test_explicit_provider_without_key_fails(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     with pytest.raises(ai_brain.ProviderNotConfigured):
         ai_brain._selected_provider()
+
+
+def test_video_generation_prompt_enforces_hindi_and_no_text_overlay(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "local")
+    captured = {}\n    monkeypatch.setattr(ai_brain, "_generate_ollama", lambda prompt: captured.setdefault("prompt", prompt) or "निर्माण पैकेज")
+    monkeypatch.setattr(ai_brain, "_ollama_status", lambda: {"service_running": True, "model_available": True})
+    result = ai_brain.generate_text("भारत के रहस्य पर वीडियो बनाओ", "shorts")
+    assert result["output"] == "निर्माण पैकेज"\n    assert "कम से कम 95%" in captured["prompt"] or "at least 95%" in captured["prompt"].lower()\n    assert "NO text overlay" in captured["prompt"]
