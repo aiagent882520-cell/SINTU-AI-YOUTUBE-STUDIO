@@ -301,3 +301,8 @@ Follow-up workload CSV export: the community review workload panel can download 
 - उदाहरण: `{"timeline_items":[{"kind":"image","asset_id":"<32-char-image-id>","duration":5,"transition":"fade"},{"kind":"video","asset_id":"<32-char-video-id>","trim_start":1.5,"trim_end":6,"audio_volume":0.25,"transition":"cut"}]}`. यह केवल पहले से generated assets को जोड़ता है; AI video generation engine अपने-आप नहीं चलाता।
 - यह final assembly stage supplied media पर निर्भर है। AI image/video assets अपने-आप generate नहीं होते; उनके local engines/workflows पहले configure और run करने होंगे।
 - YouTube publishing इस endpoint से नहीं होती; अलग OAuth connection और explicit human approval जरूरी है।
+
+### Dashboard engine diagnostics
+- Image और AI Video capability status अब local ComfyUI की server reachability, workflow validity, node verification, missing custom nodes और missing model choices dashboard पर दिखाता है।
+- ये diagnostics ComfyUI `/system_stats` और `/object_info` के advertised data पर आधारित हैं; model weights का वास्तविक load, GPU memory sufficiency और सफल render अलग runtime test से ही confirm होंगे।
+- Local workflow file path या API credentials dashboard response में expose नहीं किए जाते।
