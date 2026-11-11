@@ -936,11 +936,13 @@ async function checkImageService() {
   try {
     const info = await request("/api/images/capabilities");
     window.SINTU_IMAGE_LOCAL_AVAILABLE=!!info.local_available;
+    const diagnostic = info.local_diagnostics || {};
+    const issues = [...(diagnostic.missing_nodes || []), ...(diagnostic.missing_models || []).map(item => item.configured)];
+    const detail = diagnostic.reason || (issues.length ? "Missing: " + issues.join(", ") : "");
     $("imageNotice").textContent = info.local_available
       ? "Ready: free local ComfyUI image workflow · no API key or media token."
-      : info.available ? "Ready: optional paid image provider."
-      : info.workflow_configured ? "ComfyUI workflow valid, but local server is offline: " + (info.reason || "Start ComfyUI on the configured local address.")
-      : "Free image generation needs a valid ComfyUI API workflow JSON. " + (info.reason || "Set COMFYUI_IMAGE_WORKFLOW_PATH.");
+      : info.available ? "Ready: optional paid image provider. Local ComfyUI: " + (detail || "not ready.")
+      : "Free local image engine not ready. " + (detail || "Configure COMFYUI_IMAGE_WORKFLOW_PATH and start ComfyUI.");
     $("imageButton").disabled = !info.available;
   } catch (error) {
     $("imageNotice").textContent = "Image service status unavailable.";
@@ -983,11 +985,13 @@ async function checkAIVideoService() {
   try {
     const info = await request("/api/video/capabilities");
     window.SINTU_VIDEO_LOCAL_AVAILABLE=!!info.local_available;
+    const diagnostic = info.local_diagnostics || {};
+    const issues = [...(diagnostic.missing_nodes || []), ...(diagnostic.missing_models || []).map(item => item.configured)];
+    const detail = diagnostic.reason || (issues.length ? "Missing: " + issues.join(", ") : "");
     $("aiVideoStatus").textContent = info.local_available
       ? "Ready: free local ComfyUI text-to-video workflow · no API key or media token."
-      : info.available ? "Ready: optional paid Gemini video provider."
-      : info.workflow_configured ? "ComfyUI video workflow valid, but local server is offline: " + (info.reason || "Start ComfyUI on the configured local address.")
-      : "Free video generation needs a valid ComfyUI API workflow JSON. " + (info.reason || "Set COMFYUI_VIDEO_WORKFLOW_PATH.");
+      : info.available ? "Ready: optional paid Gemini video provider. Local ComfyUI: " + (detail || "not ready.")
+      : "Free local video engine not ready. " + (detail || "Configure COMFYUI_VIDEO_WORKFLOW_PATH and start ComfyUI.");
     $("aiVideoButton").disabled = !info.available;
   } catch (error) {
     $("aiVideoStatus").textContent = "AI video provider status unavailable.";
