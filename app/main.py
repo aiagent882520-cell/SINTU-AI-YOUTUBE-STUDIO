@@ -1682,6 +1682,35 @@ def list_youtube_comment_reviews(
             "note": "Yeh SINTU mein save kiye gaye internal review records hain; YouTube par koi moderation action nahi hota."}
 
 
+@app.get("/api/admin/youtube/comments/reviews/follow-ups/due")
+def youtube_comment_follow_up_due(
+    as_of: str = Query(default="", max_length=10),
+    limit: int = Query(default=50, ge=1, le=100),
+):
+    """Return actionable overdue and due-today internal community follow-ups."""
+    today = as_of or datetime.now(timezone.utc).date().isoformat()
+    try:
+        datetime.strptime(today, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=422, detail="as_of must use YYYY-MM-DD")
+    with db() as conn:
+        rows = conn.execute(
+            """SELECT comment_id,video_id,review_status,author,comment_text AS text,
+                      classification,assigned_to,follow_up_at,updated_at,likes
+               FROM youtube_comment_reviews
+               WHERE follow_up_at<>'' AND follow_up_at<=? AND review_status<>'resolved'
+               ORDER BY follow_up_at ASC,likes DESC,updated_at DESC LIMIT ?""",
+            (today,limit)
+        ).fetchall()
+    items=[]
+    for row in rows:
+        item=dict(row)
+        item["due_state"]="overdue" if item["follow_up_at"]<today else "due_today"
+        items.append(item)
+    return {"as_of":today,"items":items,"total":len(items),
+            "note":"Yeh internal SINTU follow-up inbox hai; yeh push notification nahi bhejta aur YouTube par koi action nahi karta."}
+
+
 @app.get("/api/admin/youtube/comments/reviews/follow-ups/summary")
 def youtube_comment_follow_up_summary(as_of: str = Query(default="", max_length=10)):
     """Return due/overdue follow-up counts and internal assignee workload."""
