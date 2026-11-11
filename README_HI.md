@@ -139,3 +139,6 @@ Admin dashboard mein approval-pending, agle 24 ghante ke approved posts, due pos
 ### YouTube Comments pagination
 The admin comments analyzer loads 50 comments per page from the official YouTube Data API. Use **Load more comments** to continue with the API-provided page token; counts and displayed comments accumulate for the current refresh session. Labels remain keyword heuristics and reply suggestions remain draft-only.
 \n\nThe comments panel can export the currently loaded comments as CSV. Active search and category filters are applied to the export; loading more comments adds them to the available export set.\n
+
+### Manual YouTube comment review
+Admins can assign an internal review status (Pending, Reviewed, Follow-up, Resolved) and save a private note in SINTU's SQLite database. The state is keyed by YouTube comment ID and is shown again when comments are loaded. This is an internal workflow only: it does not delete, hide, approve, report, or reply to comments on YouTube.
