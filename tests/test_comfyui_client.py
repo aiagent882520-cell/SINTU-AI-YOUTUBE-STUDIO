@@ -23,4 +23,4 @@ def test_comfyui_rejects_non_loopback_server(tmp_path, monkeypatch):
     monkeypatch.setenv("COMFYUI_IMAGE_WORKFLOW_PATH", str(workflow))
     status = comfyui_client.image_workflow_status()
     assert status["available"] is False
-    assert "localhost" in status["reason"]
+    assert "loopback" in status["reason"]
