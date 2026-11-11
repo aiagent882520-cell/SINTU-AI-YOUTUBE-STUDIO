@@ -2274,3 +2274,27 @@ def test_format_rendering_profile_api_reports_vertical_shorts(tmp_path, monkeypa
 def test_format_rendering_profile_api_rejects_unknown_format(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     assert client.get("/api/rendering/formats/not-real").status_code == 404
+
+
+
+def test_render_api_uses_selected_format_default_resolution(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    captured = {}
+    def fake_render(title, scenes, seconds, **kwargs):
+        captured.update(kwargs)
+        return {"video_id": "b" * 32, "format": "MP4 / H.264"}
+    monkeypatch.setattr(main, "render_storyboard", fake_render)
+    response = client.post("/api/render", json={
+        "title": "Short", "scenes": ["A visual scene"], "format_id": "youtube-shorts"
+    })
+    assert response.status_code == 200
+    assert captured["resolution"] == "1080x1920"
+
+
+def test_render_api_blocks_unimplemented_specialized_formats(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.post("/api/render", json={
+        "title": "VR test", "scenes": ["A scene"], "format_id": "vr-video"
+    })
+    assert response.status_code == 501
+    assert "VR-specific" in response.json()["detail"]
