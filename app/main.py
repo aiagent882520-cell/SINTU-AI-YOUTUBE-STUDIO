@@ -258,6 +258,16 @@ def init_db():
             notes TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_youtube_comment_reviews_status ON youtube_comment_reviews(review_status,updated_at DESC)")
+        review_columns = {row["name"] for row in conn.execute("PRAGMA table_info(youtube_comment_reviews)").fetchall()}
+        for column, definition in {
+            "author": "TEXT NOT NULL DEFAULT ''",
+            "comment_text": "TEXT NOT NULL DEFAULT ''",
+            "published_at": "TEXT NOT NULL DEFAULT ''",
+            "likes": "INTEGER NOT NULL DEFAULT 0",
+            "classification": "TEXT NOT NULL DEFAULT 'other'",
+        }.items():
+            if column not in review_columns:
+                conn.execute(f"ALTER TABLE youtube_comment_reviews ADD COLUMN {column} {definition}")
     _ensure_bootstrap_admin()
 
 init_db()
@@ -271,6 +281,11 @@ class YouTubeCommentReviewInput(BaseModel):
     video_id: str = Field(min_length=11, max_length=20, pattern=r"^[A-Za-z0-9_-]+$")
     review_status: str = Field(pattern=r"^(pending|reviewed|follow_up|resolved)$")
     notes: str = Field(default="", max_length=1000)
+    author: str = Field(default="", max_length=200)
+    text: str = Field(default="", max_length=5000)
+    published_at: str = Field(default="", max_length=40)
+    likes: int = Field(default=0, ge=0, le=100000000)
+    classification: str = Field(default="other", pattern=r"^(possible_spam|positive|negative|question|other)$")
 
 
 class CalendarItemInput(BaseModel):
@@ -1471,15 +1486,42 @@ def save_youtube_comment_review(item: YouTubeCommentReviewInput):
     now = datetime.now(timezone.utc).isoformat()
     with db() as conn:
         conn.execute(
-            """INSERT INTO youtube_comment_reviews(comment_id,video_id,review_status,notes,updated_at)
-               VALUES(?,?,?,?,?)
+            """INSERT INTO youtube_comment_reviews(
+                 comment_id,video_id,review_status,notes,updated_at,author,comment_text,published_at,likes,classification
+               ) VALUES(?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT(comment_id) DO UPDATE SET video_id=excluded.video_id,
-               review_status=excluded.review_status,notes=excluded.notes,updated_at=excluded.updated_at""",
-            (item.comment_id, item.video_id, item.review_status, item.notes.strip(), now),
+                 review_status=excluded.review_status,notes=excluded.notes,updated_at=excluded.updated_at,
+                 author=excluded.author,comment_text=excluded.comment_text,published_at=excluded.published_at,
+                 likes=excluded.likes,classification=excluded.classification""",
+            (item.comment_id, item.video_id, item.review_status, item.notes.strip(), now,
+             item.author.strip(), item.text, item.published_at, item.likes, item.classification),
         )
     return {"saved": True, "comment_id": item.comment_id, "review_status": item.review_status,
-            "notes": item.notes.strip(), "updated_at": now,
+            "notes": item.notes.strip(), "updated_at": now, "author": item.author.strip(),
             "note": "Review SINTU mein save hua hai. YouTube comment par koi action nahi hua."}
+
+
+@app.get("/api/admin/youtube/comments/reviews")
+def list_youtube_comment_reviews(
+    review_status: str = Query(default="", regex=r"^(|pending|reviewed|follow_up|resolved)$"),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=1000000),
+):
+    """List saved internal review records, including comments no longer on the current API page."""
+    where = "WHERE review_status=?" if review_status else ""
+    params = (review_status,) if review_status else ()
+    with db() as conn:
+        total = conn.execute(f"SELECT COUNT(*) FROM youtube_comment_reviews {where}", params).fetchone()[0]
+        rows = conn.execute(
+            f"""SELECT comment_id,video_id,review_status,notes,updated_at,author,
+                       comment_text AS text,published_at,likes,classification
+                FROM youtube_comment_reviews {where}
+                ORDER BY updated_at DESC LIMIT ? OFFSET ?""",
+            (*params, limit, offset),
+        ).fetchall()
+    return {"items": [dict(row) for row in rows], "total": total,
+            "limit": limit, "offset": offset,
+            "note": "Yeh SINTU mein save kiye gaye internal review records hain; YouTube par koi moderation action nahi hota."}
 
 
 @app.get("/api/admin/youtube/retention")
