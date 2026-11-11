@@ -1818,3 +1818,10 @@ def test_docker_compose_forwards_optional_integration_secrets():
         assert key + ":" in compose
     assert "OPENAI_MODEL:-gpt-5.5" in compose
     assert "GEMINI_MODEL:-gemini-2.5-flash" in compose
+
+
+def test_production_studio_prompt_uses_real_line_break_escapes(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    script = client.get("/static/production_studio.js").text
+    assert '\\\\nLanguage:' not in script
+    assert '"\\\\nLanguage:' not in script
