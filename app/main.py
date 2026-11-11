@@ -258,6 +258,17 @@ def init_db():
             notes TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_youtube_comment_reviews_status ON youtube_comment_reviews(review_status,updated_at DESC)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS youtube_comment_review_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            comment_id TEXT NOT NULL,
+            video_id TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            previous_status TEXT NOT NULL DEFAULT '',
+            new_status TEXT NOT NULL,
+            note_changed INTEGER NOT NULL DEFAULT 0,
+            changed_at TEXT NOT NULL
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_youtube_comment_review_history_comment ON youtube_comment_review_history(comment_id,changed_at DESC)")
         review_columns = {row["name"] for row in conn.execute("PRAGMA table_info(youtube_comment_reviews)").fetchall()}
         for column, definition in {
             "author": "TEXT NOT NULL DEFAULT ''",
@@ -1485,6 +1496,13 @@ def save_youtube_comment_review(item: YouTubeCommentReviewInput):
     """Save an internal review decision only; does not modify anything on YouTube."""
     now = datetime.now(timezone.utc).isoformat()
     with db() as conn:
+        previous = conn.execute(
+            "SELECT review_status,notes FROM youtube_comment_reviews WHERE comment_id=?",
+            (item.comment_id,),
+        ).fetchone()
+        event_type = "created" if previous is None else "updated"
+        previous_status = previous["review_status"] if previous else ""
+        note_changed = previous is not None and previous["notes"] != item.notes.strip()
         conn.execute(
             """INSERT INTO youtube_comment_reviews(
                  comment_id,video_id,review_status,notes,updated_at,author,comment_text,published_at,likes,classification
@@ -1495,6 +1513,12 @@ def save_youtube_comment_review(item: YouTubeCommentReviewInput):
                  likes=excluded.likes,classification=excluded.classification""",
             (item.comment_id, item.video_id, item.review_status, item.notes.strip(), now,
              item.author.strip(), item.text, item.published_at, item.likes, item.classification),
+        )
+        conn.execute(
+            """INSERT INTO youtube_comment_review_history(
+                 comment_id,video_id,event_type,previous_status,new_status,note_changed,changed_at
+               ) VALUES(?,?,?,?,?,?,?)""",
+            (item.comment_id,item.video_id,event_type,previous_status,item.review_status,int(note_changed),now),
         )
     return {"saved": True, "comment_id": item.comment_id, "review_status": item.review_status,
             "notes": item.notes.strip(), "updated_at": now, "author": item.author.strip(),
@@ -1541,6 +1565,27 @@ def list_youtube_comment_reviews(
     return {"items": [dict(row) for row in rows], "total": total,
             "limit": limit, "offset": offset, "sort": sort,
             "note": "Yeh SINTU mein save kiye gaye internal review records hain; YouTube par koi moderation action nahi hota."}
+
+
+@app.get("/api/admin/youtube/comments/reviews/{comment_id}/history")
+def get_youtube_comment_review_history(comment_id: str = Query(default="", min_length=0, max_length=200)):
+    """Return internal status-change history for one saved comment."""
+    if not comment_id.strip():
+        raise HTTPException(status_code=422, detail="comment_id is required")
+    with db() as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM youtube_comment_reviews WHERE comment_id=?", (comment_id,)
+        ).fetchone()
+        if not exists:
+            raise HTTPException(status_code=404, detail="Saved comment review not found")
+        rows = conn.execute(
+            """SELECT event_type,previous_status,new_status,note_changed,changed_at
+               FROM youtube_comment_review_history WHERE comment_id=?
+               ORDER BY changed_at DESC,id DESC LIMIT 100""",
+            (comment_id,),
+        ).fetchall()
+    return {"comment_id":comment_id,"items":[dict(row) for row in rows],
+            "note":"History sirf SINTU ke internal review changes dikhata hai; YouTube par koi action nahi hota."}
 
 
 @app.get("/api/admin/youtube/comments/reviews/export")
