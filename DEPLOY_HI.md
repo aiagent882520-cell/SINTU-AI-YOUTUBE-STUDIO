@@ -1,4 +1,4 @@
-# SINTU AI STUDIO — Deployment
+# SINTU AI YOUTUBE STUDIO — Deployment
 
 ## Docker deployment (generic container host)
 
