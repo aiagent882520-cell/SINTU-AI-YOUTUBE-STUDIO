@@ -6,7 +6,7 @@ import pytest
 from app.video_generator import VideoGenerationFailed, _validate_video
 
 
-VALID_MP4_HEADER = b"\\x00\\x00\\x00\\x18ftypisom" + b"\\x00" * 16
+VALID_MP4_HEADER = b"\x00\\x00\\x00\\x18ftypisom" + b"\x00" * 16
 
 
 def _probe_result(metadata, returncode=0):
