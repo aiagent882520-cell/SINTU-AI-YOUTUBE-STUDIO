@@ -25,7 +25,9 @@ from pydantic import BaseModel, Field
 
 from .agents import list_agents
 from .production_catalog import production_catalog
-from .studio_scope import agent_registry, production_plan
+from .studio_scope import agent_registry, production_plan, scope_summary
+from . import studio_engine
+from .policy import paid_upgrades_allowed
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
 from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, RendererUnavailable, RenderFailed, OUTPUT_DIR
@@ -525,6 +527,8 @@ def admin_provider_settings():
 @app.patch("/api/admin/provider-settings")
 def update_admin_provider_settings(payload: ProviderSettingsInput):
     status = provider_status(payload.selected_provider)
+    if payload.selected_provider in {"openai", "gemini"} and not paid_upgrades_allowed():
+        raise HTTPException(status_code=403, detail="Paid upgrade locked until SINTU earns revenue and the user explicitly approves it.")
     if payload.selected_provider in {"openai", "gemini"} and not status[payload.selected_provider]["configured"]:
         raise HTTPException(status_code=400, detail=f"{payload.selected_provider} API key server par configured nahi hai.")
     _set_app_setting("selected_provider", payload.selected_provider)
@@ -534,7 +538,7 @@ def update_admin_provider_settings(payload: ProviderSettingsInput):
 @app.get("/api/admin/integrations")
 def admin_integrations():
     providers = admin_provider_settings()
-    paid_media = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "false").lower() == "true"
+    paid_media = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "false").lower() == "true" and paid_upgrades_allowed()
     media_token = bool(os.getenv("MEDIA_GENERATION_TOKEN"))
     ffmpeg = bool(shutil.which("ffmpeg"))
     return {
@@ -827,6 +831,246 @@ def studio_production_plan(format_id: str):
         raise HTTPException(status_code=404, detail="Unknown video format.")
 
 
+
+
+class StudioRunInput(BaseModel):
+    project_id: str = Field(min_length=32, max_length=32, pattern=r"^[a-f0-9]{32}$")
+    format_id: str = Field(min_length=1, max_length=80)
+class StudioWorkerOutputInput(BaseModel):
+    output: str = Field(min_length=1, max_length=50000)
+class StudioCheckerInput(BaseModel):
+    decision: str = Field(pattern=r"^(PASS|FAIL|pass|fail)$")
+    evidence: str = Field(min_length=1, max_length=12000)
+    issues: str = Field(default="", max_length=12000)
+class StudioApprovalInput(BaseModel):
+    approved: bool
+    note: str = Field(default="", max_length=4000)
+class StudioAssetInput(BaseModel):
+    project_id: str = Field(min_length=32, max_length=32, pattern=r"^[a-f0-9]{32}$")
+    kind: str = Field(min_length=1, max_length=40)
+    name: str = Field(min_length=1, max_length=160)
+    uri: str = Field(default="", max_length=2048)
+    metadata: dict = Field(default_factory=dict)
+class StudioMemoryInput(BaseModel):
+    project_id: str = Field(min_length=32, max_length=32, pattern=r"^[a-f0-9]{32}$")
+    key: str = Field(min_length=1, max_length=120)
+    value: str = Field(min_length=1, max_length=12000)
+class StudioVersionInput(BaseModel):
+    project_id: str = Field(min_length=32, max_length=32, pattern=r"^[a-f0-9]{32}$")
+class StudioRenderInput(BaseModel):
+    project_id: str = Field(min_length=32, max_length=32, pattern=r"^[a-f0-9]{32}$")
+    payload: dict = Field(default_factory=dict)
+class StudioRenderUpdateInput(BaseModel):
+    status: str = Field(pattern=r"^(running|completed|failed)$")
+    result: dict | None = None
+
+def _studio_owner(request: Request) -> str:
+    return _production_project_owner(request)
+
+def _studio_project_or_404(project_id: str, request: Request):
+    if not re.fullmatch(r"[a-f0-9]{32}", project_id):
+        raise HTTPException(status_code=400, detail="Invalid project ID.")
+    _ensure_production_projects_table()
+    with db() as conn:
+        row = conn.execute("SELECT * FROM production_projects WHERE id=? AND owner_username=?",
+                           (project_id, _studio_owner(request))).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    return dict(row)
+
+@app.get("/api/studio/summary")
+def studio_summary():
+    return {"scope": scope_summary(), "orchestration": orchestration_summary(),
+            "execution": "Persistent worker/checker queue is available; actual model calls require local Ollama.",
+            "free_policy": "No paid API, subscription or GPU can be enabled before revenue and explicit user approval."}
+
+@app.post("/api/studio/runs", status_code=201)
+def studio_create_run(payload: StudioRunInput, request: Request):
+    project = _studio_project_or_404(payload.project_id, request)
+    if project["format_id"] != payload.format_id:
+        raise HTTPException(status_code=400, detail="Run format must match the saved project format.")
+    try:
+        run = studio_engine.create_run(_studio_owner(request), payload.project_id, payload.format_id)
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"run": run}
+
+@app.get("/api/studio/runs")
+def studio_list_runs(request: Request):
+    return {"runs": studio_engine.list_runs(_studio_owner(request))}
+
+@app.get("/api/studio/runs/{run_id}")
+def studio_get_run(run_id: str, request: Request):
+    run = studio_engine.get_run(_studio_owner(request), run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Production run not found.")
+    return {"run": run}
+
+@app.post("/api/studio/runs/{run_id}/tasks/{task_id}/submit")
+def studio_submit_worker(run_id: str, task_id: str, payload: StudioWorkerOutputInput, request: Request):
+    try:
+        result = studio_engine.submit_worker_output(_studio_owner(request), run_id, task_id, payload.output)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    if not result:
+        raise HTTPException(status_code=404, detail="Run or task not found.")
+    return {"run": result}
+
+@app.post("/api/studio/runs/{run_id}/tasks/{task_id}/check")
+def studio_submit_checker(run_id: str, task_id: str, payload: StudioCheckerInput, request: Request):
+    try:
+        result = studio_engine.submit_checker_result(_studio_owner(request), run_id, task_id,
+                                                     payload.decision, payload.evidence, payload.issues)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    if not result:
+        raise HTTPException(status_code=404, detail="Run or task not found.")
+    return {"run": result}
+
+@app.post("/api/studio/runs/{run_id}/tasks/{task_id}/revise")
+def studio_revise_worker(run_id: str, task_id: str, payload: StudioWorkerOutputInput, request: Request):
+    try:
+        result = studio_engine.revise_worker_output(_studio_owner(request), run_id, task_id, payload.output)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    if not result:
+        raise HTTPException(status_code=404, detail="Run or task not found.")
+    return {"run": result}
+
+@app.post("/api/studio/runs/{run_id}/execute-next")
+def studio_execute_next(run_id: str, request: Request):
+    owner = _studio_owner(request)
+    run = studio_engine.get_run(owner, run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Production run not found.")
+    task = next((item for item in run["tasks"] if item["id"] == run["current_task_id"]), None)
+    if not task or task["status"] not in {"pending", "needs_revision"}:
+        raise HTTPException(status_code=409, detail="No worker task is ready to execute.")
+    project = _studio_project_or_404(run["project_id"], request)
+    worker_prompt = (
+        "Act as the specialist role: " + task["specialist"] + ".\nProject: " + project["name"] +
+        "\nFormat: " + run["format_id"] + "\nLanguage: " + project["language"] +
+        "\nDuration seconds: " + str(project["duration_seconds"]) + "\nProject brief:\n" + project["brief"] +
+        "\n\nCreate only your department deliverable. Be specific and practical. Do not claim external tools, live research, media generation or publishing unless actually done.\n"
+        "Previous independent checker revision instructions:\n" + (task.get("checker_issues") or "")
+    )
+    try:
+        worker = generate_text(worker_prompt, "content", "local")
+        studio_engine.submit_worker_output(owner, run_id, task["id"], worker["output"])
+        checker_prompt = (
+            "You are the independent checker role " + task["checker"] + ". You did not create this work. "
+            "Strictly review the output of " + task["specialist"] + " against the project brief. "
+            "Return ONLY valid JSON: decision (PASS or FAIL), evidence (specific checks performed), "
+            "issues (empty for PASS; actionable corrections for FAIL). PASS only when requirements are met.\n\n"
+            "Project brief:\n" + project["brief"] + "\n\nWorker output:\n" + worker["output"][:30000]
+        )
+        checker = generate_text(checker_prompt, "content", "local")
+    except ProviderNotConfigured as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except ProviderRequestError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    parsed = None
+    match = re.search(r"\{[\s\S]*\}", checker["output"])
+    if match:
+        try:
+            parsed = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            parsed = None
+    if not isinstance(parsed, dict) or str(parsed.get("decision", "")).upper() not in {"PASS", "FAIL"} or not str(parsed.get("evidence", "")).strip():
+        decision, evidence, issues = "FAIL", checker["output"][:10000] or "No structured checker evidence returned.", "Checker response was not valid strict JSON. Review manually and resubmit checker result."
+    else:
+        decision = str(parsed["decision"]).upper()
+        evidence = str(parsed["evidence"])[:12000]
+        issues = str(parsed.get("issues", ""))[:12000]
+        if decision == "FAIL" and not issues:
+            issues = "Checker reported FAIL but omitted revision instructions."
+    result = studio_engine.submit_checker_result(owner, run_id, task["id"], decision, evidence, issues)
+    return {"run": result, "worker": {"role": task["specialist"], "model": worker["model"], "output": worker["output"]},
+            "checker": {"role": task["checker"], "model": checker["model"], "decision": decision, "evidence": evidence, "issues": issues},
+            "note": "Worker and checker used separate local-model requests. Human judgment remains necessary for factual, legal and copyright decisions."}
+
+@app.post("/api/studio/runs/{run_id}/approve")
+def studio_approve_run(run_id: str, payload: StudioApprovalInput, request: Request):
+    try:
+        result = studio_engine.approve_run(_studio_owner(request), run_id, payload.approved, payload.note)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    if not result:
+        raise HTTPException(status_code=404, detail="Production run not found.")
+    return {"run": result, "publishing_started": False, "note": "Human approval records workflow completion; it does not publish publicly."}
+
+@app.get("/api/studio/assets")
+def studio_list_assets(project_id: str, request: Request):
+    _studio_project_or_404(project_id, request)
+    return {"assets": studio_engine.list_assets(_studio_owner(request), project_id)}
+
+@app.post("/api/studio/assets", status_code=201)
+def studio_add_asset(payload: StudioAssetInput, request: Request):
+    _studio_project_or_404(payload.project_id, request)
+    if len(json.dumps(payload.metadata, ensure_ascii=False)) > 12000:
+        raise HTTPException(status_code=400, detail="Asset metadata is too large.")
+    return {"asset": studio_engine.add_asset(_studio_owner(request), payload.project_id, payload.kind,
+                                               payload.name, payload.uri, payload.metadata)}
+
+@app.delete("/api/studio/assets/{asset_id}")
+def studio_delete_asset(asset_id: str, request: Request):
+    if not studio_engine.delete_asset(_studio_owner(request), asset_id):
+        raise HTTPException(status_code=404, detail="Asset not found.")
+    return {"deleted": True}
+
+@app.get("/api/studio/memory/{project_id}")
+def studio_get_memory(project_id: str, request: Request):
+    _studio_project_or_404(project_id, request)
+    return {"memory": studio_engine.list_memory(_studio_owner(request), project_id)}
+
+@app.put("/api/studio/memory")
+def studio_set_memory(payload: StudioMemoryInput, request: Request):
+    _studio_project_or_404(payload.project_id, request)
+    return {"memory": studio_engine.set_memory(_studio_owner(request), payload.project_id, payload.key, payload.value)}
+
+@app.delete("/api/studio/memory/{project_id}/{key}")
+def studio_delete_memory(project_id: str, key: str, request: Request):
+    _studio_project_or_404(project_id, request)
+    if not studio_engine.delete_memory(_studio_owner(request), project_id, key):
+        raise HTTPException(status_code=404, detail="Memory item not found.")
+    return {"deleted": True}
+
+@app.get("/api/studio/versions/{project_id}")
+def studio_get_versions(project_id: str, request: Request):
+    _studio_project_or_404(project_id, request)
+    return {"versions": studio_engine.list_versions(_studio_owner(request), project_id)}
+
+@app.post("/api/studio/versions", status_code=201)
+def studio_create_version(payload: StudioVersionInput, request: Request):
+    project = _studio_project_or_404(payload.project_id, request)
+    snapshot = {"project": project, "memory": studio_engine.list_memory(_studio_owner(request), payload.project_id),
+                "assets": studio_engine.list_assets(_studio_owner(request), payload.project_id)}
+    return {"version": studio_engine.create_version(_studio_owner(request), payload.project_id, snapshot)}
+
+@app.get("/api/studio/render-queue")
+def studio_get_render_queue(request: Request, project_id: str | None = None):
+    if project_id:
+        _studio_project_or_404(project_id, request)
+    return {"queue": studio_engine.list_render_queue(_studio_owner(request), project_id)}
+
+@app.post("/api/studio/render-queue", status_code=201)
+def studio_enqueue_render(payload: StudioRenderInput, request: Request):
+    _studio_project_or_404(payload.project_id, request)
+    if len(json.dumps(payload.payload, ensure_ascii=False)) > 20000:
+        raise HTTPException(status_code=400, detail="Render payload is too large.")
+    return {"item": studio_engine.enqueue_render(_studio_owner(request), payload.project_id, payload.payload)}
+
+@app.patch("/api/studio/render-queue/{item_id}")
+def studio_update_render_queue(item_id: str, payload: StudioRenderUpdateInput, request: Request):
+    try:
+        item = studio_engine.update_render_item(_studio_owner(request), item_id, payload.status, payload.result)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    if not item:
+        raise HTTPException(status_code=404, detail="Render queue item not found.")
+    return {"item": item}
+
+
 @app.get("/api/agents")
 def agents():
     return {"total": len(list_agents()), "agents": list_agents(), "orchestration": orchestration_summary()}
@@ -840,9 +1084,12 @@ def capabilities():
         "agent_catalog": len(list_agents()),
         "orchestration": orchestration_summary(),
         "providers": {
+            "local": providers["local"]["configured"],
             "openai": providers["openai"]["configured"],
             "gemini": providers["gemini"]["configured"],
         },
+        "studio_scope": scope_summary(),
+        "paid_upgrades_allowed": paid_upgrades_allowed(),
         "storyboard_renderer": {"available": bool(shutil.which("ffmpeg")), "output": "720x1280 MP4 with optional scene images, narration, uploaded music and captions"},
         "voiceover": voice_status(),
         "image_generation": image_status(),
@@ -2818,10 +3065,15 @@ def status():
         count = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
         completed = conn.execute("SELECT COUNT(*) FROM tasks WHERE status = 'Completed'").fetchone()[0]
     providers = provider_status()
-    configured = providers["openai"]["configured"] or providers["gemini"]["configured"]
+    configured = providers["local"]["configured"]
     return {
         "agents_total": len(list_agents()),
         "agents_implemented": 0,
+        "specialist_roles": scope_summary()["specialist_count"],
+        "independent_checker_roles": scope_summary()["independent_checker_count"],
+        "video_formats": scope_summary()["video_format_count"],
+        "studio_modules": scope_summary()["studio_module_count"],
+        "paid_upgrades_allowed": paid_upgrades_allowed(),
         "roles_routed": orchestration_summary()["roles_routed"],
         "orchestration_mode": orchestration_summary()["execution_mode"],
         "workflows_available": len(WORKFLOW_GUIDES),
