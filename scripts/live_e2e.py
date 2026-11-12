@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 import urllib.request
@@ -20,7 +21,7 @@ from app.agents import AGENTS
 from app.comfyui_client import image_workflow_status, video_workflow_status
 from app.image_generator import image_status
 from app.music_generator import music_status
-from app.production_runtime import REVIEWERS, create_run, execute_run, get_run
+from app.production_runtime import REVIEWERS, attach_render_result, create_run, execute_run, get_run
 from app.video_generator import AI_VIDEO_DIR, generate_video, video_status
 from app.video_renderer import OUTPUT_DIR, render_ai_clips
 from app.voice_generator import voice_status
@@ -109,6 +110,10 @@ def _live_video(prompt: str) -> dict:
     final_path = OUTPUT_DIR / rendered["filename"]
     if not final_path.is_file() or final_path.stat().st_size <= 0:
         raise RuntimeError("Final FFmpeg render was not created.")
+    if rendered.get("brand_watermark") != "SINTU AI YOUTUBE STUDIO":
+        raise RuntimeError("Final MP4 is missing the mandatory SINTU watermark.")
+    if rendered.get("subtitles_burned_in") is not False:
+        raise RuntimeError("Final MP4 violates the no-subtitles/no-text-overlay policy.")
     return {
         "generated_clip_id": clip["video_id"],
         "generated_clip_bytes": clip_path.stat().st_size,
@@ -165,7 +170,44 @@ def _live_agent_catalog(topic: str) -> dict:
             "Full role validation did not pass exact catalog coverage: "
             + json.dumps(summary, ensure_ascii=False)
         )
-    return summary
+    return (summary, result) if include_result else summary
+
+
+def _extract_scene_prompts(deliverable: str) -> list[str]:
+    if not isinstance(deliverable, str):
+        raise RuntimeError("AI Video Generator deliverable is missing.")
+    match = re.search(r"(?im)^\s*SCENE PROMPTS\s*:?[ \t]*\n([\s\S]*)$", deliverable)
+    if not match:
+        raise RuntimeError("Approved AI Video Generator output has no SCENE PROMPTS section.")
+    prompts = [
+        item.strip()
+        for item in re.findall(r"(?m)^\s*\d+[.)]\s*(.+?)\s*$", match.group(1))
+        if item.strip()
+    ]
+    if not 6 <= len(prompts) <= 12:
+        raise RuntimeError(f"Expected 6 to 12 approved scene prompts; received {len(prompts)}.")
+    return prompts
+
+
+def _full_studio_e2e(topic: str) -> dict:
+    role_summary, run = _live_agent_catalog(topic, include_result=True)
+    deliverables = (run.get("result") or {}).get("deliverables") or {}
+    prompts = _extract_scene_prompts(deliverables.get("AI Video Generator", ""))
+    media = _live_video(prompts[0])
+    attached = attach_render_result(run["id"], media["render_result"], "local")
+    if not attached or not attached.get("result", {}).get("video_rendered"):
+        raise RuntimeError("Rendered MP4 could not be attached to the quality-approved production run.")
+    if attached.get("result", {}).get("published") is not False:
+        raise RuntimeError("E2E test unexpectedly changed publishing state.")
+    return {
+        "agent_catalog": role_summary,
+        "approved_scene_prompts": len(prompts),
+        "rendered_scene_prompt_index": 1,
+        "video": {key: value for key, value in media.items() if key != "render_result"},
+        "production_run_id": run["id"],
+        "render_attached_to_production_run": True,
+        "published": False,
+    }
 
 
 def _deployment_health(url: str) -> dict:
@@ -186,6 +228,7 @@ def main() -> int:
     parser.add_argument("--live-text", action="store_true", help="Make one real local Ollama text inference.")
     parser.add_argument("--live-agent-catalog", action="store_true", help="Run all 61 workers, 61 checkers and five reviewers using local Ollama.")
     parser.add_argument("--generate-video", action="store_true", help="Generate a real 3-second ComfyUI clip and render a branded MP4.")
+    parser.add_argument("--full-studio-e2e", action="store_true", help="Run all 61 workers/checkers and five reviewers, use the approved AI Video Generator scene prompt, render a branded MP4, and attach it to the production run.")
     parser.add_argument("--topic", default="भारत के प्राचीन किले में सुबह का सिनेमाई दृश्य")
     parser.add_argument("--deployment-url", help="Probe a deployed /api/health URL.")
     args = parser.parse_args()
@@ -205,6 +248,8 @@ def main() -> int:
             }
         if args.live_agent_catalog:
             report["live_tests"]["agent_catalog"] = _live_agent_catalog(args.topic)
+        if args.full_studio_e2e:
+            report["live_tests"]["full_studio_e2e"] = _full_studio_e2e(args.topic)
         if args.generate_video:
             report["live_tests"]["comfyui_video_and_branded_render"] = _live_video(args.topic)
         if args.deployment_url:

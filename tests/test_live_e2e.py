@@ -108,3 +108,62 @@ def test_live_agent_catalog_rejects_incomplete_role_coverage(monkeypatch):
     with pytest.raises(RuntimeError, match="exact catalog coverage"):
         live_e2e._live_agent_catalog("Incomplete role coverage test")
 
+
+def test_scene_prompt_parser_requires_six_to_twelve_numbered_prompts():
+    from scripts.live_e2e import _extract_scene_prompts
+
+    prompt_text = "Approved visual plan\nSCENE PROMPTS:\n" + "\n".join(
+        f"{index}. Text-free cinematic scene {index}" for index in range(1, 7)
+    )
+    prompts = _extract_scene_prompts(prompt_text)
+    assert len(prompts) == 6
+    assert prompts[0] == "Text-free cinematic scene 1"
+    with pytest.raises(RuntimeError, match="6 to 12"):
+        _extract_scene_prompts("SCENE PROMPTS:\n1. Only one scene")
+    with pytest.raises(RuntimeError, match="no SCENE PROMPTS"):
+        _extract_scene_prompts("No approved scene section")
+
+
+def test_full_studio_e2e_uses_approved_scene_and_attaches_branded_render(monkeypatch):
+    scene_section = "SCENE PROMPTS:\n" + "\n".join(
+        f"{index}. Approved cinematic scene {index}" for index in range(1, 7)
+    )
+    package = {
+        "id": "full-e2e-run",
+        "result": {"deliverables": {"AI Video Generator": scene_section}},
+    }
+    monkeypatch.setattr(live_e2e, "_live_agent_catalog", lambda topic, include_result=False: (
+        {"status": "completed", "registered_agent_roles": 61}, package
+    ))
+    generated = []
+    monkeypatch.setattr(live_e2e, "_live_video", lambda prompt: (
+        generated.append(prompt) or {
+            "final_render_id": "render-id",
+            "render_result": {"video_id": "render-id", "brand_watermark": "SINTU AI YOUTUBE STUDIO"},
+            "final_render_path": "/tmp/render.mp4",
+        }
+    ))
+    monkeypatch.setattr(live_e2e, "attach_render_result", lambda *args: {
+        "result": {"video_rendered": True, "published": False}
+    })
+
+    result = live_e2e._full_studio_e2e("Test topic")
+    assert generated == ["Approved cinematic scene 1"]
+    assert result["approved_scene_prompts"] == 6
+    assert result["render_attached_to_production_run"] is True
+    assert result["published"] is False
+
+
+def test_full_studio_e2e_does_not_attach_if_render_is_not_approved(monkeypatch):
+    package = {"id": "blocked-run", "result": {"deliverables": {
+        "AI Video Generator": "SCENE PROMPTS:\n" + "\n".join(
+            f"{index}. Scene {index}" for index in range(1, 7)
+        )
+    }}}
+    monkeypatch.setattr(live_e2e, "_live_agent_catalog", lambda *args, **kwargs: ({}, package))
+    monkeypatch.setattr(live_e2e, "_live_video", lambda prompt: {"render_result": {}})
+    monkeypatch.setattr(live_e2e, "attach_render_result", lambda *args: {
+        "result": {"video_rendered": False, "published": False}
+    })
+    with pytest.raises(RuntimeError, match="could not be attached"):
+        live_e2e._full_studio_e2e("Test topic")

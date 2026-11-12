@@ -345,7 +345,8 @@ Follow-up workload CSV export: the community review workload panel can download 
 ### वास्तविक Local E2E और Deployment Smoke Test
 - केवल readiness report: `python scripts/live_e2e.py`
 - Ollama पर वास्तविक text inference: `python scripts/live_e2e.py --live-text`
-- सभी 61 Agent Workers + 61 Checkers + पाँच Final Reviewers का वास्तविक local run: `python scripts/live_e2e.py --live-agent-catalog --topic "SINTU Studio का पूर्ण परीक्षण"`
+- सभी 61 Agent Workers + 61 Checkers + पाँच Final Reviewers का वास्तविक local run: `python scripts/live_e2e.py --live-agent-catalog --topic "SINTU Studio का पूर्ण परीक्षण"
+- पूरे Studio का linked live E2E (61 roles → approved scene prompts → ComfyUI MP4 → SINTU watermark render → production run में attach): `python scripts/live_e2e.py --full-studio-e2e --topic "भारत की रहस्यमयी जगहें"``
 - ComfyUI से 3 सेकंड का वास्तविक clip बनाकर FFmpeg से SINTU watermark वाला final MP4 render: `python scripts/live_e2e.py --generate-video`
 - Deployed app का health check: `python scripts/live_e2e.py --deployment-url https://YOUR-DOMAIN/api/health`
 - ये live flags तभी चलाएँ जब संबंधित local model, ComfyUI workflow, FFmpeg/FFprobe या deployment पहले configure हों। Default run केवल readiness दिखाता है; missing engine को PASS नहीं बताता।
