@@ -2806,3 +2806,85 @@ def test_production_media_pipeline_rejects_runs_owned_by_other_users(tmp_path, m
         "scene_prompts": ["एक दृश्य"], "narration": "यह हिंदी कहानी है"
     })
     assert response.status_code == 404
+
+
+def test_youtube_analytics_aggregates_official_metrics_and_separates_estimated_revenue(tmp_path, monkeypatch):
+    from datetime import date, timedelta
+    from fastapi import HTTPException
+    from urllib.parse import urlparse, parse_qs
+
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "_youtube_access_token", lambda: "test-access-token")
+    monkeypatch.setattr(main, "_youtube_connection", lambda: {"channel_title": "Test Channel"})
+    calls = []
+
+    def fake_request(url, headers=None):
+        query = parse_qs(urlparse(url).query)
+        calls.append(query)
+        dimension = query.get("dimensions", [""])[0]
+        if "estimatedRevenue" in query.get("metrics", [""])[0]:
+            payload = {"columnHeaders": [{"name": "estimatedRevenue"}, {"name": "estimatedAdRevenue"}],
+                       "rows": [[12.5, 10.0]]}
+        elif dimension == "day":
+            payload = {
+                "columnHeaders": [{"name": "day"}, {"name": "views"},
+                                  {"name": "estimatedMinutesWatched"}, {"name": "averageViewDuration"},
+                                  {"name": "subscribersGained"}, {"name": "subscribersLost"}],
+                "rows": [["2026-11-01", 100, 50.0, 30, 4, 1], ["2026-11-02", 300, 180.0, 36, 8, 2]]
+            }
+        else:
+            payload = {"columnHeaders": [{"name": "video"}, {"name": "views"}],
+                       "rows": [["abc123", 250], ["xyz789", 150]]}
+        return 200, {}, json.dumps(payload).encode("utf-8")
+
+    monkeypatch.setattr(main, "_youtube_request", fake_request)
+    response = client.get("/api/admin/youtube/analytics?start_date=2026-11-01&end_date=2026-11-30")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["channel"] == "Test Channel"
+    assert body["totals"]["views"] == 400
+    assert body["totals"]["estimatedMinutesWatched"] == 230
+    assert body["totals"]["subscribersGained"] == 12
+    assert body["totals"]["subscribersLost"] == 3
+    assert body["totals"]["averageViewDuration"] == 34.5
+    assert body["top_videos"][0]["url"] == "https://www.youtube.com/watch?v=abc123"
+    assert body["revenue"]["available"] is True
+    assert body["revenue"]["estimated_revenue"] == 12.5
+    assert len(calls) == 3
+    assert all(call["ids"] == ["channel==MINE"] for call in calls)
+    assert response.json()["revenue"]["currency"] == "INR"
+
+
+def test_youtube_analytics_rejects_invalid_ranges_before_oauth_and_handles_revenue_permission_error(tmp_path, monkeypatch):
+    from fastapi import HTTPException
+
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "_youtube_access_token", lambda: pytest.fail("invalid dates must be rejected before OAuth"))
+    assert client.get("/api/admin/youtube/analytics?start_date=not-a-date").status_code == 422
+    assert client.get("/api/admin/youtube/analytics?start_date=2026-11-10&end_date=2026-11-01").status_code == 422
+    assert client.get("/api/admin/youtube/analytics?start_date=2025-01-01&end_date=2026-11-01").status_code == 422
+
+    monkeypatch.setattr(main, "_youtube_access_token", lambda: "test-access-token")
+    monkeypatch.setattr(main, "_youtube_connection", lambda: {"channel_title": "Test Channel"})
+    calls = {"count": 0}
+
+    def fake_request(url, headers=None):
+        calls["count"] += 1
+        if calls["count"] == 3:
+            raise HTTPException(status_code=403, detail="monetary scope unavailable")
+        from urllib.parse import urlparse, parse_qs
+        dimension = parse_qs(urlparse(url).query).get("dimensions", [""])[0]
+        if dimension == "day":
+            payload = {"columnHeaders": [{"name": "day"}, {"name": "views"},
+                       {"name": "estimatedMinutesWatched"}, {"name": "averageViewDuration"},
+                       {"name": "subscribersGained"}, {"name": "subscribersLost"}], "rows": []}
+        else:
+            payload = {"columnHeaders": [{"name": "video"}, {"name": "views"}], "rows": []}
+        return 200, {}, json.dumps(payload).encode("utf-8")
+
+    monkeypatch.setattr(main, "_youtube_request", fake_request)
+    response = client.get("/api/admin/youtube/analytics?start_date=2026-11-01&end_date=2026-11-02")
+    assert response.status_code == 200, response.text
+    assert response.json()["revenue"]["available"] is False
+    assert "Revenue abhi available nahi" in response.json()["revenue"]["note"]
+    assert response.json()["totals"]["views"] == 0
