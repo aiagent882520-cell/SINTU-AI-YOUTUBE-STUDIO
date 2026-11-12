@@ -84,19 +84,30 @@ def earnings_summary(month: str | None = Query(default=None, pattern=r"^\d{4}-(0
         rows = conn.execute("SELECT kind,status,currency,SUM(amount) total,COUNT(*) count FROM earning_records WHERE substr(record_date,1,7)=? GROUP BY kind,status,currency", (month,)).fetchall()
         target = conn.execute("SELECT target_amount,currency FROM earning_targets WHERE month=?", (month,)).fetchone()
         by_source = conn.execute("SELECT source,currency,SUM(amount) total,COUNT(*) count FROM earning_records WHERE kind='income' AND status IN ('confirmed','received') AND substr(record_date,1,7)=? GROUP BY source,currency ORDER BY total DESC", (month,)).fetchall()
-    totals = {"confirmed_income": {}, "estimated_income": {}, "pending_income": {}, "expenses": {}, "received_income": {}, "net_confirmed": {}}
+    totals = {"confirmed_income": {}, "estimated_income": {}, "pending_income": {}, "expenses": {},
+              "confirmed_expenses": {}, "estimated_expenses": {}, "pending_expenses": {},
+              "received_income": {}, "net_confirmed": {}}
     for row in rows:
         key = row["currency"]
-        bucket = ("expenses" if row["kind"] == "expense" and row["status"] != "cancelled" else
-                  "confirmed_income" if row["kind"] == "income" and row["status"] == "confirmed" else
-                  "received_income" if row["kind"] == "income" and row["status"] == "received" else
-                  "estimated_income" if row["kind"] == "income" and row["status"] == "estimated" else
-                  "pending_income" if row["kind"] == "income" and row["status"] == "pending" else None)
-        if bucket:
-            totals[bucket][key] = round(totals[bucket].get(key, 0) + float(row["total"] or 0), 2)
-    currencies = set(totals["confirmed_income"]) | set(totals["received_income"]) | set(totals["expenses"])
+        amount = float(row["total"] or 0)
+        if row["kind"] == "expense":
+            if row["status"] != "cancelled":
+                totals["expenses"][key] = round(totals["expenses"].get(key, 0) + amount, 2)
+            expense_bucket = {"confirmed": "confirmed_expenses", "received": "confirmed_expenses",
+                              "estimated": "estimated_expenses", "pending": "pending_expenses"}.get(row["status"])
+            if expense_bucket:
+                totals[expense_bucket][key] = round(totals[expense_bucket].get(key, 0) + amount, 2)
+            continue
+        income_bucket = {"confirmed": "confirmed_income", "received": "received_income",
+                         "estimated": "estimated_income", "pending": "pending_income"}.get(row["status"])
+        if income_bucket:
+            totals[income_bucket][key] = round(totals[income_bucket].get(key, 0) + amount, 2)
+    currencies = (set(totals["confirmed_income"]) | set(totals["received_income"]) |
+                  set(totals["confirmed_expenses"]))
     for currency in currencies:
-        totals["net_confirmed"][currency] = round(totals["confirmed_income"].get(currency, 0) + totals["received_income"].get(currency, 0) - totals["expenses"].get(currency, 0), 2)
+        totals["net_confirmed"][currency] = round(
+            totals["confirmed_income"].get(currency, 0) + totals["received_income"].get(currency, 0) -
+            totals["confirmed_expenses"].get(currency, 0), 2)
     target_data = dict(target) if target else None
     target_progress = None
     if target_data:

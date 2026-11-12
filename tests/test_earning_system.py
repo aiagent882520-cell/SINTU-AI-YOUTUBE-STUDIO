@@ -128,3 +128,27 @@ def test_earning_dashboard_includes_official_youtube_analytics_panel(tmp_path, m
     assert '/api/admin/youtube/analytics' in page
     assert "अनुमानित रकम वास्तविक भुगतान नहीं है" in page
     assert "YouTube डेटा लोड करें" in page
+
+
+
+def test_net_confirmed_excludes_estimated_and_pending_expenses(tmp_path, monkeypatch):
+    client = setup_client(tmp_path, monkeypatch)
+    records = [
+        ("income", "received", 1000, "Received income"),
+        ("expense", "confirmed", 100, "Confirmed expense"),
+        ("expense", "estimated", 300, "Estimated expense"),
+        ("expense", "pending", 200, "Pending expense"),
+        ("expense", "cancelled", 999, "Cancelled expense"),
+    ]
+    for kind, status, amount, title in records:
+        response = client.post("/api/earnings/records", json={
+            "kind": kind, "source": "other", "title": title, "amount": amount,
+            "currency": "INR", "status": status, "record_date": "2026-11-12"
+        })
+        assert response.status_code == 201
+    summary = client.get("/api/earnings/summary?month=2026-11").json()
+    assert summary["expenses"]["INR"] == 600
+    assert summary["confirmed_expenses"]["INR"] == 100
+    assert summary["estimated_expenses"]["INR"] == 300
+    assert summary["pending_expenses"]["INR"] == 200
+    assert summary["net_confirmed"]["INR"] == 900
