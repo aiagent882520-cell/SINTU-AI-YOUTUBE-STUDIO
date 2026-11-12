@@ -2052,7 +2052,7 @@ def test_windows_launcher_is_in_repo_and_uses_bootstrap():
     assert "scripts\\bootstrap_local.py" in launcher
     assert "requirements.txt" in launcher
     assert "uvicorn app.main:app" in launcher
-    assert "sys.version_info >= (3,10)" in launcher
+    assert "sys.version_info >= (3,11)" in launcher
     gitignore = (root / ".gitignore").read_text(encoding="utf-8")
     assert ".env" in gitignore and ".venv/" in gitignore
 
