@@ -46,6 +46,12 @@ pytest -q
 
 See [Hindi setup and capability notes](README_HI.md) for Windows, local engines, video workflow and integration details.
 
+## One-step Local Media Production API
+
+After a production run passes its builder/checker and final-review gates, call `POST /api/production/runs/{run_id}/produce-media` with up to 25 scene prompts, optional narration (or a Script Writer deliverable), seconds per scene, resolution, FPS and quality. The endpoint requires the run to belong to the current account and to be completed, and it only accepts formats with a supported generic export profile.
+
+Free local operation requires a validated ComfyUI image workflow, Piper with a Hindi voice model, and FFmpeg/FFprobe. Original procedural background music is generated locally. This route does not silently call paid providers; missing engines fail closed. The final MP4 receives the SINTU watermark and no burned-in subtitles. The rendered result is attached to the run, but `published` remains false and YouTube publishing still requires separate human approval. Scene prompts are currently supplied by the caller; this endpoint does not claim automatic prompt extraction or long-form AI scene generation.
+
 ## Important limitations
 
 A format being listed does not mean every format has passed full production rendering tests. A role catalog is not proof of 61 autonomous agents running as separate services. Google Flow, platform permissions, actual YouTube monetization eligibility, automated payout collection, live hosting and end-to-end production on the owner's machine require separate setup and verification. Public publishing and financial actions must remain explicitly approved by the owner.

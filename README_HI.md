@@ -50,6 +50,28 @@ If Ollama is not installed/running, generation displays setup guidance and does 
 - Basic browser security headers (CSP, frame protection, MIME sniffing protection, referrer and permissions policies).
 - API tests for health, catalog, generation flow, task retrieval, export, PWA shell, team routing and capability safety.
 
+## One-step Local Media Production API
+
+Builder/checker aur five final reviewers se approved production run ke baad local media pipeline ko ek API request se chalaya ja sakta hai:
+
+- Route: `POST /api/production/runs/{run_id}/produce-media`
+- Body example:
+  ```json
+  {
+    "scene_prompts": ["पुराने किले का सिनेमाई दृश्य", "रहस्यमयी जंगल का दृश्य"],
+    "narration": "यहाँ 95% या अधिक देवनागरी हिंदी narration दें।",
+    "seconds_per_scene": 5,
+    "resolution": "1080x1920",
+    "fps": 30,
+    "quality": "high"
+  }
+  ```
+- Run current logged-in owner ka hona chahiye aur status `completed` hona chahiye. Format ka generic export profile supported hona chahiye.
+- Free local image ke liye validated ComfyUI image workflow; voice ke liye Piper executable + Hindi voice model; final MP4 ke liye FFmpeg + FFprobe chahiye. Original procedural background music local generate hota hai.
+- API paid providers ko is pipeline se automatically call nahi karti. Engine missing ho to request 503 ke saath fail closed hoti hai.
+- Final renderer SINTU watermark add karta hai; subtitles/captions burn nahi hote. Result run se attach hota hai. `published=false` rahega; YouTube upload alag human-approved step hai.
+- Yeh endpoint 25 scene prompts tak accept karta hai. Scene prompts abhi request mein dene honge; automatic scene prompt extraction, long-form AI video generation aur remote publishing is endpoint ka hissa nahi hain.
+
 ## Earning System
 
 - Main dashboard se **Earning System** kholein: `/earnings`.
