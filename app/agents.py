@@ -14,25 +14,17 @@ AGENTS = [
     "Privacy & Access Agent", "Testing & QA Agent", "System Health Agent"
 ]
 
+
 def list_agents():
     return [
         {
-            "id": i + 1,
+            "id": index + 1,
             "name": name,
-            "status": "Role prompt available" if name in {
-                "Master AI", "Task Manager", "Workflow Agent", "Web Research", "Fact Checker",
-                "Trend Detector", "Competitor Analyst", "Keyword Research", "Topic Predictor",
-                "Content Planner", "Channel Strategist", "Audience Analyst", "Language Specialist",
-                "Script Writer", "Storytelling", "Course Designer", "Lesson Creator",
-                "Educational Expert", "Quiz & Assessment", "Image Generator", "2D Animation",
-                "3D Animation", "AI Video Generator", "Google Flow Specialist", "Documentary Producer",
-                "Filmmaking Director", "Visual Effects Artist", "Voice Generator", "Narration Director",
-                "Music Composer", "Sound Designer", "Video Editor", "Subtitle Creator",
-                "Motion Graphics", "Quality Enhancer", "Final Render Agent", "Thumbnail Designer",
-                "CTR Optimizer", "Title Generator", "Description Writer", "Hashtag & Tag Expert",
-                "Distribution Manager", "Community Manager", "Cyber Security Agent",
-                "Privacy & Access Agent", "Testing & QA Agent"
-            } else "Catalog / integration pending",
+            "status": "Runnable worker/checker role",
+            "execution_mode": "on_demand_local_model",
+            "external_integration": "Requires configured platform credentials where applicable"
+            if name in {"YouTube Publisher", "Social Media Publisher", "Scheduler", "Channel Analytics"}
+            else None,
         }
-        for i, name in enumerate(AGENTS)
+        for index, name in enumerate(AGENTS)
     ]

@@ -1226,6 +1226,35 @@ def studio_summary():
             "execution": "Persistent worker/checker queue is available; actual model calls require local Ollama.",
             "free_policy": "No paid API, subscription or GPU can be enabled before revenue and explicit user approval."}
 
+@app.post("/api/admin/agent-catalog/validate", status_code=202)
+def validate_all_agent_roles(payload: dict, background_tasks: BackgroundTasks, request: Request):
+    """Run every registered agent role through a separate worker and checker model call."""
+    topic = payload.get("topic")
+    if not isinstance(topic, str) or not topic.strip() or len(topic.strip()) > 5000:
+        raise HTTPException(status_code=422, detail="topic must contain 1 to 5000 characters.")
+    owner = _studio_owner(request)
+    try:
+        run = create_production_run("__agent_catalog__", topic.strip(), owner)
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    background_tasks.add_task(execute_production_run, run["id"], owner)
+    return {
+        "run": run,
+        "started": True,
+        "registered_agent_roles": 61,
+        "expected_worker_checker_pairs": 61,
+        "note": "All 61 roles run sequentially with independent checker calls and five final reviewers. Local Ollama must be reachable; a failed gate pauses the run. This validation does not publish or spend money.",
+    }
+
+
+@app.get("/api/admin/agent-catalog/runs/{run_id}")
+def get_agent_catalog_validation(run_id: str, request: Request):
+    run = get_production_run(run_id, _studio_owner(request))
+    if not run or run.get("format_id") != "__agent_catalog__":
+        raise HTTPException(status_code=404, detail="Agent catalog validation run not found.")
+    return {"run": run}
+
+
 @app.post("/api/studio/runs", status_code=201)
 def studio_create_run(payload: StudioRunInput, request: Request):
     project = _studio_project_or_404(payload.project_id, request)

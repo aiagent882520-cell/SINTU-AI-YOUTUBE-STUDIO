@@ -16,6 +16,7 @@ from typing import Any
 
 from .studio_scope import get_format, production_plan
 from .agent_orchestrator import format_team
+from .agents import AGENTS
 from .ai_brain import generate_text, ProviderNotConfigured, ProviderRequestError
 
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(Path(__file__).resolve().parent.parent))).expanduser().resolve()
@@ -63,8 +64,20 @@ def init_runtime_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_production_steps_run ON production_steps(run_id, sequence)")
 
 
+def _selected_format(format_id: str) -> dict[str, Any] | None:
+    if format_id == "__agent_catalog__":
+        return {
+            "id": format_id,
+            "name": "Complete 61-Agent Role Validation",
+            "aspect_ratio": "16:9",
+            "recommended_resolution": "1920x1080",
+            "roles": list(AGENTS),
+        }
+    return get_format(format_id)
+
+
 def create_run(format_id: str, topic: str, owner_username: str = "local") -> dict[str, Any]:
-    selected = get_format(format_id)
+    selected = _selected_format(format_id)
     if not selected:
         raise ValueError("Unknown video format.")
     topic = (topic or "").strip()
@@ -171,7 +184,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
         return
     if run["status"] not in {"queued", "paused"}:
         return
-    selected = get_format(run["format_id"])
+    selected = _selected_format(run["format_id"])
     if not selected:
         _set_run(run_id, "failed", error="Video format no longer exists.")
         return

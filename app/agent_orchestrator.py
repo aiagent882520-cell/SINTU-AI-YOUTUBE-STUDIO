@@ -39,7 +39,31 @@ def workflow_team(workflow: str) -> list[dict]:
                        "checks":name,"mission":"Independently evaluate the submitted work; return PASS/FAIL, evidence, issues and revision instructions."})
     return result
 
+def catalog_team() -> list[dict]:
+    """Build distinct worker/checker instances for every registered top-level agent role."""
+    result = []
+    for name in AGENTS:
+        result.append({
+            "name": name,
+            "role_type": "specialist",
+            "mission": ROLE_MISSIONS.get(
+                name,
+                f"Perform the {name} responsibility for the requested SINTU production package. "
+                "Return a concrete deliverable, identify assumptions, and never claim external actions."
+            ),
+        })
+        result.append({
+            "name": _checker_name(name),
+            "role_type": "independent_checker",
+            "checks": name,
+            "mission": "Independently verify the worker deliverable, cite concrete evidence, and return PASS/FAIL with issues and revision instructions.",
+        })
+    return result
+
+
 def format_team(format_id: str) -> list[dict]:
+    if format_id == "__agent_catalog__":
+        return catalog_team()
     item = get_format(format_id)
     if not item:
         raise KeyError(format_id)
