@@ -43,6 +43,7 @@ If Ollama is not installed/running, generation displays setup guidance and does 
 - All 60 approved video formats, 15 Studio Modules, format-specific role presets, 8 production stages and checker PASS/FAIL revision gates.
 - Free-first engine policy: Ollama, ComfyUI, Blender, FFmpeg, Piper and SQLite; no required paid API, subscription or cloud GPU.
 - Persistent /api/studio endpoints provide worker/checker production runs, PASS/FAIL revision gates, human approval, project memory, assets, version snapshots and a render queue.
+- YouTube Data API v3 OAuth connection, encrypted token storage, channel status, analytics and explicit approved MP4 upload endpoints are implemented and covered by mocked Google API integration tests. Actual owner consent, live channel linking, quota and real upload still require Google Cloud credentials and a real authorized channel.
 - Local-first provider guard prevents paid model/media calls until revenue is confirmed and the owner explicitly enables upgrades.
 - Local AI worker and independent checker use two separate Ollama requests per role pair; actual execution requires the local Ollama runtime.
 - The role registry separates every specialist from its checker. The current shared-model gateway is not a claim that all role workers are running as independent background processes; actual worker execution is reported separately.
@@ -84,7 +85,7 @@ Builder/checker aur five final reviewers se approved production run ke baad loca
 
 ## Not yet integrated / not verified
 
-This repository is still under active implementation and is not yet a fully autonomous video studio. Long-form AI video scene generation and automatic multi-clip assembly, true editable 2D/3D animation rigs and advanced FFmpeg editing/VFX beyond basic slow zoom, YouTube/social OAuth publishing, analytics/revenue connectors, autonomous multi-agent execution, managed database and native Android/iOS apps require further integrations and testing. Basic storyboard MP4 rendering is available only where FFmpeg is installed. A generated script or production package is not a rendered video file. No publishing or external account action occurs automatically.
+This repository is still under active implementation and is not yet a fully autonomous video studio. Local ComfyUI text-to-video workflows and multi-scene MP4 assembly are implemented, including a full-studio live E2E command, but real generation requires a reachable ComfyUI server, a compatible API workflow, installed model weights/custom nodes, sufficient GPU/VRAM and FFmpeg/FFprobe. The optional Gemini video provider is paid and remains locked by policy. YouTube OAuth, encrypted token storage, channel analytics and human-approved resumable MP4 upload are implemented and covered by mocked integration tests; real Google consent, channel connection, quota and upload have not yet been verified against the owner's account. Social OAuth for Meta/TikTok, true editable 2D/3D animation rigs, advanced nonlinear editing/VFX, managed database scaling and native Android/iOS apps require separate integration or validation. A generated script or production package is not a rendered video file. No publishing or external account action occurs automatically.
 
 ## Production notes
 
@@ -351,4 +352,44 @@ Follow-up workload CSV export: the community review workload panel can download 
 - Deployed app का health check: `python scripts/live_e2e.py --deployment-url https://YOUR-DOMAIN/api/health`
 - ये live flags तभी चलाएँ जब संबंधित local model, ComfyUI workflow, FFmpeg/FFprobe या deployment पहले configure हों। Default run केवल readiness दिखाता है; missing engine को PASS नहीं बताता।
 - YouTube OAuth में owner की Google consent जरूरी है। Script OAuth consent, public upload या publish अपने-आप नहीं करता; dashboard से channel connect करें और approved calendar item पर अलग publish action दें।
+
+
+
+## Live integration and production verification
+
+### 1. Free local AI video generation
+
+1. Start Ollama and install the configured local text model.
+2. Start ComfyUI locally and install every custom node and model required by the exported video workflow.
+3. Export the workflow in ComfyUI **API format**. Configure `COMFYUI_VIDEO_WORKFLOW_PATH` to that JSON file. The workflow must contain `__SINTU_PROMPT__`, `__SINTU_WIDTH__`, `__SINTU_HEIGHT__`, `__SINTU_FRAMES__` and `__SINTU_FPS__` placeholders and write a final MP4 to ComfyUI history.
+4. Run engine diagnostics in the Studio. A workflow file alone is not enough: server reachability, node types and installed model choices must validate.
+5. Install FFmpeg and FFprobe, then run:
+   ```bash
+   python scripts/live_e2e.py
+   python scripts/live_e2e.py --generate-video
+   python scripts/live_e2e.py --full-studio-e2e --topic "भारत के रहस्यमयी किले"
+   ```
+   The full test runs the local specialist/checker/reviewer pipeline, generates approved scene prompts, assembles a branded MP4 and attaches it to the run. It does **not** publish to YouTube. A failure is expected if local Ollama/ComfyUI/model/GPU prerequisites are missing.
+
+### 2. Connect the owner's YouTube channel
+
+1. Enable **YouTube Data API v3** and **YouTube Analytics API** in the owner's Google Cloud project.
+2. Create a Google OAuth **Web application** client. Register the exact HTTPS callback: `https://YOUR-DOMAIN/api/admin/youtube/oauth/callback`.
+3. Set `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REDIRECT_URI` and a stable `YOUTUBE_TOKEN_ENCRYPTION_KEY` in the deployment secret manager. Never put secrets in Git, the browser, or chat.
+4. Sign in as SINTU admin over HTTPS and use **YouTube Channel Connection** to authorize the owner's Google account.
+5. Verify the connected channel in the panel / `GET /api/admin/youtube/status`. Then approve a calendar item, render its MP4 and use the explicit upload action. Privacy defaults to **private**; public visibility requires a separate explicit choice.
+6. The repository's OAuth/upload tests mock Google's endpoints. Only a real owner consent flow and a successful upload can prove that the account is connected and publishing works end-to-end.
+
+### 3. Public HTTPS deployment
+
+1. Use a Docker-capable host with a persistent volume and a stable domain. The current SQLite design should run as one app instance; do not scale multiple app replicas against one SQLite file.
+2. Configure a unique admin password (12+ characters), a random session secret (32+ characters), all OAuth secrets, and `SINTU_COOKIE_SECURE=true` in the host secret manager.
+3. Run `docker compose up --build -d`. Keep the app port private to the host/reverse proxy; do not expose direct HTTP port 8000 to the internet.
+4. Put a maintained HTTPS reverse proxy/WAF in front, enable TLS, access controls and shared rate limiting, and route the exact OAuth callback path to the app.
+5. Attach persistent storage at `/data`, configure encrypted off-host backups, log retention and resource limits. Keep the ComfyUI/Ollama engines on a private network; never expose their control APIs publicly.
+6. Verify `https://YOUR-DOMAIN/api/health` returns `{"status":"ok"}`, then run:
+   ```bash
+   python scripts/live_e2e.py --deployment-url https://YOUR-DOMAIN/api/health
+   ```
+7. A successful CI Docker build or local health check is **not** a public deployment. Mark deployment live only after the host is provisioned, DNS/TLS work, persistent storage is attached and the remote health probe passes.
 
