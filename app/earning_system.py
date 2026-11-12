@@ -8,6 +8,7 @@ from pathlib import Path
 import csv
 import io
 import os
+import re
 import sqlite3
 from contextlib import contextmanager
 from fastapi import APIRouter, HTTPException, Query
@@ -109,8 +110,8 @@ def earnings_summary(month: str | None = Query(default=None, pattern=r"^\d{4}-(0
 def list_earning_records(kind: str | None = None, month: str | None = None, limit: int = Query(default=100, ge=1, le=500)):
     if kind and kind not in {"income", "expense"}:
         raise HTTPException(400, "kind must be income or expense")
-    if month and (len(month) != 7 or month[4] != "-"):
-        raise HTTPException(400, "month must use YYYY-MM")
+    if month and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month):
+        raise HTTPException(400, "month must be a valid YYYY-MM value")
     clauses, values = [], []
     if kind:
         clauses.append("kind=?"); values.append(kind)
@@ -173,6 +174,15 @@ def export_earning_records():
     stream = io.StringIO()
     writer = csv.writer(stream)
     writer.writerow(["id","kind","source","title","amount","currency","status","record_date","reference","notes","created_at"])
-    writer.writerows([tuple(r) for r in rows])
+    def safe_spreadsheet_text(value):
+        if not isinstance(value, str):
+            return value
+        first = value.lstrip(" \t\r\n")[:1]
+        return "'" + value if first in {"=", "+", "-", "@"} else value
+
+    writer.writerows([
+        tuple(safe_spreadsheet_text(value) for value in row)
+        for row in rows
+    ])
     stream.seek(0)
     return StreamingResponse(iter([stream.getvalue()]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=sintu-earnings.csv"})
