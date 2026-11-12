@@ -50,7 +50,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
       - name: Compile Python
-        run: python -m compileall -q app tests
+        run: python -m compileall -q app tests scripts
       - name: Check browser JavaScript syntax
         run: |
           node --check app/static/app.js
