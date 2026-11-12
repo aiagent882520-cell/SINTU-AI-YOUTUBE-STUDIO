@@ -101,6 +101,39 @@
     output.textContent="Saved project · Task #"+data.task.id+" · "+data.task.provider+" / "+data.task.model+"\n\n"+data.task.output;
    }catch(err){output.textContent="Generation abhi complete nahi hua: "+err.message+"\n\nLocal Ollama setup karein; paid provider automatically enable nahi hoga.";}
   });
+  document.getElementById("runLocalMediaProduction").addEventListener("click",async()=>{
+   const button=document.getElementById("runLocalMediaProduction"),status=document.getElementById("localMediaStatus"),output=document.getElementById("productionPackageOutput");
+   const prompts=document.getElementById("mediaScenePrompts").value.split(/\\r?\\n/).map(x=>x.trim()).filter(Boolean);
+   const narration=document.getElementById("mediaNarration").value.trim(),seconds=Number(document.getElementById("mediaSecondsPerScene").value)||4;
+   const resolution=document.getElementById("mediaResolution").value,brief=formPayload();
+   if(!brief.brief){status.textContent="Pehle project topic / brief likhein.";return;}
+   if(prompts.length<1||prompts.length>25||prompts.some(x=>x.length>3000)){status.textContent="1–25 scene prompts dein; har prompt 3000 characters se chhota ho.";return;}
+   if(!narration){status.textContent="Hindi voiceover script zaroori hai.";return;}
+   if(seconds<2||seconds>12){status.textContent="Seconds per scene 2 se 12 ke beech rakhein.";return;}
+   button.disabled=true;output.hidden=false;output.textContent="Production run create ho raha hai…";
+   try{
+    const create=await fetch("/api/production/runs",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({format_id:state.format,topic:brief.brief})});
+    const created=await create.json().catch(()=>({}));if(!create.ok)throw new Error(created.detail||"Production run create nahi hua.");
+    const runId=created.run_id;status.textContent="Run "+runId+" · specialists, independent checkers aur five reviewers chal rahe hain…";
+    let run=null;
+    for(let attempt=0;attempt<600;attempt++){
+     await new Promise(resolve=>setTimeout(resolve,3000));
+     const poll=await fetch("/api/production/runs/"+encodeURIComponent(runId),{credentials:"same-origin"});
+     const data=await poll.json().catch(()=>({}));if(!poll.ok)throw new Error(data.detail||"Production status check failed.");
+     run=data;status.textContent="Run "+runId+" · "+run.status+(run.current_role?" · "+run.current_role:"")+(run.error?" · "+run.error:"");
+     if(["completed","paused","blocked","failed"].includes(run.status))break;
+    }
+    if(!run||run.status!=="completed")throw new Error("Media render safely stopped. "+(run?.status||"timeout")+": "+(run?.error||"Review gates did not complete within 30 minutes."));
+    status.textContent="All review gates PASS. Local media generation + final MP4 render starting…";
+    const media=await fetch("/api/production/runs/"+encodeURIComponent(runId)+"/produce-media",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({scene_prompts:prompts,narration,seconds_per_scene:seconds,resolution,fps:30,quality:"high"})});
+    const result=await media.json().catch(()=>({}));if(!media.ok)throw new Error(result.detail||"Local media generation failed.");
+    const videoUrl=result.render?.url||"";
+    output.textContent="Production run: "+runId+"\\nStatus: "+result.status+"\\nScenes generated: "+result.generated_images.length+"\\nVoice: "+(result.voiceover?.provider||"local")+"\\nMusic: "+(result.background_music?.provider||"local")+"\\nResolution: "+(result.render?.resolution||resolution)+"\\nWatermark: SINTU AI YOUTUBE STUDIO\\nPublished: No (human approval required)\\n\\nFinal video: "+videoUrl;
+    if(videoUrl){const link=document.createElement("a");link.href=videoUrl;link.target="_blank";link.rel="noopener noreferrer";link.textContent="Open verified final MP4";link.className="secondary";output.after(link);}
+    status.textContent="Final MP4 rendered and verified. YouTube publishing remains a separate human-approved action.";
+   }catch(error){status.textContent=error.message;output.textContent="Production stopped safely. No automatic publishing occurred.";}
+   finally{button.disabled=false;}
+  });
   document.getElementById("refreshStudioTools").addEventListener("click",refreshProjectTools);
   document.getElementById("saveStudioMemory").addEventListener("click",async()=>{
    try{const project=await saveCurrentProject();const r=await fetch("/api/studio/memory",{method:"PUT",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({project_id:project.id,key:document.getElementById("studioMemoryKey").value,value:document.getElementById("studioMemoryValue").value})});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Memory save failed");await refreshProjectTools();}
