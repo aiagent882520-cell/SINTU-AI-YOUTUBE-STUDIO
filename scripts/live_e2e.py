@@ -84,25 +84,38 @@ def preflight() -> dict:
     }
 
 
-def _live_video(prompt: str) -> dict:
+def _live_video(prompt: str | list[str]) -> dict:
     status = video_status()
     if not status.get("local_available"):
         raise RuntimeError(
             "Local ComfyUI video workflow is not ready. Check workflow, nodes, models and /system_stats first."
         )
-    clip = generate_video(
-        prompt=prompt,
-        aspect_ratio="9:16",
-        resolution="360p",
-        style="cinematic",
-        reference_image_id=None,
-        duration_seconds=3,
-    )
-    clip_path = AI_VIDEO_DIR / clip["filename"]
-    if not clip_path.is_file() or clip_path.stat().st_size <= 0:
-        raise RuntimeError("ComfyUI did not leave a valid generated clip on disk.")
+    prompts = [prompt] if isinstance(prompt, str) else list(prompt)
+    prompts = [item.strip() for item in prompts if isinstance(item, str) and item.strip()]
+    if not prompts or len(prompts) > 25:
+        raise ValueError("Live video test needs 1 to 25 non-empty approved scene prompts.")
+
+    clip_paths = []
+    clip_ids = []
+    clip_sizes = []
+    for scene_index, scene_prompt in enumerate(prompts, start=1):
+        clip = generate_video(
+            prompt=scene_prompt,
+            aspect_ratio="9:16",
+            resolution="360p",
+            style="cinematic",
+            reference_image_id=None,
+            duration_seconds=3,
+        )
+        clip_path = AI_VIDEO_DIR / clip["filename"]
+        if not clip_path.is_file() or clip_path.stat().st_size <= 0:
+            raise RuntimeError(f"ComfyUI did not leave a valid MP4 for scene {scene_index}.")
+        clip_paths.append(clip_path)
+        clip_ids.append(clip["video_id"])
+        clip_sizes.append(clip_path.stat().st_size)
+
     rendered = render_ai_clips(
-        [clip_path],
+        clip_paths,
         resolution="720x1280",
         fps=24,
         quality="standard",
@@ -115,11 +128,13 @@ def _live_video(prompt: str) -> dict:
     if rendered.get("subtitles_burned_in") is not False:
         raise RuntimeError("Final MP4 violates the no-subtitles/no-text-overlay policy.")
     return {
-        "generated_clip_id": clip["video_id"],
-        "generated_clip_bytes": clip_path.stat().st_size,
+        "generated_clip_ids": clip_ids,
+        "generated_clip_bytes": clip_sizes,
+        "scene_count": len(clip_paths),
         "final_render_id": rendered["video_id"],
         "final_render_path": str(final_path),
         "final_render_bytes": final_path.stat().st_size,
+        "duration_seconds": rendered["duration_seconds"],
         "watermark": rendered["brand_watermark"],
         "subtitles_burned_in": rendered["subtitles_burned_in"],
         "verified_by_renderer": True,
@@ -194,7 +209,7 @@ def _full_studio_e2e(topic: str) -> dict:
     role_summary, run = _live_agent_catalog(topic, include_result=True)
     deliverables = (run.get("result") or {}).get("deliverables") or {}
     prompts = _extract_scene_prompts(deliverables.get("AI Video Generator", ""))
-    media = _live_video(prompts[0])
+    media = _live_video(prompts)
     attached = attach_render_result(run["id"], media["render_result"], "local")
     if not attached or not attached.get("result", {}).get("video_rendered"):
         raise RuntimeError("Rendered MP4 could not be attached to the quality-approved production run.")
@@ -203,7 +218,7 @@ def _full_studio_e2e(topic: str) -> dict:
     return {
         "agent_catalog": role_summary,
         "approved_scene_prompts": len(prompts),
-        "rendered_scene_prompt_index": 1,
+        "rendered_scene_prompts": len(prompts),
         "video": {key: value for key, value in media.items() if key != "render_result"},
         "production_run_id": run["id"],
         "render_attached_to_production_run": True,

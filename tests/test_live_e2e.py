@@ -148,7 +148,7 @@ def test_full_studio_e2e_uses_approved_scene_and_attaches_branded_render(monkeyp
     })
 
     result = live_e2e._full_studio_e2e("Test topic")
-    assert generated == ["Approved cinematic scene 1"]
+    assert generated == [[f"Approved cinematic scene {index}" for index in range(1, 7)]]
     assert result["approved_scene_prompts"] == 6
     assert result["render_attached_to_production_run"] is True
     assert result["published"] is False
