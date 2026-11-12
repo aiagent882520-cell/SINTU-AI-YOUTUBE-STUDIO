@@ -82,6 +82,8 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v5
+      - name: Validate production Compose configuration
+        run: docker compose config --quiet
       - name: Build production image
         run: docker build --pull --tag sintu-ai-youtube-studio:ci .
       - name: Boot production image and verify health endpoint

@@ -26,8 +26,8 @@ services:
       PIPER_EXECUTABLE: ${PIPER_EXECUTABLE:-piper}
       PIPER_MODEL_PATH: ${PIPER_MODEL_PATH:-}
       COMFYUI_BASE_URL: ${COMFYUI_BASE_URL:-http://host.docker.internal:8188}
-      COMFYUI_IMAGE_WORKFLOW_PATH: ${COMFYUI_IMAGE_WORKFLOW_PATH:-}
-      COMFYUI_VIDEO_WORKFLOW_PATH: ${COMFYUI_VIDEO_WORKFLOW_PATH:-}
+      COMFYUI_IMAGE_WORKFLOW_PATH: ${COMFYUI_IMAGE_WORKFLOW_PATH:-/app/config/comfyui/image_api.json}
+      COMFYUI_VIDEO_WORKFLOW_PATH: ${COMFYUI_VIDEO_WORKFLOW_PATH:-/app/config/comfyui/video_api.json}
       MUSIC_PROVIDER: ${MUSIC_PROVIDER:-local}
       BLENDER_EXECUTABLE: ${BLENDER_EXECUTABLE:-blender}
       SINTU_REVENUE_CONFIRMED: ${SINTU_REVENUE_CONFIRMED:-false}
@@ -50,8 +50,11 @@ services:
       TIKTOK_CLIENT_KEY: ${TIKTOK_CLIENT_KEY:-}
       TIKTOK_CLIENT_SECRET: ${TIKTOK_CLIENT_SECRET:-}
       TIKTOK_REDIRECT_URI: ${TIKTOK_REDIRECT_URI:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - sintu-data:/data
+      - ./config/comfyui:/app/config/comfyui:ro
     restart: unless-stopped
 
 volumes:
