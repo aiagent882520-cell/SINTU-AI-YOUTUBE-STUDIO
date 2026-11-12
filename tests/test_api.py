@@ -3047,3 +3047,155 @@ def test_youtube_analytics_rejects_invalid_ranges_before_oauth_and_handles_reven
     assert response.json()["revenue"]["available"] is False
     assert "Revenue abhi available nahi" in response.json()["revenue"]["note"]
     assert response.json()["totals"]["views"] == 0
+
+
+def test_youtube_oauth_callback_encrypts_tokens_and_consumes_state(tmp_path, monkeypatch):
+    from cryptography.fernet import Fernet
+    from urllib.parse import parse_qs, urlsplit
+
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("YOUTUBE_CLIENT_ID", "test-client-id")
+    monkeypatch.setenv("YOUTUBE_CLIENT_SECRET", "test-client-secret")
+    monkeypatch.setenv("YOUTUBE_REDIRECT_URI", "http://testserver/api/admin/youtube/oauth/callback")
+    monkeypatch.setenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode())
+
+    started = client.post("/api/admin/youtube/oauth/start")
+    assert started.status_code == 200
+    auth = urlsplit(started.json()["authorization_url"])
+    assert auth.netloc == "accounts.google.com"
+    state = parse_qs(auth.query)["state"][0]
+    assert "youtube.upload" in parse_qs(auth.query)["scope"][0]
+
+    calls = []
+    def fake_google(url, data=None, headers=None, method=None):
+        calls.append((url, method))
+        if url == "https://oauth2.googleapis.com/token":
+            return 200, {}, json.dumps({
+                "access_token": "test-access-token",
+                "refresh_token": "test-refresh-token",
+                "expires_in": 3600,
+            }).encode()
+        if url.startswith("https://www.googleapis.com/youtube/v3/channels"):
+            assert headers["Authorization"] == "Bearer test-access-token"
+            return 200, {}, json.dumps({"items": [{
+                "id": "UC_TEST_CHANNEL",
+                "snippet": {"title": "SINTU Test Channel"},
+            }]}).encode()
+        raise AssertionError("Unexpected Google API URL: " + url)
+
+    monkeypatch.setattr(main, "_youtube_request", fake_google)
+    callback = client.get("/api/admin/youtube/oauth/callback", params={
+        "code": "one-time-auth-code", "state": state,
+    }, follow_redirects=False)
+    assert callback.status_code == 303
+    assert callback.headers["location"] == "/?youtube_oauth=connected"
+    assert len(calls) == 2
+
+    with main.db() as conn:
+        row = conn.execute("SELECT channel_id,channel_title,encrypted_tokens FROM youtube_connection WHERE id=1").fetchone()
+        remaining_state = conn.execute("SELECT state FROM youtube_oauth_states WHERE state=?", (state,)).fetchone()
+    assert row["channel_id"] == "UC_TEST_CHANNEL"
+    assert row["channel_title"] == "SINTU Test Channel"
+    assert remaining_state is None
+    assert "test-access-token" not in row["encrypted_tokens"]
+    assert "test-refresh-token" not in row["encrypted_tokens"]
+    decrypted = json.loads(main._youtube_cipher().decrypt(row["encrypted_tokens"].encode()).decode())
+    assert decrypted["access_token"] == "test-access-token"
+    assert decrypted["refresh_token"] == "test-refresh-token"
+
+    replay = client.get("/api/admin/youtube/oauth/callback", params={
+        "code": "replayed-code", "state": state,
+    }, follow_redirects=False)
+    assert replay.status_code == 400
+    assert len(calls) == 2
+
+
+def test_youtube_oauth_callback_rejects_invalid_state_without_google_request(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "_youtube_request", lambda *args, **kwargs: pytest.fail("invalid state must not call Google"))
+    response = client.get("/api/admin/youtube/oauth/callback", params={
+        "code": "attacker-code", "state": "not-a-real-state",
+    })
+    assert response.status_code == 400
+
+
+def test_youtube_publish_requires_approved_calendar_and_records_success(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    client = client_for_test(tmp_path, monkeypatch)
+    output_dir = tmp_path / "generated_videos"
+    output_dir.mkdir()
+    monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    video_id = "a" * 32
+    (output_dir / (video_id + ".mp4")).write_bytes(b"fake-mp4-content")
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    created = client.post("/api/calendar", json={
+        "title": "Approved upload test", "platform": "youtube_shorts",
+        "prompt": "Create a branded short", "scheduled_at": future,
+    })
+    assert created.status_code == 200
+    calendar_id = created.json()["id"]
+    monkeypatch.setattr(main, "_youtube_access_token", lambda: "test-access-token")
+
+    uploads = []
+    def fake_upload(url, data=None, headers=None, method=None):
+        uploads.append((url, data, headers, method))
+        if method == "POST":
+            return 200, {"Location": "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=test"}, b""
+        if method == "PUT":
+            assert data == b"fake-mp4-content"
+            return 200, {}, json.dumps({"id": "youtube-video-123"}).encode()
+        raise AssertionError("Unexpected upload method")
+
+    monkeypatch.setattr(main, "_youtube_request", fake_upload)
+    blocked = client.post(
+        f"/api/admin/youtube/publish/{calendar_id}",
+        params={"video_id": video_id, "title": "Test upload"},
+    )
+    assert blocked.status_code == 409
+    assert uploads == []
+
+    approved = client.post(f"/api/calendar/{calendar_id}/approve")
+    assert approved.status_code == 200
+    published = client.post(
+        f"/api/admin/youtube/publish/{calendar_id}",
+        params={"video_id": video_id, "title": "Test upload", "privacy_status": "private"},
+    )
+    assert published.status_code == 200, published.text
+    assert published.json()["youtube_video_id"] == "youtube-video-123"
+    assert published.json()["privacy_status"] == "private"
+    assert len(uploads) == 2
+    metadata = json.loads(uploads[0][1].decode())
+    assert metadata["status"]["privacyStatus"] == "private"
+    assert uploads[1][0].startswith("https://www.googleapis.com/upload/youtube/")
+    assert client.get("/api/calendar").json()["items"][0]["status"] == "Published"
+    history = client.get("/api/admin/publishing/history")
+    assert history.status_code == 200
+    assert any(item["external_id"] == "youtube-video-123" for item in history.json()["items"])
+
+    duplicate = client.post(
+        f"/api/admin/youtube/publish/{calendar_id}",
+        params={"video_id": video_id, "title": "Test upload"},
+    )
+    assert duplicate.status_code == 409
+    assert len(uploads) == 2
+
+
+def test_youtube_publish_rejects_missing_render_before_token_access(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    client = client_for_test(tmp_path, monkeypatch)
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    created = client.post("/api/calendar", json={
+        "title": "Missing render", "platform": "youtube",
+        "prompt": "Create content", "scheduled_at": future,
+    })
+    calendar_id = created.json()["id"]
+    assert client.post(f"/api/calendar/{calendar_id}/approve").status_code == 200
+    monkeypatch.setattr(main, "_youtube_access_token", lambda: pytest.fail("missing render must fail before OAuth"))
+    response = client.post(
+        f"/api/admin/youtube/publish/{calendar_id}",
+        params={"video_id": "b" * 32, "title": "No file"},
+    )
+    assert response.status_code == 404
+
