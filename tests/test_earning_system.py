@@ -152,3 +152,30 @@ def test_net_confirmed_excludes_estimated_and_pending_expenses(tmp_path, monkeyp
     assert summary["estimated_expenses"]["INR"] == 300
     assert summary["pending_expenses"]["INR"] == 200
     assert summary["net_confirmed"]["INR"] == 900
+
+
+
+def test_earning_record_rejects_blank_title_and_normalizes_source(tmp_path, monkeypatch):
+    client = setup_client(tmp_path, monkeypatch)
+    payload = {
+        "kind": "income", "source": "affiliate", "title": "   ",
+        "amount": 10, "currency": "INR", "status": "received",
+        "record_date": "2026-11-12"
+    }
+    assert client.post("/api/earnings/records", json=payload).status_code == 422
+    payload["title"] = "  Affiliate payment  "
+    payload["source"] = " affiliate "
+    created = client.post("/api/earnings/records", json=payload)
+    assert created.status_code == 201
+    assert created.json()["record"]["title"] == "Affiliate payment"
+    assert created.json()["record"]["source"] == "affiliate"
+
+
+def test_earning_record_rejects_unknown_source_at_validation(tmp_path, monkeypatch):
+    client = setup_client(tmp_path, monkeypatch)
+    response = client.post("/api/earnings/records", json={
+        "kind": "income", "source": "untrusted-category", "title": "Payment",
+        "amount": 10, "currency": "INR", "status": "received",
+        "record_date": "2026-11-12"
+    })
+    assert response.status_code == 422

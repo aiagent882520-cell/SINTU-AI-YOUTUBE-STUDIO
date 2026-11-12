@@ -13,7 +13,7 @@ import sqlite3
 from contextlib import contextmanager
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 router = APIRouter(tags=["earning-system"])
 SOURCES = {"youtube_ads", "youtube_memberships", "youtube_supers", "affiliate", "sponsorship", "brand_deal", "digital_product", "service", "licensing", "other"}
@@ -62,6 +62,22 @@ class RecordInput(BaseModel):
     record_date: date
     reference: str = Field(default="", max_length=240)
     notes: str = Field(default="", max_length=2000)
+
+    @field_validator("title")
+    @classmethod
+    def title_must_contain_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("title must contain non-whitespace text")
+        return value
+
+    @field_validator("source")
+    @classmethod
+    def source_must_be_supported(cls, value: str) -> str:
+        value = value.strip()
+        if value not in SOURCES:
+            raise ValueError("unsupported income/expense source")
+        return value
 
 class TargetInput(BaseModel):
     month: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
