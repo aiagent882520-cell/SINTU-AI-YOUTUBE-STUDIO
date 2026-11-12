@@ -332,3 +332,12 @@ Follow-up workload CSV export: the community review workload panel can download 
 - Image और AI Video capability status अब local ComfyUI की server reachability, workflow validity, node verification, missing custom nodes और missing model choices dashboard पर दिखाता है।
 - ये diagnostics ComfyUI `/system_stats` और `/object_info` के advertised data पर आधारित हैं; model weights का वास्तविक load, GPU memory sufficiency और सफल render अलग runtime test से ही confirm होंगे।
 - Local workflow file path या API credentials dashboard response में expose नहीं किए जाते।
+
+
+### 61 Agent Roles का पूरा validation run
+- सभी 61 registered Agent Roles को एक ही on-demand validation run में अलग-अलग Worker और Independent Checker calls मिलती हैं; हर checker का verdict evidence सहित होना जरूरी है।
+- Admin login के बाद `POST /api/admin/agent-catalog/validate` को JSON body `{"topic":"पूरे SINTU Studio का role validation"}` के साथ call करें। API queued run ID लौटाता है; status और हर worker/checker/reviewer का evidence `GET /api/admin/agent-catalog/runs/{run_id}` से देखें।
+- यह run local Ollama model का उपयोग करता है। Model/provider error या checker FAIL होने पर run PASS दिखाने के बजाय blocked/paused रहेगा। सभी 61 roles के बाद पाँच final reviewers चलते हैं।
+- CI में mock-provider tests orchestration, 61 अलग role pairs, revision और fail-closed behavior जाँचते हैं। यह वास्तविक Ollama/ComfyUI model inference का विकल्प नहीं है; live inference के लिए स्थानीय मॉडल और workflow configure होना जरूरी है।
+- OAuth और publishing के integration tests Google API responses को mock करके token encryption, channel binding, resumable upload, approval gate और publishing history जाँचते हैं। असली channel पर upload के लिए Google Cloud OAuth consent, enabled YouTube APIs और owner की स्पष्ट publish action जरूरी है।
+
