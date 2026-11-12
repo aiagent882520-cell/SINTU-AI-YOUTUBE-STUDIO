@@ -63,3 +63,48 @@ def test_deployment_health_accepts_https_and_checks_health_payload(monkeypatch):
     assert live_e2e._deployment_health("https://studio.example.test/api/health") == {
         "status_code": 200, "health": "ok"
     }
+
+def test_live_agent_catalog_requires_every_registered_worker_checker_and_reviewer(monkeypatch):
+    from app.agents import AGENTS
+    from app.production_runtime import REVIEWERS
+
+    steps = []
+    for role in AGENTS:
+        steps.append({"step_type": "builder", "role": role, "status": "completed"})
+        steps.append({"step_type": "checker", "role": role + " Checker", "status": "pass"})
+    steps.extend(
+        {"step_type": "reviewer", "role": role, "status": "pass"}
+        for role in REVIEWERS
+    )
+    monkeypatch.setattr(live_e2e, "create_run", lambda *args: {"id": "catalog-run"})
+    monkeypatch.setattr(live_e2e, "execute_run", lambda *args: None)
+    monkeypatch.setattr(live_e2e, "get_run", lambda *args: {
+        "status": "completed", "steps": steps, "error": None
+    })
+
+    result = live_e2e._live_agent_catalog("Role coverage test")
+    assert result["registered_agent_roles"] == 61
+    assert result["completed_workers"] == 61
+    assert result["passed_checkers"] == 61
+    assert result["final_reviewers"] == 5
+    assert result["worker_role_coverage"] == 61
+    assert result["checker_role_coverage"] == 61
+    assert result["reviewer_role_coverage"] == 5
+
+
+def test_live_agent_catalog_rejects_incomplete_role_coverage(monkeypatch):
+    from app.agents import AGENTS
+
+    steps = []
+    for role in AGENTS[:-1]:
+        steps.append({"step_type": "builder", "role": role, "status": "completed"})
+        steps.append({"step_type": "checker", "role": role + " Checker", "status": "pass"})
+    monkeypatch.setattr(live_e2e, "create_run", lambda *args: {"id": "incomplete-run"})
+    monkeypatch.setattr(live_e2e, "execute_run", lambda *args: None)
+    monkeypatch.setattr(live_e2e, "get_run", lambda *args: {
+        "status": "completed", "steps": steps, "error": None
+    })
+
+    with pytest.raises(RuntimeError, match="exact catalog coverage"):
+        live_e2e._live_agent_catalog("Incomplete role coverage test")
+
