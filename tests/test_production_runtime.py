@@ -112,8 +112,10 @@ def test_runtime_stops_after_first_checker_failure(tmp_path, monkeypatch):
 
     assert result["status"] == "paused"
     assert result["current_role"].endswith("Checker")
-    assert len(calls) == 2
+    assert len(calls) == 4
+    assert [step["step_type"] for step in result["steps"]] == ["builder", "checker", "builder", "checker"]
     assert result["steps"][-1]["status"] == "fail"
+    assert result["steps"][-1]["attempts"] == 2
 
 
 def test_render_result_attaches_only_to_completed_run(tmp_path, monkeypatch):
@@ -142,3 +144,38 @@ def test_render_result_cannot_attach_to_unapproved_run(tmp_path, monkeypatch):
     run = runtime.create_run("youtube-shorts", "Hindi topic")
     with pytest.raises(ValueError, match="completed"):
         runtime.attach_render_result(run["id"], {"video_id": "a" * 32})
+
+
+def test_runtime_revises_once_then_continues_after_checker_pass(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    monkeypatch.setattr(runtime, "format_team", lambda _format: [
+        {"role_type": "specialist", "name": "Script Writer", "mission": "write the Hindi narration"}
+    ])
+    calls = []
+
+    def fake_generate(prompt, workflow, provider):
+        calls.append(prompt)
+        if "independent quality checker" in prompt.lower():
+            if "Revision attempt: 1" in prompt:
+                output = '{"decision":"FAIL","evidence":[],"issues":["hook is weak"],"revision_instructions":["write a stronger opening hook"]}'
+            else:
+                output = '{"decision":"PASS","evidence":["stronger hook verified"],"issues":[],"revision_instructions":[]}'
+        elif "final video production reviewer" in prompt.lower():
+            output = '{"decision":"PASS","evidence":["review criteria checked"],"issues":[],"revision_instructions":[]}'
+        else:
+            output = "Revised Hindi narration with a stronger opening hook" if "REVISION REQUIRED" in prompt else "Initial Hindi narration"
+        return {"output": output, "provider": "test", "model": "fixture"}
+
+    monkeypatch.setattr(runtime, "generate_text", fake_generate)
+    run = runtime.create_run("youtube-shorts", "भारत की रहस्यमयी जगहें")
+    runtime.execute_run(run["id"])
+    result = runtime.get_run(run["id"])
+
+    assert result["status"] == "completed"
+    assert result["result"]["deliverables"]["Script Writer"].startswith("Revised")
+    assert [step["step_type"] for step in result["steps"][:4]] == ["builder", "checker", "builder", "checker"]
+    assert result["steps"][0]["attempts"] == 1
+    assert result["steps"][2]["attempts"] == 2
+    assert len([step for step in result["steps"] if step["step_type"] == "reviewer"]) == 5

@@ -183,25 +183,45 @@ def execute_run(run_id: str) -> None:
                 f"Topic: {run['topic']}\nRole: {role}\nMission: {pair.get('mission','Perform your specialist task.')}\n"
                 "Use free/open-source tools by default. Do not claim external research, rendering or publishing occurred."
             )
-            worker = generate_text(worker_prompt, "content", "local")
-            deliverables[role] = worker["output"]
-            sequence += 1
-            _save_step(run_id, sequence, role, "builder", "completed", worker_prompt, worker["output"])
-            checker_prompt = (
-                "Act as an independent quality checker. Do not rewrite the work. "
-                "Evaluate accuracy, completeness, format fit, Hindi-first policy, clean text-free video frames, "
-                "copyright safety and actionable production detail. Return ONLY JSON with keys: "
-                "decision (PASS or FAIL), evidence (array), issues (array), revision_instructions (array).\n"
-                f"Topic: {run['topic']}\nSpecialist: {role}\nSubmitted work:\n{worker['output']}"
-            )
-            checked = generate_text(checker_prompt, "content", "local")
-            verdict = _checker_payload(checked["output"])
-            sequence += 1
-            _save_step(run_id, sequence, checker, "checker", verdict["decision"].lower(),
-                       checker_prompt, checked["output"], verdict["evidence"], verdict["issues"])
+            previous_output = ""
+            verdict = None
+            for attempt in range(MAX_REVISION_ATTEMPTS + 1):
+                current_worker_prompt = worker_prompt
+                if attempt:
+                    current_worker_prompt = (
+                        worker_prompt + "\\nREVISION REQUIRED (attempt " + str(attempt) + "):\\n"
+                        "Correct the previous deliverable using the independent checker's exact findings. "
+                        "Preserve correct material; do not invent evidence.\\n"
+                        "Checker issues: " + json.dumps(verdict["issues"], ensure_ascii=False) + "\\n"
+                        "Revision instructions: " + json.dumps(verdict["revision_instructions"], ensure_ascii=False) + "\\n"
+                        "Previous deliverable:\\n" + previous_output
+                    )
+                worker = generate_text(current_worker_prompt, "content", "local")
+                previous_output = worker["output"]
+                sequence += 1
+                _save_step(run_id, sequence, role, "builder", "completed",
+                           current_worker_prompt, worker["output"], attempts=attempt + 1)
+                checker_prompt = (
+                    "Act as an independent quality checker. Do not rewrite the work. "
+                    "Evaluate accuracy, completeness, format fit, Hindi-first policy, clean text-free video frames, "
+                    "copyright safety and actionable production detail. Return ONLY JSON with keys: "
+                    "decision (PASS or FAIL), evidence (array), issues (array), revision_instructions (array).\\n"
+                    f"Topic: {run['topic']}\\nSpecialist: {role}\\n"
+                    f"Revision attempt: {attempt + 1} of {MAX_REVISION_ATTEMPTS + 1}\\n"
+                    f"Submitted work:\\n{worker['output']}"
+                )
+                checked = generate_text(checker_prompt, "content", "local")
+                verdict = _checker_payload(checked["output"])
+                sequence += 1
+                _save_step(run_id, sequence, checker, "checker", verdict["decision"].lower(),
+                           checker_prompt, checked["output"], verdict["evidence"], verdict["issues"],
+                           attempts=attempt + 1)
+                if verdict["decision"] == "PASS":
+                    deliverables[role] = worker["output"]
+                    break
             if verdict["decision"] != "PASS":
                 _set_run(run_id, "paused", current_role=checker,
-                         error="Independent checker failed. Run paused; revise this specialist output and re-check.")
+                         error="Independent checker failed after the bounded revision attempt. Run paused for human review.")
                 return
 
         review_results = {}
