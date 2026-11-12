@@ -3364,6 +3364,105 @@ class ProductionRenderInput(RenderInput):
     format_id: str = Field(min_length=1, max_length=80)
 
 
+class ProductionMediaInput(BaseModel):
+    scene_prompts: list[str] = Field(min_length=1, max_length=25)
+    narration: str | None = Field(default=None, max_length=4000)
+    seconds_per_scene: int = Field(default=4, ge=2, le=12)
+    resolution: str | None = Field(default=None, max_length=12)
+    fps: int = Field(default=30, ge=24, le=60)
+    quality: str = Field(default="high", max_length=12)
+
+
+@app.post("/api/production/runs/{run_id}/produce-media")
+def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, request: Request):
+    """Generate local scene images, Hindi voice, original music and a verified MP4 for an approved run."""
+    if not re.fullmatch(r"[a-f0-9]{32}", run_id):
+        raise HTTPException(status_code=400, detail="Invalid production run ID.")
+    owner = _production_project_owner(request)
+    run = get_production_run(run_id, owner)
+    if not run:
+        raise HTTPException(status_code=404, detail="Production run not found.")
+    if run.get("status") != "completed" or not isinstance(run.get("result"), dict):
+        raise HTTPException(status_code=409, detail="Production package must pass all builder/checker/reviewer gates first.")
+    try:
+        profile = format_render_profile(run["format_id"])
+    except KeyError:
+        raise HTTPException(status_code=400, detail="Production format no longer exists.") from None
+    if not profile["generic_export_available"]:
+        raise HTTPException(status_code=501, detail=profile["limitations"][0])
+    if not image_status().get("local_available"):
+        raise HTTPException(status_code=503, detail="Local ComfyUI image workflow is not ready. Configure a validated free local workflow; paid providers are not enabled by this route.")
+    if not voice_status().get("local_available"):
+        raise HTTPException(status_code=503, detail="Local Piper TTS executable and Hindi voice model are required. Paid voice providers are not enabled by this route.")
+    scene_prompts = [item.strip() for item in payload.scene_prompts]
+    if any(not item or len(item) > 3000 for item in scene_prompts):
+        raise HTTPException(status_code=400, detail="Each scene prompt must contain 1 to 3000 characters.")
+    narration = (payload.narration or "").strip()
+    if not narration:
+        deliverables = run["result"].get("deliverables") or {}
+        narration = next((value for key, value in deliverables.items()
+                          if "script" in key.lower() and isinstance(value, str) and value.strip()), "")
+    if not narration:
+        raise HTTPException(status_code=400, detail="Hindi narration is required; add narration or a Script Writer deliverable.")
+    if len(narration) > 4000:
+        raise HTTPException(status_code=400, detail="Hindi narration must not exceed 4000 characters.")
+    resolution = payload.resolution or profile["default_resolution"]
+    if resolution not in {"720x1280", "1080x1920", "1080x1080", "1280x720", "1920x1080"}:
+        raise HTTPException(status_code=400, detail="Unsupported output resolution profile.")
+    if payload.fps not in {24, 30, 60} or payload.quality not in {"standard", "high", "maximum"}:
+        raise HTTPException(status_code=400, detail="Unsupported FPS or render quality.")
+    created_images, audio_id, music_id = [], None, None
+    try:
+        for prompt in scene_prompts:
+            image_result = generate_image(prompt, "scene", "portrait" if "x1920" in resolution else "landscape")
+            created_images.append(image_result["image_id"])
+        voice_result = generate_voiceover(narration)
+        audio_id = voice_result["audio_id"]
+        music_result = generate_music(
+            "Original instrumental background score; no vocals; cinematic documentary ambience",
+            max(5, min(360, len(scene_prompts) * payload.seconds_per_scene)),
+        )
+        music_id = music_result["music_id"]
+        image_paths = [IMAGE_DIR / f"{image_id}.jpg" for image_id in created_images]
+        audio_path = AUDIO_DIR / voice_result["filename"]
+        music_matches = list(MUSIC_DIR.glob(music_id + ".*"))
+        if not all(path.is_file() for path in image_paths) or not audio_path.is_file() or not music_matches:
+            raise RenderFailed("A generated media asset is missing; final render was stopped.")
+        rendered = render_storyboard(
+            run.get("topic", "SINTU AI Studio Production"), scene_prompts,
+            payload.seconds_per_scene, image_paths=image_paths, audio_path=audio_path,
+            music_path=music_matches[0], music_volume=0.16, subtitles=[],
+            transition="fade", motion="none", resolution=resolution,
+            fps=payload.fps, quality=payload.quality,
+        )
+        updated = attach_render_result(run_id, rendered, owner)
+        return {
+            "run_id": run_id, "status": updated["status"],
+            "generated_images": created_images, "voiceover": voice_result,
+            "background_music": music_result, "render": rendered,
+            "video_rendered": True, "published": False,
+            "detail": "Local media generated and final MP4 verified. YouTube publishing still requires separate human approval.",
+        }
+    except (ImageUnavailable, VoiceUnavailable, MusicUnavailable, RendererUnavailable) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    except (ImageGenerationFailed, VoiceGenerationFailed, MusicGenerationFailed, RenderFailed) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    finally:
+        # Failed attempts must not leave a collection of orphaned partial assets.
+        import sys
+        if sys.exc_info()[0] is not None:
+            for image_id in created_images:
+                (IMAGE_DIR / f"{image_id}.jpg").unlink(missing_ok=True)
+            if audio_id:
+                for suffix in (".wav", ".mp3"):
+                    (AUDIO_DIR / f"{audio_id}{suffix}").unlink(missing_ok=True)
+            if music_id:
+                for path in MUSIC_DIR.glob(music_id + ".*"):
+                    path.unlink(missing_ok=True)
+
+
 @app.post("/api/production/runs/{run_id}/render")
 def render_approved_production_run(run_id: str, payload: ProductionRenderInput, request: Request):
     if not re.fullmatch(r"[a-f0-9]{32}", run_id):

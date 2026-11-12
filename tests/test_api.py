@@ -2521,3 +2521,84 @@ def test_production_run_creation_assigns_request_owner(tmp_path, monkeypatch):
     })
     assert response.status_code == 200
     assert captured["owner"] == "local"
+
+
+
+def test_production_media_pipeline_uses_local_engines_and_attaches_verified_render(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    run_id = "a" * 32
+    state = {"id": run_id, "status": "completed", "format_id": "youtube-shorts",
+             "topic": "भारत की रहस्यमयी जगहें",
+             "result": {"deliverables": {"Script Writer": "भारत की रहस्यमयी जगहों की कहानी"}}}
+    monkeypatch.setattr(main, "get_production_run", lambda value, owner=None: state if value == run_id and owner == "local" else None)
+    monkeypatch.setattr(main, "image_status", lambda: {"local_available": True})
+    monkeypatch.setattr(main, "voice_status", lambda: {"local_available": True})
+    monkeypatch.setattr(main, "generate_image", lambda prompt, kind, aspect: {
+        "image_id": str(len(generated) + 1).zfill(32), "url": "/api/images/" + str(len(generated) + 1).zfill(32)
+    })
+    generated = []
+    def fake_image(prompt, kind, aspect):
+        generated.append(prompt)
+        return {"image_id": str(len(generated)).zfill(32), "url": "/api/images/" + str(len(generated)).zfill(32)}
+    monkeypatch.setattr(main, "generate_image", fake_image)
+    monkeypatch.setattr(main, "generate_voiceover", lambda text: {
+        "audio_id": "b" * 32, "filename": "b" * 32 + ".wav", "url": "/api/audio/" + "b" * 32
+    })
+    monkeypatch.setattr(main, "generate_music", lambda prompt, duration: {
+        "music_id": "c" * 32, "url": "/api/music/" + "c" * 32
+    })
+    monkeypatch.setattr(main, "render_storyboard", lambda title, scenes, seconds, **kwargs: {
+        "video_id": "d" * 32, "filename": "d" * 32 + ".mp4",
+        "url": "/api/videos/" + "d" * 32, "resolution": kwargs["resolution"],
+        "brand_watermark": "SINTU AI YOUTUBE STUDIO", "subtitles_burned_in": False
+    })
+    attached = {}
+    def fake_attach(value, rendered, owner):
+        attached.update(run_id=value, render=rendered, owner=owner)
+        return {"status": "completed"}
+    monkeypatch.setattr(main, "attach_render_result", fake_attach)
+    image_dir, audio_dir, music_dir = tmp_path / "generated_images", tmp_path / "generated_audio", tmp_path / "generated_music"
+    image_dir.mkdir(); audio_dir.mkdir(); music_dir.mkdir()
+    for i in (1, 2): (image_dir / (str(i).zfill(32) + ".jpg")).write_bytes(b"image")
+    (audio_dir / ("b" * 32 + ".wav")).write_bytes(b"audio")
+    (music_dir / ("c" * 32 + ".wav")).write_bytes(b"music")
+    monkeypatch.setattr(main, "IMAGE_DIR", image_dir)
+    monkeypatch.setattr(main, "AUDIO_DIR", audio_dir)
+    monkeypatch.setattr(main, "MUSIC_DIR", music_dir)
+
+    response = client.post(f"/api/production/runs/{run_id}/produce-media", json={
+        "scene_prompts": ["पुराने किले का सिनेमाई दृश्य", "रहस्यमयी जंगल का दृश्य"],
+        "seconds_per_scene": 5
+    })
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["video_rendered"] is True and body["published"] is False
+    assert len(body["generated_images"]) == 2
+    assert body["render"]["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
+    assert body["render"]["subtitles_burned_in"] is False
+    assert attached["owner"] == "local"
+    assert generated == ["पुराने किले का सिनेमाई दृश्य", "रहस्यमयी जंगल का दृश्य"]
+
+
+def test_production_media_pipeline_fails_closed_when_local_media_engines_missing(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    run_id = "e" * 32
+    state = {"id": run_id, "status": "completed", "format_id": "youtube-shorts",
+             "result": {"deliverables": {"Script Writer": "हिंदी कहानी"}}}
+    monkeypatch.setattr(main, "get_production_run", lambda value, owner=None: state if value == run_id else None)
+    monkeypatch.setattr(main, "image_status", lambda: {"local_available": False})
+    monkeypatch.setattr(main, "generate_image", lambda *args: pytest.fail("must not generate without local engine"))
+    response = client.post(f"/api/production/runs/{run_id}/produce-media", json={
+        "scene_prompts": ["एक दृश्य"]
+    })
+    assert response.status_code == 503
+    assert "ComfyUI" in response.json()["detail"]
+
+
+def test_production_media_pipeline_rejects_runs_owned_by_other_users(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "get_production_run", lambda value, owner=None: None)
+    response = client.post(f"/api/production/runs/{'f' * 32}/produce-media", json={
+        "scene_prompts": ["एक दृश्य"], "narration": "यह हिंदी कहानी है"
+    })
+    assert response.status_code == 404
