@@ -33,7 +33,9 @@
 </div>
 <p id="youtubeAnalyticsStatus" class="notice" role="status">YouTube चैनल कनेक्ट होने पर यहाँ आँकड़े दिखेंगे।</p>
 <div id="youtubeAnalyticsMetrics" class="grid"></div>
+<div id="youtubeAnalyticsDailyChart" class="notice" aria-live="polite"></div>
 <div id="youtubeAnalyticsRevenue" class="notice"></div>
+<div id="youtubeAnalyticsRevenueComparison" class="notice" aria-live="polite"></div>
 <div id="youtubeAnalyticsVideos" class="notice"></div>
 </section>
 <section class="records"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h2>आय और खर्च का रिकॉर्ड</h2><div style="display:flex;gap:8px;align-items:center"><select id="recordKindFilter" class="filter" aria-label="रिकॉर्ड प्रकार"><option value="">सभी रिकॉर्ड</option><option value="income">केवल कमाई</option><option value="expense">केवल खर्च</option></select><a class="button" href="/api/earnings/export.csv">CSV Export</a></div></div><div id="recordList" class="notice">Loading records…</div></section>
@@ -44,11 +46,34 @@ const el=id=>document.getElementById(id), money=(n,c)=>new Intl.NumberFormat("en
 const today=new Date();el("record_date").value=today.toISOString().slice(0,10);el("targetMonth").value=today.toISOString().slice(0,7);
 let editingRecordId=null;
 async function request(url,opts={}){const r=await fetch(url,{credentials:"same-origin",...opts,headers:{"Content-Type":"application/json",...(opts.headers||{})}});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.detail||"Request failed");return d}
-function renderYouTubeAnalytics(data){
+function renderDailyAnalytics(rows){
+ const daily=Array.isArray(rows)?rows:[];
+ if(!daily.length){el("youtubeAnalyticsDailyChart").textContent="इस तारीख़ सीमा में दैनिक आँकड़े उपलब्ध नहीं हैं।";return;}
+ const maxViews=Math.max(1,...daily.map(x=>Number(x.views)||0));
+ const maxWatch=Math.max(1,...daily.map(x=>Number(x.watch_minutes)||0));
+ const bars=daily.map(x=>{
+  const date=escapeHtml(String(x.date||""));
+  const views=Math.max(0,Number(x.views)||0),watch=Math.max(0,Number(x.watch_minutes)||0);
+  const vw=Math.min(100,views/maxViews*100),ww=Math.min(100,watch/maxWatch*100);
+  return '<div class="card" style="padding:10px;margin:8px 0"><div style="display:flex;justify-content:space-between;gap:8px"><b>'+date+'</b><span>'+views.toLocaleString("en-IN")+' views</span></div><div style="height:7px;background:#263650;border-radius:8px;margin:7px 0 10px;overflow:hidden"><div style="height:100%;width:'+vw.toFixed(2)+'%;background:#38bdf8;border-radius:8px"></div></div><div style="display:flex;justify-content:space-between;gap:8px"><span class="muted">Watch time</span><span>'+watch.toLocaleString("en-IN")+' मिनट</span></div><div style="height:7px;background:#263650;border-radius:8px;margin:7px 0;overflow:hidden"><div style="height:100%;width:'+ww.toFixed(2)+'%;background:#8b7cff;border-radius:8px"></div></div></div>';
+ }).join("");
+ el("youtubeAnalyticsDailyChart").innerHTML='<h3>दैनिक प्रदर्शन · Views और Watch Time</h3><p class="notice">हर बार की लंबाई उसी metric के date range के अधिकतम दिन के अनुपात में है।</p>'+bars;
+}
+async function renderYouTubeAnalytics(data){
  const t=data.totals||{}, r=data.revenue||{};
  const cards=[["Views",Number(t.views||0).toLocaleString("en-IN")],["Watch time",Number(t.estimatedMinutesWatched||0).toLocaleString("en-IN")+" मिनट"],["Subscribers gained",Number(t.subscribersGained||0).toLocaleString("en-IN")],["Subscribers lost",Number(t.subscribersLost||0).toLocaleString("en-IN")],["Net subscribers",(Number(t.subscribersGained||0)-Number(t.subscribersLost||0)).toLocaleString("en-IN")],["औसत view duration",Math.round(Number(t.averageViewDuration||0))+" सेकंड"]];
  el("youtubeAnalyticsMetrics").innerHTML=cards.map(([k,v])=>'<article class="card"><div class="muted">'+escapeHtml(k)+'</div><div class="metric">'+escapeHtml(v)+'</div></article>').join("");
+ renderDailyAnalytics(data.daily);
  el("youtubeAnalyticsRevenue").textContent=r.available?"YouTube अनुमानित कमाई: "+money(r.estimated_revenue||0,r.currency||"INR")+" · यह अनुमान है, प्राप्त भुगतान नहीं। "+(r.note||""):("YouTube कमाई उपलब्ध नहीं: "+(r.note||"Monetization permission आवश्यक है।"));
+ const comparison=el("youtubeAnalyticsRevenueComparison");
+ if(r.available){
+  try{
+   const ledger=await request("/api/earnings/records?kind=income&limit=500");
+   const received=(ledger.records||[]).filter(x=>x.source==="youtube_ads"&&x.status==="received"&&x.currency==="INR"&&x.record_date>=data.start_date&&x.record_date<=data.end_date).reduce((sum,x)=>sum+Number(x.amount||0),0);
+   const estimated=Number(r.estimated_revenue||0);
+   comparison.innerHTML='<h3>अनुमान बनाम दर्ज प्राप्त भुगतान</h3><div class="grid"><article class="card"><div class="muted">YouTube अनुमान (INR)</div><div class="metric">'+money(estimated,"INR")+'</div></article><article class="card"><div class="muted">Ledger में दर्ज प्राप्त YouTube Ads रकम (INR)</div><div class="metric">'+money(received,"INR")+'</div></article><article class="card"><div class="muted">अंतर · अनुमान − दर्ज रकम</div><div class="metric">'+money(estimated-received,"INR")+'</div></article></div><p class="notice">प्राप्त रकम केवल आपके द्वारा Ledger में दर्ज YouTube Ads रिकॉर्ड से ली गई है। यह बैंक/AdSense से स्वतः सत्यापित भुगतान नहीं है; रिकॉर्ड date range और INR तक सीमित हैं।</p>';
+  }catch(err){comparison.textContent="प्राप्त भुगतान की तुलना के लिए Ledger डेटा उपलब्ध नहीं: "+err.message;}
+ }else{comparison.textContent="Revenue API अनुमान उपलब्ध होने पर ही Ledger तुलना दिखाई जाएगी।";}
  const videos=data.top_videos||[];
  el("youtubeAnalyticsVideos").innerHTML=videos.length?'<h3>Top videos</h3>'+videos.map(v=>'<div class="record"><a href="'+escapeHtml(v.url)+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(v.video_id)+'</a><span>'+Number(v.views||0).toLocaleString("en-IN")+' views</span></div>').join(""):"";
 }
@@ -60,7 +85,7 @@ async function loadYouTubeAnalytics(){
   if(el("youtubeStartDate").value)params.set("start_date",el("youtubeStartDate").value);
   if(el("youtubeEndDate").value)params.set("end_date",el("youtubeEndDate").value);
   const data=await request("/api/admin/youtube/analytics"+(params.size?"?"+params.toString():""));
-  renderYouTubeAnalytics(data);
+  await renderYouTubeAnalytics(data);
   status.textContent=(data.channel||"Connected channel")+" · "+data.start_date+" से "+data.end_date+" · "+(data.note||"Official YouTube data");
  }catch(err){status.textContent=err.message+" · YouTube channel connection और Analytics permission जाँचें।";}
  finally{button.disabled=false;}

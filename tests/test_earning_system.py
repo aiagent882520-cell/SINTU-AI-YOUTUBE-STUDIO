@@ -121,6 +121,10 @@ def test_earning_dashboard_includes_official_youtube_analytics_panel(tmp_path, m
     assert 'id="youtubeAnalyticsLoad"' in page
     assert 'id="youtubeAnalyticsMetrics"' in page
     assert 'id="youtubeAnalyticsRevenue"' in page
+    assert 'id="youtubeAnalyticsDailyChart"' in page
+    assert 'id="youtubeAnalyticsRevenueComparison"' in page
+    assert "renderDailyAnalytics" in page
+    assert "Ledger में दर्ज प्राप्त YouTube Ads रकम" in page
     assert '/api/admin/youtube/analytics' in page
     assert "अनुमानित रकम वास्तविक भुगतान नहीं है" in page
     assert "YouTube डेटा लोड करें" in page
