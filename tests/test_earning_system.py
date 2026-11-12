@@ -112,3 +112,15 @@ def test_earning_dashboard_has_record_management_controls(tmp_path, monkeypatch)
     assert "data-delete-id" in page
     assert "recordKindFilter" in page
     assert "cancelEdit" in page
+
+
+def test_earning_dashboard_includes_official_youtube_analytics_panel(tmp_path, monkeypatch):
+    client = setup_client(tmp_path, monkeypatch)
+    page = client.get("/earnings").text
+    assert 'id="youtubeAnalyticsPanel"' in page
+    assert 'id="youtubeAnalyticsLoad"' in page
+    assert 'id="youtubeAnalyticsMetrics"' in page
+    assert 'id="youtubeAnalyticsRevenue"' in page
+    assert '/api/admin/youtube/analytics' in page
+    assert "अनुमानित रकम वास्तविक भुगतान नहीं है" in page
+    assert "YouTube डेटा लोड करें" in page

@@ -22,6 +22,20 @@
 <div class="row"><button id="recordSubmit" type="submit">रिकॉर्ड सेव करें</button><button id="cancelEdit" type="button" hidden>Edit रद्द करें</button></div><p class="notice" id="formNotice" role="status"></p></form></section>
 <section><h2>मासिक कमाई लक्ष्य</h2><form id="targetForm"><label>महीना</label><input id="targetMonth" type="month" required><label>Target amount</label><input id="targetAmount" type="number" min="1" step="0.01" required><label>Currency</label><select id="targetCurrency"><option>INR</option><option>USD</option><option>EUR</option><option>GBP</option></select><button type="submit">लक्ष्य सेव करें</button><p class="notice" id="targetNotice" role="status"></p></form><hr style="border-color:var(--line);margin:20px 0"><p class="notice">कमाई के रास्ते: YouTube monetization, affiliate, sponsorship, brand deals, digital products और services. इनमें से हर विकल्प के लिए संबंधित platform approval, audience और वास्तविक ग्राहक/बिक्री जरूरी हो सकती है।</p></section>
 </div>
+<section id="youtubeAnalyticsPanel" style="margin-top:14px">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+<div><h2>YouTube Analytics और अनुमानित कमाई</h2><p class="notice">आधिकारिक YouTube Analytics API · अनुमानित रकम वास्तविक भुगतान नहीं है</p></div>
+<button id="youtubeAnalyticsLoad" type="button">YouTube डेटा लोड करें</button>
+</div>
+<div class="row">
+<div><label for="youtubeStartDate">शुरुआती तारीख</label><input id="youtubeStartDate" type="date"></div>
+<div><label for="youtubeEndDate">अंतिम तारीख</label><input id="youtubeEndDate" type="date"></div>
+</div>
+<p id="youtubeAnalyticsStatus" class="notice" role="status">YouTube चैनल कनेक्ट होने पर यहाँ आँकड़े दिखेंगे।</p>
+<div id="youtubeAnalyticsMetrics" class="grid"></div>
+<div id="youtubeAnalyticsRevenue" class="notice"></div>
+<div id="youtubeAnalyticsVideos" class="notice"></div>
+</section>
 <section class="records"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h2>आय और खर्च का रिकॉर्ड</h2><div style="display:flex;gap:8px;align-items:center"><select id="recordKindFilter" class="filter" aria-label="रिकॉर्ड प्रकार"><option value="">सभी रिकॉर्ड</option><option value="income">केवल कमाई</option><option value="expense">केवल खर्च</option></select><a class="button" href="/api/earnings/export.csv">CSV Export</a></div></div><div id="recordList" class="notice">Loading records…</div></section>
 <p class="notice">सुरक्षा: यह tracker वित्तीय रिकॉर्ड रखता है; यह अपने-आप भुगतान नहीं करता और न ही कमाई की गारंटी देता है। Estimated / Pending रकम को प्राप्त कमाई न समझें। अलग-अलग currencies को जोड़कर एक total नहीं बनाया जाता।</p>
 </main>
@@ -30,6 +44,27 @@ const el=id=>document.getElementById(id), money=(n,c)=>new Intl.NumberFormat("en
 const today=new Date();el("record_date").value=today.toISOString().slice(0,10);el("targetMonth").value=today.toISOString().slice(0,7);
 let editingRecordId=null;
 async function request(url,opts={}){const r=await fetch(url,{credentials:"same-origin",...opts,headers:{"Content-Type":"application/json",...(opts.headers||{})}});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.detail||"Request failed");return d}
+function renderYouTubeAnalytics(data){
+ const t=data.totals||{}, r=data.revenue||{};
+ const cards=[["Views",Number(t.views||0).toLocaleString("en-IN")],["Watch time",Number(t.estimatedMinutesWatched||0).toLocaleString("en-IN")+" मिनट"],["Subscribers gained",Number(t.subscribersGained||0).toLocaleString("en-IN")],["Subscribers lost",Number(t.subscribersLost||0).toLocaleString("en-IN")],["Net subscribers",(Number(t.subscribersGained||0)-Number(t.subscribersLost||0)).toLocaleString("en-IN")],["औसत view duration",Math.round(Number(t.averageViewDuration||0))+" सेकंड"]];
+ el("youtubeAnalyticsMetrics").innerHTML=cards.map(([k,v])=>'<article class="card"><div class="muted">'+escapeHtml(k)+'</div><div class="metric">'+escapeHtml(v)+'</div></article>').join("");
+ el("youtubeAnalyticsRevenue").textContent=r.available?"YouTube अनुमानित कमाई: "+money(r.estimated_revenue||0,r.currency||"INR")+" · यह अनुमान है, प्राप्त भुगतान नहीं। "+(r.note||""):("YouTube कमाई उपलब्ध नहीं: "+(r.note||"Monetization permission आवश्यक है।"));
+ const videos=data.top_videos||[];
+ el("youtubeAnalyticsVideos").innerHTML=videos.length?'<h3>Top videos</h3>'+videos.map(v=>'<div class="record"><a href="'+escapeHtml(v.url)+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(v.video_id)+'</a><span>'+Number(v.views||0).toLocaleString("en-IN")+' views</span></div>').join(""):"";
+}
+async function loadYouTubeAnalytics(){
+ const button=el("youtubeAnalyticsLoad"),status=el("youtubeAnalyticsStatus");
+ button.disabled=true;status.textContent="YouTube Analytics डेटा प्राप्त हो रहा है…";
+ try{
+  const params=new URLSearchParams();
+  if(el("youtubeStartDate").value)params.set("start_date",el("youtubeStartDate").value);
+  if(el("youtubeEndDate").value)params.set("end_date",el("youtubeEndDate").value);
+  const data=await request("/api/admin/youtube/analytics"+(params.size?"?"+params.toString():""));
+  renderYouTubeAnalytics(data);
+  status.textContent=(data.channel||"Connected channel")+" · "+data.start_date+" से "+data.end_date+" · "+(data.note||"Official YouTube data");
+ }catch(err){status.textContent=err.message+" · YouTube channel connection और Analytics permission जाँचें।";}
+ finally{button.disabled=false;}
+}
 async function refresh(){const month=el("targetMonth").value||today.toISOString().slice(0,7);const kind=el("recordKindFilter").value;const query=new URLSearchParams({month});if(kind)query.set("kind",kind);const [s,r]=await Promise.all([request("/api/earnings/summary?month="+encodeURIComponent(month)),request("/api/earnings/records?"+query.toString())]);const cards=[["Confirmed income",s.confirmed_income],["Received",s.received_income],["Estimated",s.estimated_income],["Pending",s.pending_income],["Expenses",s.expenses],["Net confirmed",s.net_confirmed]];el("metrics").innerHTML=cards.map(([label,values])=>'<article class="card"><div class="muted">'+label+'</div><div class="metric">'+(Object.keys(values||{}).length?Object.entries(values).map(([c,v])=>money(v,c)).join("<br>"):"—")+'</div></article>').join("");if(s.target){el("targetNotice").textContent="Target "+money(s.target.target_amount,s.target.currency)+" · Progress "+s.target_progress_percent+"%";}else{el("targetNotice").textContent="इस महीने के लिए अभी कोई लक्ष्य सेट नहीं है।";}renderRecords(r.records||[]);}
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function renderRecords(rows){el("recordList").innerHTML=rows.length?rows.map(x=>'<div class="record"><div><b>'+escapeHtml(x.title)+'</b><div class="muted">'+escapeHtml(x.record_date)+' · '+escapeHtml(x.source)+' · '+escapeHtml(x.status)+'</div></div><div class="record-actions"><b class="'+(x.kind==="income"?"positive":"")+'">'+(x.kind==="expense"?"−":"+")+money(x.amount,x.currency)+'</b><button type="button" class="secondary" data-edit-id="'+Number(x.id)+'">Edit</button><button type="button" class="secondary" data-delete-id="'+Number(x.id)+'">Delete</button></div></div>').join(""):'अभी कोई रिकॉर्ड नहीं है।';}
@@ -38,5 +73,5 @@ el("recordForm").addEventListener("submit",async e=>{e.preventDefault();const pa
 el("cancelEdit").addEventListener("click",resetRecordForm);
 el("recordList").addEventListener("click",async e=>{const edit=e.target.closest("[data-edit-id]");const del=e.target.closest("[data-delete-id]");if(edit){try{const id=Number(edit.dataset.editId);const data=await request("/api/earnings/records?limit=500");const row=(data.records||[]).find(x=>Number(x.id)===id);if(!row)throw Error("Record not found. Refresh and try again.");editingRecordId=id;for(const key of ["kind","source","title","amount","currency","status","record_date","reference","notes"])el(key).value=row[key]??"";el("recordSubmit").textContent="बदलाव सेव करें";el("cancelEdit").hidden=false;el("formNotice").textContent="Record editing mode.";el("recordForm").scrollIntoView({behavior:"smooth",block:"start"});}catch(err){el("formNotice").textContent=err.message;}}else if(del){const id=Number(del.dataset.deleteId);if(!Number.isSafeInteger(id)||id<=0)return;if(!confirm("इस रिकॉर्ड को स्थायी रूप से हटाएँ?"))return;try{await request("/api/earnings/records/"+id,{method:"DELETE"});if(editingRecordId===id)resetRecordForm();el("formNotice").textContent="Record deleted.";await refresh();}catch(err){el("formNotice").textContent=err.message;}}});
 el("targetForm").addEventListener("submit",async e=>{e.preventDefault();try{await request("/api/earnings/target",{method:"PUT",body:JSON.stringify({month:el("targetMonth").value,target_amount:Number(el("targetAmount").value),currency:el("targetCurrency").value})});el("targetNotice").textContent="Monthly target saved.";await refresh();}catch(err){el("targetNotice").textContent=err.message;}});
-el("targetMonth").addEventListener("change",()=>refresh().catch(e=>el("recordList").textContent=e.message));el("recordKindFilter").addEventListener("change",()=>refresh().catch(e=>el("recordList").textContent=e.message));refresh().catch(e=>{el("recordList").textContent=e.message;});
+el("targetMonth").addEventListener("change",()=>refresh().catch(e=>el("recordList").textContent=e.message));el("recordKindFilter").addEventListener("change",()=>refresh().catch(e=>el("recordList").textContent=e.message));el("youtubeAnalyticsLoad").addEventListener("click",loadYouTubeAnalytics);refresh().catch(e=>{el("recordList").textContent=e.message;});
 </script></body></html>
