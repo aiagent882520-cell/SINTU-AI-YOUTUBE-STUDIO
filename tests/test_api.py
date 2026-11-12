@@ -61,6 +61,8 @@ def test_installable_app_shell(tmp_path, monkeypatch):
     page = client.get("/")
     assert page.status_code == 200
     assert 'rel="manifest"' in page.text
+    assert 'id="adminBackupCreate"' in page.text
+    assert 'id="adminBackups"' in page.text
     assert 'navigator.serviceWorker.register("/sw.js")' in page.text
     manifest = client.get("/static/manifest.json")
     assert manifest.status_code == 200
@@ -73,6 +75,10 @@ def test_installable_app_shell(tmp_path, monkeypatch):
     assert "/static/production_studio.js" in worker.text
     assert "/static/production_studio.css" in worker.text
     assert "/static/app.js" in worker.text
+    app_script = client.get("/static/app.js")
+    assert app_script.status_code == 200
+    assert "/api/admin/backups" in app_script.text
+    assert "SHA-256" in app_script.text
     assert "sintu-studio-shell-v10" in worker.text
     assert "/static/offline.html" in worker.text
 
