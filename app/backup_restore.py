@@ -77,6 +77,9 @@ def verify_backup(archive_path: str | Path) -> dict:
                     raise BackupValidationError("Archive contains a symbolic link.")
                 if info.file_size > MAX_TOTAL_BYTES:
                     raise BackupValidationError("Archive member exceeds the size safety limit.")
+            manifest_info = next(item for item in infos if item.filename == "manifest.json")
+            if manifest_info.file_size > 5 * 1024 * 1024:
+                raise BackupValidationError("Backup manifest exceeds the 5 MiB safety limit.")
             try:
                 manifest = json.loads(archive.read("manifest.json"))
             except (UnicodeDecodeError, json.JSONDecodeError, KeyError):
@@ -132,7 +135,8 @@ def verify_backup(archive_path: str | Path) -> dict:
                 if manifest.get("total_uncompressed_bytes") != total:
                     raise BackupValidationError("Backup total size does not match its manifest.")
                 try:
-                    with sqlite3.connect("file:" + str(database_copy) + "?mode=ro", uri=True) as conn:
+                    with sqlite3.connect(str(database_copy)) as conn:
+                        conn.execute("PRAGMA query_only=ON")
                         check = conn.execute("PRAGMA integrity_check").fetchone()
                         if not check or check[0] != "ok":
                             raise BackupValidationError("SQLite database integrity check failed.")
@@ -184,8 +188,12 @@ def restore_backup(archive_path: str | Path, data_dir: str | Path, *, app_stoppe
     data_dir = Path(data_dir).expanduser().resolve()
     data_dir.mkdir(parents=True, exist_ok=True)
     database_path = data_dir / "sintu_studio.db"
+    if database_path.is_symlink():
+        raise BackupValidationError("Studio database path is a symbolic link; restore stopped.")
     backup_dir = data_dir / "backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
+    if backup_dir.is_symlink():
+        raise BackupValidationError("Backup safety-copy directory is a symbolic link; restore stopped.")
     import secrets
     restore_token = secrets.token_hex(6)
     staged_database = data_dir / (".sintu-restore-" + restore_token + ".sqlite")
@@ -195,6 +203,8 @@ def restore_backup(archive_path: str | Path, data_dir: str | Path, *, app_stoppe
     media_conflicts = []
     try:
         with zipfile.ZipFile(archive_path, "r") as archive:
+            manifest = json.loads(archive.read("manifest.json"))
+            media_hashes = {entry["path"]: entry["sha256"] for entry in manifest["files"] if entry["path"].startswith("media/")}
             with archive.open(DATABASE_MEMBER, "r") as member, staged_database.open("xb") as output:
                 shutil.copyfileobj(member, output, 1024 * 1024)
             if database_path.is_file():
@@ -220,8 +230,13 @@ def restore_backup(archive_path: str | Path, data_dir: str | Path, *, app_stoppe
                     raise BackupValidationError("Media destination is a symbolic link.")
                 if target.exists():
                     skipped_media += 1
-                    if not target.is_file() or target.stat().st_size != info.file_size:
+                    if not target.is_file():
                         media_conflicts.append(name)
+                    else:
+                        with target.open("rb") as existing:
+                            _, existing_hash = _digest_stream(existing)
+                        if existing_hash != media_hashes.get(name):
+                            media_conflicts.append(name)
                     continue
                 try:
                     with archive.open(info, "r") as member, target.open("xb") as output:

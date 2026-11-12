@@ -81,6 +81,7 @@ def test_restore_creates_database_safety_copy_and_adds_media_without_overwrite(t
     assert Path(result["database_safety_copy"]).is_file()
     assert result["media_files_preserved"] == 1
     assert result["media_conflicts"] == ["media/generated_videos/sample.mp4"]
+    assert result["media_files_added"] == 0
     assert (media_dir / "sample.mp4").read_bytes() == b"existing-video"
     with sqlite3.connect(current_db) as conn:
         assert conn.execute("SELECT value FROM demo").fetchone() == ("backup-data",)
@@ -90,3 +91,26 @@ def test_restore_creates_database_safety_copy_and_adds_media_without_overwrite(t
 
 
 from pathlib import Path
+
+def test_restore_preserves_identical_existing_media_without_conflict(tmp_path):
+    archive = make_backup(tmp_path)
+    data = tmp_path / "data"
+    media_dir = data / "generated_videos"
+    media_dir.mkdir(parents=True)
+    (media_dir / "sample.mp4").write_bytes(b"video-data")
+    result = restore_backup(archive, data, app_stopped=True)
+    assert result["media_files_preserved"] == 1
+    assert result["media_conflicts"] == []
+    assert (media_dir / "sample.mp4").read_bytes() == b"video-data"
+
+
+def test_restore_refuses_symlink_database_destination(tmp_path):
+    archive = make_backup(tmp_path)
+    data = tmp_path / "data"
+    data.mkdir()
+    outside = tmp_path / "outside.sqlite"
+    with sqlite3.connect(outside) as conn:
+        conn.execute("CREATE TABLE safe(value TEXT)")
+    (data / "sintu_studio.db").symlink_to(outside)
+    with pytest.raises(BackupValidationError, match="symbolic link"):
+        restore_backup(archive, data, app_stopped=True)
