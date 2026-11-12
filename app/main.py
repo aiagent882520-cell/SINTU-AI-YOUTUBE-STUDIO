@@ -691,11 +691,18 @@ def _create_admin_backup() -> dict:
     entries = []
     total_bytes = 0
     try:
-        with sqlite3.connect(str(DB_PATH), timeout=30) as source, sqlite3.connect(str(database_snapshot), timeout=30) as target:
-            source.backup(target, pages=256, sleep=0.01)
-            check = target.execute("PRAGMA integrity_check").fetchone()
-            if not check or check[0] != "ok":
-                raise HTTPException(status_code=500, detail="Database integrity check failed; backup was not created.")
+        source = sqlite3.connect(str(DB_PATH), timeout=30)
+        try:
+            target = sqlite3.connect(str(database_snapshot), timeout=30)
+            try:
+                source.backup(target, pages=256, sleep=0.01)
+                check = target.execute("PRAGMA integrity_check").fetchone()
+                if not check or check[0] != "ok":
+                    raise HTTPException(status_code=500, detail="Database integrity check failed; backup was not created.")
+            finally:
+                target.close()
+        finally:
+            source.close()
         candidates = [(database_snapshot, "database/sintu_studio.db")]
         for directory_name in _BACKUP_MEDIA_DIRS:
             media_root = DATA_DIR / directory_name

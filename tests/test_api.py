@@ -132,6 +132,8 @@ def test_admin_backup_contains_consistent_database_and_generated_media_but_no_se
     assert listing.status_code == 200
     assert listing.json()["total"] == 1
     assert listing.json()["retention_limit"] == 5
+    assert not list((tmp_path / "backups").glob(".*.sqlite"))
+    assert not list((tmp_path / "backups").glob(".*.zip.tmp"))
 
 
 def test_admin_backup_rejects_invalid_identifiers_and_requires_admin(tmp_path, monkeypatch):
