@@ -1357,6 +1357,67 @@ def test_content_calendar_rejects_past_naive_and_invalid_platform(tmp_path, monk
     assert client.post("/api/calendar", json={**base,"platform":"unsupported","scheduled_at":future}).status_code == 422
 
 
+
+def test_agent_catalog_validation_route_starts_scoped_full_run(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    captured = {}
+    run = {"id": "a" * 32, "format_id": "__agent_catalog__", "status": "queued"}
+
+    def fake_create(format_id, topic, owner):
+        captured.update(format_id=format_id, topic=topic, owner=owner)
+        return run
+
+    monkeypatch.setattr(main, "create_production_run", fake_create)
+    monkeypatch.setattr(main, "execute_production_run", lambda run_id, owner: captured.update(executed=(run_id, owner)))
+    monkeypatch.setattr(main, "get_production_run", lambda run_id, owner=None: {**run, "owner_username": owner})
+
+    response = client.post("/api/admin/agent-catalog/validate", json={"topic": "पूर्ण स्टूडियो परीक्षण"})
+    assert response.status_code == 202
+    assert response.json()["registered_agent_roles"] == 61
+    assert response.json()["expected_worker_checker_pairs"] == 61
+    assert captured["format_id"] == "__agent_catalog__"
+    assert captured["owner"] == "local"
+    assert captured["executed"] == (run["id"], "local")
+    status = client.get(f"/api/admin/agent-catalog/runs/{run['id']}")
+    assert status.status_code == 200
+    assert status.json()["run"]["owner_username"] == "local"
+
+
+def test_agent_catalog_validation_rejects_empty_topic(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.post("/api/admin/agent-catalog/validate", json={"topic": "   "})
+    assert response.status_code == 422
+
+
+def test_youtube_oauth_callback_rejects_invalid_state_before_network(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "_youtube_request", lambda *args, **kwargs: pytest.fail("invalid OAuth state must not contact Google"))
+    response = client.get("/api/admin/youtube/oauth/callback?code=untrusted-code&state=invalid-state")
+    assert response.status_code == 400
+
+
+def test_youtube_publish_requires_approved_calendar_item_and_rendered_file(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    client = client_for_test(tmp_path, monkeypatch)
+    scheduled = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    created = client.post("/api/calendar", json={
+        "title": "Approval gate", "platform": "youtube", "prompt": "Test upload",
+        "scheduled_at": scheduled,
+    })
+    assert created.status_code == 200
+    calendar_id = created.json()["id"]
+    video_id = "b" * 32
+    query = f"?video_id={video_id}&title=Approved%20test"
+    blocked = client.post(f"/api/admin/youtube/publish/{calendar_id}" + query)
+    assert blocked.status_code == 409
+
+    with main.db() as conn:
+        conn.execute("UPDATE content_calendar SET status='Approved' WHERE id=?", (calendar_id,))
+    monkeypatch.setattr(main, "OUTPUT_DIR", tmp_path / "renders")
+    missing = client.post(f"/api/admin/youtube/publish/{calendar_id}" + query)
+    assert missing.status_code == 404
+
 def test_youtube_status_never_exposes_credentials(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("YOUTUBE_CLIENT_ID", "client-id-secret")
