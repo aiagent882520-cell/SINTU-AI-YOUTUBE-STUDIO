@@ -134,20 +134,49 @@ def earnings_summary(month: str | None = Query(default=None, pattern=r"^\d{4}-(0
             "notice": "Estimated and pending amounts are not received money. Totals are grouped by currency; no exchange-rate conversion is applied."}
 
 @router.get("/api/earnings/records")
-def list_earning_records(kind: str | None = None, month: str | None = None, limit: int = Query(default=100, ge=1, le=500)):
+def list_earning_records(
+    kind: str | None = None,
+    month: str | None = None,
+    status: str | None = None,
+    source: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0, le=1000000),
+):
     if kind and kind not in {"income", "expense"}:
         raise HTTPException(400, "kind must be income or expense")
-    if month and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month):
+    if month and not re.fullmatch(r"\\d{4}-(0[1-9]|1[0-2])", month):
         raise HTTPException(400, "month must be a valid YYYY-MM value")
+    if status and status not in STATUSES:
+        raise HTTPException(400, "status must be a supported record status")
+    if source and source not in SOURCES:
+        raise HTTPException(400, "source must be a supported record source")
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(400, "start_date must not be after end_date")
     clauses, values = [], []
     if kind:
         clauses.append("kind=?"); values.append(kind)
     if month:
         clauses.append("substr(record_date,1,7)=?"); values.append(month)
+    if status:
+        clauses.append("status=?"); values.append(status)
+    if source:
+        clauses.append("source=?"); values.append(source)
+    if start_date:
+        clauses.append("record_date>=?"); values.append(start_date.isoformat())
+    if end_date:
+        clauses.append("record_date<=?"); values.append(end_date.isoformat())
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     with _connect() as conn:
-        rows = conn.execute("SELECT * FROM earning_records" + where + " ORDER BY record_date DESC,id DESC LIMIT ?", (*values, limit)).fetchall()
-    return {"records": [_record(r) for r in rows]}
+        total = conn.execute("SELECT COUNT(*) FROM earning_records" + where, values).fetchone()[0]
+        rows = conn.execute(
+            "SELECT * FROM earning_records" + where +
+            " ORDER BY record_date DESC,id DESC LIMIT ? OFFSET ?",
+            (*values, limit, offset),
+        ).fetchall()
+    return {"records": [_record(r) for r in rows], "total": total,
+            "limit": limit, "offset": offset, "has_more": offset + len(rows) < total}
 
 @router.post("/api/earnings/records", status_code=201)
 def create_earning_record(payload: RecordInput):

@@ -179,3 +179,50 @@ def test_earning_record_rejects_unknown_source_at_validation(tmp_path, monkeypat
         "record_date": "2026-11-12"
     })
     assert response.status_code == 422
+
+
+def test_earning_record_filters_and_pagination(tmp_path, monkeypatch):
+    client = setup_client(tmp_path, monkeypatch)
+    samples = [
+        ("affiliate", "received", "2026-11-01", "Affiliate paid"),
+        ("youtube_ads", "estimated", "2026-11-05", "YouTube estimate"),
+        ("affiliate", "pending", "2026-11-10", "Affiliate pending"),
+    ]
+    for source, status, record_date, title in samples:
+        response = client.post("/api/earnings/records", json={
+            "kind": "income", "source": source, "title": title, "amount": 100,
+            "currency": "INR", "status": status, "record_date": record_date
+        })
+        assert response.status_code == 201
+
+    filtered = client.get(
+        "/api/earnings/records?kind=income&source=affiliate&status=received"
+        "&start_date=2026-11-01&end_date=2026-11-09&limit=1"
+    )
+    assert filtered.status_code == 200
+    data = filtered.json()
+    assert data["total"] == 1
+    assert data["records"][0]["title"] == "Affiliate paid"
+    assert data["has_more"] is False
+
+    page = client.get("/api/earnings/records?month=2026-11&limit=1&offset=1")
+    assert page.status_code == 200
+    assert page.json()["total"] == 3
+    assert len(page.json()["records"]) == 1
+    assert page.json()["offset"] == 1
+
+
+def test_earning_record_filters_reject_invalid_values_and_date_order(tmp_path, monkeypatch):
+    client = setup_client(tmp_path, monkeypatch)
+    assert client.get("/api/earnings/records?status=unknown").status_code == 400
+    assert client.get("/api/earnings/records?source=unknown").status_code == 400
+    assert client.get(
+        "/api/earnings/records?start_date=2026-11-20&end_date=2026-11-01"
+    ).status_code == 400
+
+
+def test_earning_dashboard_exposes_record_filters(tmp_path, monkeypatch):
+    client = setup_client(tmp_path, monkeypatch)
+    page = client.get("/earnings").text
+    for control in ["recordStatusFilter", "recordSourceFilter", "recordStartDate", "recordEndDate"]:
+        assert f'id="{control}"' in page
