@@ -3414,7 +3414,9 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
     created_images, audio_id, music_id = [], None, None
     try:
         for prompt in scene_prompts:
-            image_result = generate_image(prompt, "scene", "portrait" if "x1920" in resolution else "landscape")
+            width, height = (int(value) for value in resolution.split("x"))
+            aspect = "portrait" if height > width else ("square" if height == width else "landscape")
+            image_result = generate_image(prompt, "scene", aspect)
             created_images.append(image_result["image_id"])
         voice_result = generate_voiceover(narration)
         audio_id = voice_result["audio_id"]

@@ -2536,9 +2536,10 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
     monkeypatch.setattr(main, "generate_image", lambda prompt, kind, aspect: {
         "image_id": str(len(generated) + 1).zfill(32), "url": "/api/images/" + str(len(generated) + 1).zfill(32)
     })
-    generated = []
+    generated, aspects = [], []
     def fake_image(prompt, kind, aspect):
         generated.append(prompt)
+        aspects.append(aspect)
         return {"image_id": str(len(generated)).zfill(32), "url": "/api/images/" + str(len(generated)).zfill(32)}
     monkeypatch.setattr(main, "generate_image", fake_image)
     monkeypatch.setattr(main, "generate_voiceover", lambda text: {
@@ -2568,7 +2569,7 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
 
     response = client.post(f"/api/production/runs/{run_id}/produce-media", json={
         "scene_prompts": ["पुराने किले का सिनेमाई दृश्य", "रहस्यमयी जंगल का दृश्य"],
-        "seconds_per_scene": 5
+        "seconds_per_scene": 5, "resolution": "720x1280"
     })
     assert response.status_code == 200, response.text
     body = response.json()
@@ -2578,6 +2579,7 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
     assert body["render"]["subtitles_burned_in"] is False
     assert attached["owner"] == "local"
     assert generated == ["पुराने किले का सिनेमाई दृश्य", "रहस्यमयी जंगल का दृश्य"]
+    assert aspects == ["portrait", "portrait"]
 
 
 def test_production_media_pipeline_fails_closed_when_local_media_engines_missing(tmp_path, monkeypatch):
