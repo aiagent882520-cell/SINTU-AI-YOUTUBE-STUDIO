@@ -108,7 +108,7 @@
    const resolution=document.getElementById("mediaResolution").value,brief=formPayload();
    if(!brief.brief){status.textContent="Pehle project topic / brief likhein.";return;}
    if(prompts.length<1||prompts.length>25||prompts.some(x=>x.length>3000)){status.textContent="1–25 scene prompts dein; har prompt 3000 characters se chhota ho.";return;}
-   if(!narration){status.textContent="Hindi voiceover script zaroori hai.";return;}
+   /* Narration may be omitted when the approved Script Writer deliverable contains the voiceover. */
    if(seconds<2||seconds>12){status.textContent="Seconds per scene 2 se 12 ke beech rakhein.";return;}
    button.disabled=true;output.hidden=false;output.textContent="Production run create ho raha hai…";
    try{
@@ -129,9 +129,9 @@
     const result=await media.json().catch(()=>({}));if(!media.ok)throw new Error(result.detail||"Local media generation failed.");
     const videoUrl=result.render?.url||"";
     output.textContent="Production run: "+runId+"\nStatus: "+result.status+"\nScenes generated: "+result.generated_images.length+"\nVoice: "+(result.voiceover?.provider||"local")+"\nMusic: "+(result.background_music?.provider||"local")+"\nResolution: "+(result.render?.resolution||resolution)+"\nWatermark: SINTU AI YOUTUBE STUDIO\nPublished: No (human approval required)\n\nFinal video: "+videoUrl;
-    if(videoUrl){const link=document.createElement("a");link.href=videoUrl;link.target="_blank";link.rel="noopener noreferrer";link.textContent="Open verified final MP4";link.className="secondary";output.after(link);}
+    let link=document.getElementById("localMediaVideoLink");if(!link){link=document.createElement("a");link.id="localMediaVideoLink";link.target="_blank";link.rel="noopener noreferrer";link.textContent="Open verified final MP4";link.className="secondary";output.after(link);}link.href=videoUrl;link.hidden=!videoUrl;
     status.textContent="Final MP4 rendered and verified. YouTube publishing remains a separate human-approved action.";
-   }catch(error){status.textContent=error.message;output.textContent="Production stopped safely. No automatic publishing occurred.";}
+   }catch(error){status.textContent=error.message;output.textContent="Production stopped safely. No automatic publishing occurred.";const staleLink=document.getElementById("localMediaVideoLink");if(staleLink)staleLink.hidden=true;}
    finally{button.disabled=false;}
   });
   document.getElementById("refreshStudioTools").addEventListener("click",refreshProjectTools);
