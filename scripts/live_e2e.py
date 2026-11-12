@@ -123,10 +123,11 @@ def _live_video(prompt: str) -> dict:
         "watermark": rendered["brand_watermark"],
         "subtitles_burned_in": rendered["subtitles_burned_in"],
         "verified_by_renderer": True,
+        "render_result": rendered,
     }
 
 
-def _live_agent_catalog(topic: str) -> dict:
+def _live_agent_catalog(topic: str, include_result: bool = False):
     run = create_run("__agent_catalog__", topic, "local")
     execute_run(run["id"], "local")
     result = get_run(run["id"], "local")
