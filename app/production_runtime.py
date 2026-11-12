@@ -192,7 +192,15 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 "titles, labels or text overlays in video frames. Only the final SINTU watermark is permitted.\n"
                 f"Format: {selected['name']} ({selected['aspect_ratio']}, {selected['recommended_resolution']}).\n"
                 f"Topic: {run['topic']}\nRole: {role}\nMission: {pair.get('mission','Perform your specialist task.')}\n"
-                "Use free/open-source tools by default. Do not claim external research, rendering or publishing occurred."
+                + (
+                    "Include a section headed exactly SCENE PROMPTS, then provide 6 to 12 numbered lines "
+                    "(1. prompt, 2. prompt...). Each line must be a standalone, richly detailed, text-free "
+                    "visual shot prompt with subject, setting, lighting and camera composition. Do not include "
+                    "subtitles, words, labels or logos.\\n"
+                    if any(term in role.lower() for term in ("ai video generator", "filmmaking director", "storyboard"))
+                    else ""
+                )
+                + "Use free/open-source tools by default. Do not claim external research, rendering or publishing occurred."
             )
             previous_output = ""
             verdict = None

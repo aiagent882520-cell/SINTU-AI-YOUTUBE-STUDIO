@@ -107,7 +107,7 @@
    const narration=document.getElementById("mediaNarration").value.trim(),seconds=Number(document.getElementById("mediaSecondsPerScene").value)||4;
    const resolution=document.getElementById("mediaResolution").value,brief=formPayload();
    if(!brief.brief){status.textContent="Pehle project topic / brief likhein.";return;}
-   if(prompts.length<1||prompts.length>25||prompts.some(x=>x.length>3000)){status.textContent="1–25 scene prompts dein; har prompt 3000 characters se chhota ho.";return;}
+   if(prompts.length>25||prompts.some(x=>x.length>3000)){status.textContent="Maximum 25 scene prompts dein; har prompt 3000 characters se chhota ho.";return;}
    /* Narration may be omitted when the approved Script Writer deliverable contains the voiceover. */
    if(seconds<2||seconds>12){status.textContent="Seconds per scene 2 se 12 ke beech rakhein.";return;}
    button.disabled=true;output.hidden=false;output.textContent="Production run create ho raha hai…";
@@ -124,7 +124,7 @@
      if(["completed","paused","blocked","failed"].includes(run.status))break;
     }
     if(!run||run.status!=="completed")throw new Error("Media render safely stopped. "+(run?.status||"timeout")+": "+(run?.error||"Review gates did not complete within 30 minutes."));
-    status.textContent="All review gates PASS. Local media generation + final MP4 render starting…";
+    status.textContent=prompts.length?"All review gates PASS. Supplied scene prompts ke saath local MP4 render shuru…":"All review gates PASS. Approved AI storyboard se scenes lekar local MP4 render shuru…";
     const media=await fetch("/api/production/runs/"+encodeURIComponent(runId)+"/produce-media",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({scene_prompts:prompts,narration,seconds_per_scene:seconds,resolution,fps:30,quality:"high"})});
     const result=await media.json().catch(()=>({}));if(!media.ok)throw new Error(result.detail||"Local media generation failed.");
     const videoUrl=result.render?.url||"";

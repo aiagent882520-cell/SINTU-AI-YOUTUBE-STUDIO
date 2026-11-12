@@ -3365,12 +3365,58 @@ class ProductionRenderInput(RenderInput):
 
 
 class ProductionMediaInput(BaseModel):
-    scene_prompts: list[str] = Field(min_length=1, max_length=25)
+    # Empty means use the approved AI Video Generator / storyboard deliverable.
+    scene_prompts: list[str] = Field(default_factory=list, max_length=25)
     narration: str | None = Field(default=None, max_length=4000)
     seconds_per_scene: int = Field(default=4, ge=2, le=12)
     resolution: str | None = Field(default=None, max_length=12)
     fps: int = Field(default=30, ge=24, le=60)
     quality: str = Field(default="high", max_length=12)
+
+
+def _scene_prompts_from_deliverables(deliverables: dict) -> list[str]:
+    """Extract clean, numbered visual prompts from an approved storyboard deliverable."""
+    if not isinstance(deliverables, dict):
+        return []
+    preferred = ("ai video generator", "storyboard", "scene planner",
+                 "filmmaking director", "visual")
+    candidates = sorted(
+        ((str(key).lower(), value) for key, value in deliverables.items()
+         if isinstance(value, str) and value.strip()),
+        key=lambda item: next((i for i, marker in enumerate(preferred)
+                               if marker in item[0]), len(preferred)),
+    )
+    for _key, value in candidates:
+        lines = value.replace("```", "").splitlines()
+        active = False
+        prompts = []
+        for raw in lines:
+            line = raw.strip().strip("`")
+            if not line:
+                continue
+            if re.match(r"^(?:#{1,6}\s*)?(?:scene\s+prompts|visual\s+prompts|storyboard\s+prompts)\s*:?", line, re.I):
+                active = True
+                continue
+            match = re.match(r"^(?:[-*•]\s*)?(?:(?:scene|shot|prompt)\s*)?\d{1,2}[.)}:：\-–]\s*(.+)$", line, re.I)
+            if active and match:
+                prompt = match.group(1).strip()
+                if len(prompt) >= 12:
+                    prompts.append(prompt[:3000])
+                    if len(prompts) == 25:
+                        return prompts
+            elif active and prompts and re.match(r"^(?:notes?|camera|style|aspect|duration)\s*:", line, re.I):
+                continue
+            elif active and prompts and len(line) >= 20:
+                prompts[-1] = (prompts[-1] + " " + line)[:3000]
+            elif not active and match:
+                prompt = match.group(1).strip()
+                if len(prompt) >= 12:
+                    prompts.append(prompt[:3000])
+                    if len(prompts) == 25:
+                        return prompts
+        if prompts:
+            return prompts
+    return []
 
 
 @app.post("/api/production/runs/{run_id}/produce-media")
@@ -3394,12 +3440,19 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=503, detail="Local ComfyUI image workflow is not ready. Configure a validated free local workflow; paid providers are not enabled by this route.")
     if not voice_status().get("local_available"):
         raise HTTPException(status_code=503, detail="Local Piper TTS executable and Hindi voice model are required. Paid voice providers are not enabled by this route.")
+    deliverables = run["result"].get("deliverables") or {}
     scene_prompts = [item.strip() for item in payload.scene_prompts]
+    if not scene_prompts:
+        scene_prompts = _scene_prompts_from_deliverables(deliverables)
+    if not scene_prompts:
+        raise HTTPException(
+            status_code=400,
+            detail="Approved run mein scene prompts nahi mile. AI Video Generator ko numbered SCENE PROMPTS dene dein ya prompts manually add karein.",
+        )
     if any(not item or len(item) > 3000 for item in scene_prompts):
         raise HTTPException(status_code=400, detail="Each scene prompt must contain 1 to 3000 characters.")
     narration = (payload.narration or "").strip()
     if not narration:
-        deliverables = run["result"].get("deliverables") or {}
         narration = next((value for key, value in deliverables.items()
                           if "script" in key.lower() and isinstance(value, str) and value.strip()), "")
     if not narration:

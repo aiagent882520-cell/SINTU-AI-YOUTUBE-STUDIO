@@ -2582,6 +2582,69 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
     assert aspects == ["portrait", "portrait"]
 
 
+def test_production_media_pipeline_uses_approved_storyboard_when_scene_prompts_omitted(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    run_id = "9" * 32
+    state = {
+        "id": run_id, "status": "completed", "format_id": "youtube-shorts",
+        "topic": "भारत की रहस्यमयी जगहें",
+        "result": {
+            "deliverables": {
+                "Script Writer": "भारत की रहस्यमयी जगहों की कहानी",
+                "AI Video Generator": (
+                    "SCENE PROMPTS:\\n"
+                    "1. प्राचीन किले का वाइड सिनेमाई दृश्य, सुबह की धुंध, धीमा कैमरा पुश-इन\\n"
+                    "2. घने जंगल में रहस्यमयी रास्ता, पेड़ों से छनती रोशनी, लो-एंगल कैमरा"
+                ),
+            }
+        },
+    }
+    monkeypatch.setattr(main, "get_production_run", lambda value, owner=None: state if value == run_id and owner == "local" else None)
+    monkeypatch.setattr(main, "image_status", lambda: {"local_available": True})
+    monkeypatch.setattr(main, "voice_status", lambda: {"local_available": True})
+    generated = []
+    def fake_image(prompt, kind, aspect):
+        generated.append(prompt)
+        return {"image_id": str(len(generated)).zfill(32), "url": "/api/images/" + str(len(generated)).zfill(32)}
+    monkeypatch.setattr(main, "generate_image", fake_image)
+    monkeypatch.setattr(main, "generate_voiceover", lambda text: {
+        "audio_id": "b" * 32, "filename": "b" * 32 + ".wav", "url": "/api/audio/" + "b" * 32
+    })
+    monkeypatch.setattr(main, "generate_music", lambda prompt, duration: {
+        "music_id": "c" * 32, "url": "/api/music/" + "c" * 32
+    })
+    monkeypatch.setattr(main, "render_storyboard", lambda title, scenes, seconds, **kwargs: {
+        "video_id": "d" * 32, "filename": "d" * 32 + ".mp4",
+        "url": "/api/videos/" + "d" * 32, "resolution": kwargs["resolution"],
+        "brand_watermark": "SINTU AI YOUTUBE STUDIO", "subtitles_burned_in": False
+    })
+    monkeypatch.setattr(main, "attach_render_result", lambda *args: {"status": "completed"})
+    image_dir, audio_dir, music_dir = tmp_path / "images", tmp_path / "audio", tmp_path / "music"
+    image_dir.mkdir(); audio_dir.mkdir(); music_dir.mkdir()
+    monkeypatch.setattr(main, "IMAGE_DIR", image_dir)
+    monkeypatch.setattr(main, "AUDIO_DIR", audio_dir)
+    monkeypatch.setattr(main, "MUSIC_DIR", music_dir)
+    for i in (1, 2):
+        (image_dir / (str(i).zfill(32) + ".jpg")).write_bytes(b"image")
+    (audio_dir / ("b" * 32 + ".wav")).write_bytes(b"audio")
+    (music_dir / ("c" * 32 + ".wav")).write_bytes(b"music")
+
+    response = client.post(f"/api/production/runs/{run_id}/produce-media", json={})
+    assert response.status_code == 200, response.text
+    assert generated == [
+        "प्राचीन किले का वाइड सिनेमाई दृश्य, सुबह की धुंध, धीमा कैमरा पुश-इन",
+        "घने जंगल में रहस्यमयी रास्ता, पेड़ों से छनती रोशनी, लो-एंगल कैमरा",
+    ]
+    assert response.json()["video_rendered"] is True
+    assert response.json()["published"] is False
+
+
+def test_scene_prompt_extraction_ignores_unstructured_deliverables():
+    assert main._scene_prompts_from_deliverables({
+        "AI Video Generator": "SCENE PROMPTS:\\n1. छोटा दृश्य prompt"
+    }) == ["छोटा दृश्य prompt"]
+
+
 def test_production_media_pipeline_fails_closed_when_local_media_engines_missing(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     run_id = "e" * 32
