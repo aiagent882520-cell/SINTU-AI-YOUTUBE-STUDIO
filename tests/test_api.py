@@ -2592,8 +2592,8 @@ def test_production_media_pipeline_uses_approved_storyboard_when_scene_prompts_o
             "deliverables": {
                 "Script Writer": "भारत की रहस्यमयी जगहों की कहानी",
                 "AI Video Generator": (
-                    "SCENE PROMPTS:\\n"
-                    "1. प्राचीन किले का वाइड सिनेमाई दृश्य, सुबह की धुंध, धीमा कैमरा पुश-इन\\n"
+                    "SCENE PROMPTS:\n"
+                    "1. प्राचीन किले का वाइड सिनेमाई दृश्य, सुबह की धुंध, धीमा कैमरा पुश-इन\n"
                     "2. घने जंगल में रहस्यमयी रास्ता, पेड़ों से छनती रोशनी, लो-एंगल कैमरा"
                 ),
             }
@@ -2639,9 +2639,9 @@ def test_production_media_pipeline_uses_approved_storyboard_when_scene_prompts_o
     assert response.json()["published"] is False
 
 
-def test_scene_prompt_extraction_ignores_unstructured_deliverables():
+def test_scene_prompt_extraction_from_numbered_deliverable():
     assert main._scene_prompts_from_deliverables({
-        "AI Video Generator": "SCENE PROMPTS:\\n1. छोटा दृश्य prompt"
+        "AI Video Generator": "SCENE PROMPTS:\n1. छोटा दृश्य prompt"
     }) == ["छोटा दृश्य prompt"]
 
 
