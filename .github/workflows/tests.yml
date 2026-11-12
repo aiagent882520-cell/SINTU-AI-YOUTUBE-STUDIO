@@ -84,4 +84,39 @@ jobs:
         uses: actions/checkout@v5
       - name: Build production image
         run: docker build --pull --tag sintu-ai-youtube-studio:ci .
+      - name: Boot production image and verify health endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker volume create sintu-ci-data >/dev/null
+          cleanup() {
+            docker logs sintu-ci-app 2>&1 || true
+            docker rm --force sintu-ci-app >/dev/null 2>&1 || true
+            docker volume rm sintu-ci-data >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker run --detach --name sintu-ci-app \
+            --publish 127.0.0.1:8000:8000 \
+            --env PORT=8000 \
+            --env SINTU_DATA_DIR=/data \
+            --env SINTU_AUTH_REQUIRED=false \
+            --env SINTU_SESSION_SECRET=ci-only-not-for-production \
+            --volume sintu-ci-data:/data \
+            sintu-ai-youtube-studio:ci >/dev/null
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:8000/api/health \
+              | python -c 'import json,sys; data=json.load(sys.stdin); sys.exit(0 if data.get("status") == "ok" else 1)'; then
+              echo "Production container health check passed."
+              exit 0
+            fi
+            if [ "$(docker inspect --format '{{.State.Running}}' sintu-ci-app 2>/dev/null || true)" != "true" ]; then
+              echo "Production container exited before becoming healthy."
+              docker logs sintu-ci-app || true
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "Production container did not become healthy within 90 seconds."
+          docker logs sintu-ci-app || true
+          exit 1
 
