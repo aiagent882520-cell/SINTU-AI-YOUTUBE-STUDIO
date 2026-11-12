@@ -9,16 +9,16 @@ if %errorlevel%==0 (
 ) else (
   where python >nul 2>nul
   if errorlevel 1 (
-    echo Python 3.10 or newer is required. Install Python from https://www.python.org/downloads/
+    echo Python 3.11 or newer is required. Install Python from https://www.python.org/downloads/
     pause
     exit /b 1
   )
   set "PYTHON=python"
 )
 
-%PYTHON% -c "import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)"
+%PYTHON% -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)"
 if errorlevel 1 (
-  echo Python 3.10 or newer is required. Update Python and run this file again.
+  echo Python 3.11 or newer is required. Update Python and run this file again.
   pause
   exit /b 1
 )
