@@ -146,7 +146,7 @@ def list_earning_records(
 ):
     if kind and kind not in {"income", "expense"}:
         raise HTTPException(400, "kind must be income or expense")
-    if month and not re.fullmatch(r"\\d{4}-(0[1-9]|1[0-2])", month):
+    if month and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month):
         raise HTTPException(400, "month must be a valid YYYY-MM value")
     if status and status not in STATUSES:
         raise HTTPException(400, "status must be a supported record status")
