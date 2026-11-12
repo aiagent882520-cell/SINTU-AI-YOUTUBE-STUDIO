@@ -1,3 +1,4 @@
+import sqlite3
 from fastapi.testclient import TestClient
 import csv
 import io
