@@ -72,3 +72,10 @@ python scripts/restore_backup.py /path/to/sintu-backup-YYYYMMDDTHHMMSSZ-id.zip -
 ```
 
 The restore command creates a verified pre-restore SQLite safety copy under `backups/`, atomically replaces the database, adds missing generated media, and never overwrites existing media. Existing same-name media is preserved and reported as a conflict. Restore does not restore API keys, OAuth secrets, environment files, or application code. Review the JSON result and restart the service only after a successful restore.
+
+
+### Recovery validation and complete local data backup
+
+New backups include the main Studio database and, when present, the separate earnings ledger database (`sintu_earnings.sqlite3`), plus approved generated-media folders. The dashboard shows backup count, total archive storage and latest-backup age; this inventory is not a substitute for the per-archive Verify operation. Verify checks ZIP structure, every SHA-256 digest, SQLite integrity and foreign-key consistency.
+
+Offline restore validates the required application tables before installing databases and validates them again after installation. It restores the earnings ledger when that database is present in the archive, keeps pre-restore safety copies, and reports media conflicts without overwriting existing files. Restore remains an explicit offline operation while the service and workers are stopped.

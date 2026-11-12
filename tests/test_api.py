@@ -80,7 +80,8 @@ def test_installable_app_shell(tmp_path, monkeypatch):
     assert "/api/admin/backups" in app_script.text
     assert "SHA-256" in app_script.text
     assert "backup-verify" in app_script.text
-    assert "sintu-studio-shell-v11" in worker.text
+    assert "adminBackupHealth" in page.text
+    assert "sintu-studio-shell-v12" in worker.text
     assert "/static/offline.html" in worker.text
 
 def test_agent_orchestration_catalog_and_teams(tmp_path, monkeypatch):
@@ -109,13 +110,20 @@ def test_admin_backup_contains_consistent_database_and_generated_media_but_no_se
     media.mkdir()
     (media / "sample.mp4").write_bytes(b"test-video-bytes")
     (tmp_path / ".env").write_text("OPENAI_API_KEY=must-not-be-backed-up", encoding="utf-8")
+    earnings_db = tmp_path / "sintu_earnings.sqlite3"
+    with sqlite3.connect(earnings_db) as conn:
+        conn.execute("CREATE TABLE earning_records(id INTEGER PRIMARY KEY, title TEXT)")
+        conn.execute("CREATE TABLE earning_targets(id INTEGER PRIMARY KEY, month TEXT)")
+        conn.execute("INSERT INTO earning_records(title) VALUES('backup income')")
+
 
     created = client.post("/api/admin/backups")
     assert created.status_code == 200, created.text
     result = created.json()
     assert result["database_integrity"] == "ok"
     assert result["secrets_and_environment_files_included"] is False
-    assert result["file_count"] == 2
+    assert result["file_count"] == 3
+    assert "sintu_earnings.sqlite3" in result["database_members"]
     archive_response = client.get(result["download_url"])
     assert archive_response.status_code == 200
     import zipfile
@@ -124,11 +132,13 @@ def test_admin_backup_contains_consistent_database_and_generated_media_but_no_se
     with zipfile.ZipFile(archive_path) as archive:
         names = set(archive.namelist())
         assert "database/sintu_studio.db" in names
+        assert "database/sintu_earnings.sqlite3" in names
         assert "media/generated_videos/sample.mp4" in names
         assert ".env" not in names
         manifest = json.loads(archive.read("manifest.json"))
         assert manifest["database_integrity"] == "ok"
-        assert manifest["file_count"] == 2
+        assert manifest["file_count"] == 3
+        assert manifest["database_members"] == ["sintu_studio.db", "sintu_earnings.sqlite3"]
         database_file = tmp_path / "restored-snapshot.sqlite"
         database_file.write_bytes(archive.read("database/sintu_studio.db"))
     import sqlite3
@@ -141,6 +151,12 @@ def test_admin_backup_contains_consistent_database_and_generated_media_but_no_se
     assert verify.json()["verified"] is True
     assert verify.json()["database_integrity"] == "ok"
     assert len(verify.json()["archive_sha256"]) == 64
+    assert set(verify.json()["databases"]) == {"database/sintu_studio.db", "database/sintu_earnings.sqlite3"}
+    health = client.get("/api/admin/backups/health")
+    assert health.status_code == 200
+    assert health.json()["archive_count"] == 1
+    assert health.json()["freshness"] == "recent"
+    assert health.json()["latest_backup"]["integrity"] == "not_checked"
     listing = client.get("/api/admin/backups")
     assert listing.status_code == 200
     assert listing.json()["total"] == 1

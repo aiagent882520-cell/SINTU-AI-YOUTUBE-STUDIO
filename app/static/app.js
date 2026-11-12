@@ -1142,18 +1142,30 @@ async function loadAdminBackups() {
   list.textContent = "Loading backups…";
   try {
     const data = await request("/api/admin/backups");
+    const health = await request("/api/admin/backups/health");
+    const latest = health.latest_backup;
+    const age = latest ? (latest.age_seconds < 3600 ? Math.floor(latest.age_seconds / 60) + " min" :
+      latest.age_seconds < 86400 ? Math.floor(latest.age_seconds / 3600) + " hours" :
+      Math.floor(latest.age_seconds / 86400) + " days") : "none";
+    const totalSize = health.total_archive_bytes < 1024 * 1024
+      ? (health.total_archive_bytes / 1024).toFixed(1) + " KB"
+      : (health.total_archive_bytes / (1024 * 1024)).toFixed(2) + " MB";
+    $("adminBackupHealth").innerHTML =
+      '<div class="integration-card"><strong>Archives</strong><span>' + health.archive_count + ' / ' + health.retention_limit + '</span><small>Stored backups</small></div>' +
+      '<div class="integration-card"><strong>Storage</strong><span>' + totalSize + '</span><small>Total ZIP size</small></div>' +
+      '<div class="integration-card"><strong>Latest backup</strong><span>' + adminEscape(age) + '</span><small>' + adminEscape(health.freshness) + '</small></div>';
     list.innerHTML = data.backups.map(backup => {
       const size = backup.size_bytes < 1024 * 1024
         ? (backup.size_bytes / 1024).toFixed(1) + " KB"
         : (backup.size_bytes / (1024 * 1024)).toFixed(2) + " MB";
-      return '<div class="admin-row backup-row"><div><strong>' + adminEscape(backup.filename) +
+      return '<div class="admin-row backup-row" data-backup-row="' + adminEscape(backup.backup_id) + '"><div><strong>' + adminEscape(backup.filename) +
         '</strong><small>' + adminEscape(new Date(backup.created_at).toLocaleString()) +
-        ' · ' + size + '</small></div><a class="secondary backup-download" href="' +
+        ' · ' + size + ' · <span class="backup-status">Not verified</span></small></div><a class="secondary backup-download" href="' +
         adminEscape(backup.download_url) + '" download>Download ZIP</a><button class="secondary backup-verify" data-backup-verify="' +
         adminEscape(backup.backup_id) + '" type="button">Verify</button></div>';
     }).join("") || '<p class="muted">Abhi koi backup nahi hai.</p>';
-    $("adminBackupNotice").textContent = "Total backups: " + data.total +
-      " · Retention: latest " + data.retention_limit + " archives.";
+    $("adminBackupNotice").textContent = "Inventory: " + health.status +
+      " · " + data.total + " backups · Integrity check Verify button se hota hai.";
   } catch (error) {
     list.textContent = "Backup list load nahi hui: " + error.message;
     $("adminBackupNotice").textContent = error.message;
@@ -1186,9 +1198,13 @@ $("adminBackups")?.addEventListener("click", async event => {
   $("adminBackupNotice").textContent = "Backup ke har file ka SHA-256 aur SQLite integrity verify ho raha hai…";
   try {
     const result = await request("/api/admin/backups/" + encodeURIComponent(backupId) + "/verify", {method:"POST"});
-    $("adminBackupNotice").textContent = "Verified: " + result.file_count + " files · database " +
-      result.database_integrity + " · SHA-256 " + result.archive_sha256;
+    const row = button.closest("[data-backup-row]");
+    if (row) row.querySelector(".backup-status").textContent = "Verified · " + Object.keys(result.databases || {}).length + " DB";
+    $("adminBackupNotice").textContent = "Verified: " + result.file_count + " files · " +
+      Object.keys(result.databases || {}).length + " database(s) · SQLite + foreign keys OK · SHA-256 " + result.archive_sha256;
   } catch (error) {
+    const row = button.closest("[data-backup-row]");
+    if (row) row.querySelector(".backup-status").textContent = "Verification failed";
     $("adminBackupNotice").textContent = "Verification failed: " + error.message;
   } finally {
     button.disabled = false;

@@ -41,7 +41,7 @@ from .video_generator import generate_video, video_status, VideoUnavailable, Vid
 from .production_runtime import create_run as create_production_run, get_run as get_production_run, execute_run as execute_production_run, attach_render_result
 from .earning_system import router as earning_router
 from .security import RequestRateLimiter, client_address_allowed, same_origin_request
-from .backup_restore import verify_backup, BackupValidationError
+from .backup_restore import verify_backup, BackupValidationError, snapshot_database
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT.parent))).expanduser().resolve()
@@ -686,25 +686,28 @@ def _create_admin_backup() -> dict:
     except OSError:
         pass
     backup_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + secrets.token_hex(4)
-    database_snapshot = BACKUP_DIR / ("." + backup_id + ".sqlite")
     temporary_archive = BACKUP_DIR / ("." + backup_id + ".zip.tmp")
     archive_path = BACKUP_DIR / ("sintu-backup-" + backup_id + ".zip")
+    temporary_databases = []
     entries = []
     total_bytes = 0
     try:
-        source = sqlite3.connect(str(DB_PATH), timeout=30)
-        try:
-            target = sqlite3.connect(str(database_snapshot), timeout=30)
+        database_sources = [(DB_PATH, "sintu_studio.db")]
+        earnings_path = DATA_DIR / "sintu_earnings.sqlite3"
+        if earnings_path.is_file() and not earnings_path.is_symlink():
+            database_sources.append((earnings_path, "sintu_earnings.sqlite3"))
+        candidates = []
+        database_members = []
+        for source_path, filename in database_sources:
+            snapshot = BACKUP_DIR / ("." + backup_id + "-" + filename + ".snapshot")
+            temporary_databases.append(snapshot)
             try:
-                source.backup(target, pages=256, sleep=0.01)
-                check = target.execute("PRAGMA integrity_check").fetchone()
-                if not check or check[0] != "ok":
-                    raise HTTPException(status_code=500, detail="Database integrity check failed; backup was not created.")
-            finally:
-                target.close()
-        finally:
-            source.close()
-        candidates = [(database_snapshot, "database/sintu_studio.db")]
+                snapshot_database(source_path, snapshot)
+            except (OSError, sqlite3.Error, BackupValidationError) as exc:
+                raise HTTPException(status_code=500, detail="Database snapshot failed safely: " + str(exc)[:180]) from None
+            archive_name = "database/" + filename
+            candidates.append((snapshot, archive_name))
+            database_members.append(filename)
         for directory_name in _BACKUP_MEDIA_DIRS:
             media_root = DATA_DIR / directory_name
             if not media_root.is_dir() or media_root.is_symlink():
@@ -729,6 +732,7 @@ def _create_admin_backup() -> dict:
                 "format": "sintu-studio-backup-v1",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "database_integrity": "ok",
+                "database_members": database_members,
                 "included_media_directories": list(_BACKUP_MEDIA_DIRS),
                 "file_count": len(entries),
                 "total_uncompressed_bytes": total_bytes,
@@ -737,8 +741,8 @@ def _create_admin_backup() -> dict:
             }
             archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
         os.replace(temporary_archive, archive_path)
-        archive_hash = _sha256_file(archive_path)
-        # Keep the five newest completed archives; never prune until a new backup is verified.
+        verification = verify_backup(archive_path)
+        archive_hash = verification["archive_sha256"]
         completed = sorted(
             (p for p in BACKUP_DIR.glob("sintu-backup-*.zip") if p.is_file() and not p.is_symlink()),
             key=lambda p: p.stat().st_mtime,
@@ -755,17 +759,19 @@ def _create_admin_backup() -> dict:
             "size_bytes": archive_path.stat().st_size,
             "sha256": archive_hash,
             "file_count": len(entries),
-            "included_media_directories": list(_BACKUP_MEDIA_DIRS),
+            "database_members": database_members,
+            "verification": verification,
             "database_integrity": "ok",
             "secrets_and_environment_files_included": False,
             "download_url": "/api/admin/backups/" + backup_id,
         }
     except HTTPException:
         raise
-    except (OSError, sqlite3.Error, zipfile.BadZipFile) as exc:
+    except (OSError, sqlite3.Error, zipfile.BadZipFile, BackupValidationError) as exc:
+        archive_path.unlink(missing_ok=True)
         raise HTTPException(status_code=500, detail="Backup failed safely: " + str(exc)[:240]) from None
     finally:
-        for temporary in (database_snapshot, temporary_archive):
+        for temporary in [*temporary_databases, temporary_archive]:
             try:
                 temporary.unlink(missing_ok=True)
             except OSError:
@@ -795,6 +801,44 @@ def list_admin_backups():
             "download_url": "/api/admin/backups/" + backup_id,
         })
     return {"backups": backups, "total": len(backups), "retention_limit": 5}
+
+
+
+
+@app.get("/api/admin/backups/health")
+def admin_backup_health():
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(timezone.utc)
+    archives = []
+    total_bytes = 0
+    for path in BACKUP_DIR.glob("sintu-backup-*.zip"):
+        if path.is_symlink() or not path.is_file():
+            continue
+        try:
+            size = path.stat().st_size
+            total_bytes += size
+            archives.append((path, size, path.stat().st_mtime))
+        except OSError:
+            continue
+    archives.sort(key=lambda item: item[2], reverse=True)
+    latest = archives[0] if archives else None
+    age_seconds = max(0, int(now.timestamp() - latest[2])) if latest else None
+    freshness = "missing" if not latest else ("stale" if age_seconds > 7 * 86400 else "recent")
+    return {
+        "status": "attention" if freshness in {"missing", "stale"} else "inventory_available",
+        "freshness": freshness,
+        "archive_count": len(archives),
+        "retention_limit": 5,
+        "total_archive_bytes": total_bytes,
+        "latest_backup": {
+            "filename": latest[0].name,
+            "size_bytes": latest[1],
+            "created_at": datetime.fromtimestamp(latest[2], timezone.utc).isoformat(),
+            "age_seconds": age_seconds,
+            "integrity": "not_checked",
+        } if latest else None,
+        "integrity_note": "Inventory and age are checked here; use Verify to validate ZIP members, SHA-256 and every SQLite database.",
+    }
 
 
 @app.post("/api/admin/backups/{backup_id}/verify")

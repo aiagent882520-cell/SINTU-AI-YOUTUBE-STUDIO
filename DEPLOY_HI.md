@@ -124,3 +124,10 @@ python scripts/restore_backup.py "backups/sintu-backup-YYYYMMDDTHHMMSSZ-id.zip" 
 ```
 
 Restore मौजूदा database की verified safety copy `backups/pre-restore-db-*.sqlite` में बनाता है, database को atomic तरीके से बदलता है और केवल missing generated media जोड़ता है। पहले से मौजूद media overwrite नहीं होता; same-name अलग file conflict report में दिखती है। API keys, OAuth secrets, `.env` और application code restore नहीं होते। Restore सफल होने पर JSON result जाँचें, फिर service restart करें।
+
+
+### Recovery validation और Earnings backup
+
+अब backup में मुख्य Studio database के साथ मौजूद होने पर अलग `sintu_earnings.sqlite3` ledger भी शामिल होता है। Admin dashboard पर archive count, कुल ZIP storage और latest backup की age दिखती है। ये inventory metrics हैं; हर archive की integrity जाँचने के लिए **Verify** चलाएँ।
+
+Restore command सभी SQLite databases की integrity, foreign-key consistency और आवश्यक schema tables की जाँच restore से पहले और बाद में करती है। Earnings ledger भी restore होता है, अगर वह backup में मौजूद हो। पुरानी databases की safety copies `backups/` में रखी जाती हैं। Existing media overwrite नहीं होती; conflicts JSON report में आते हैं।

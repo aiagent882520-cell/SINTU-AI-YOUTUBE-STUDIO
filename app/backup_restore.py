@@ -14,6 +14,10 @@ BACKUP_FORMAT = "sintu-studio-backup-v1"
 MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
 MAX_FILES = 10_000
 MEDIA_DIRS = {"generated_images", "generated_ai_videos", "generated_audio", "generated_music", "generated_videos"}
+DATABASE_MEMBERS = {
+    "database/sintu_studio.db": ("sintu_studio.db", {"tasks", "admin_users", "security_audit", "app_settings", "content_calendar"}),
+    "database/sintu_earnings.sqlite3": ("sintu_earnings.sqlite3", {"earning_records", "earning_targets"}),
+}
 DATABASE_MEMBER = "database/sintu_studio.db"
 
 
@@ -27,13 +31,12 @@ def _safe_member_name(name: str) -> bool:
     path = PurePosixPath(name)
     if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
         return False
-    if name != DATABASE_MEMBER and not name.startswith("media/"):
-        return False
+    if name in DATABASE_MEMBERS:
+        return True
     if name.startswith("media/"):
         parts = path.parts
-        if len(parts) < 3 or parts[1] not in MEDIA_DIRS:
-            return False
-    return True
+        return len(parts) >= 3 and parts[1] in MEDIA_DIRS
+    return False
 
 
 def _digest_stream(stream, output=None, limit=MAX_TOTAL_BYTES):
@@ -52,8 +55,42 @@ def _digest_stream(stream, output=None, limit=MAX_TOTAL_BYTES):
     return size, digest.hexdigest()
 
 
+def validate_database(database_path: str | Path, required_tables: set[str] | None = None) -> dict:
+    """Read-only SQLite recovery validation, including schema and foreign-key checks."""
+    database_path = Path(database_path)
+    try:
+        uri = database_path.resolve().as_uri() + "?mode=ro"
+        with sqlite3.connect(uri, uri=True, timeout=10) as conn:
+            conn.execute("PRAGMA query_only=ON")
+            integrity = conn.execute("PRAGMA integrity_check").fetchall()
+            if not integrity or any(row[0] != "ok" for row in integrity):
+                raise BackupValidationError("SQLite integrity_check failed.")
+            foreign_key_errors = conn.execute("PRAGMA foreign_key_check").fetchall()
+            if foreign_key_errors:
+                raise BackupValidationError("SQLite foreign_key_check found inconsistent references.")
+            tables = {
+                row[0] for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+                ).fetchall()
+            }
+            missing = sorted((required_tables or set()) - tables)
+            if missing:
+                raise BackupValidationError("Restored database is missing required tables: " + ", ".join(missing))
+            return {
+                "integrity": "ok",
+                "foreign_key_errors": 0,
+                "table_count": len(tables),
+                "required_tables_present": True,
+                "page_count": conn.execute("PRAGMA page_count").fetchone()[0],
+            }
+    except BackupValidationError:
+        raise
+    except (OSError, sqlite3.Error, ValueError) as exc:
+        raise BackupValidationError("SQLite recovery validation failed: " + str(exc)[:180]) from None
+
+
 def verify_backup(archive_path: str | Path) -> dict:
-    """Fully verify ZIP structure, manifest hashes, file limits and SQLite integrity."""
+    """Fully verify ZIP structure, manifest hashes, file limits and every SQLite database."""
     archive_path = Path(archive_path)
     if archive_path.is_symlink() or not archive_path.is_file():
         raise BackupValidationError("Backup file is missing or is a symbolic link.")
@@ -65,12 +102,12 @@ def verify_backup(archive_path: str | Path) -> dict:
             names = [item.filename for item in infos]
             if len(names) != len(set(names)):
                 raise BackupValidationError("Archive contains duplicate file names.")
-            if "manifest.json" not in names or names.count("manifest.json") != 1:
+            if names.count("manifest.json") != 1:
                 raise BackupValidationError("Backup manifest is missing or duplicated.")
             if len(infos) > MAX_FILES + 1:
                 raise BackupValidationError("Backup contains too many files.")
             for info in infos:
-                if info.is_dir() or not _safe_member_name(info.filename) and info.filename != "manifest.json":
+                if info.is_dir() or (not _safe_member_name(info.filename) and info.filename != "manifest.json"):
                     raise BackupValidationError("Archive contains an unsupported or unsafe path.")
                 unix_mode = (info.external_attr >> 16) & 0xFFFF
                 if (unix_mode & 0o170000) == 0o120000:
@@ -95,9 +132,8 @@ def verify_backup(archive_path: str | Path) -> dict:
                 raise BackupValidationError("Backup manifest file count does not match.")
             expected_names = set()
             total = 0
-            database_seen = False
+            database_results = {}
             with tempfile.TemporaryDirectory(prefix="sintu-backup-check-") as temp_dir:
-                database_copy = Path(temp_dir) / "snapshot.sqlite"
                 for entry in entries:
                     if not isinstance(entry, dict):
                         raise BackupValidationError("Backup manifest contains an invalid entry.")
@@ -106,7 +142,7 @@ def verify_backup(archive_path: str | Path) -> dict:
                     expected_hash = entry.get("sha256")
                     if not isinstance(name, str) or not _safe_member_name(name) or name in expected_names:
                         raise BackupValidationError("Backup manifest contains an unsafe or duplicate path.")
-                    if not isinstance(expected_size, int) or expected_size < 0:
+                    if not isinstance(expected_size, int) or isinstance(expected_size, bool) or expected_size < 0:
                         raise BackupValidationError("Backup manifest contains an invalid file size.")
                     if not isinstance(expected_hash, str) or len(expected_hash) != 64 or any(c not in "0123456789abcdef" for c in expected_hash):
                         raise BackupValidationError("Backup manifest contains an invalid SHA-256 digest.")
@@ -116,7 +152,8 @@ def verify_backup(archive_path: str | Path) -> dict:
                         raise BackupValidationError("Backup exceeds the 2 GiB uncompressed safety limit.")
                     try:
                         with archive.open(name, "r") as member:
-                            if name == DATABASE_MEMBER:
+                            if name in DATABASE_MEMBERS:
+                                database_copy = Path(temp_dir) / (DATABASE_MEMBERS[name][0] + ".check")
                                 with database_copy.open("wb") as output:
                                     actual_size, actual_hash = _digest_stream(member, output)
                             else:
@@ -125,23 +162,16 @@ def verify_backup(archive_path: str | Path) -> dict:
                         raise BackupValidationError("Backup member could not be read: " + name) from None
                     if actual_size != expected_size or actual_hash != expected_hash:
                         raise BackupValidationError("Backup checksum or file size mismatch: " + name)
-                    if name == DATABASE_MEMBER:
-                        database_seen = True
-                if not database_seen:
+                    if name in DATABASE_MEMBERS:
+                        _, required = DATABASE_MEMBERS[name]
+                        database_results[name] = validate_database(database_copy, required)
+                if DATABASE_MEMBER not in database_results:
                     raise BackupValidationError("Backup does not contain the studio database.")
                 archive_names = set(names) - {"manifest.json"}
                 if archive_names != expected_names:
                     raise BackupValidationError("Archive members do not match the manifest.")
                 if manifest.get("total_uncompressed_bytes") != total:
                     raise BackupValidationError("Backup total size does not match its manifest.")
-                try:
-                    with sqlite3.connect(str(database_copy)) as conn:
-                        conn.execute("PRAGMA query_only=ON")
-                        check = conn.execute("PRAGMA integrity_check").fetchone()
-                        if not check or check[0] != "ok":
-                            raise BackupValidationError("SQLite database integrity check failed.")
-                except sqlite3.Error:
-                    raise BackupValidationError("Backup database could not be opened safely.") from None
     except BackupValidationError:
         raise
     except (OSError, zipfile.BadZipFile, RuntimeError):
@@ -158,10 +188,11 @@ def verify_backup(archive_path: str | Path) -> dict:
         "archive_size_bytes": archive_path.stat().st_size,
         "archive_sha256": digest.hexdigest(),
         "database_integrity": "ok",
+        "databases": database_results,
     }
 
 
-def _snapshot_database(source_path: Path, snapshot_path: Path) -> None:
+def snapshot_database(source_path: str | Path, snapshot_path: str | Path) -> None:
     source = sqlite3.connect(str(source_path), timeout=30)
     try:
         target = sqlite3.connect(str(snapshot_path), timeout=30)
@@ -177,39 +208,48 @@ def _snapshot_database(source_path: Path, snapshot_path: Path) -> None:
 
 
 def restore_backup(archive_path: str | Path, data_dir: str | Path, *, app_stopped: bool = False) -> dict:
-    """Restore the database atomically and add missing media without overwriting existing files.
-
-    This must run while the application is stopped. Existing media files are never overwritten.
-    """
+    """Restore databases atomically with rollback copies; add media without overwriting."""
     if not app_stopped:
         raise BackupValidationError("Stop SINTU Studio first, then explicitly confirm --app-stopped.")
     archive_path = Path(archive_path)
     verification = verify_backup(archive_path)
     data_dir = Path(data_dir).expanduser().resolve()
     data_dir.mkdir(parents=True, exist_ok=True)
-    database_path = data_dir / "sintu_studio.db"
-    if database_path.is_symlink():
-        raise BackupValidationError("Studio database path is a symbolic link; restore stopped.")
     backup_dir = data_dir / "backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
     if backup_dir.is_symlink():
         raise BackupValidationError("Backup safety-copy directory is a symbolic link; restore stopped.")
     import secrets
     restore_token = secrets.token_hex(6)
-    staged_database = data_dir / (".sintu-restore-" + restore_token + ".sqlite")
-    safety_copy = backup_dir / ("pre-restore-db-" + restore_token + ".sqlite")
+    staged = {}
+    safety = {}
+    installed = []
     added_media = 0
     skipped_media = 0
     media_conflicts = []
+    database_results = {}
     try:
         with zipfile.ZipFile(archive_path, "r") as archive:
             manifest = json.loads(archive.read("manifest.json"))
-            media_hashes = {entry["path"]: entry["sha256"] for entry in manifest["files"] if entry["path"].startswith("media/")}
-            with archive.open(DATABASE_MEMBER, "r") as member, staged_database.open("xb") as output:
-                shutil.copyfileobj(member, output, 1024 * 1024)
-            if database_path.is_file():
-                _snapshot_database(database_path, safety_copy)
-            # Restore only into the expected media folders. Never follow symlinks or overwrite files.
+            media_hashes = {
+                entry["path"]: entry["sha256"]
+                for entry in manifest["files"] if entry["path"].startswith("media/")
+            }
+            database_names = [name for name in DATABASE_MEMBERS if name in archive.namelist()]
+            for member_name in database_names:
+                filename, required_tables = DATABASE_MEMBERS[member_name]
+                destination = data_dir / filename
+                if destination.is_symlink():
+                    raise BackupValidationError("Studio database path is a symbolic link; restore stopped.")
+                stage = data_dir / (".sintu-restore-" + restore_token + "-" + filename)
+                with archive.open(member_name, "r") as member, stage.open("xb") as output:
+                    shutil.copyfileobj(member, output, 1024 * 1024)
+                staged[filename] = stage
+                database_results[filename] = validate_database(stage, required_tables)
+                if destination.is_file():
+                    safe_copy = backup_dir / ("pre-restore-" + filename + "-" + restore_token + ".sqlite")
+                    snapshot_database(destination, safe_copy)
+                    safety[filename] = safe_copy
             for info in archive.infolist():
                 name = info.filename
                 if not name.startswith("media/"):
@@ -244,26 +284,43 @@ def restore_backup(archive_path: str | Path, data_dir: str | Path, *, app_stoppe
                     added_media += 1
                 except FileExistsError:
                     skipped_media += 1
-            # A leftover WAL/SHM beside the database can be replayed against the new file.
-            # Since the app is stopped and the current DB has a safety snapshot, remove sidecars.
-            for suffix in ("-wal", "-shm"):
-                sidecar = Path(str(database_path) + suffix)
-                if sidecar.is_symlink():
-                    raise BackupValidationError("Database sidecar is a symbolic link; restore stopped.")
-                sidecar.unlink(missing_ok=True)
-            os.replace(staged_database, database_path)
+            for filename, stage in staged.items():
+                destination = data_dir / filename
+                for suffix in ("-wal", "-shm"):
+                    sidecar = Path(str(destination) + suffix)
+                    if sidecar.is_symlink():
+                        raise BackupValidationError("Database sidecar is a symbolic link; restore stopped.")
+                    sidecar.unlink(missing_ok=True)
+                os.replace(stage, destination)
+                installed.append(filename)
+                filename_member = next(name for name, pair in DATABASE_MEMBERS.items() if pair[0] == filename)
+                _, required_tables = DATABASE_MEMBERS[filename_member]
+                database_results[filename] = validate_database(destination, required_tables)
     except Exception:
-        if safety_copy.exists() and not database_path.exists():
-            os.replace(safety_copy, database_path)
+        for filename in reversed(installed):
+            destination = data_dir / filename
+            safe_copy = safety.get(filename)
+            if safe_copy and safe_copy.exists():
+                os.replace(safe_copy, destination)
+            else:
+                destination.unlink(missing_ok=True)
         raise
     finally:
-        staged_database.unlink(missing_ok=True)
+        for stage in staged.values():
+            stage.unlink(missing_ok=True)
     return {
         "restored": True,
-        "database": str(database_path),
-        "database_safety_copy": str(safety_copy) if safety_copy.exists() else None,
+        "databases": database_results,
+        "database_safety_copies": {name: str(path) for name, path in safety.items() if path.exists()},
         "media_files_added": added_media,
         "media_files_preserved": skipped_media,
         "media_conflicts": media_conflicts,
+        "recovery_validation": {
+            "passed": True,
+            "databases_checked": len(database_results),
+            "all_sqlite_integrity_checks": "ok",
+            "all_foreign_key_checks": "ok",
+            "required_schema_tables_present": True,
+        },
         "verification": verification,
     }
