@@ -1423,7 +1423,6 @@ def test_youtube_oauth_callback_encrypts_tokens_and_connects_channel(tmp_path, m
     import hashlib
     import time
     from cryptography.fernet import Fernet
-    from urllib.parse import parse_qs, urlparse
 
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("YOUTUBE_CLIENT_ID", "test-client-id")
@@ -1455,7 +1454,7 @@ def test_youtube_oauth_callback_encrypts_tokens_and_connects_channel(tmp_path, m
         pytest.fail("Unexpected Google API request: " + url)
 
     monkeypatch.setattr(main, "_youtube_request", fake_google)
-    response = client.get("/api/admin/youtube/oauth/callback?code=approved-code&state=" + state)
+    response = client.get("/api/admin/youtube/oauth/callback?code=approved-code&state=" + state, follow_redirects=False)
     assert response.status_code == 303
     assert response.headers["location"] == "/?youtube_oauth=connected"
     assert main._youtube_connection()["channel_id"] == "UC-sintu-test"
