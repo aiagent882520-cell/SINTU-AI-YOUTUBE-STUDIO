@@ -103,7 +103,7 @@
   });
   document.getElementById("runLocalMediaProduction").addEventListener("click",async()=>{
    const button=document.getElementById("runLocalMediaProduction"),status=document.getElementById("localMediaStatus"),output=document.getElementById("productionPackageOutput");
-   const prompts=document.getElementById("mediaScenePrompts").value.split(/\\r?\\n/).map(x=>x.trim()).filter(Boolean);
+   const prompts=document.getElementById("mediaScenePrompts").value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
    const narration=document.getElementById("mediaNarration").value.trim(),seconds=Number(document.getElementById("mediaSecondsPerScene").value)||4;
    const resolution=document.getElementById("mediaResolution").value,brief=formPayload();
    if(!brief.brief){status.textContent="Pehle project topic / brief likhein.";return;}
@@ -128,7 +128,7 @@
     const media=await fetch("/api/production/runs/"+encodeURIComponent(runId)+"/produce-media",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({scene_prompts:prompts,narration,seconds_per_scene:seconds,resolution,fps:30,quality:"high"})});
     const result=await media.json().catch(()=>({}));if(!media.ok)throw new Error(result.detail||"Local media generation failed.");
     const videoUrl=result.render?.url||"";
-    output.textContent="Production run: "+runId+"\\nStatus: "+result.status+"\\nScenes generated: "+result.generated_images.length+"\\nVoice: "+(result.voiceover?.provider||"local")+"\\nMusic: "+(result.background_music?.provider||"local")+"\\nResolution: "+(result.render?.resolution||resolution)+"\\nWatermark: SINTU AI YOUTUBE STUDIO\\nPublished: No (human approval required)\\n\\nFinal video: "+videoUrl;
+    output.textContent="Production run: "+runId+"\nStatus: "+result.status+"\nScenes generated: "+result.generated_images.length+"\nVoice: "+(result.voiceover?.provider||"local")+"\nMusic: "+(result.background_music?.provider||"local")+"\nResolution: "+(result.render?.resolution||resolution)+"\nWatermark: SINTU AI YOUTUBE STUDIO\nPublished: No (human approval required)\n\nFinal video: "+videoUrl;
     if(videoUrl){const link=document.createElement("a");link.href=videoUrl;link.target="_blank";link.rel="noopener noreferrer";link.textContent="Open verified final MP4";link.className="secondary";output.after(link);}
     status.textContent="Final MP4 rendered and verified. YouTube publishing remains a separate human-approved action.";
    }catch(error){status.textContent=error.message;output.textContent="Production stopped safely. No automatic publishing occurred.";}
