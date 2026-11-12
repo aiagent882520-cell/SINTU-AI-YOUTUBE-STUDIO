@@ -3184,9 +3184,12 @@ def ai_video_capabilities():
 @app.post("/api/video/generate")
 def create_ai_video(payload: AIVideoInput, media_token: str = Header(default="", alias="X-Media-Token")):
     import hmac, os
-    expected = os.getenv("MEDIA_GENERATION_TOKEN", "")
-    if not expected or not hmac.compare_digest(media_token, expected):
-        raise HTTPException(status_code=403, detail="Valid media access token required.")
+    # Local ComfyUI is the preferred free path; only an actually enabled paid provider needs this token.
+    media_status = video_status()
+    if not media_status.get("local_available") and media_status.get("paid_available"):
+        expected = os.getenv("MEDIA_GENERATION_TOKEN", "")
+        if not expected or not hmac.compare_digest(media_token, expected):
+            raise HTTPException(status_code=403, detail="Valid media access token required for the optional paid video provider.")
     if payload.aspect_ratio not in {"9:16", "16:9"}:
         raise HTTPException(status_code=400, detail="Aspect ratio 9:16 ya 16:9 hona chahiye.")
     if payload.resolution not in {"360p", "720p", "1080p", "4k"}:

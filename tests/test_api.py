@@ -217,6 +217,8 @@ def test_subtitle_srt_generation(tmp_path, monkeypatch):
 def test_voiceover_requires_media_access_token(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "expected-token")
     response = client.post("/api/voice", json={"text": "Hello", "voice": "alloy"})
@@ -244,6 +246,8 @@ def test_image_generation_is_disabled_by_default(tmp_path, monkeypatch):
 def test_image_generation_requires_access_token(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "expected-token")
     response = client.post("/api/images", json={"prompt": "A cinematic mountain"})
@@ -606,6 +610,8 @@ def test_unconfigured_local_image_and_voice_return_503_without_media_token(tmp_p
 def test_ai_video_generation_requires_media_token(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
     monkeypatch.setenv("GEMINI_API_KEY", "gemini-test-key")
     monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "media-secret")
     response = client.post("/api/video/generate", json={"prompt": "A cinematic mountain"})
@@ -615,6 +621,8 @@ def test_ai_video_generation_requires_media_token(tmp_path, monkeypatch):
 def test_ai_video_generation_endpoint_contract(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
     monkeypatch.setenv("GEMINI_API_KEY", "gemini-test-key")
     monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "media-secret")
     monkeypatch.setattr(main, "generate_video", lambda prompt, aspect, resolution, style, reference, duration: {
