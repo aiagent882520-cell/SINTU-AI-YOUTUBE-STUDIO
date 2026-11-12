@@ -3350,12 +3350,13 @@ class ProductionRunInput(BaseModel):
 
 
 @app.post("/api/production/runs")
-def start_production_run(payload: ProductionRunInput, background_tasks: BackgroundTasks):
+def start_production_run(payload: ProductionRunInput, background_tasks: BackgroundTasks, request: Request):
+    owner = _production_project_owner(request)
     try:
-        run = create_production_run(payload.format_id, payload.topic)
+        run = create_production_run(payload.format_id, payload.topic, owner)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
-    background_tasks.add_task(execute_production_run, run["id"])
+    background_tasks.add_task(execute_production_run, run["id"], owner)
     return {"run_id": run["id"], "status": run["status"], "detail": "Format-specific builder/checker production run queued."}
 
 
@@ -3364,10 +3365,11 @@ class ProductionRenderInput(RenderInput):
 
 
 @app.post("/api/production/runs/{run_id}/render")
-def render_approved_production_run(run_id: str, payload: ProductionRenderInput):
+def render_approved_production_run(run_id: str, payload: ProductionRenderInput, request: Request):
     if not re.fullmatch(r"[a-f0-9]{32}", run_id):
         raise HTTPException(status_code=400, detail="Invalid production run ID.")
-    run = get_production_run(run_id)
+    owner = _production_project_owner(request)
+    run = get_production_run(run_id, owner)
     if not run:
         raise HTTPException(status_code=404, detail="Production run not found.")
     if run["status"] != "completed":
@@ -3378,7 +3380,7 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput):
         raise HTTPException(status_code=400, detail="Final production render requires supplied scene images, AI video clips or a mixed media timeline; scene descriptions alone are not visuals.")
     rendered = render_video(payload)
     try:
-        updated = attach_render_result(run_id, rendered)
+        updated = attach_render_result(run_id, rendered, owner)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return {"run_id": run_id, "status": updated["status"], "render": rendered,
@@ -3386,10 +3388,10 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput):
 
 
 @app.get("/api/production/runs/{run_id}")
-def production_run_status(run_id: str):
+def production_run_status(run_id: str, request: Request):
     if not re.fullmatch(r"[a-f0-9]{32}", run_id):
         raise HTTPException(status_code=400, detail="Invalid production run ID.")
-    run = get_production_run(run_id)
+    run = get_production_run(run_id, _production_project_owner(request))
     if not run:
         raise HTTPException(status_code=404, detail="Production run not found.")
     return run

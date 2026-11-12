@@ -2358,12 +2358,12 @@ def test_production_run_render_requires_approved_matching_format(tmp_path, monke
     client = client_for_test(tmp_path, monkeypatch)
     run_id = "a" * 32
     state = {"status": "paused", "format_id": "youtube-shorts"}
-    monkeypatch.setattr(main, "get_production_run", lambda value: state if value == run_id else None)
+    monkeypatch.setattr(main, "get_production_run", lambda value, owner=None: state if value == run_id and owner == "local" else None)
     monkeypatch.setattr(main, "render_video", lambda payload: {
         "video_id": "b" * 32, "url": "/api/videos/" + "b" * 32,
         "format": "MP4 / H.264"
     })
-    monkeypatch.setattr(main, "attach_render_result", lambda value, result: {
+    monkeypatch.setattr(main, "attach_render_result", lambda value, result, owner=None: {
         "status": "completed", "result": {"video_rendered": True}
     })
     payload = {"title": "Hindi short", "scenes": ["Opening"], "format_id": "youtube-shorts", "image_ids": ["d" * 32]}
@@ -2487,3 +2487,37 @@ def test_admin_login_rate_limit_is_bounded_and_resets_after_success(tmp_path, mo
     login = client.post("/api/auth/login", json={"username": "owner", "password": "a-strong-test-password"})
     assert login.status_code == 200
     assert len(main._LOGIN_LIMITER._events) == 0
+
+
+
+def test_production_run_status_is_scoped_to_authenticated_owner(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    run_id = "d" * 32
+    seen = {}
+
+    def fake_get(run_value, owner=None):
+        seen["owner"] = owner
+        return {"id": run_id, "status": "completed", "owner_username": owner} if owner == "local" else None
+
+    monkeypatch.setattr(main, "get_production_run", fake_get)
+    response = client.get(f"/api/production/runs/{run_id}")
+    assert response.status_code == 200
+    assert response.json()["owner_username"] == "local"
+    assert seen["owner"] == "local"
+
+
+def test_production_run_creation_assigns_request_owner(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    captured = {}
+
+    def fake_create(format_id, topic, owner):
+        captured.update(format_id=format_id, topic=topic, owner=owner)
+        return {"id": "e" * 32, "status": "queued"}
+
+    monkeypatch.setattr(main, "create_production_run", fake_create)
+    monkeypatch.setattr(main, "execute_production_run", lambda run_id, owner: None)
+    response = client.post("/api/production/runs", json={
+        "format_id": "youtube-shorts", "topic": "भारत की रहस्यमयी जगहें"
+    })
+    assert response.status_code == 200
+    assert captured["owner"] == "local"

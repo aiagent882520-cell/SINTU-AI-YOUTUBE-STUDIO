@@ -46,8 +46,12 @@ def init_runtime_db() -> None:
         conn.execute("""CREATE TABLE IF NOT EXISTS production_runs (
             id TEXT PRIMARY KEY, format_id TEXT NOT NULL, topic TEXT NOT NULL,
             status TEXT NOT NULL, current_role TEXT, result_json TEXT,
-            error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+            error TEXT, owner_username TEXT NOT NULL DEFAULT 'local',
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL
         )""")
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(production_runs)").fetchall()}
+        if "owner_username" not in columns:
+            conn.execute("ALTER TABLE production_runs ADD COLUMN owner_username TEXT NOT NULL DEFAULT 'local'")
         conn.execute("""CREATE TABLE IF NOT EXISTS production_steps (
             id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL,
             sequence INTEGER NOT NULL, role TEXT NOT NULL, step_type TEXT NOT NULL,
@@ -59,11 +63,14 @@ def init_runtime_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_production_steps_run ON production_steps(run_id, sequence)")
 
 
-def create_run(format_id: str, topic: str) -> dict[str, Any]:
+def create_run(format_id: str, topic: str, owner_username: str = "local") -> dict[str, Any]:
     selected = get_format(format_id)
     if not selected:
         raise ValueError("Unknown video format.")
     topic = (topic or "").strip()
+    owner_username = (owner_username or "").strip()
+    if not owner_username or len(owner_username) > 120:
+        raise ValueError("Production run owner is invalid.")
     if not topic or len(topic) > 5000:
         raise ValueError("Topic must contain 1 to 5000 characters.")
     init_runtime_db()
@@ -71,15 +78,19 @@ def create_run(format_id: str, topic: str) -> dict[str, Any]:
     now = _now()
     with _connect() as conn:
         conn.execute("""INSERT INTO production_runs
-            (id,format_id,topic,status,created_at,updated_at) VALUES(?,?,?,?,?,?)""",
-            (run_id, format_id, topic, "queued", now, now))
-    return get_run(run_id)
+            (id,format_id,topic,status,owner_username,created_at,updated_at) VALUES(?,?,?,?,?,?,?)""",
+            (run_id, format_id, topic, "queued", owner_username, now, now))
+    return get_run(run_id, owner_username)
 
 
-def get_run(run_id: str) -> dict[str, Any] | None:
+def get_run(run_id: str, owner_username: str | None = None) -> dict[str, Any] | None:
     init_runtime_db()
     with _connect() as conn:
-        row = conn.execute("SELECT * FROM production_runs WHERE id=?", (run_id,)).fetchone()
+        if owner_username is None:
+            row = conn.execute("SELECT * FROM production_runs WHERE id=?", (run_id,)).fetchone()
+        else:
+            row = conn.execute("SELECT * FROM production_runs WHERE id=? AND owner_username=?",
+                               (run_id, owner_username)).fetchone()
         if not row:
             return None
         steps = conn.execute("SELECT sequence,role,step_type,status,output_text,evidence_json,issues_json,attempts FROM production_steps WHERE run_id=? ORDER BY sequence", (run_id,)).fetchall()
@@ -154,8 +165,8 @@ def _review_payload(text: str) -> dict:
     return verdict
 
 
-def execute_run(run_id: str) -> None:
-    run = get_run(run_id)
+def execute_run(run_id: str, owner_username: str | None = None) -> None:
+    run = get_run(run_id, owner_username)
     if not run:
         return
     if run["status"] not in {"queued", "paused"}:
@@ -267,9 +278,10 @@ def execute_run(run_id: str) -> None:
         _set_run(run_id, "failed", error=f"Production runtime error: {type(exc).__name__}")
 
 
-def attach_render_result(run_id: str, render_result: dict[str, Any]) -> dict[str, Any]:
+def attach_render_result(run_id: str, render_result: dict[str, Any],
+                         owner_username: str | None = None) -> dict[str, Any]:
     """Attach a separately rendered MP4 to a completed production package."""
-    run = get_run(run_id)
+    run = get_run(run_id, owner_username)
     if not run:
         raise ValueError("Production run not found.")
     if run["status"] != "completed" or not isinstance(run.get("result"), dict):
