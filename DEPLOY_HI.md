@@ -131,3 +131,18 @@ Restore मौजूदा database की verified safety copy `backups/pre-res
 अब backup में मुख्य Studio database के साथ मौजूद होने पर अलग `sintu_earnings.sqlite3` ledger भी शामिल होता है। Admin dashboard पर archive count, कुल ZIP storage और latest backup की age दिखती है। ये inventory metrics हैं; हर archive की integrity जाँचने के लिए **Verify** चलाएँ।
 
 Restore command सभी SQLite databases की integrity, foreign-key consistency और आवश्यक schema tables की जाँच restore से पहले और बाद में करती है। Earnings ledger भी restore होता है, अगर वह backup में मौजूद हो। पुरानी databases की safety copies `backups/` में रखी जाती हैं। Existing media overwrite नहीं होती; conflicts JSON report में आते हैं।
+
+
+## Fail-closed production configuration check
+
+Before exposing the HTTPS reverse proxy to the internet, validate the deployment environment without printing secrets:
+
+```bash
+# Before Google OAuth credentials are configured:
+python scripts/validate_deployment.py --allow-unconfigured-youtube
+
+# Final go-live gate after the owner's Google OAuth client and encryption key are set:
+python scripts/validate_deployment.py --production
+```
+
+The production gate requires a unique 16+ character admin password, 32+ character session secret, authentication enabled, Secure cookies, loopback-only Docker bind behind the host TLS proxy, paid media disabled, and a complete YouTube OAuth configuration with a valid Fernet token-encryption key and exact HTTPS callback. It does not provision a host or perform Google consent. Never paste secrets into GitHub issues, commits, or chat.
