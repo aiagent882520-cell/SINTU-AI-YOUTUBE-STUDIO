@@ -241,3 +241,21 @@ def test_earning_record_can_be_fetched_by_id(tmp_path, monkeypatch):
     assert fetched.status_code == 200
     assert fetched.json()['record']['title'] == 'Older payout'
     assert client.get('/api/earnings/records/999999').status_code == 404
+
+
+def test_earning_dashboard_exposes_pagination_controls(tmp_path, monkeypatch):
+    client = setup_client(tmp_path, monkeypatch)
+    page = client.get("/earnings").text
+    assert 'id="recordPagination"' in page
+    assert 'id="recordPageInfo"' in page
+    assert 'id="recordPrevPage"' in page
+    assert 'id="recordNextPage"' in page
+    assert 'data-record-page-size="50"' in page
+
+
+def test_earning_records_pagination_bounds_are_enforced(tmp_path, monkeypatch):
+    client = setup_client(tmp_path, monkeypatch)
+    assert client.get("/api/earnings/records?limit=0").status_code == 422
+    assert client.get("/api/earnings/records?limit=501").status_code == 422
+    assert client.get("/api/earnings/records?offset=-1").status_code == 422
+    assert client.get("/api/earnings/records?offset=1000001").status_code == 422
