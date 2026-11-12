@@ -846,7 +846,8 @@ def generate_production_project(project_id: str, payload: ProductionProjectGener
         project["brief"] + "\n\nProduction format: " + (format_info["name"] if format_info else project["format_id"]) +
         "\nLanguage: " + project["language"] +
         "\nTarget duration: " + str(project["duration_seconds"]) +
-        " seconds. Return a complete production package with scene-by-scene narration, visuals, on-screen text, sound cues, CTA, and publishing metadata."
+        " seconds. Return a complete production package with scene-by-scene Hindi narration, clean visuals, sound cues, CTA, and publishing metadata.\n"\
+        "MANDATORY visual policy: do not include any visible text, titles, subtitles, captions, transcripts, labels, lower-thirds, signs, logos, or watermarks in generated scenes. Keep every frame clean and text-free. The final renderer adds only the SINTU AI YOUTUBE STUDIO brand watermark."
     )
     if len(prompt) > 10000:
         raise HTTPException(status_code=400, detail="Brief bahut lamba hai. AI generation ke liye ise 9,000 characters se chhota karein.")

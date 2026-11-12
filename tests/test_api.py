@@ -1925,9 +1925,12 @@ def test_production_studio_prompt_uses_real_line_break_escapes(tmp_path, monkeyp
 
 def test_saved_production_project_generates_and_links_ai_task(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
-    monkeypatch.setattr(main, "generate_text", lambda prompt, workflow: {
-        "provider": "test", "model": "test-model", "output": "Complete scene-by-scene production package"
-    })
+    captured = {}
+    monkeypatch.setattr(main, "generate_text", lambda prompt, workflow: (
+        captured.update({"prompt": prompt, "workflow": workflow}) or {
+            "provider": "test", "model": "test-model", "output": "Complete scene-by-scene production package"
+        }
+    ))
     created = client.post("/api/projects", json={
         "name": "Linked project", "brief": "Make a Hindi mystery short.",
         "format_id": "youtube-shorts", "language": "Hindi", "duration_seconds": 60
@@ -1941,6 +1944,11 @@ def test_saved_production_project_generates_and_links_ai_task(tmp_path, monkeypa
     assert data["task"]["output"] == "Complete scene-by-scene production package"
     assert data["project"]["last_task_id"] == data["task"]["id"]
     assert data["project"]["last_task_status"] == "Completed"
+    assert captured["workflow"] == "shorts"
+    assert "scene-by-scene Hindi narration" in captured["prompt"]
+    assert "on-screen text" not in captured["prompt"].lower()
+    assert "do not include any visible text" in captured["prompt"].lower()
+    assert "only the SINTU AI YOUTUBE STUDIO brand watermark" in captured["prompt"]
 
 
 def test_saved_production_project_generation_rejects_unknown_workflow(tmp_path, monkeypatch):
