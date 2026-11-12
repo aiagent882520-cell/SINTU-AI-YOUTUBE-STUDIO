@@ -60,3 +60,15 @@ Free local operation requires a validated ComfyUI image workflow, Piper with a H
 ## Important limitations
 
 A format being listed does not mean every format has passed full production rendering tests. A role catalog is not proof of 61 autonomous agents running as separate services. Google Flow, platform permissions, actual YouTube monetization eligibility, automated payout collection, live hosting and end-to-end production on the owner's machine require separate setup and verification. Public publishing and financial actions must remain explicitly approved by the owner.
+
+
+### Backup verification and offline restore
+
+Administrators can verify every backup from the dashboard; verification checks the ZIP structure, manifest, SHA-256 for every included file, and SQLite integrity. A restore is deliberately an offline operator action, not an in-app button: stop the SINTU service and all workers first, then run:
+
+```bash
+python scripts/restore_backup.py /path/to/sintu-backup-YYYYMMDDTHHMMSSZ-id.zip --verify-only
+python scripts/restore_backup.py /path/to/sintu-backup-YYYYMMDDTHHMMSSZ-id.zip --confirm-restore --app-stopped
+```
+
+The restore command creates a verified pre-restore SQLite safety copy under `backups/`, atomically replaces the database, adds missing generated media, and never overwrites existing media. Existing same-name media is preserved and reported as a conflict. Restore does not restore API keys, OAuth secrets, environment files, or application code. Review the JSON result and restart the service only after a successful restore.

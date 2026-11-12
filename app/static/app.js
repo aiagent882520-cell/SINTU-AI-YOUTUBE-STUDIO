@@ -1149,7 +1149,8 @@ async function loadAdminBackups() {
       return '<div class="admin-row backup-row"><div><strong>' + adminEscape(backup.filename) +
         '</strong><small>' + adminEscape(new Date(backup.created_at).toLocaleString()) +
         ' · ' + size + '</small></div><a class="secondary backup-download" href="' +
-        adminEscape(backup.download_url) + '" download>Download ZIP</a></div>';
+        adminEscape(backup.download_url) + '" download>Download ZIP</a><button class="secondary backup-verify" data-backup-verify="' +
+        adminEscape(backup.backup_id) + '" type="button">Verify</button></div>';
     }).join("") || '<p class="muted">Abhi koi backup nahi hai.</p>';
     $("adminBackupNotice").textContent = "Total backups: " + data.total +
       " · Retention: latest " + data.retention_limit + " archives.";
@@ -1173,6 +1174,22 @@ $("adminBackupCreate")?.addEventListener("click", async () => {
     await loadAdminBackups();
   } catch (error) {
     $("adminBackupNotice").textContent = "Backup failed: " + error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+$("adminBackups")?.addEventListener("click", async event => {
+  const button = event.target.closest("[data-backup-verify]");
+  if (!button) return;
+  const backupId = button.dataset.backupVerify;
+  button.disabled = true;
+  $("adminBackupNotice").textContent = "Backup ke har file ka SHA-256 aur SQLite integrity verify ho raha hai…";
+  try {
+    const result = await request("/api/admin/backups/" + encodeURIComponent(backupId) + "/verify", {method:"POST"});
+    $("adminBackupNotice").textContent = "Verified: " + result.file_count + " files · database " +
+      result.database_integrity + " · SHA-256 " + result.archive_sha256;
+  } catch (error) {
+    $("adminBackupNotice").textContent = "Verification failed: " + error.message;
   } finally {
     button.disabled = false;
   }

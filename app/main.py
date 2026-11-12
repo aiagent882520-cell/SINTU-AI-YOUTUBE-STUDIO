@@ -41,6 +41,7 @@ from .video_generator import generate_video, video_status, VideoUnavailable, Vid
 from .production_runtime import create_run as create_production_run, get_run as get_production_run, execute_run as execute_production_run, attach_render_result
 from .earning_system import router as earning_router
 from .security import RequestRateLimiter, client_address_allowed, same_origin_request
+from .backup_restore import verify_backup, BackupValidationError
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT.parent))).expanduser().resolve()
@@ -794,6 +795,20 @@ def list_admin_backups():
             "download_url": "/api/admin/backups/" + backup_id,
         })
     return {"backups": backups, "total": len(backups), "retention_limit": 5}
+
+
+@app.post("/api/admin/backups/{backup_id}/verify")
+def verify_admin_backup(backup_id: str):
+    if not _BACKUP_ID_PATTERN.fullmatch(backup_id):
+        raise HTTPException(status_code=400, detail="Invalid backup identifier.")
+    path = BACKUP_DIR / ("sintu-backup-" + backup_id + ".zip")
+    if path.is_symlink() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Backup not found.")
+    try:
+        result = verify_backup(path)
+    except BackupValidationError as exc:
+        raise HTTPException(status_code=422, detail="Backup verification failed: " + str(exc)) from None
+    return {"backup_id": backup_id, **result}
 
 
 @app.get("/api/admin/backups/{backup_id}")

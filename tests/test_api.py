@@ -79,7 +79,8 @@ def test_installable_app_shell(tmp_path, monkeypatch):
     assert app_script.status_code == 200
     assert "/api/admin/backups" in app_script.text
     assert "SHA-256" in app_script.text
-    assert "sintu-studio-shell-v10" in worker.text
+    assert "backup-verify" in app_script.text
+    assert "sintu-studio-shell-v11" in worker.text
     assert "/static/offline.html" in worker.text
 
 def test_agent_orchestration_catalog_and_teams(tmp_path, monkeypatch):
@@ -135,6 +136,11 @@ def test_admin_backup_contains_consistent_database_and_generated_media_but_no_se
         row = snapshot.execute("SELECT output FROM tasks WHERE prompt='backup regression'").fetchone()
         assert row == ("saved content",)
         assert snapshot.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    verify = client.post(result["download_url"] + "/verify")
+    assert verify.status_code == 200, verify.text
+    assert verify.json()["verified"] is True
+    assert verify.json()["database_integrity"] == "ok"
+    assert len(verify.json()["archive_sha256"]) == 64
     listing = client.get("/api/admin/backups")
     assert listing.status_code == 200
     assert listing.json()["total"] == 1

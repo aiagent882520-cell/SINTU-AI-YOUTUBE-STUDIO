@@ -112,3 +112,15 @@ Admin dashboard ke **AI Provider Settings** section mein `auto`, `openai`, ya `g
 ## Local Windows quick start
 
 For a local Windows computer, double-click `START_SINTU_WINDOWS.bat`. It creates the virtual environment, installs requirements, bootstraps a random admin login in `.env`, and opens the local dashboard. No AI/social API key is required just to open the workspace and save production briefs. The command window must remain open while the local server is running.
+
+
+## Backup verify और offline restore
+
+Admin dashboard में हर backup के सामने **Verify** दबाकर ZIP structure, manifest, हर file का SHA-256 और SQLite integrity जाँचें। Restore जानबूझकर dashboard/API से नहीं चलता। पहले SINTU service और सभी background workers बंद करें। फिर project folder में:
+
+```bash
+python scripts/restore_backup.py "backups/sintu-backup-YYYYMMDDTHHMMSSZ-id.zip" --verify-only
+python scripts/restore_backup.py "backups/sintu-backup-YYYYMMDDTHHMMSSZ-id.zip" --confirm-restore --app-stopped
+```
+
+Restore मौजूदा database की verified safety copy `backups/pre-restore-db-*.sqlite` में बनाता है, database को atomic तरीके से बदलता है और केवल missing generated media जोड़ता है। पहले से मौजूद media overwrite नहीं होता; same-name अलग file conflict report में दिखती है। API keys, OAuth secrets, `.env` और application code restore नहीं होते। Restore सफल होने पर JSON result जाँचें, फिर service restart करें।
