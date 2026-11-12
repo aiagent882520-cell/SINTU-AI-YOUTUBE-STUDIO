@@ -179,3 +179,43 @@ def test_runtime_revises_once_then_continues_after_checker_pass(tmp_path, monkey
     assert result["steps"][0]["attempts"] == 1
     assert result["steps"][2]["attempts"] == 2
     assert len([step for step in result["steps"] if step["step_type"] == "reviewer"]) == 5
+
+
+
+def test_production_runs_are_isolated_by_owner(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    alice = runtime.create_run("youtube-shorts", "Alice topic", "alice")
+    bob = runtime.create_run("youtube-shorts", "Bob topic", "bob")
+
+    assert runtime.get_run(alice["id"], "alice")["topic"] == "Alice topic"
+    assert runtime.get_run(alice["id"], "bob") is None
+    assert runtime.get_run(bob["id"], "alice") is None
+    assert runtime.get_run(bob["id"], "bob")["topic"] == "Bob topic"
+
+    with pytest.raises(ValueError, match="not found"):
+        runtime.attach_render_result(alice["id"], {"video_id": "a" * 32}, "bob")
+
+
+def test_runtime_database_migrates_legacy_runs_to_local_owner(tmp_path, monkeypatch):
+    import sqlite3
+    import app.production_runtime as runtime
+
+    database = tmp_path / "legacy.sqlite3"
+    monkeypatch.setattr(runtime, "DB_PATH", database)
+    with sqlite3.connect(database) as conn:
+        conn.execute("""CREATE TABLE production_runs (
+            id TEXT PRIMARY KEY, format_id TEXT NOT NULL, topic TEXT NOT NULL,
+            status TEXT NOT NULL, current_role TEXT, result_json TEXT,
+            error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        )""")
+        conn.execute("""INSERT INTO production_runs
+            (id,format_id,topic,status,created_at,updated_at)
+            VALUES(?,?,?,?,?,?)""",
+            ("f" * 32, "youtube-shorts", "Legacy topic", "paused", "now", "now"))
+
+    legacy = runtime.get_run("f" * 32, "local")
+    assert legacy is not None
+    assert legacy["owner_username"] == "local"
+    assert runtime.get_run("f" * 32, "another-user") is None
