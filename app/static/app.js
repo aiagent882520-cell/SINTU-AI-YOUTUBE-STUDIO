@@ -1101,6 +1101,7 @@ async function loadAdminPanel() {
         <div><b>${adminEscape(event.method)} ${adminEscape(event.path)}</b><small>HTTP ${event.status_code}</small></div>
       </div>`).join("") || "No security events yet.";
     $("adminNotice").textContent = "Users: " + usersData.users.length + " · Recent security events: " + auditData.events.length;
+    await loadAdminBackups();
     document.querySelectorAll("[data-user-role]").forEach(select => select.addEventListener("change", async () => {
       try { await request("/api/admin/users/" + select.dataset.userRole, {method:"PATCH",body:JSON.stringify({role:select.value})}); await loadAdminPanel(); }
       catch(error) { $("adminNotice").textContent = error.message; }
@@ -1135,6 +1136,48 @@ $("adminUserForm")?.addEventListener("submit", async event => {
   } catch(error) { $("adminNotice").textContent = error.message; }
   finally { button.disabled = false; }
 });
+async function loadAdminBackups() {
+  const list = $("adminBackups");
+  if (!list) return;
+  list.textContent = "Loading backups…";
+  try {
+    const data = await request("/api/admin/backups");
+    list.innerHTML = data.backups.map(backup => {
+      const size = backup.size_bytes < 1024 * 1024
+        ? (backup.size_bytes / 1024).toFixed(1) + " KB"
+        : (backup.size_bytes / (1024 * 1024)).toFixed(2) + " MB";
+      return '<div class="admin-row backup-row"><div><strong>' + adminEscape(backup.filename) +
+        '</strong><small>' + adminEscape(new Date(backup.created_at).toLocaleString()) +
+        ' · ' + size + '</small></div><a class="secondary backup-download" href="' +
+        adminEscape(backup.download_url) + '" download>Download ZIP</a></div>';
+    }).join("") || '<p class="muted">Abhi koi backup nahi hai.</p>';
+    $("adminBackupNotice").textContent = "Total backups: " + data.total +
+      " · Retention: latest " + data.retention_limit + " archives.";
+  } catch (error) {
+    list.textContent = "Backup list load nahi hui: " + error.message;
+    $("adminBackupNotice").textContent = error.message;
+  }
+}
+$("adminBackupCreate")?.addEventListener("click", async () => {
+  const button = $("adminBackupCreate");
+  if (!window.confirm("Database aur generated media ka backup banayein? Ismein creator data aur encrypted platform tokens ho sakte hain.")) return;
+  button.disabled = true;
+  $("adminBackupNotice").textContent = "Backup ban raha hai. Media files ke size ke hisaab se samay lag sakta hai…";
+  try {
+    const result = await request("/api/admin/backups", {method:"POST"});
+    const size = result.size_bytes < 1024 * 1024
+      ? (result.size_bytes / 1024).toFixed(1) + " KB"
+      : (result.size_bytes / (1024 * 1024)).toFixed(2) + " MB";
+    $("adminBackupNotice").textContent = "Backup verified: " + result.filename +
+      " · " + size + " · " + result.file_count + " files · SHA-256 " + result.sha256;
+    await loadAdminBackups();
+  } catch (error) {
+    $("adminBackupNotice").textContent = "Backup failed: " + error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+$("adminBackupRefresh")?.addEventListener("click", loadAdminBackups);
 $("adminRefresh")?.addEventListener("click", loadAdminPanel);
 $("providerSettingsForm")?.addEventListener("submit", async event => {
   event.preventDefault();

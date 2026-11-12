@@ -187,6 +187,11 @@
       <p id="adminNotice" class="muted" role="status" aria-live="polite"></p>
       <h3>Team Accounts</h3><div id="adminUsers" class="admin-list">Loading…</div>
       <h3>Security Activity Log</h3><div id="adminAudit" class="admin-list">Loading…</div>
+      <hr>
+      <div class="panel-head"><div><h3>Backup & Recovery</h3><p>Database aur generated media ka secure backup banayein. Secrets aur .env archive mein include nahi hote.</p></div><button id="adminBackupRefresh" class="secondary" type="button">Refresh backups</button></div>
+      <div class="actions"><button id="adminBackupCreate" type="button">Create verified backup</button></div>
+      <p id="adminBackupNotice" class="muted" role="status" aria-live="polite">Admin-only backup controls. Maximum five recent archives.</p>
+      <div id="adminBackups" class="admin-list" aria-live="polite">Loading backups…</div>
     </section>
     <section class="panel" id="providerAdminPanel" hidden>
       <div class="panel-head"><div><h2>AI Provider Settings</h2><p>Text AI provider choose karein. API keys server ke secure environment mein hi rahengi.</p></div><button id="providerRefresh" class="secondary" type="button">Refresh</button></div>
