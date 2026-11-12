@@ -558,6 +558,51 @@ def test_ai_video_generation_is_disabled_by_default(tmp_path, monkeypatch):
     assert response.status_code == 503
 
 
+def test_local_ai_video_generation_does_not_require_paid_media_token(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.delenv("MEDIA_GENERATION_TOKEN", raising=False)
+    monkeypatch.setattr(main, "video_status", lambda: {
+        "local_available": True, "paid_available": False, "available": True
+    })
+    monkeypatch.setattr(main, "generate_video", lambda prompt, aspect, resolution, style, reference, duration: {
+        "video_id": "6" * 32, "url": "/api/ai-videos/" + "6" * 32,
+        "provider": "ComfyUI (local)", "local": True, "requested_duration_seconds": duration
+    })
+    response = client.post("/api/video/generate", json={"prompt": "A cinematic mountain"})
+    assert response.status_code == 200, response.text
+    assert response.json()["provider"] == "ComfyUI (local)"
+    assert response.json()["local"] is True
+
+
+def test_unavailable_video_provider_returns_service_unavailable_without_token(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.delenv("MEDIA_GENERATION_TOKEN", raising=False)
+    monkeypatch.setattr(main, "video_status", lambda: {
+        "local_available": False, "paid_available": False, "available": False
+    })
+    monkeypatch.setattr(main, "generate_video", lambda *args: (_ for _ in ()).throw(main.VideoUnavailable("Local video workflow is not ready.")))
+    response = client.post("/api/video/generate", json={"prompt": "A cinematic mountain"})
+    assert response.status_code == 503
+    assert "not ready" in response.json()["detail"]
+
+
+def test_unconfigured_local_image_and_voice_return_503_without_media_token(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.delenv("MEDIA_GENERATION_TOKEN", raising=False)
+    monkeypatch.setattr(main, "image_status", lambda: {
+        "local_available": False, "enabled_by_admin": False, "provider_configured": False
+    })
+    monkeypatch.setattr(main, "voice_status", lambda: {
+        "local_available": False, "enabled_by_admin": False, "provider_configured": False
+    })
+    monkeypatch.setattr(main, "generate_image", lambda *args: (_ for _ in ()).throw(main.ImageUnavailable("ComfyUI image workflow is not ready.")))
+    monkeypatch.setattr(main, "generate_voiceover", lambda *args: (_ for _ in ()).throw(main.VoiceUnavailable("Piper Hindi voice model is not ready.")))
+    image = client.post("/api/images", json={"prompt": "A cinematic fort"})
+    voice = client.post("/api/voice", json={"text": "यह एक हिंदी कहानी है"})
+    assert image.status_code == 503
+    assert voice.status_code == 503
+
+
 def test_ai_video_generation_requires_media_token(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")

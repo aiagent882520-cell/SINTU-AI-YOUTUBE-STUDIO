@@ -3236,9 +3236,12 @@ def image_capabilities():
 @app.post("/api/images")
 def create_image(payload: ImageInput, media_token: str = Header(default="", alias="X-Media-Token")):
     import hmac, os
-    expected = os.getenv("MEDIA_GENERATION_TOKEN", "")
-    if not image_status().get("local_available") and (not expected or not hmac.compare_digest(media_token, expected)):
-        raise HTTPException(status_code=403, detail="Valid media access token required for the optional paid image provider.")
+    status = image_status()
+    if (not status.get("local_available") and status.get("enabled_by_admin")
+            and status.get("provider_configured")):
+        expected = os.getenv("MEDIA_GENERATION_TOKEN", "")
+        if not expected or not hmac.compare_digest(media_token, expected):
+            raise HTTPException(status_code=403, detail="Valid media access token required for the optional paid image provider.")
     try:
         return generate_image(payload.prompt, payload.kind, payload.aspect)
     except ImageUnavailable as exc:
@@ -3267,9 +3270,12 @@ def voice_capabilities():
 @app.post("/api/voice")
 def create_voiceover(payload: VoiceInput, media_token: str = Header(default="", alias="X-Media-Token")):
     import hmac, os
-    expected = os.getenv("MEDIA_GENERATION_TOKEN", "")
-    if not voice_status().get("local_available") and (not expected or not hmac.compare_digest(media_token, expected)):
-        raise HTTPException(status_code=403, detail="Valid media access token required for the optional paid voice provider.")
+    status = voice_status()
+    if (not status.get("local_available") and status.get("enabled_by_admin")
+            and status.get("provider_configured")):
+        expected = os.getenv("MEDIA_GENERATION_TOKEN", "")
+        if not expected or not hmac.compare_digest(media_token, expected):
+            raise HTTPException(status_code=403, detail="Valid media access token required for the optional paid voice provider.")
     try:
         return generate_voiceover(payload.text, payload.voice)
     except VoiceUnavailable as exc:

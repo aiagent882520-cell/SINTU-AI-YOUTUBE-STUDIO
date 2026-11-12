@@ -32,7 +32,7 @@ Set secrets in the host's secret manager or a protected `.env` file (never commi
 - `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REDIRECT_URI`, `YOUTUBE_TOKEN_ENCRYPTION_KEY`
 - `META_APP_ID`, `META_APP_SECRET`, `META_REDIRECT_URI`, `META_GRAPH_API_VERSION`
 - `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REDIRECT_URI`
-- `MEDIA_GENERATION_TOKEN`
+- `MEDIA_GENERATION_TOKEN` (केवल optional paid media providers के लिए; local ComfyUI/Piper workflows को इसकी जरूरत नहीं)
 - `ENABLE_PAID_MEDIA_GENERATION=false` (keep false until paid provider costs and credentials are intentionally configured)
 - `SINTU_AUTH_REQUIRED=true`, `SINTU_ADMIN_USERNAME`, `SINTU_ADMIN_PASSWORD`, `SINTU_SESSION_SECRET` (minimum 32 random characters)
 - `SINTU_BIND_ADDRESS=127.0.0.1` (safe local-only default), `SINTU_ALLOWED_IPS` (optional comma-separated IP/CIDR allowlist), and `SINTU_RATE_LIMIT_PER_MINUTE=300`.
