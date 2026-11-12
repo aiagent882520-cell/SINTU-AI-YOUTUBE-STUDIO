@@ -189,12 +189,12 @@ def execute_run(run_id: str) -> None:
                 current_worker_prompt = worker_prompt
                 if attempt:
                     current_worker_prompt = (
-                        worker_prompt + "\\nREVISION REQUIRED (attempt " + str(attempt) + "):\\n"
+                        worker_prompt + "\nREVISION REQUIRED (attempt " + str(attempt) + "):\n"
                         "Correct the previous deliverable using the independent checker's exact findings. "
-                        "Preserve correct material; do not invent evidence.\\n"
-                        "Checker issues: " + json.dumps(verdict["issues"], ensure_ascii=False) + "\\n"
-                        "Revision instructions: " + json.dumps(verdict["revision_instructions"], ensure_ascii=False) + "\\n"
-                        "Previous deliverable:\\n" + previous_output
+                        "Preserve correct material; do not invent evidence.\n"
+                        "Checker issues: " + json.dumps(verdict["issues"], ensure_ascii=False) + "\n"
+                        "Revision instructions: " + json.dumps(verdict["revision_instructions"], ensure_ascii=False) + "\n"
+                        "Previous deliverable:\n" + previous_output
                     )
                 worker = generate_text(current_worker_prompt, "content", "local")
                 previous_output = worker["output"]
@@ -205,10 +205,10 @@ def execute_run(run_id: str) -> None:
                     "Act as an independent quality checker. Do not rewrite the work. "
                     "Evaluate accuracy, completeness, format fit, Hindi-first policy, clean text-free video frames, "
                     "copyright safety and actionable production detail. Return ONLY JSON with keys: "
-                    "decision (PASS or FAIL), evidence (array), issues (array), revision_instructions (array).\\n"
-                    f"Topic: {run['topic']}\\nSpecialist: {role}\\n"
-                    f"Revision attempt: {attempt + 1} of {MAX_REVISION_ATTEMPTS + 1}\\n"
-                    f"Submitted work:\\n{worker['output']}"
+                    "decision (PASS or FAIL), evidence (array), issues (array), revision_instructions (array).\n"
+                    f"Topic: {run['topic']}\nSpecialist: {role}\n"
+                    f"Revision attempt: {attempt + 1} of {MAX_REVISION_ATTEMPTS + 1}\n"
+                    f"Submitted work:\n{worker['output']}"
                 )
                 checked = generate_text(checker_prompt, "content", "local")
                 verdict = _checker_payload(checked["output"])
