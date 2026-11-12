@@ -142,7 +142,6 @@ def test_admin_backup_contains_consistent_database_and_generated_media_but_no_se
         assert manifest["database_members"] == ["sintu_studio.db", "sintu_earnings.sqlite3"]
         database_file = tmp_path / "restored-snapshot.sqlite"
         database_file.write_bytes(archive.read("database/sintu_studio.db"))
-    import sqlite3
     with sqlite3.connect(database_file) as snapshot:
         row = snapshot.execute("SELECT output FROM tasks WHERE prompt='backup regression'").fetchone()
         assert row == ("saved content",)
