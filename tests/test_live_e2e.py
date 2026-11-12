@@ -8,6 +8,7 @@ from scripts import live_e2e
 def test_preflight_never_returns_oauth_secret_values(monkeypatch):
     monkeypatch.setenv("YOUTUBE_CLIENT_ID", "private-client-id")
     monkeypatch.setenv("YOUTUBE_CLIENT_SECRET", "private-client-secret")
+    monkeypatch.setenv("YOUTUBE_REDIRECT_URI", "https://example.test/oauth/callback")
     monkeypatch.setenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", "private-encryption-key")
     monkeypatch.setattr(live_e2e, "provider_status", lambda: {
         "local": {"service_running": True, "model_available": True, "model": "qwen2.5:3b"}
@@ -28,7 +29,9 @@ def test_preflight_never_returns_oauth_secret_values(monkeypatch):
     assert "private-client-id" not in report
     assert "private-client-secret" not in report
     assert "private-encryption-key" not in report
-    assert '"credentials_configured": true' in report
+    parsed = json.loads(report)
+    assert parsed["youtube_oauth"]["credentials_configured"] is True
+    assert parsed["youtube_oauth"]["token_encryption_configured"] is True
 
 
 def test_deployment_health_rejects_plain_http_remote_and_hostname_prefix(monkeypatch):

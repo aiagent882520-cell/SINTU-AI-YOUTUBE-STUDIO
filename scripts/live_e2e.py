@@ -16,10 +16,11 @@ import urllib.request
 from urllib.parse import urlsplit
 
 from app.ai_brain import generate_text, provider_status
+from app.agents import AGENTS
 from app.comfyui_client import image_workflow_status, video_workflow_status
 from app.image_generator import image_status
 from app.music_generator import music_status
-from app.production_runtime import create_run, execute_run, get_run
+from app.production_runtime import REVIEWERS, create_run, execute_run, get_run
 from app.video_generator import AI_VIDEO_DIR, generate_video, video_status
 from app.video_renderer import OUTPUT_DIR, render_ai_clips
 from app.voice_generator import voice_status
@@ -126,22 +127,44 @@ def _live_agent_catalog(topic: str) -> dict:
     result = get_run(run["id"], "local")
     if not result:
         raise RuntimeError("Agent catalog run disappeared from persistent storage.")
+
+    steps = result["steps"]
+    workers = [step for step in steps if step["step_type"] == "builder"]
+    checkers = [step for step in steps if step["step_type"] == "checker"]
+    reviewers = [step for step in steps if step["step_type"] == "reviewer"]
+    worker_roles = {step["role"] for step in workers}
+    checker_roles = {step["role"].removesuffix(" Checker") for step in checkers}
+    reviewer_roles = {step["role"] for step in reviewers}
     summary = {
         "run_id": run["id"],
         "status": result["status"],
-        "completed_workers": sum(
-            step["step_type"] == "builder" and step["status"] == "completed"
-            for step in result["steps"]
-        ),
-        "passed_checkers": sum(
-            step["step_type"] == "checker" and step["status"] == "pass"
-            for step in result["steps"]
-        ),
-        "final_reviewers": sum(step["step_type"] == "reviewer" for step in result["steps"]),
+        "registered_agent_roles": len(AGENTS),
+        "completed_workers": sum(step["status"] == "completed" for step in workers),
+        "passed_checkers": sum(step["status"] == "pass" for step in checkers),
+        "final_reviewers": sum(step["status"] == "pass" for step in reviewers),
+        "worker_role_coverage": len(worker_roles),
+        "checker_role_coverage": len(checker_roles),
+        "reviewer_role_coverage": len(reviewer_roles),
         "error": result.get("error"),
     }
-    if result["status"] != "completed":
-        raise RuntimeError("Full 61-role run did not complete: " + json.dumps(summary, ensure_ascii=False))
+    expected_workers = set(AGENTS)
+    expected_reviewers = set(REVIEWERS)
+    if (
+        result["status"] != "completed"
+        or worker_roles != expected_workers
+        or checker_roles != expected_workers
+        or reviewer_roles != expected_reviewers
+        or len(workers) != len(AGENTS)
+        or len(checkers) != len(AGENTS)
+        or len(reviewers) != len(REVIEWERS)
+        or summary["completed_workers"] != len(AGENTS)
+        or summary["passed_checkers"] != len(AGENTS)
+        or summary["final_reviewers"] != len(REVIEWERS)
+    ):
+        raise RuntimeError(
+            "Full role validation did not pass exact catalog coverage: "
+            + json.dumps(summary, ensure_ascii=False)
+        )
     return summary
 
 
