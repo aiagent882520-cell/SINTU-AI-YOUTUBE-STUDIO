@@ -226,3 +226,18 @@ def test_earning_dashboard_exposes_record_filters(tmp_path, monkeypatch):
     page = client.get("/earnings").text
     for control in ["recordStatusFilter", "recordSourceFilter", "recordStartDate", "recordEndDate"]:
         assert f'id="{control}"' in page
+
+
+
+def test_earning_record_can_be_fetched_by_id(tmp_path, monkeypatch):
+    client = setup_client(tmp_path, monkeypatch)
+    created = client.post('/api/earnings/records', json={
+        'kind': 'income', 'source': 'affiliate', 'title': 'Older payout',
+        'amount': 75, 'currency': 'INR', 'status': 'received',
+        'record_date': '2025-01-10'
+    })
+    record_id = created.json()['record']['id']
+    fetched = client.get('/api/earnings/records/' + str(record_id))
+    assert fetched.status_code == 200
+    assert fetched.json()['record']['title'] == 'Older payout'
+    assert client.get('/api/earnings/records/999999').status_code == 404

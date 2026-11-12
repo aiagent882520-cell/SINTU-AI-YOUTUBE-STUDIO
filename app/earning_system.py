@@ -192,6 +192,15 @@ def create_earning_record(payload: RecordInput):
         row = conn.execute("SELECT * FROM earning_records WHERE id=?", (cur.lastrowid,)).fetchone()
     return {"record": _record(row)}
 
+@router.get("/api/earnings/records/{record_id}")
+def get_earning_record(record_id: int):
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM earning_records WHERE id=?", (record_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Earning record not found.")
+    return {"record": _record(row)}
+
+
 @router.patch("/api/earnings/records/{record_id}")
 def update_earning_record(record_id: int, payload: RecordInput):
     if payload.source not in SOURCES:
