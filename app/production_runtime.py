@@ -196,7 +196,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                     "Include a section headed exactly SCENE PROMPTS, then provide 6 to 12 numbered lines "
                     "(1. prompt, 2. prompt...). Each line must be a standalone, richly detailed, text-free "
                     "visual shot prompt with subject, setting, lighting and camera composition. Do not include "
-                    "subtitles, words, labels or logos.\\n"
+                    "subtitles, words, labels or logos.\n"
                     if any(term in role.lower() for term in ("ai video generator", "filmmaking director", "storyboard"))
                     else ""
                 )
