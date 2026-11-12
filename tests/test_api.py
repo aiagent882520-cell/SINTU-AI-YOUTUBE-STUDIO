@@ -88,6 +88,61 @@ def test_agent_orchestration_catalog_and_teams(tmp_path, monkeypatch):
     assert "Fact Checker" in names
     assert client.get("/api/workflows/not-real/team").status_code == 404
 
+def test_admin_backup_contains_consistent_database_and_generated_media_but_no_secrets(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(main, "BACKUP_DIR", tmp_path / "backups")
+    with main.db() as conn:
+        conn.execute(
+            "INSERT INTO tasks(prompt,workflow,status,created_at,output) VALUES(?,?,?,?,?)",
+            ("backup regression", "shorts", "Completed", "2026-11-12T00:00:00+00:00", "saved content"),
+        )
+    media = tmp_path / "generated_videos"
+    media.mkdir()
+    (media / "sample.mp4").write_bytes(b"test-video-bytes")
+    (tmp_path / ".env").write_text("OPENAI_API_KEY=must-not-be-backed-up", encoding="utf-8")
+
+    created = client.post("/api/admin/backups")
+    assert created.status_code == 200, created.text
+    result = created.json()
+    assert result["database_integrity"] == "ok"
+    assert result["secrets_and_environment_files_included"] is False
+    assert result["file_count"] == 2
+    archive_response = client.get(result["download_url"])
+    assert archive_response.status_code == 200
+    import zipfile
+    archive_path = tmp_path / "downloaded-backup.zip"
+    archive_path.write_bytes(archive_response.content)
+    with zipfile.ZipFile(archive_path) as archive:
+        names = set(archive.namelist())
+        assert "database/sintu_studio.db" in names
+        assert "media/generated_videos/sample.mp4" in names
+        assert ".env" not in names
+        manifest = json.loads(archive.read("manifest.json"))
+        assert manifest["database_integrity"] == "ok"
+        assert manifest["file_count"] == 2
+        database_file = tmp_path / "restored-snapshot.sqlite"
+        database_file.write_bytes(archive.read("database/sintu_studio.db"))
+    import sqlite3
+    with sqlite3.connect(database_file) as snapshot:
+        row = snapshot.execute("SELECT output FROM tasks WHERE prompt='backup regression'").fetchone()
+        assert row == ("saved content",)
+        assert snapshot.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    listing = client.get("/api/admin/backups")
+    assert listing.status_code == 200
+    assert listing.json()["total"] == 1
+    assert listing.json()["retention_limit"] == 5
+
+
+def test_admin_backup_rejects_invalid_identifiers_and_requires_admin(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(main, "BACKUP_DIR", tmp_path / "backups")
+    assert client.get("/api/admin/backups/../../.env").status_code in {400, 404}
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    assert client.get("/api/admin/backups").status_code == 401
+
+
 def test_capabilities_never_expose_provider_secrets(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     response = client.get("/api/capabilities")

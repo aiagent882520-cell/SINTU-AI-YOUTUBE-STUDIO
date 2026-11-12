@@ -19,7 +19,7 @@ docker compose up --build -d
 6. For a trusted private LAN only, set `SINTU_BIND_ADDRESS=0.0.0.0`, configure `SINTU_ALLOWED_IPS` with trusted client IP/CIDR ranges, and allow port 8000 only on the Private network in the OS firewall. Never expose this direct HTTP port to the public internet; use an HTTPS reverse proxy/WAF for remote access.
 7. Compose drops all Linux capabilities, enables `no-new-privileges`, starts with a minimal init process, and limits process count.
 
-Docker Compose stores SQLite, generated images, audio, music, and videos in the named `sintu-data` volume mounted at `/data`. Back up this volume. Do not delete it when updating the container.
+Docker Compose stores SQLite, generated images, audio, music, and videos in the named `sintu-data` volume mounted at `/data`. Admin panel ke **Backup Manager API** se SQLite + generated media ka verified ZIP backup bana sakte hain: `POST /api/admin/backups`; list `GET /api/admin/backups`; download `GET /api/admin/backups/{backup_id}`. Five newest archives retain hote hain; .env/API secrets archive mein nahi aate. Backup mein encrypted OAuth tokens aur private creator data ho sakta hai—downloaded file ko securely store karein. Restore se pehle app stop karke backup contents verify karein; automated restore endpoint intentionally nahi hai. Volume backup ka alternative nahi; host-level volume snapshots bhi rakhein.
 
 ### Environment variables
 

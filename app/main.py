@@ -11,6 +11,7 @@ import gzip
 import sqlite3
 import re
 import shutil
+import zipfile
 import secrets
 import urllib.parse
 import urllib.request
@@ -657,6 +658,145 @@ def admin_audit(limit: int = 50):
     with db() as conn:
         rows = conn.execute("SELECT id,actor_username,actor_role,action,method,path,status_code,ip_address,created_at FROM security_audit ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
     return {"events": [dict(row) for row in rows]}
+
+
+BACKUP_DIR = DATA_DIR / "backups"
+_BACKUP_MEDIA_DIRS = ("generated_images", "generated_ai_videos", "generated_audio",
+                      "generated_music", "generated_videos")
+_BACKUP_MAX_BYTES = 2 * 1024 * 1024 * 1024
+_BACKUP_MAX_FILES = 10000
+_BACKUP_ID_PATTERN = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8}$")
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _create_admin_backup() -> dict:
+    if not DB_PATH.is_file():
+        raise HTTPException(status_code=503, detail="Studio database is not available for backup.")
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        BACKUP_DIR.chmod(0o700)
+    except OSError:
+        pass
+    backup_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + secrets.token_hex(4)
+    database_snapshot = BACKUP_DIR / ("." + backup_id + ".sqlite")
+    temporary_archive = BACKUP_DIR / ("." + backup_id + ".zip.tmp")
+    archive_path = BACKUP_DIR / ("sintu-backup-" + backup_id + ".zip")
+    entries = []
+    total_bytes = 0
+    try:
+        with sqlite3.connect(str(DB_PATH), timeout=30) as source, sqlite3.connect(str(database_snapshot), timeout=30) as target:
+            source.backup(target, pages=256, sleep=0.01)
+            check = target.execute("PRAGMA integrity_check").fetchone()
+            if not check or check[0] != "ok":
+                raise HTTPException(status_code=500, detail="Database integrity check failed; backup was not created.")
+        candidates = [(database_snapshot, "database/sintu_studio.db")]
+        for directory_name in _BACKUP_MEDIA_DIRS:
+            media_root = DATA_DIR / directory_name
+            if not media_root.is_dir() or media_root.is_symlink():
+                continue
+            for candidate in media_root.rglob("*"):
+                if candidate.is_symlink() or not candidate.is_file():
+                    continue
+                try:
+                    relative = candidate.resolve().relative_to(DATA_DIR.resolve())
+                except ValueError:
+                    continue
+                candidates.append((candidate, "media/" + relative.as_posix()))
+        with zipfile.ZipFile(temporary_archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=1) as archive:
+            for source_path, archive_name in candidates:
+                size = source_path.stat().st_size
+                total_bytes += size
+                if len(entries) >= _BACKUP_MAX_FILES or total_bytes > _BACKUP_MAX_BYTES:
+                    raise HTTPException(status_code=413, detail="Backup exceeds the 10,000-file or 2 GiB safety limit.")
+                archive.write(source_path, archive_name)
+                entries.append({"path": archive_name, "size_bytes": size, "sha256": _sha256_file(source_path)})
+            manifest = {
+                "format": "sintu-studio-backup-v1",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "database_integrity": "ok",
+                "included_media_directories": list(_BACKUP_MEDIA_DIRS),
+                "file_count": len(entries),
+                "total_uncompressed_bytes": total_bytes,
+                "files": entries,
+                "secrets_and_environment_files_included": False,
+            }
+            archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        os.replace(temporary_archive, archive_path)
+        archive_hash = _sha256_file(archive_path)
+        # Keep the five newest completed archives; never prune until a new backup is verified.
+        completed = sorted(
+            (p for p in BACKUP_DIR.glob("sintu-backup-*.zip") if p.is_file() and not p.is_symlink()),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        for stale in completed[5:]:
+            try:
+                stale.unlink()
+            except OSError:
+                pass
+        return {
+            "backup_id": backup_id,
+            "filename": archive_path.name,
+            "size_bytes": archive_path.stat().st_size,
+            "sha256": archive_hash,
+            "file_count": len(entries),
+            "included_media_directories": list(_BACKUP_MEDIA_DIRS),
+            "database_integrity": "ok",
+            "secrets_and_environment_files_included": False,
+            "download_url": "/api/admin/backups/" + backup_id,
+        }
+    except HTTPException:
+        raise
+    except (OSError, sqlite3.Error, zipfile.BadZipFile) as exc:
+        raise HTTPException(status_code=500, detail="Backup failed safely: " + str(exc)[:240]) from None
+    finally:
+        for temporary in (database_snapshot, temporary_archive):
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+@app.post("/api/admin/backups")
+def create_admin_backup():
+    return _create_admin_backup()
+
+
+@app.get("/api/admin/backups")
+def list_admin_backups():
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    backups = []
+    for path in sorted(BACKUP_DIR.glob("sintu-backup-*.zip"), key=lambda item: item.stat().st_mtime, reverse=True):
+        if path.is_symlink() or not path.is_file():
+            continue
+        backup_id = path.name[len("sintu-backup-"):-len(".zip")]
+        if not _BACKUP_ID_PATTERN.fullmatch(backup_id):
+            continue
+        backups.append({
+            "backup_id": backup_id,
+            "filename": path.name,
+            "size_bytes": path.stat().st_size,
+            "created_at": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(),
+            "download_url": "/api/admin/backups/" + backup_id,
+        })
+    return {"backups": backups, "total": len(backups), "retention_limit": 5}
+
+
+@app.get("/api/admin/backups/{backup_id}")
+def download_admin_backup(backup_id: str):
+    if not _BACKUP_ID_PATTERN.fullmatch(backup_id):
+        raise HTTPException(status_code=400, detail="Invalid backup identifier.")
+    path = BACKUP_DIR / ("sintu-backup-" + backup_id + ".zip")
+    if path.is_symlink() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Backup not found.")
+    return FileResponse(path, media_type="application/zip", filename=path.name)
 
 
 @app.get("/")

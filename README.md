@@ -12,6 +12,7 @@ Free-first, local-first AI creator workspace for planning, producing, reviewing,
 - Video renderers add SINTU branding watermark and reject subtitle/caption burn-in; generated source imagery can still contain accidental text.
 - YouTube OAuth, approved upload, channel analytics/revenue, comment review and publishing-calendar endpoints are present but require owner-provided Google credentials, channel permissions and API enablement.
 - Earning System at `/earnings`: income/expense ledger, source categories, status separation, currency-wise monthly summary, targets and CSV export. It does not generate guaranteed income or process payouts.
+- Admin-only backup manager: creates integrity-checked SQLite snapshots plus generated media archives, SHA-256 checksums, safe downloads, a five-backup retention limit, and excludes environment/secrets files.
 
 ## Quick start
 
@@ -21,6 +22,10 @@ Free-first, local-first AI creator workspace for planning, producing, reviewing,
 4. For free local text generation, install Ollama and pull a compatible model such as `qwen2.5:3b`.
 5. Start the app: `uvicorn app.main:app --host 127.0.0.1 --port 8000`.
 6. Open `http://127.0.0.1:8000`. After login, use the **Earning System** link or visit `/earnings`.
+
+## Backup and recovery
+
+Admin users can create a backup with `POST /api/admin/backups`, list archives with `GET /api/admin/backups`, and download one with `GET /api/admin/backups/{backup_id}`. Each ZIP contains a SQLite online-backup snapshot, generated image/video/audio/music files, a manifest and SHA-256 hashes. Archives are capped at 2 GiB and 10,000 files; only the five newest verified backups are retained. Environment files, API keys, OAuth secrets, source code and model weights are deliberately excluded. Store downloaded backups securely; they contain creator data and encrypted platform tokens. Restore is a deliberate operator action and is not automated by this API.
 
 ## Application firewall and security
 
