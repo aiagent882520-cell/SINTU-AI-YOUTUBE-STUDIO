@@ -398,7 +398,13 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     video_id = uuid.uuid4().hex
     output_path = OUTPUT_DIR / f"{video_id}.mp4"
+    temporary_output_path = None
     try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", prefix=".sintu-ai-join-", suffix=".mp4",
+            dir=OUTPUT_DIR, delete=False,
+        ) as temporary_output:
+            temporary_output_path = Path(temporary_output.name)
         with tempfile.TemporaryDirectory(prefix="sintu-ai-join-") as temp:
             work = Path(temp)
             command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
@@ -480,17 +486,23 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             command += ["-filter_complex", ";".join(filters), "-map", video_map, "-map", "[aout]",
                         "-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
                         "-c:a", "aac", "-b:a", "192k", "-t", f"{total_duration:.3f}",
-                        "-movflags", "+faststart", str(output_path)]
+                        "-movflags", "+faststart", str(temporary_output_path)]
             completed = subprocess.run(command, capture_output=True, text=True, timeout=900, check=False)
-            if completed.returncode != 0 or not output_path.exists():
+            if completed.returncode != 0 or not temporary_output_path.is_file():
                 detail = (completed.stderr or "FFmpeg AI clip assembly failed")[-1600:]
                 raise RenderFailed(detail)
-            _verify_rendered_output(output_path, width, height, total_duration, require_audio=True)
+            _verify_rendered_output(temporary_output_path, width, height, total_duration, require_audio=True)
+            os.replace(temporary_output_path, output_path)
+            temporary_output_path = None
     except subprocess.TimeoutExpired:
         output_path.unlink(missing_ok=True)
+        if temporary_output_path is not None:
+            temporary_output_path.unlink(missing_ok=True)
         raise RenderFailed("AI clips assemble karne mein timeout ho gaya.") from None
     except Exception:
         output_path.unlink(missing_ok=True)
+        if temporary_output_path is not None:
+            temporary_output_path.unlink(missing_ok=True)
         raise
 
     return {
