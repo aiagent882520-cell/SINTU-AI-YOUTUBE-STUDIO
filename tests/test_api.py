@@ -1487,33 +1487,44 @@ def test_youtube_publish_completes_resumable_upload_and_records_history(tmp_path
     video_id = "c" * 32
     output_dir = tmp_path / "renders"
     output_dir.mkdir()
-    (output_dir / (video_id + ".mp4")).write_bytes(b"mock rendered mp4 bytes")
+    video_bytes = b"mock rendered mp4 bytes"
+    (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(main, "_youtube_access_token", lambda: "mock-youtube-access-token")
     requests = []
+    streamed_uploads = []
 
     def fake_upload(url, data=None, headers=None, method="GET"):
         requests.append((url, method, data))
         if method == "POST":
             return 200, {"Location": "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=mock"}, b""
-        if method == "PUT":
-            assert data == b"mock rendered mp4 bytes"
-            return 200, {}, b'{"id":"published-video-123"}'
-        pytest.fail("Unexpected upload method: " + method)
+        pytest.fail("The video bytes must use the bounded streaming upload connection, not _youtube_request.")
+
+    def fake_streaming_upload(upload_url, video_path, size, access_token):
+        with open(video_path, "rb") as stream:
+            uploaded_bytes = stream.read()
+        streamed_uploads.append((upload_url, uploaded_bytes, size, access_token))
+        return b'{"id":"published-video-123"}'
 
     monkeypatch.setattr(main, "_youtube_request", fake_upload)
+    monkeypatch.setattr(main, "_youtube_upload_file", fake_streaming_upload)
     response = client.post(
         f"/api/admin/youtube/publish/{calendar_id}?video_id={video_id}&title=Test%20upload&privacy_status=private"
     )
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "Published"
     assert response.json()["url"] == "https://www.youtube.com/watch?v=published-video-123"
-    assert [item[1] for item in requests] == ["POST", "PUT"]
+    assert [item[1] for item in requests] == ["POST"]
+    assert streamed_uploads == [(
+        "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=mock",
+        video_bytes, len(video_bytes), "mock-youtube-access-token",
+    )]
     with main.db() as conn:
         status = conn.execute("SELECT status FROM content_calendar WHERE id=?", (calendar_id,)).fetchone()[0]
         event = conn.execute("SELECT external_id,status FROM publishing_history WHERE calendar_id=?", (calendar_id,)).fetchone()
     assert status == "Published"
     assert tuple(event) == ("published-video-123", "Published")
+
 
 
 def test_youtube_status_never_exposes_credentials(tmp_path, monkeypatch):
@@ -3127,7 +3138,8 @@ def test_youtube_publish_requires_approved_calendar_and_records_success(tmp_path
     output_dir.mkdir()
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
     video_id = "a" * 32
-    (output_dir / (video_id + ".mp4")).write_bytes(b"fake-mp4-content")
+    video_bytes = b"fake-mp4-content"
+    (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
     future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
     created = client.post("/api/calendar", json={
         "title": "Approved upload test", "platform": "youtube_shorts",
@@ -3138,22 +3150,27 @@ def test_youtube_publish_requires_approved_calendar_and_records_success(tmp_path
     monkeypatch.setattr(main, "_youtube_access_token", lambda: "test-access-token")
 
     uploads = []
+    streamed_uploads = []
+
     def fake_upload(url, data=None, headers=None, method=None):
         uploads.append((url, data, headers, method))
         if method == "POST":
             return 200, {"Location": "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=test"}, b""
-        if method == "PUT":
-            assert data == b"fake-mp4-content"
-            return 200, {}, json.dumps({"id": "youtube-video-123"}).encode()
-        raise AssertionError("Unexpected upload method")
+        raise AssertionError("The video bytes must use the bounded streaming upload connection.")
+
+    def fake_streaming_upload(upload_url, video_path, size, access_token):
+        streamed_uploads.append((upload_url, str(video_path), size, access_token))
+        return json.dumps({"id": "youtube-video-123"}).encode()
 
     monkeypatch.setattr(main, "_youtube_request", fake_upload)
+    monkeypatch.setattr(main, "_youtube_upload_file", fake_streaming_upload)
     blocked = client.post(
         f"/api/admin/youtube/publish/{calendar_id}",
         params={"video_id": video_id, "title": "Test upload"},
     )
     assert blocked.status_code == 409
     assert uploads == []
+    assert streamed_uploads == []
 
     approved = client.post(f"/api/calendar/{calendar_id}/approve")
     assert approved.status_code == 200
@@ -3164,10 +3181,14 @@ def test_youtube_publish_requires_approved_calendar_and_records_success(tmp_path
     assert published.status_code == 200, published.text
     assert published.json()["youtube_video_id"] == "youtube-video-123"
     assert published.json()["privacy_status"] == "private"
-    assert len(uploads) == 2
+    assert len(uploads) == 1
     metadata = json.loads(uploads[0][1].decode())
     assert metadata["status"]["privacyStatus"] == "private"
-    assert uploads[1][0].startswith("https://www.googleapis.com/upload/youtube/")
+    assert uploads[0][0].startswith("https://www.googleapis.com/upload/youtube/")
+    assert streamed_uploads == [(
+        "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=test",
+        str(output_dir / (video_id + ".mp4")), len(video_bytes), "test-access-token",
+    )]
     assert client.get("/api/calendar").json()["items"][0]["status"] == "Published"
     history = client.get("/api/admin/publishing/history")
     assert history.status_code == 200
@@ -3178,7 +3199,9 @@ def test_youtube_publish_requires_approved_calendar_and_records_success(tmp_path
         params={"video_id": video_id, "title": "Test upload"},
     )
     assert duplicate.status_code == 409
-    assert len(uploads) == 2
+    assert len(uploads) == 1
+    assert len(streamed_uploads) == 1
+
 
 
 def test_youtube_publish_rejects_missing_render_before_token_access(tmp_path, monkeypatch):
