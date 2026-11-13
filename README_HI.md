@@ -2,6 +2,18 @@
 
 SINTU AI YOUTUBE STUDIO is a responsive web/PWA creator workspace. It currently provides an AI text-production desk, specialized content workflows, task history, a 61-role legacy registry and a complete worker/checker architecture, and export of generated text packages.
 
+## Android Termux quick start
+
+Agar aap Android par Termux use kar rahe hain, project folder ke andar ye ek command chalayein:
+
+```bash
+bash START_SINTU_TERMUX.sh
+```
+
+Pehli baar script Termux packages, Python virtual environment aur Studio dependencies install karegi, secure local admin login banayegi, local engine diagnostics dikhayegi aur dashboard start karegi. Browser mein `http://127.0.0.1:8000` kholein. Server chalta rakhne ke liye Termux session khula rakhein; band karne ke liye `CTRL+C` dabayein.
+
+**Android hardware limitation:** is launcher se dashboard aur API chal sakte hain, lekin isse Ollama model, ComfyUI video workflow/model weights ya Piper Hindi voice model automatically install nahi hote. Real AI video generation ke liye compatible local PC/server aur uske model files ki zaroorat ho sakti hai. Diagnostics missing components ko clearly report karte hain; app fake AI output ya paid fallback nahi chalata.
+
 ## Run locally
 
 1. Python 3.11+ install karein.

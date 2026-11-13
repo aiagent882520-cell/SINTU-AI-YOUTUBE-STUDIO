@@ -51,6 +51,8 @@ jobs:
           python -m pip install -r requirements-dev.txt
       - name: Compile Python
         run: python -m compileall -q app tests scripts
+      - name: Validate Termux launcher syntax
+        run: bash -n START_SINTU_TERMUX.sh
       - name: Check browser JavaScript syntax
         run: |
           node --check app/static/app.js
