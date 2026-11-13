@@ -231,7 +231,14 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     video_id = uuid.uuid4().hex
     output_path = OUTPUT_DIR / f"{video_id}.mp4"
+    temporary_output_path = None
     try:
+        # Render privately; publish only after FFprobe verification.
+        with tempfile.NamedTemporaryFile(
+            mode="wb", prefix=".sintu-render-", suffix=".mp4",
+            dir=OUTPUT_DIR, delete=False,
+        ) as temporary_output:
+            temporary_output_path = Path(temporary_output.name)
         with tempfile.TemporaryDirectory(prefix="sintu-render-") as temp:
             work = Path(temp)
             lines = []
@@ -286,17 +293,23 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             # duplicate at exactly the timeline boundary and can leave only one frame.
             command += ["-t", f"{duration + (1 / fps):.6f}", "-c:v", "libx264", "-preset", preset,
                         "-crf", str(crf), "-pix_fmt", "yuv420p", "-r", str(fps),
-                        "-movflags", "+faststart", str(output_path)]
+                        "-movflags", "+faststart", str(temporary_output_path)]
             completed = subprocess.run(command, capture_output=True, text=True, timeout=180, check=False)
-            if completed.returncode != 0 or not output_path.exists():
+            if completed.returncode != 0 or not temporary_output_path.is_file():
                 detail = (completed.stderr or "FFmpeg render failed")[-1200:]
                 raise RenderFailed(detail)
-            _verify_rendered_output(output_path, width, height, duration, require_audio=bool(audio_path or music_path))
+            _verify_rendered_output(temporary_output_path, width, height, duration, require_audio=bool(audio_path or music_path))
+            os.replace(temporary_output_path, output_path)
+            temporary_output_path = None
     except subprocess.TimeoutExpired:
         output_path.unlink(missing_ok=True)
+        if temporary_output_path is not None:
+            temporary_output_path.unlink(missing_ok=True)
         raise RenderFailed("Video render timeout ho gaya. Scenes kam karke dobara try karein.") from None
     except Exception:
         output_path.unlink(missing_ok=True)
+        if temporary_output_path is not None:
+            temporary_output_path.unlink(missing_ok=True)
         raise
     return {
         "video_id": video_id,
