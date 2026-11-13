@@ -167,3 +167,17 @@ def test_full_studio_e2e_does_not_attach_if_render_is_not_approved(monkeypatch):
     })
     with pytest.raises(RuntimeError, match="could not be attached"):
         live_e2e._full_studio_e2e("Test topic")
+
+
+def test_live_diagnostics_load_project_env_without_overriding_process_values(monkeypatch, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "SINTU_TEST_DIAGNOSTIC_ENV=loaded-from-file\\nSINTU_TEST_DIAGNOSTIC_PRECEDENCE=file-value\\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("SINTU_TEST_DIAGNOSTIC_ENV", raising=False)
+    monkeypatch.setenv("SINTU_TEST_DIAGNOSTIC_PRECEDENCE", "process-value")
+
+    assert live_e2e._load_project_environment(env_file) is True
+    assert live_e2e.os.environ["SINTU_TEST_DIAGNOSTIC_ENV"] == "loaded-from-file"
+    assert live_e2e.os.environ["SINTU_TEST_DIAGNOSTIC_PRECEDENCE"] == "process-value"
