@@ -55,6 +55,25 @@ def video_status():
     }
 
 
+def _store_video_atomically(video_bytes: bytes) -> tuple[str, Path]:
+    """Persist a validated MP4 without exposing a partially-written output."""
+    AI_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+    video_id = uuid.uuid4().hex
+    output = AI_VIDEO_DIR / f"{video_id}.mp4"
+    temporary = AI_VIDEO_DIR / f".{video_id}.tmp"
+    try:
+        with temporary.open("xb") as stream:
+            stream.write(video_bytes)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, output)
+    except OSError:
+        temporary.unlink(missing_ok=True)
+        output.unlink(missing_ok=True)
+        raise VideoGenerationFailed("Generated video disk par safely save nahi ho saka.") from None
+    return video_id, output
+
+
 def _validate_video(raw: bytes) -> bytes:
     """Reject corrupt, empty, audio-only or implausibly large MP4s before storing them."""
     if len(raw) < 16 or len(raw) > MAX_VIDEO_BYTES or raw[4:8] != b"ftyp":
@@ -211,10 +230,7 @@ def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "7
             video_bytes = _validate_video(generate_video_bytes(full_prompt, width, height, duration_seconds * 24, 24))
         except ComfyUIUnavailable as exc:
             raise VideoUnavailable(str(exc)) from None
-        AI_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-        video_id = uuid.uuid4().hex
-        output = AI_VIDEO_DIR / f"{video_id}.mp4"
-        output.write_bytes(video_bytes)
+        video_id, output = _store_video_atomically(video_bytes)
         return {"video_id": video_id, "url": f"/api/ai-videos/{video_id}", "filename": output.name,
                 "format": "MP4", "size_bytes": output.stat().st_size, "duration_seconds": duration_seconds,
                 "aspect_ratio": aspect_ratio, "resolution": resolution, "style": style,
@@ -280,10 +296,7 @@ def generate_video(prompt: str, aspect_ratio: str = "9:16", resolution: str = "7
         if not file_id:
             raise
         video_bytes = _download_video_file(file_id, os.environ["GEMINI_API_KEY"])
-    AI_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-    video_id = uuid.uuid4().hex
-    output = AI_VIDEO_DIR / f"{video_id}.mp4"
-    output.write_bytes(video_bytes)
+    video_id, output = _store_video_atomically(video_bytes)
     return {
         "video_id": video_id,
         "url": f"/api/ai-videos/{video_id}",
