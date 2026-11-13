@@ -2458,7 +2458,7 @@ def test_piper_voice_is_free_and_does_not_need_media_token(tmp_path, monkeypatch
     monkeypatch.setattr(voice_generator, "AUDIO_DIR", output_dir)
     monkeypatch.setenv("PIPER_EXECUTABLE", "fake-piper")
     monkeypatch.setenv("PIPER_MODEL_PATH", str(model))
-    monkeypatch.setattr(voice_generator.shutil, "which", lambda name: "fake-piper")
+    monkeypatch.setattr(voice_generator.shutil, "which", lambda name: "fake-piper" if name == "fake-piper" else None)
     def fake_run(command, **kwargs):
         output = Path(command[command.index("--output_file") + 1])
         output.parent.mkdir(parents=True, exist_ok=True)
