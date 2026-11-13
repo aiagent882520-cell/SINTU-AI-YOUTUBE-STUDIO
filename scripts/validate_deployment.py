@@ -56,8 +56,22 @@ def validate_environment(env: dict[str, str], require_youtube: bool = True) -> l
 
     if youtube_configured:
         parsed = urlsplit(redirect)
-        if parsed.scheme != "https" or not parsed.hostname or parsed.path != "/api/admin/youtube/oauth/callback":
-            errors.append("YOUTUBE_REDIRECT_URI must be HTTPS and end with /api/admin/youtube/oauth/callback.")
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.path != "/api/admin/youtube/oauth/callback"
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+            or parsed.port not in (None, 443)
+            or parsed.hostname.lower() in {"localhost", "localhost.localdomain"}
+            or "." not in parsed.hostname
+        ):
+            errors.append(
+                "YOUTUBE_REDIRECT_URI must be a public HTTPS URL on the standard port, "
+                "without credentials/query/fragment, ending with /api/admin/youtube/oauth/callback."
+            )
         key = env.get("YOUTUBE_TOKEN_ENCRYPTION_KEY", "").strip()
         try:
             from cryptography.fernet import Fernet

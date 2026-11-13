@@ -76,3 +76,26 @@ def test_partial_youtube_configuration_is_rejected_even_in_pre_oauth_mode():
     env["YOUTUBE_CLIENT_SECRET"] = ""
     errors = validate_environment(env, require_youtube=False)
     assert any("settings are partial" in item for item in errors)
+
+
+
+def test_youtube_redirect_rejects_credentials_query_fragment_and_nonstandard_port():
+    invalid_urls = [
+        "https://user:pass@studio.example.org/api/admin/youtube/oauth/callback",
+        "https://studio.example.org/api/admin/youtube/oauth/callback?next=https://evil.test",
+        "https://studio.example.org/api/admin/youtube/oauth/callback#fragment",
+        "https://studio.example.org:8443/api/admin/youtube/oauth/callback",
+        "https://localhost/api/admin/youtube/oauth/callback",
+        "https://studio/api/admin/youtube/oauth/callback",
+    ]
+    for redirect in invalid_urls:
+        env = production_env()
+        env["YOUTUBE_REDIRECT_URI"] = redirect
+        errors = validate_environment(env, require_youtube=True)
+        assert any("public HTTPS URL" in item for item in errors), redirect
+
+
+def test_youtube_redirect_accepts_standard_https_callback():
+    env = production_env()
+    env["YOUTUBE_REDIRECT_URI"] = "https://studio.example.org/api/admin/youtube/oauth/callback"
+    assert validate_environment(env, require_youtube=True) == []
