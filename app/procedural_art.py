@@ -40,13 +40,12 @@ def generate_procedural_scene_bytes(prompt: str, width: int, height: int) -> byt
     palette = PALETTES[_scene_palette(prompt)]
     top, mid, low, glow = palette
     image = Image.new("RGB", (width, height))
-    pixels = image.load()
+    gradient = ImageDraw.Draw(image)
     for y in range(height):
         t = y / max(1, height - 1)
         a, b, f = (top, mid, t / .62) if t < .62 else (mid, low, (t - .62) / .38)
         color = tuple(int(a[i] * (1-f) + b[i] * f) for i in range(3))
-        for x in range(width):
-            pixels[x, y] = color
+        gradient.line((0, y, width, y), fill=color)
     light = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     ld = ImageDraw.Draw(light)
     cx, cy = int(width * (.3 + rng.random() * .4)), int(height * .25)
