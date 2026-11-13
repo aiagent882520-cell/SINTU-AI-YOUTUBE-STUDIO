@@ -144,3 +144,20 @@ def test_recovery_validation_rejects_missing_required_tables(tmp_path):
         conn.execute("CREATE TABLE wrong(value TEXT)")
     with pytest.raises(BackupValidationError, match="required tables"):
         validate_database(broken, {"tasks", "admin_users"})
+
+
+def test_restore_failure_removes_media_added_before_database_commit(tmp_path, monkeypatch):
+    from app import backup_restore
+
+    archive = make_backup(tmp_path)
+    data = tmp_path / "data"
+    data.mkdir()
+    def fail_replace(source, destination):
+        raise OSError("simulated database install failure")
+    monkeypatch.setattr(backup_restore.os, "replace", fail_replace)
+    with pytest.raises(OSError, match="simulated database install failure"):
+        restore_backup(archive, data, app_stopped=True)
+    media_dir = data / "generated_videos"
+    assert not (media_dir / "sample.mp4").exists()
+    assert not list(media_dir.glob(".sintu-restore-media-*.tmp"))
+    assert not list(data.glob(".sintu-restore-*.sqlite"))

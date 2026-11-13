@@ -224,6 +224,7 @@ def restore_backup(archive_path: str | Path, data_dir: str | Path, *, app_stoppe
     staged = {}
     safety = {}
     installed = []
+    added_media_paths = []
     added_media = 0
     skipped_media = 0
     media_conflicts = []
@@ -278,12 +279,27 @@ def restore_backup(archive_path: str | Path, data_dir: str | Path, *, app_stoppe
                         if existing_hash != media_hashes.get(name):
                             media_conflicts.append(name)
                     continue
+                temporary_media = None
                 try:
-                    with archive.open(info, "r") as member, target.open("xb") as output:
-                        shutil.copyfileobj(member, output, 1024 * 1024)
+                    with tempfile.NamedTemporaryFile(
+                        mode="wb", prefix=".sintu-restore-media-", suffix=".tmp",
+                        dir=target.parent, delete=False,
+                    ) as output:
+                        temporary_media = Path(output.name)
+                        with archive.open(info, "r") as member:
+                            shutil.copyfileobj(member, output, 1024 * 1024)
+                        output.flush()
+                        os.fsync(output.fileno())
+                    # Hard-link publication is atomic and never overwrites a racing file.
+                    os.link(temporary_media, target)
+                    temporary_media.unlink(missing_ok=True)
+                    added_media_paths.append(target)
                     added_media += 1
                 except FileExistsError:
                     skipped_media += 1
+                finally:
+                    if temporary_media is not None:
+                        temporary_media.unlink(missing_ok=True)
             for filename, stage in staged.items():
                 destination = data_dir / filename
                 for suffix in ("-wal", "-shm"):
@@ -298,6 +314,8 @@ def restore_backup(archive_path: str | Path, data_dir: str | Path, *, app_stoppe
                 database_results[filename] = validate_database(destination, required_tables)
     except Exception:
         for filename in reversed(installed):
+        for media_path in reversed(added_media_paths):
+            media_path.unlink(missing_ok=True)
             destination = data_dir / filename
             safe_copy = safety.get(filename)
             if safe_copy and safe_copy.exists():
