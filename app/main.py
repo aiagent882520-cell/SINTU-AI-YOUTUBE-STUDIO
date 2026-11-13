@@ -21,6 +21,17 @@ from datetime import datetime, timedelta, timezone
 from cryptography.fernet import Fernet, InvalidToken
 from dotenv import load_dotenv
 
+# Load local configuration before importing modules that read environment at import time.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _load_project_environment(env_path: Path | None = None) -> bool:
+    """Load the project .env without overriding explicitly supplied process settings."""
+    return load_dotenv(dotenv_path=env_path or PROJECT_ROOT / ".env", override=False)
+
+
+_load_project_environment()
+
 from fastapi import FastAPI, HTTPException, Header, Request, Query, BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -46,16 +57,6 @@ from .security import RequestRateLimiter, client_address_allowed, same_origin_re
 from .backup_restore import verify_backup, BackupValidationError, snapshot_database
 
 ROOT = Path(__file__).resolve().parent
-
-
-def _load_project_environment(env_path: Path | None = None) -> bool:
-    """Load the project .env before reading any application configuration."""
-    return load_dotenv(dotenv_path=env_path or ROOT.parent / ".env", override=False)
-
-
-# Termux/local installs create .env during bootstrap; load it before auth and paths initialize.
-_load_project_environment()
-
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT.parent))).expanduser().resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "sintu_studio.db"
