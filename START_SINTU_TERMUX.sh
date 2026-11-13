@@ -47,7 +47,19 @@ if [ -n "${PREFIX:-}" ] && [ -d "$PREFIX/include/openssl" ]; then
   "$PY" -m pip install --no-cache-dir --no-binary=cryptography --force-reinstall "cryptography>=50.0.0,<51"
 fi
 
-# Fail here with a focused diagnostic instead of a long Uvicorn import traceback.
+# Termux Python does not always expose libpython symbols to dlopen() extensions.
+# Preload the matching shared library so cryptography's Rust abi3 module can
+# resolve CPython data symbols such as PyBaseObject_Type at import time.
+if [ -n "${PREFIX:-}" ]; then
+  PYTHON_VERSION="$("$PY" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+  PYTHON_SHARED_LIB="$PREFIX/lib/libpython$PYTHON_VERSION.so"
+  if [ -f "$PYTHON_SHARED_LIB" ]; then
+    export LD_PRELOAD="$PYTHON_SHARED_LIB${LD_PRELOAD:+:$LD_PRELOAD}"
+    echo "Preloaded Termux Python shared library: libpython$PYTHON_VERSION.so"
+  else
+    echo "Warning: matching Termux shared library not found: $PYTHON_SHARED_LIB"
+  fi
+fi
 
 # Fail here with a focused diagnostic instead of a long Uvicorn import traceback.
 "$PY" -c 'from cryptography.fernet import Fernet; print("Cryptography native module: OK")'
