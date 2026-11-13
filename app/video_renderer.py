@@ -22,6 +22,12 @@ MAX_SCENE_IMAGE_PIXELS = 16_777_216
 
 MAX_SOURCE_VIDEO_BYTES = 100 * 1024 * 1024
 
+# Mobile Termux devices need more time for portrait H.264 encoding with two audio tracks.
+try:
+    RENDER_TIMEOUT_SECONDS = max(60, min(900, int(os.getenv("SINTU_RENDER_TIMEOUT_SECONDS", "600"))))
+except ValueError:
+    RENDER_TIMEOUT_SECONDS = 600
+
 
 def _validate_source_video(path: Path) -> None:
     """Bound source MP4 size before invoking FFprobe or FFmpeg."""
@@ -293,8 +299,8 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             # duplicate at exactly the timeline boundary and can leave only one frame.
             command += ["-t", f"{duration + (1 / fps):.6f}", "-c:v", "libx264", "-preset", preset,
                         "-crf", str(crf), "-pix_fmt", "yuv420p", "-r", str(fps),
-                        "-movflags", "+faststart", str(temporary_output_path)]
-            completed = subprocess.run(command, capture_output=True, text=True, timeout=180, check=False)
+                        "-movflags", "+faststart", "-threads", "2", str(temporary_output_path)]
+            completed = subprocess.run(command, capture_output=True, text=True, timeout=RENDER_TIMEOUT_SECONDS, check=False)
             if completed.returncode != 0 or not temporary_output_path.is_file():
                 detail = (completed.stderr or "FFmpeg render failed")[-1200:]
                 raise RenderFailed(detail)
@@ -305,7 +311,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         output_path.unlink(missing_ok=True)
         if temporary_output_path is not None:
             temporary_output_path.unlink(missing_ok=True)
-        raise RenderFailed("Video render timeout ho gaya. Scenes kam karke dobara try karein.") from None
+        raise RenderFailed(f"Video render {RENDER_TIMEOUT_SECONDS}s timeout par ruk gaya. Phone par background apps band karke ya kam scenes/resolution ke saath dobara try karein.") from None
     except Exception:
         output_path.unlink(missing_ok=True)
         if temporary_output_path is not None:
