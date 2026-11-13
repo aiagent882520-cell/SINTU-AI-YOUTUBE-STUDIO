@@ -37,3 +37,17 @@ def test_scene_image_validation_rejects_oversized_file(tmp_path, monkeypatch):
     monkeypatch.setattr("app.video_renderer.MAX_SCENE_IMAGE_BYTES", 0)
     with pytest.raises(ValueError, match="15 MB"):
         _validate_scene_image(path)
+
+
+def test_scene_image_validation_rejects_symlink(tmp_path):
+    from PIL import Image
+    from app.video_renderer import _validate_scene_image
+    target = tmp_path / "real.png"
+    Image.new("RGB", (64, 64)).save(target)
+    link = tmp_path / "scene.png"
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlinks are not available on this platform.")
+    with pytest.raises(ValueError, match="safe regular file"):
+        _validate_scene_image(link)

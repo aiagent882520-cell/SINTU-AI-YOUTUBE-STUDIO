@@ -29,3 +29,15 @@ def test_source_video_validation_rejects_oversized_file(tmp_path, monkeypatch):
     monkeypatch.setattr("app.video_renderer.MAX_SOURCE_VIDEO_BYTES", 0)
     with pytest.raises(ValueError, match="100 MB"):
         _validate_source_video(path)
+
+
+def test_source_video_validation_rejects_symlink(tmp_path):
+    target = tmp_path / "real.mp4"
+    target.write_bytes(b"video")
+    link = tmp_path / "clip.mp4"
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlinks are not available on this platform.")
+    with pytest.raises(ValueError, match="safe regular file"):
+        _validate_source_video(link)

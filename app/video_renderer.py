@@ -25,8 +25,8 @@ MAX_SOURCE_VIDEO_BYTES = 100 * 1024 * 1024
 
 def _validate_source_video(path: Path) -> None:
     """Bound source MP4 size before invoking FFprobe or FFmpeg."""
-    if not path.is_file() or path.suffix.lower() != ".mp4":
-        raise ValueError("Selected AI video clip file nahi mili ya MP4 nahi hai.")
+    if path.is_symlink() or not path.is_file() or path.suffix.lower() != ".mp4":
+        raise ValueError("Selected AI video clip file nahi mili, safe regular file nahi hai ya MP4 nahi hai.")
     try:
         size = path.stat().st_size
     except OSError:
@@ -39,8 +39,8 @@ def _validate_source_video(path: Path) -> None:
 def _validate_scene_image(path: Path) -> None:
     """Reject oversized, unsupported or malformed user-supplied scene images."""
     try:
-        if not path.is_file():
-            raise ValueError("Selected scene image file nahi mili.")
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("Selected scene image file nahi mili ya safe regular file nahi hai.")
         size = path.stat().st_size
         if size <= 0 or size > MAX_SCENE_IMAGE_BYTES:
             raise ValueError("Scene image empty hai ya 15 MB limit se badi hai.")
