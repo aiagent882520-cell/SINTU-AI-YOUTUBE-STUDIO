@@ -22,6 +22,40 @@ class ImageGenerationFailed(Exception):
     pass
 
 
+def _save_generated_image(raw: bytes):
+    """Validate untrusted image bytes before decoding and storing a normalized JPEG."""
+    if not isinstance(raw, (bytes, bytearray)) or not raw:
+        raise ImageGenerationFailed("Image provider returned no image data.")
+    if len(raw) > MAX_IMAGE_BYTES:
+        raise ImageGenerationFailed("Generated image exceeded the allowed size.")
+    try:
+        with Image.open(BytesIO(raw)) as source:
+            if source.format not in {"PNG", "JPEG", "WEBP"}:
+                raise ImageGenerationFailed("Generated image format is not supported.")
+            width, height = source.size
+            if (width < 64 or height < 64 or width > 4096 or height > 4096
+                    or width * height > 16_777_216):
+                raise ImageGenerationFailed("Generated image dimensions are outside the safe limits.")
+            source.verify()
+        with Image.open(BytesIO(raw)) as source:
+            source.load()
+            image = source.convert("RGB")
+    except ImageGenerationFailed:
+        raise
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
+        raise ImageGenerationFailed("Image provider returned invalid or unsafe image data.") from None
+
+    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    image_id = uuid.uuid4().hex
+    output = IMAGE_DIR / f"{image_id}.jpg"
+    try:
+        image.save(output, format="JPEG", quality=92, optimize=True)
+    except OSError:
+        output.unlink(missing_ok=True)
+        raise ImageGenerationFailed("Generated image could not be stored safely.") from None
+    return image_id, image, output
+
+
 def image_status():
     enabled = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "false").strip().lower() == "true" and paid_upgrades_allowed()
     configured = bool(os.getenv("OPENAI_API_KEY"))
@@ -61,13 +95,7 @@ def generate_image(prompt: str, kind: str = "scene", aspect: str = "portrait") -
         width, height = {"portrait": (768, 1152), "landscape": (1152, 768), "square": (1024, 1024)}[aspect]
         try:
             raw = generate_image_bytes(prompt, width, height)
-            with Image.open(BytesIO(raw)) as source:
-                source.verify()
-            with Image.open(BytesIO(raw)) as source:
-                source.load(); image = source.convert("RGB")
-                IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-                image_id = uuid.uuid4().hex; output = IMAGE_DIR / f"{image_id}.jpg"
-                image.save(output, format="JPEG", quality=92, optimize=True)
+            image_id, image, output = _save_generated_image(raw)
             return {"image_id": image_id, "url": f"/api/images/{image_id}", "kind": kind,
                     "aspect": aspect, "width": image.width, "height": image.height, "format": "JPEG",
                     "size_bytes": output.stat().st_size, "provider": "ComfyUI (local)", "local": True,
@@ -94,17 +122,7 @@ def generate_image(prompt: str, kind: str = "scene", aspect: str = "portrait") -
         if not encoded:
             raise ImageGenerationFailed("Image provider returned no image data.")
         raw = base64.b64decode(encoded, validate=True)
-        if len(raw) > MAX_IMAGE_BYTES:
-            raise ImageGenerationFailed("Generated image exceeded the allowed size.")
-        with Image.open(BytesIO(raw)) as source:
-            source.verify()
-        with Image.open(BytesIO(raw)) as source:
-            source.load()
-            image = source.convert("RGB")
-            IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-            image_id = uuid.uuid4().hex
-            output = IMAGE_DIR / f"{image_id}.jpg"
-            image.save(output, format="JPEG", quality=92, optimize=True)
+        image_id, image, output = _save_generated_image(raw)
         return {
             "image_id": image_id,
             "url": f"/api/images/{image_id}",
