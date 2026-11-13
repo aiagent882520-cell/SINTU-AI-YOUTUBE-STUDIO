@@ -72,7 +72,7 @@ def image_status():
         "access_token_configured": token_configured,
         "provider": "ComfyUI local / optional OpenAI",
         "model": os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
-        "formats": ["png"],
+        "formats": ["jpeg"],
         "notice": "Paid image generation remains locked until revenue is confirmed and the user explicitly approves upgrades.",
     }
 
@@ -92,7 +92,7 @@ def generate_image(prompt: str, kind: str = "scene", aspect: str = "portrait") -
     if kind == "thumbnail" and aspect != "landscape":
         raise ValueError("YouTube thumbnails must use landscape aspect ratio.")
     if status["local_available"]:
-        width, height = {"portrait": (768, 1152), "landscape": (1152, 768), "square": (1024, 1024)}[aspect]
+        width, height = {"portrait": (768, 1360), "landscape": (1360, 768), "square": (1024, 1024)}[aspect]
         try:
             raw = generate_image_bytes(prompt, width, height)
             image_id, image, output = _save_generated_image(raw)
