@@ -97,7 +97,7 @@ def generate_image(prompt: str, kind: str = "scene", aspect: str = "portrait") -
     if kind == "thumbnail" and aspect != "landscape":
         raise ValueError("YouTube thumbnails must use landscape aspect ratio.")
     width, height = {"portrait": (768, 1360), "landscape": (1360, 768), "square": (1024, 1024)}[aspect]
-    if status["comfyui_available"]:
+    if status.get("comfyui_available", status.get("local_available", False)):
         try:
             raw = generate_image_bytes(clean_prompt, width, height)
             provider = "ComfyUI (local AI)"
