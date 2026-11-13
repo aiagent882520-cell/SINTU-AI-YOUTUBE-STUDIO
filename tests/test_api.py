@@ -2587,7 +2587,7 @@ def test_scene_image_prompts_are_text_free(tmp_path, monkeypatch):
     from app import image_generator
 
     output = io.BytesIO()
-    Image.new("RGB", (16, 16), (20, 30, 40)).save(output, format="PNG")
+    Image.new("RGB", (64, 64), (20, 30, 40)).save(output, format="PNG")
     captured = {}
     monkeypatch.setattr(image_generator, "IMAGE_DIR", tmp_path / "images")
     monkeypatch.setattr(image_generator, "image_workflow_status", lambda: {"available": True, "workflow_configured": True})
