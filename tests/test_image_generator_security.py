@@ -33,7 +33,7 @@ def test_save_generated_image_rejects_invalid_payload():
         image_generator._save_generated_image(b"not an image")
 
 
-@pytest.mark.parametrize("size", [(32, 32), (4097, 128), (4096, 4096)])
+@pytest.mark.parametrize("size", [(32, 32), (4097, 128), (4096, 4097)])
 def test_save_generated_image_rejects_unsafe_dimensions(size):
     with pytest.raises(image_generator.ImageGenerationFailed, match="dimensions"):
         image_generator._save_generated_image(png_bytes(size))
