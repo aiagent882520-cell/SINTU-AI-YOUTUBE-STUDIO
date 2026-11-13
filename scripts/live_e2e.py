@@ -15,6 +15,12 @@ import shutil
 import sys
 import urllib.request
 from urllib.parse import urlsplit
+from pathlib import Path
+
+# Ensure the repository root is importable when invoked as `python scripts/live_e2e.py`.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.ai_brain import generate_text, provider_status
 from app.agents import AGENTS
