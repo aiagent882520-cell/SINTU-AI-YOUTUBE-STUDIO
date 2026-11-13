@@ -25,8 +25,8 @@ fi
 
 PY="$ROOT/.venv/bin/python"
 "$PY" -m pip install --upgrade pip setuptools wheel
-# Termux is Android/bionic, not glibc Linux. The prebuilt cryptography wheel can
-# load with unresolved CPython symbols on Android, so compile it against Termux.
+# Termux is Android/bionic, not glibc Linux. Avoid binary wheels during the
+# initial install; a second forced source build runs after requirements below.
 if [ -n "${PREFIX:-}" ] && [ -d "$PREFIX/include/openssl" ]; then
   export OPENSSL_DIR="$PREFIX"
   export OPENSSL_INCLUDE_DIR="$PREFIX/include"
@@ -38,6 +38,16 @@ else
   "$PY" -m pip install "cryptography>=50.0.0,<51"
 fi
 "$PY" -m pip install -r requirements.txt
+
+# Rebuild AFTER requirements installation so dependency resolution cannot leave
+# an incompatible manylinux/CPython wheel in the Termux virtual environment.
+if [ -n "${PREFIX:-}" ] && [ -d "$PREFIX/include/openssl" ]; then
+  echo "Final Termux-native cryptography rebuild (this can take several minutes)..."
+  export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-1}"
+  "$PY" -m pip install --no-cache-dir --no-binary=cryptography --force-reinstall "cryptography>=50.0.0,<51"
+fi
+
+# Fail here with a focused diagnostic instead of a long Uvicorn import traceback.
 
 # Fail here with a focused diagnostic instead of a long Uvicorn import traceback.
 "$PY" -c 'from cryptography.fernet import Fernet; print("Cryptography native module: OK")'
