@@ -20,6 +20,21 @@ MAX_SCENE_IMAGE_BYTES = 15 * 1024 * 1024
 MAX_SCENE_IMAGE_DIMENSION = 4096
 MAX_SCENE_IMAGE_PIXELS = 16_777_216
 
+MAX_SOURCE_VIDEO_BYTES = 100 * 1024 * 1024
+
+
+def _validate_source_video(path: Path) -> None:
+    """Bound source MP4 size before invoking FFprobe or FFmpeg."""
+    if not path.is_file() or path.suffix.lower() != ".mp4":
+        raise ValueError("Selected AI video clip file nahi mili ya MP4 nahi hai.")
+    try:
+        size = path.stat().st_size
+    except OSError:
+        raise ValueError("Selected AI video clip file read nahi ho sakti.") from None
+    if size <= 0 or size > MAX_SOURCE_VIDEO_BYTES:
+        raise ValueError("AI video clip empty hai ya 100 MB limit se badi hai.")
+
+
 
 def _validate_scene_image(path: Path) -> None:
     """Reject oversized, unsupported or malformed user-supplied scene images."""
@@ -339,8 +354,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
     if any(len(line) > 1000 for line in subtitles):
         raise ValueError("Subtitle line 1000 characters se chhoti honi chahiye.")
     for path in video_paths:
-        if not path.is_file() or path.suffix.lower() != ".mp4":
-            raise ValueError("Selected AI video clip file nahi mili ya MP4 nahi hai.")
+        _validate_source_video(path)
     if audio_path and not audio_path.is_file():
         raise ValueError("Voiceover audio file nahi mili.")
     if music_path and not music_path.is_file():
@@ -517,8 +531,9 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
             kind = item.get("kind")
             path = item.get("path")
             if kind == "video":
-                if not isinstance(path, Path) or not path.is_file():
+                if not isinstance(path, Path):
                     raise ValueError("Timeline AI video clip nahi mili.")
+                _validate_source_video(path)
                 try:
                     trim_start = float(item.get("trim_start", 0) or 0)
                     trim_end = float(item["trim_end"]) if item.get("trim_end") is not None else None
