@@ -12,7 +12,7 @@ fi
 echo "SINTU AI YOUTUBE STUDIO — Termux setup"
 echo "पहली बार setup में internet और कुछ समय लगेगा।"
 pkg update -y
-pkg install -y python ffmpeg git clang make rust pkg-config libjpeg-turbo freetype libpng libffi openssl zlib
+pkg install -y python ffmpeg espeak git clang make rust pkg-config libjpeg-turbo freetype libpng libffi openssl zlib
 
 if ! python -c 'import sys; raise SystemExit(0 if sys.version_info >= (3,11) else 1)'; then
   echo "Python 3.11 या नया version आवश्यक है।"
