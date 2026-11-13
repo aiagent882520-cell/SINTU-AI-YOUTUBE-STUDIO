@@ -3446,11 +3446,18 @@ def create_ai_video(payload: AIVideoInput, media_token: str = Header(default="",
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+def _reject_symlinked_media(path: Path, label: str) -> None:
+    """Never serve a media path redirected outside its managed storage directory."""
+    if path.is_symlink():
+        raise HTTPException(status_code=404, detail=f"{label} not found")
+
+
 @app.get("/api/ai-videos/{video_id}")
 def get_ai_video(video_id: str):
     if not re.fullmatch(r"[a-f0-9]{32}", video_id):
         raise HTTPException(status_code=400, detail="Invalid AI video ID")
     path = AI_VIDEO_DIR / f"{video_id}.mp4"
+    _reject_symlinked_media(path, "AI video")
     if not path.is_file():
         raise HTTPException(status_code=404, detail="AI video not found")
     return FileResponse(path, media_type="video/mp4", filename=f"sintu-ai-{video_id}.mp4")
@@ -3461,6 +3468,7 @@ def get_video(video_id: str):
     if not re.fullmatch(r"[a-f0-9]{32}", video_id):
         raise HTTPException(status_code=400, detail="Invalid video ID")
     path = OUTPUT_DIR / f"{video_id}.mp4"
+    _reject_symlinked_media(path, "Video")
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Video not found")
     return FileResponse(path, media_type="video/mp4", filename=f"sintu-{video_id}.mp4")
@@ -3495,6 +3503,7 @@ def get_image(image_id: str):
     if not re.fullmatch(r"[a-f0-9]{32}", image_id):
         raise HTTPException(status_code=400, detail="Invalid image ID")
     path = IMAGE_DIR / f"{image_id}.jpg"
+    _reject_symlinked_media(path, "Image")
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Image not found")
     return FileResponse(path, media_type="image/jpeg", filename=f"sintu-image-{image_id}.jpg")
@@ -3529,9 +3538,11 @@ def get_audio(audio_id: str):
     if not re.fullmatch(r"[a-f0-9]{32}", audio_id):
         raise HTTPException(status_code=400, detail="Invalid audio ID")
     path = AUDIO_DIR / f"{audio_id}.mp3"
+    _reject_symlinked_media(path, "Audio")
     media_type, filename = "audio/mpeg", f"sintu-voice-{audio_id}.mp3"
     if not path.is_file():
         path = AUDIO_DIR / f"{audio_id}.wav"
+        _reject_symlinked_media(path, "Audio")
         media_type, filename = "audio/wav", f"sintu-voice-{audio_id}.wav"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Audio not found")

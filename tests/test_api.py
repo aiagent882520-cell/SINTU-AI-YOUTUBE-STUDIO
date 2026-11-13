@@ -3199,3 +3199,27 @@ def test_youtube_publish_rejects_missing_render_before_token_access(tmp_path, mo
     )
     assert response.status_code == 404
 
+
+@pytest.mark.parametrize(
+    "route,directory_name,filename",
+    [
+        ("/api/videos/" + "a" * 32, "OUTPUT_DIR", "a" * 32 + ".mp4"),
+        ("/api/ai-videos/" + "b" * 32, "AI_VIDEO_DIR", "b" * 32 + ".mp4"),
+        ("/api/images/" + "c" * 32, "IMAGE_DIR", "c" * 32 + ".jpg"),
+        ("/api/audio/" + "d" * 32, "AUDIO_DIR", "d" * 32 + ".mp3"),
+    ],
+)
+def test_media_download_endpoints_reject_symlink_files(tmp_path, monkeypatch, route, directory_name, filename):
+    client = client_for_test(tmp_path, monkeypatch)
+    media_dir = tmp_path / directory_name.lower()
+    media_dir.mkdir()
+    outside = tmp_path / ("outside-" + filename)
+    outside.write_bytes(b"not-public-media")
+    link = media_dir / filename
+    try:
+        link.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlinks are not available on this platform.")
+    monkeypatch.setattr(main, directory_name, media_dir)
+    response = client.get(route)
+    assert response.status_code == 404
