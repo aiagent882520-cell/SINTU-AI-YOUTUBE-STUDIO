@@ -90,29 +90,56 @@ def _validate_audio_file(output: Path, expected_format: str) -> dict:
     return {"size_bytes": size}
 
 
+def _find_executable(configured: str) -> str | None:
+    return shutil.which(configured) or (configured if Path(configured).is_file() else None)
+
+
+def _local_tts_engines() -> tuple[str | None, str | None, str | None]:
+    """Return (engine, executable, Piper model), preferring Piper over eSpeak NG."""
+    piper_name = os.getenv("PIPER_EXECUTABLE") or "piper"
+    piper_executable = _find_executable(piper_name)
+    piper_model = os.getenv("PIPER_MODEL_PATH", "").strip()
+    if piper_executable and piper_model and Path(piper_model).is_file():
+        return "Piper TTS", piper_executable, piper_model
+
+    espeak_name = os.getenv("ESPEAK_EXECUTABLE") or "espeak"
+    espeak_executable = _find_executable(espeak_name)
+    if espeak_executable:
+        try:
+            voices = subprocess.run(
+                [espeak_executable, "--voices=hi"],
+                capture_output=True, text=True, timeout=10, check=False
+            )
+            if voices.returncode == 0 and any(
+                line.split() and line.split()[1].lower() == "hi"
+                for line in voices.stdout.splitlines()[1:]
+            ):
+                return "eSpeak NG Hindi", espeak_executable, None
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return None, None, None
+
+
 def voice_status():
     enabled = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "false").strip().lower() == "true" and paid_upgrades_allowed()
     configured = bool(os.getenv("OPENAI_API_KEY"))
     token_configured = bool(os.getenv("MEDIA_GENERATION_TOKEN"))
-    configured_executable = os.getenv("PIPER_EXECUTABLE") or "piper"
-    piper_executable = shutil.which(configured_executable) or (configured_executable if Path(configured_executable).is_file() else None)
-    piper_model = os.getenv("PIPER_MODEL_PATH", "")
-    local_available = bool(piper_executable and piper_model and Path(piper_model).is_file())
+    local_engine, local_executable, local_model = _local_tts_engines()
+    local_available = bool(local_engine and local_executable)
     return {
         "available": local_available or (enabled and configured and token_configured),
         "local_available": local_available,
-        "local_engine": "Piper TTS",
-        "local_model_configured": bool(piper_model and Path(piper_model).is_file()),
+        "local_engine": local_engine or "Not installed",
+        "local_model_configured": bool(local_model),
         "enabled_by_admin": enabled,
         "provider_configured": configured,
-        "access_token_required": True,
+        "access_token_required": not local_available,
         "access_token_configured": token_configured,
-        "provider": "Piper local / optional OpenAI",
+        "provider": "Piper / eSpeak NG local / optional OpenAI",
         "model": os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
-        "format": "MP3",
-        "notice": "Paid APIs remain locked until revenue is confirmed and the user explicitly approves upgrades.",
+        "format": "WAV or MP3",
+        "notice": "Free local Hindi TTS is preferred. Paid APIs remain locked until revenue is confirmed and the user explicitly approves upgrades.",
     }
-
 
 def hindi_letter_ratio(text: str) -> float:
     letters = [char for char in text if char.isalpha()]
@@ -132,29 +159,43 @@ def generate_voiceover(text: str, voice: str = "alloy") -> dict:
         AUDIO_DIR.mkdir(parents=True, exist_ok=True)
         audio_id = uuid.uuid4().hex
         output = AUDIO_DIR / f"{audio_id}.wav"
-        configured_executable = os.getenv("PIPER_EXECUTABLE") or "piper"
-        executable = shutil.which(configured_executable) or (configured_executable if Path(configured_executable).is_file() else None)
-        if not executable:
-            raise VoiceUnavailable("Piper executable is not installed or not on PATH.")
-        model = os.environ["PIPER_MODEL_PATH"]
+        engine, executable, model = _local_tts_engines()
+        if not executable or not engine:
+            raise VoiceUnavailable("No supported local Hindi TTS engine is available.")
         try:
-            completed = subprocess.run([executable, "--model", model, "--output_file", str(output)],
-                                       input=text.strip(), text=True, capture_output=True, timeout=180, check=False)
+            if engine == "Piper TTS":
+                completed = subprocess.run(
+                    [executable, "--model", model, "--output_file", str(output)],
+                    input=text.strip(), text=True, capture_output=True, timeout=180, check=False
+                )
+            else:
+                speed = os.getenv("ESPEAK_SPEED", "135")
+                try:
+                    speed_value = max(80, min(250, int(speed)))
+                except ValueError:
+                    speed_value = 135
+                completed = subprocess.run(
+                    [executable, "-v", "hi", "-s", str(speed_value), "-w", str(output), "--stdin"],
+                    input=text.strip(), text=True, capture_output=True, timeout=180, check=False
+                )
         except (OSError, subprocess.TimeoutExpired):
             output.unlink(missing_ok=True)
-            raise VoiceGenerationFailed("Piper local TTS could not start or timed out.") from None
+            raise VoiceGenerationFailed(f"{engine} could not start or timed out.") from None
         if completed.returncode != 0 or not output.is_file():
             output.unlink(missing_ok=True)
-            raise VoiceGenerationFailed("Piper local TTS failed. Check the selected voice model.")
+            raise VoiceGenerationFailed(f"{engine} failed to generate Hindi speech.")
         try:
             audio_info = _validate_audio_file(output, "wav")
         except VoiceGenerationFailed:
             output.unlink(missing_ok=True)
             raise
-        return {"audio_id": audio_id, "filename": output.name, "url": f"/api/audio/{audio_id}",
-                "format": "WAV", "voice": "Piper local", "provider": "Piper (local)", "model": Path(model).name,
-                "size_bytes": audio_info["size_bytes"], "local": True,
-                "notice": "Locally generated speech. Review pronunciation and voice-model license before publishing."}
+        return {
+            "audio_id": audio_id, "filename": output.name,
+            "url": f"/api/audio/{audio_id}", "format": "WAV",
+            "voice": engine, "provider": "Local TTS", "model": model and Path(model).name or "Hindi",
+            "size_bytes": audio_info["size_bytes"], "local": True,
+            "notice": "Locally generated Hindi speech. eSpeak NG has a synthetic voice; review pronunciation before publishing."
+        }
     if not status["enabled_by_admin"]:
         raise VoiceUnavailable("Paid media generation is disabled by server administrator.")
     if not status["provider_configured"]:
