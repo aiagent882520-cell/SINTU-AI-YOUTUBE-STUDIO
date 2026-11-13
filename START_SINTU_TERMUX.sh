@@ -12,7 +12,7 @@ fi
 echo "SINTU AI YOUTUBE STUDIO — Termux setup"
 echo "पहली बार setup में internet और कुछ समय लगेगा।"
 pkg update -y
-pkg install -y python ffmpeg git clang make rust libjpeg-turbo freetype libpng libffi openssl zlib
+pkg install -y python ffmpeg git clang make rust pkg-config libjpeg-turbo freetype libpng libffi openssl zlib
 
 if ! python -c 'import sys; raise SystemExit(0 if sys.version_info >= (3,11) else 1)'; then
   echo "Python 3.11 या नया version आवश्यक है।"
@@ -25,7 +25,22 @@ fi
 
 PY="$ROOT/.venv/bin/python"
 "$PY" -m pip install --upgrade pip setuptools wheel
+# Termux is Android/bionic, not glibc Linux. The prebuilt cryptography wheel can
+# load with unresolved CPython symbols on Android, so compile it against Termux.
+if [ -n "${PREFIX:-}" ] && [ -d "$PREFIX/include/openssl" ]; then
+  export OPENSSL_DIR="$PREFIX"
+  export OPENSSL_INCLUDE_DIR="$PREFIX/include"
+  export OPENSSL_LIB_DIR="$PREFIX/lib"
+  export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+  echo "Building cryptography from source for Android/Termux..."
+  "$PY" -m pip install --no-binary=cryptography --force-reinstall "cryptography>=50.0.0,<51"
+else
+  "$PY" -m pip install "cryptography>=50.0.0,<51"
+fi
 "$PY" -m pip install -r requirements.txt
+
+# Fail here with a focused diagnostic instead of a long Uvicorn import traceback.
+"$PY" -c 'from cryptography.fernet import Fernet; print("Cryptography native module: OK")'
 
 if [ ! -f ".env" ]; then
   "$PY" scripts/bootstrap_local.py
