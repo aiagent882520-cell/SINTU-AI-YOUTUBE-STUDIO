@@ -313,9 +313,9 @@ def restore_backup(archive_path: str | Path, data_dir: str | Path, *, app_stoppe
                 _, required_tables = DATABASE_MEMBERS[filename_member]
                 database_results[filename] = validate_database(destination, required_tables)
     except Exception:
-        for filename in reversed(installed):
         for media_path in reversed(added_media_paths):
             media_path.unlink(missing_ok=True)
+        for filename in reversed(installed):
             destination = data_dir / filename
             safe_copy = safety.get(filename)
             if safe_copy and safe_copy.exists():
