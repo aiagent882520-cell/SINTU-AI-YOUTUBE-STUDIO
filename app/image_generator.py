@@ -138,4 +138,4 @@ def generate_image(prompt: str, kind: str = "scene", aspect: str = "portrait") -
     return {"image_id": image_id, "url": f"/api/images/{image_id}", "kind": kind,
             "aspect": aspect, "width": image.width, "height": image.height,
             "format": "JPEG", "size_bytes": output.stat().st_size,
-            "provider": provider, "local": provider != status["model"], "notice": notice}
+            "provider": provider, "local": provider != status.get("model"), "notice": notice}
