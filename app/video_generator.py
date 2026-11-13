@@ -60,16 +60,20 @@ def _store_video_atomically(video_bytes: bytes) -> tuple[str, Path]:
     AI_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
     video_id = uuid.uuid4().hex
     output = AI_VIDEO_DIR / f"{video_id}.mp4"
-    temporary = AI_VIDEO_DIR / f".{video_id}.tmp"
+    temporary: Path | None = None
     try:
-        with temporary.open("xb") as stream:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", prefix=".sintu-video-", suffix=".tmp",
+            dir=AI_VIDEO_DIR, delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
             stream.write(video_bytes)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, output)
     except OSError:
-        temporary.unlink(missing_ok=True)
-        output.unlink(missing_ok=True)
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
         raise VideoGenerationFailed("Generated video disk par safely save nahi ho saka.") from None
     return video_id, output
 
