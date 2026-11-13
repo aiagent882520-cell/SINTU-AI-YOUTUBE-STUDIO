@@ -56,9 +56,10 @@ def validate_environment(env: dict[str, str], require_youtube: bool = True) -> l
 
     if youtube_configured:
         parsed = urlsplit(redirect)
-        if (
-            parsed.scheme != "https"
-            or not parsed.hostname
+        if parsed.scheme != "https":
+            errors.append("YOUTUBE_REDIRECT_URI must be HTTPS.")
+        elif (
+            not parsed.hostname
             or parsed.path != "/api/admin/youtube/oauth/callback"
             or parsed.username is not None
             or parsed.password is not None

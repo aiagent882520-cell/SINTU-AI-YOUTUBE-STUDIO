@@ -52,6 +52,9 @@ def test_youtube_oauth_requires_complete_credentials_and_https_callback():
     env["YOUTUBE_REDIRECT_URI"] = "http://studio.example.org/api/admin/youtube/oauth/callback"
     errors = validate_environment(env, require_youtube=True)
     assert any("must be HTTPS" in item for item in errors)
+    env["YOUTUBE_REDIRECT_URI"] = "https://studio.example.org/wrong/path"
+    errors = validate_environment(env, require_youtube=True)
+    assert any("public HTTPS URL" in item for item in errors)
 
 
 def test_youtube_encryption_key_must_be_a_valid_fernet_key():
