@@ -16,6 +16,32 @@ OUTPUT_DIR = DATA_DIR / "generated_videos"
 WIDTH, HEIGHT = 720, 1280
 OUTPUT_PROFILES = {"720x1280": (720,1280), "1080x1920": (1080,1920), "1080x1080": (1080,1080), "1280x720": (1280,720), "1920x1080": (1920,1080)}
 QUALITY_PROFILES = {"standard": 23, "high": 20, "maximum": 18}
+MAX_SCENE_IMAGE_BYTES = 15 * 1024 * 1024
+MAX_SCENE_IMAGE_DIMENSION = 4096
+MAX_SCENE_IMAGE_PIXELS = 16_777_216
+
+
+def _validate_scene_image(path: Path) -> None:
+    """Reject oversized, unsupported or malformed user-supplied scene images."""
+    try:
+        if not path.is_file():
+            raise ValueError("Selected scene image file nahi mili.")
+        size = path.stat().st_size
+        if size <= 0 or size > MAX_SCENE_IMAGE_BYTES:
+            raise ValueError("Scene image empty hai ya 15 MB limit se badi hai.")
+        with Image.open(path) as image:
+            if image.format not in {"PNG", "JPEG", "WEBP"}:
+                raise ValueError("Scene image format PNG, JPEG ya WEBP hona chahiye.")
+            width, height = image.size
+            if (width < 64 or height < 64 or width > MAX_SCENE_IMAGE_DIMENSION
+                    or height > MAX_SCENE_IMAGE_DIMENSION
+                    or width * height > MAX_SCENE_IMAGE_PIXELS):
+                raise ValueError("Scene image dimensions allowed safety limit se bahar hain.")
+            image.verify()
+    except ValueError:
+        raise
+    except Exception:
+        raise ValueError("Selected scene image valid image file nahi hai.") from None
 
 
 def _render_settings(resolution: str, fps: int, quality: str):
@@ -185,13 +211,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
     if subtitles and len(subtitles) != len(scenes):
         raise ValueError("Subtitle lines ki sankhya scenes ke barabar honi chahiye.")
     for image_path in image_paths:
-        if not image_path.is_file():
-            raise ValueError("Selected scene image file nahi mili.")
-        try:
-            with Image.open(image_path) as check:
-                check.verify()
-        except Exception:
-            raise ValueError("Selected scene image valid image file nahi hai.") from None
+        _validate_scene_image(image_path)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     video_id = uuid.uuid4().hex
