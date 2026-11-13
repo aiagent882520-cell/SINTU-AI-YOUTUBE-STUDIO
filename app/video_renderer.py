@@ -549,8 +549,9 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                     raise RenderFailed((completed.stderr or "Video trim failed")[-1200:])
                 clip_paths.append(segment)
             elif kind == "image":
-                if not isinstance(path, Path) or not path.is_file():
+                if not isinstance(path, Path):
                     raise ValueError("Timeline scene image nahi mili.")
+                _validate_scene_image(path)
                 image_duration = item.get("duration", seconds_per_scene)
                 if not isinstance(image_duration, int) or not 2 <= image_duration <= 12:
                     raise ValueError("Har still image ki duration 2 se 12 seconds honi chahiye.")
