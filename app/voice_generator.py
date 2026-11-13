@@ -141,6 +141,7 @@ def generate_voiceover(text: str, voice: str = "alloy") -> dict:
             completed = subprocess.run([executable, "--model", model, "--output_file", str(output)],
                                        input=text.strip(), text=True, capture_output=True, timeout=180, check=False)
         except (OSError, subprocess.TimeoutExpired):
+            output.unlink(missing_ok=True)
             raise VoiceGenerationFailed("Piper local TTS could not start or timed out.") from None
         if completed.returncode != 0 or not output.is_file():
             output.unlink(missing_ok=True)
