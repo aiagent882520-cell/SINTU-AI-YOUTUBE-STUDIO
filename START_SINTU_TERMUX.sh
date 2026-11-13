@@ -33,7 +33,7 @@ if [ -n "${PREFIX:-}" ] && [ -d "$PREFIX/include/openssl" ]; then
   export OPENSSL_LIB_DIR="$PREFIX/lib"
   export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
   echo "Building cryptography from source for Android/Termux..."
-  "$PY" -m pip install --no-binary=cryptography --force-reinstall "cryptography>=50.0.0,<51"
+  "$PY" -m pip install --no-binary=cryptography,cffi --force-reinstall "cryptography>=50.0.0,<51"
 else
   "$PY" -m pip install "cryptography>=50.0.0,<51"
 fi
