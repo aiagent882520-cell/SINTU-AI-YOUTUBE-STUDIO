@@ -16,6 +16,7 @@ import secrets
 import urllib.parse
 import urllib.request
 import urllib.error
+import http.client
 from datetime import datetime, timedelta, timezone
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -1645,6 +1646,46 @@ def _youtube_request(url, data=None, headers=None, method=None):
         raise HTTPException(status_code=502, detail="Google API se connection nahi ho paya.") from None
 
 
+
+def _youtube_upload_file(upload_url: str, video_path: str | Path, size: int, access_token: str) -> bytes:
+    """Stream an approved MP4 to Google's resumable endpoint without loading it into RAM."""
+    parsed = urllib.parse.urlsplit(upload_url)
+    if (parsed.scheme != "https" or parsed.hostname != "www.googleapis.com"
+            or parsed.port not in (None, 443) or parsed.username or parsed.password
+            or not parsed.path.startswith("/upload/youtube/") or parsed.fragment):
+        raise HTTPException(status_code=502, detail="Google resumable upload URL invalid hai.")
+    connection = http.client.HTTPSConnection("www.googleapis.com", timeout=120)
+    try:
+        connection.putrequest("PUT", parsed.path + (("?" + parsed.query) if parsed.query else ""))
+        connection.putheader("Authorization", "Bearer " + access_token)
+        connection.putheader("Content-Type", "video/mp4")
+        connection.putheader("Content-Length", str(size))
+        connection.endheaders()
+        sent = 0
+        with Path(video_path).open("rb") as video_file:
+            while True:
+                chunk = video_file.read(1024 * 1024)
+                if not chunk:
+                    break
+                connection.send(chunk)
+                sent += len(chunk)
+        if sent != size:
+            raise HTTPException(status_code=409, detail="Rendered MP4 changed during upload; retry karein.")
+        response = connection.getresponse()
+        body = response.read(1024 * 1024 + 1)
+        if len(body) > 1024 * 1024:
+            raise HTTPException(status_code=502, detail="YouTube upload response exceeded safety limit.")
+        if response.status < 200 or response.status >= 300:
+            raise HTTPException(status_code=502, detail="Google video upload failed (" + str(response.status) + ").")
+        return body
+    except HTTPException:
+        raise
+    except (OSError, http.client.HTTPException, TimeoutError):
+        raise HTTPException(status_code=502, detail="YouTube video upload connection failed; retry karein.") from None
+    finally:
+        connection.close()
+
+
 def _youtube_connection():
     with db() as conn:
         row = conn.execute("SELECT channel_id,channel_title,token_expiry,connected_at FROM youtube_connection WHERE id=1").fetchone()
@@ -1794,8 +1835,8 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
     if item["status"] != "Approved" or item["platform"] not in {"youtube", "youtube_shorts"}:
         raise HTTPException(status_code=409, detail="YouTube calendar item approved hona chahiye.")
     path = OUTPUT_DIR / (video_id + ".mp4")
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="Rendered MP4 file nahi mili.")
+    if path.is_symlink() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Rendered MP4 file nahi mili ya unsafe path hai.")
     size = path.stat().st_size
     if size <= 0 or size > 512 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="MP4 size 1 byte se 512 MB ke beech honi chahiye.")
@@ -1806,12 +1847,13 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
         metadata, {"Authorization": "Bearer " + access_token, "Content-Type": "application/json; charset=UTF-8",
                    "X-Upload-Content-Type": "video/mp4", "X-Upload-Content-Length": str(size)}, "POST")
     upload_url = headers.get("Location")
-    if not upload_url or not upload_url.startswith("https://www.googleapis.com/upload/youtube/"):
-        raise HTTPException(status_code=502, detail="Google resumable upload URL invalid hai.")
-    with path.open("rb") as video_file:
-        _, _, result_body = _youtube_request(upload_url, video_file.read(), {"Authorization": "Bearer " + access_token,
-            "Content-Type": "video/mp4", "Content-Length": str(size)}, "PUT")
-    uploaded = json.loads(result_body.decode())
+    if not upload_url:
+        raise HTTPException(status_code=502, detail="Google resumable upload URL missing hai.")
+    result_body = _youtube_upload_file(upload_url, path, size, access_token)
+    try:
+        uploaded = json.loads(result_body.decode())
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise HTTPException(status_code=502, detail="YouTube upload response invalid hai.") from None
     youtube_id = uploaded.get("id")
     if not youtube_id:
         raise HTTPException(status_code=502, detail="YouTube ne video ID return nahi ki.")

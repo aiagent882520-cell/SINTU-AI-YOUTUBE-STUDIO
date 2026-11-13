@@ -3223,3 +3223,73 @@ def test_media_download_endpoints_reject_symlink_files(tmp_path, monkeypatch, ro
     monkeypatch.setattr(main, directory_name, media_dir)
     response = client.get(route)
     assert response.status_code == 404
+
+
+
+def test_youtube_streaming_upload_rejects_untrusted_upload_hosts(tmp_path):
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"test-video")
+    with pytest.raises(main.HTTPException) as error:
+        main._youtube_upload_file("https://www.googleapis.com.evil.test/upload/youtube/session", video, 10, "token")
+    assert error.value.status_code == 502
+
+
+def test_youtube_streaming_upload_sends_bounded_chunks_and_checks_size(tmp_path, monkeypatch):
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"x" * (2 * 1024 * 1024 + 17))
+    captured = {"chunks": [], "headers": [], "path": None}
+
+    class FakeResponse:
+        status = 200
+        def read(self, limit):
+            return b'{"id":"video123"}'
+
+    class FakeConnection:
+        def __init__(self, host, timeout):
+            captured["host"] = host
+            captured["timeout"] = timeout
+        def putrequest(self, method, path):
+            captured["method"], captured["path"] = method, path
+        def putheader(self, name, value):
+            captured["headers"].append((name, value))
+        def endheaders(self):
+            pass
+        def send(self, chunk):
+            captured["chunks"].append(len(chunk))
+        def getresponse(self):
+            return FakeResponse()
+        def close(self):
+            pass
+
+    monkeypatch.setattr(main.http.client, "HTTPSConnection", FakeConnection)
+    body = main._youtube_upload_file(
+        "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=abc",
+        video, video.stat().st_size, "access-token"
+    )
+    assert body == b'{"id":"video123"}'
+    assert captured["host"] == "www.googleapis.com"
+    assert captured["method"] == "PUT"
+    assert captured["path"] == "/upload/youtube/v3/videos?upload_id=abc"
+    assert max(captured["chunks"]) <= 1024 * 1024
+    assert sum(captured["chunks"]) == video.stat().st_size
+    assert ("Content-Length", str(video.stat().st_size)) in captured["headers"]
+
+
+def test_youtube_publish_rejects_symlinked_render(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    client = client_for_test(tmp_path, monkeypatch)
+    created = client.post("/api/calendar", json={
+        "title": "Symlink gate", "platform": "youtube", "prompt": "Test",
+        "scheduled_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+    })
+    calendar_id = created.json()["id"]
+    with main.db() as conn:
+        conn.execute("UPDATE content_calendar SET status='Approved' WHERE id=?", (calendar_id,))
+    render_dir = tmp_path / "renders"
+    render_dir.mkdir()
+    outside = tmp_path / "outside.mp4"
+    outside.write_bytes(b"not a rendered asset")
+    (render_dir / ("c" * 32 + ".mp4")).symlink_to(outside)
+    monkeypatch.setattr(main, "OUTPUT_DIR", render_dir)
+    response = client.post(f"/api/admin/youtube/publish/{calendar_id}?video_id={'c' * 32}&title=Test")
+    assert response.status_code == 404
