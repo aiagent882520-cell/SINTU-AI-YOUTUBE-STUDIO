@@ -710,6 +710,9 @@ def _create_admin_backup() -> dict:
         earnings_path = DATA_DIR / "sintu_earnings.sqlite3"
         if earnings_path.is_file() and not earnings_path.is_symlink():
             database_sources.append((earnings_path, "sintu_earnings.sqlite3"))
+        runtime_path = DATA_DIR / "production_runtime.sqlite3"
+        if runtime_path.is_file() and not runtime_path.is_symlink():
+            database_sources.append((runtime_path, "production_runtime.sqlite3"))
         candidates = []
         database_members = []
         for source_path, filename in database_sources:
