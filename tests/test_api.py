@@ -307,6 +307,29 @@ def test_subtitle_srt_generation(tmp_path, monkeypatch):
     assert lines[6] == "Aaj hum seekhenge"
 
 
+
+def test_local_voiceover_does_not_require_paid_media_access_token(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.delenv("MEDIA_GENERATION_TOKEN", raising=False)
+    monkeypatch.setattr(main, "voice_status", lambda: {
+        "local_available": True,
+        "enabled_by_admin": True,
+        "provider_configured": True,
+    })
+    monkeypatch.setattr(main, "generate_voiceover", lambda text, voice: {
+        "audio_id": "c" * 32, "url": "/api/audio/" + "c" * 32,
+        "format": "WAV", "voice": "Local TTS", "size_bytes": 123,
+    })
+
+    response = client.post("/api/voice", json={"text": "नमस्ते", "voice": "alloy"})
+    assert response.status_code == 200
+    assert response.json()["voice"] == "Local TTS"
+
+
 def test_voiceover_requires_media_access_token(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
@@ -314,6 +337,11 @@ def test_voiceover_requires_media_access_token(tmp_path, monkeypatch):
     monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "expected-token")
+    monkeypatch.setattr(main, "voice_status", lambda: {
+        "local_available": False,
+        "enabled_by_admin": True,
+        "provider_configured": True,
+    })
     response = client.post("/api/voice", json={"text": "Hello", "voice": "alloy"})
     assert response.status_code == 403
     monkeypatch.setattr(main, "generate_voiceover", lambda text, voice: {
