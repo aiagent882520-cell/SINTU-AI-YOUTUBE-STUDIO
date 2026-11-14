@@ -407,6 +407,7 @@ class RenderInput(BaseModel):
     format_id: str | None = Field(default=None, max_length=80)
     seconds_per_scene: int = Field(default=4, ge=2, le=12)
     image_ids: list[str] = Field(default_factory=list, max_length=25)
+    auto_generate_images: bool = False
     video_ids: list[str] = Field(default_factory=list, max_length=25)
     timeline: list[str] = Field(default_factory=list, max_length=25)
     timeline_items: list[TimelineItemInput] = Field(default_factory=list, max_length=25)
@@ -3322,6 +3323,8 @@ def render_video(payload: RenderInput):
         raise HTTPException(status_code=400, detail="Har scene ke liye exactly ek AI video ID dein.")
     if payload.video_ids and payload.image_ids:
         raise HTTPException(status_code=400, detail="AI video clips aur still-image storyboard ko ek render mein mix karna abhi supported nahi hai.")
+    if payload.auto_generate_images and (payload.image_ids or payload.video_ids or timeline_entries):
+        raise HTTPException(status_code=400, detail="Automatic scene images ko explicit image/video IDs ya mixed timeline ke saath combine nahi kar sakte.")
     if timeline_entries and (payload.image_ids or payload.video_ids):
         raise HTTPException(status_code=400, detail="Mixed timeline use karte waqt alag image_ids/video_ids fields khaali rakhein.")
     if timeline_entries and len(timeline_entries) != len(scenes):
@@ -3336,6 +3339,21 @@ def render_video(payload: RenderInput):
         if not path.is_file():
             raise HTTPException(status_code=404, detail="Scene image not found.")
         image_paths.append(path)
+    generated_scene_images = []
+    if payload.auto_generate_images:
+        aspect = "portrait" if resolution in {"720x1280", "1080x1920"} else ("square" if resolution == "1080x1080" else "landscape")
+        try:
+            for index, scene in enumerate(scenes, start=1):
+                generated = generate_image(
+                    "Cinematic, detailed, text-free visual for scene " + str(index) + ": " + scene,
+                    kind="scene", aspect=aspect,
+                )
+                generated_scene_images.append(generated)
+                image_paths.append(IMAGE_DIR / (generated["image_id"] + ".jpg"))
+        except ImageUnavailable as exc:
+            raise HTTPException(status_code=503, detail="Scene image generation unavailable: " + str(exc)) from None
+        except (ImageGenerationFailed, ValueError) as exc:
+            raise HTTPException(status_code=502, detail="Scene image generation failed: " + str(exc)) from None
     video_paths = []
     for video_id in payload.video_ids:
         if not re.fullmatch(r"[a-f0-9]{32}", video_id):
@@ -3438,11 +3456,18 @@ def render_video(payload: RenderInput):
                                    music_volume=payload.music_volume, subtitles=payload.subtitles,
                                    transition=payload.transition, resolution=resolution,
                                    fps=payload.fps, quality=payload.quality)
-        return render_storyboard(title, scenes, payload.seconds_per_scene,
-                                 image_paths=image_paths, audio_path=audio_path,
-                                 subtitles=payload.subtitles, music_path=music_path,
-                                 music_volume=payload.music_volume, transition=payload.transition, motion=payload.motion,
-                                 resolution=resolution, fps=payload.fps, quality=payload.quality)
+        rendered = render_storyboard(title, scenes, payload.seconds_per_scene,
+                                      image_paths=image_paths, audio_path=audio_path,
+                                      subtitles=payload.subtitles, music_path=music_path,
+                                      music_volume=payload.music_volume, transition=payload.transition, motion=payload.motion,
+                                      resolution=resolution, fps=payload.fps, quality=payload.quality)
+        if generated_scene_images:
+            rendered["scene_images"] = [
+                {"image_id": item["image_id"], "provider": item["provider"], "url": item["url"]}
+                for item in generated_scene_images
+            ]
+            rendered["scene_images_generated"] = len(generated_scene_images)
+        return rendered
     except RendererUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except RenderFailed as exc:
@@ -3537,8 +3562,7 @@ def image_capabilities():
 def create_image(payload: ImageInput, media_token: str = Header(default="", alias="X-Media-Token")):
     import hmac, os
     status = image_status()
-    if (not status.get("local_available") and status.get("enabled_by_admin")
-            and status.get("provider_configured")):
+    if status.get("enabled_by_admin") and status.get("provider_configured"):
         expected = os.getenv("MEDIA_GENERATION_TOKEN", "")
         if not expected or not hmac.compare_digest(media_token, expected):
             raise HTTPException(status_code=403, detail="Valid media access token required for the optional paid image provider.")
@@ -3572,8 +3596,7 @@ def voice_capabilities():
 def create_voiceover(payload: VoiceInput, media_token: str = Header(default="", alias="X-Media-Token")):
     import hmac, os
     status = voice_status()
-    if (not status.get("local_available") and status.get("enabled_by_admin")
-            and status.get("provider_configured")):
+    if status.get("enabled_by_admin") and status.get("provider_configured"):
         expected = os.getenv("MEDIA_GENERATION_TOKEN", "")
         if not expected or not hmac.compare_digest(media_token, expected):
             raise HTTPException(status_code=403, detail="Valid media access token required for the optional paid voice provider.")

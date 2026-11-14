@@ -262,17 +262,24 @@ def test_render_capabilities_list_export_profiles(tmp_path, monkeypatch):
     assert profiles["quality"] == ["standard", "high", "maximum"]
 
 
-def test_voiceover_is_disabled_by_default(tmp_path, monkeypatch):
+def test_paid_voiceover_is_disabled_by_default_but_local_tts_remains_available(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.delenv("ENABLE_PAID_MEDIA_GENERATION", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "test-token")
     info = client.get("/api/voice/capabilities")
     assert info.status_code == 200
-    assert info.json()["available"] is False
-    result = client.post("/api/voice", json={"text": "Namaste", "voice": "alloy"},
+    capabilities = info.json()
+    assert capabilities["enabled_by_admin"] is False
+    assert capabilities["available"] is capabilities["local_available"]
+    if capabilities["local_available"]:
+        monkeypatch.setattr(main, "generate_voiceover", lambda text, voice: {
+            "audio_id": "f" * 32, "url": "/api/audio/" + "f" * 32,
+            "format": "WAV", "voice": voice, "size_bytes": 123,
+        })
+    result = client.post("/api/voice", json={"text": "नमस्ते", "voice": "alloy"},
                          headers={"X-Media-Token": "test-token"})
-    assert result.status_code == 503
+    assert result.status_code == (200 if capabilities["local_available"] else 503)
 
 
 def test_voiceover_invalid_voice_is_rejected(tmp_path, monkeypatch):
@@ -319,17 +326,19 @@ def test_voiceover_requires_media_access_token(tmp_path, monkeypatch):
     assert allowed.json()["format"] == "MP3"
 
 
-def test_image_generation_is_disabled_by_default(tmp_path, monkeypatch):
+def test_offline_procedural_image_generation_is_available_by_default(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.delenv("ENABLE_PAID_MEDIA_GENERATION", raising=False)
-    assert client.get("/api/images/capabilities").json()["available"] is False
-    monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "test-token")
-    response = client.post("/api/images", json={"prompt": "A cinematic mountain", "kind": "scene", "aspect": "portrait"},
-                           headers={"X-Media-Token": "test-token"})
-    assert response.status_code == 503
+    capabilities = client.get("/api/images/capabilities").json()
+    assert capabilities["available"] is True
+    assert capabilities["procedural_fallback_available"] is True
+    assert capabilities["comfyui_available"] is False
+    response = client.post("/api/images", json={"prompt": "A cinematic mountain", "kind": "scene", "aspect": "portrait"})
+    assert response.status_code == 200
+    assert response.json()["provider"] == "SINTU Procedural Art (offline)"
 
 
-def test_image_generation_requires_access_token(tmp_path, monkeypatch):
+def test_offline_image_fallback_does_not_require_paid_access_token(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
     monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
@@ -337,7 +346,8 @@ def test_image_generation_requires_access_token(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "expected-token")
     response = client.post("/api/images", json={"prompt": "A cinematic mountain"})
-    assert response.status_code == 403
+    assert response.status_code == 200
+    assert response.json()["provider"] == "SINTU Procedural Art (offline)"
 
 
 def test_image_generation_endpoint_contract(tmp_path, monkeypatch):

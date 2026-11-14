@@ -290,10 +290,17 @@ def restore_backup(archive_path: str | Path, data_dir: str | Path, *, app_stoppe
                             shutil.copyfileobj(member, output, 1024 * 1024)
                         output.flush()
                         os.fsync(output.fileno())
-                    # Hard-link publication is atomic and never overwrites a racing file.
-                    os.link(temporary_media, target)
-                    temporary_media.unlink(missing_ok=True)
+                    # Exclusive creation is portable to Android/Termux, where os.link may be unavailable.
+                    # It also guarantees that a racing file is never overwritten.
+                    descriptor = os.open(
+                        target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+                    )
                     added_media_paths.append(target)
+                    with os.fdopen(descriptor, "wb") as published:
+                        with temporary_media.open("rb") as source:
+                            shutil.copyfileobj(source, published, 1024 * 1024)
+                        published.flush()
+                        os.fsync(published.fileno())
                     added_media += 1
                 except FileExistsError:
                     skipped_media += 1
