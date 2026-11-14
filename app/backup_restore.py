@@ -17,6 +17,8 @@ MEDIA_DIRS = {"generated_images", "generated_ai_videos", "generated_audio", "gen
 DATABASE_MEMBERS = {
     "database/sintu_studio.db": ("sintu_studio.db", {"tasks", "admin_users", "security_audit", "app_settings", "content_calendar"}),
     "database/sintu_earnings.sqlite3": ("sintu_earnings.sqlite3", {"earning_records", "earning_targets"}),
+    # Optional for backward compatibility with older archives; protects worker/checker run history.
+    "database/production_runtime.sqlite3": ("production_runtime.sqlite3", {"production_runs", "production_steps"}),
 }
 DATABASE_MEMBER = "database/sintu_studio.db"
 
