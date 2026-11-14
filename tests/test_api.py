@@ -262,17 +262,24 @@ def test_render_capabilities_list_export_profiles(tmp_path, monkeypatch):
     assert profiles["quality"] == ["standard", "high", "maximum"]
 
 
-def test_voiceover_is_disabled_by_default(tmp_path, monkeypatch):
+def test_paid_voiceover_is_disabled_by_default_but_local_tts_remains_available(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.delenv("ENABLE_PAID_MEDIA_GENERATION", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "test-token")
     info = client.get("/api/voice/capabilities")
     assert info.status_code == 200
-    assert info.json()["available"] is False
-    result = client.post("/api/voice", json={"text": "Namaste", "voice": "alloy"},
+    capabilities = info.json()
+    assert capabilities["enabled_by_admin"] is False
+    assert capabilities["available"] is capabilities["local_available"]
+    if capabilities["local_available"]:
+        monkeypatch.setattr(main, "generate_voiceover", lambda text, voice: {
+            "audio_id": "f" * 32, "url": "/api/audio/" + "f" * 32,
+            "format": "WAV", "voice": voice, "size_bytes": 123,
+        })
+    result = client.post("/api/voice", json={"text": "नमस्ते", "voice": "alloy"},
                          headers={"X-Media-Token": "test-token"})
-    assert result.status_code == 503
+    assert result.status_code == (200 if capabilities["local_available"] else 503)
 
 
 def test_voiceover_invalid_voice_is_rejected(tmp_path, monkeypatch):
