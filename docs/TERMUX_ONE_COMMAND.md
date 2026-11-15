@@ -6,12 +6,14 @@ Run inside the official Termux app (Android):
 pkg install -y curl && curl -fsSL https://raw.githubusercontent.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/main/scripts/termux_one_command.sh -o "$TMPDIR/sintu-install.sh" && bash "$TMPDIR/sintu-install.sh"
 ```
 
-On the first run, the installer prints the generated admin username and password once. Save them privately; the password is not printed again on later runs.\n\nThe installer is idempotent: it installs Termux packages, clones or fast-forward-updates the selected branch, creates an isolated `.venv`, installs the repository's declared Python requirements, creates a private `.env` only when missing, checks FFmpeg/FFprobe, compiles Python modules and starts Uvicorn on `127.0.0.1:8000`. It preserves existing `.env` and project data. When the Termux `llama-cpp` package is available, it can select and download an official Qwen GGUF model based on detected RAM/free storage and start a loopback llama.cpp server; if package, network, RAM or storage checks fail, the studio install continues without it.
+On the first run, the installer prints the generated admin username and password once. Save them privately; the password is not printed again on later runs.
+
+The installer is idempotent: it installs Termux packages, clones or fast-forward-updates the selected branch, creates an isolated `.venv`, installs the repository's declared Python requirements, creates a private `.env` only when missing, checks FFmpeg/FFprobe, compiles Python modules and starts Uvicorn on `127.0.0.1:8000`. It preserves existing `.env` and project data. When the Termux `llama-cpp` package is available, it can select and download an official Qwen GGUF model based on detected RAM/free storage and start a loopback llama.cpp server; if package, network, RAM or storage checks fail, the studio install continues without it.
 
 ## Important limits
 
-- This installs the application and available local media utilities; it does not magically install a compatible local LLM or ComfyUI model. Hardware, Android build support, model storage and RAM determine whether those engines can run.
-- Ollama is not assumed to be available as a supported Termux package. Configure a reachable local inference endpoint/model only after verifying device compatibility.
+- This installs the application and available local media utilities. It also attempts to install Termux `llama-cpp` and download a Qwen GGUF model when the package is available and available RAM/storage meet safe thresholds. This optional step can be skipped when the package or network is unavailable. ComfyUI workflows and image/video models still require separate compatible setup.
+- Ollama is not assumed to be available as a supported Termux package. The local llama.cpp server uses `127.0.0.1:8080`; SINTU detects it automatically. If the installer skips it, configure a compatible local model endpoint after verifying device compatibility.
 - YouTube/Meta/TikTok publishing requires the owner's developer app credentials, OAuth consent and platform permissions. The installer never fabricates credentials or publishes without authorization.
 - The generated admin password is in the new `.env`; keep it private. If the app's current auth bootstrap does not print credentials, inspect `.env` locally.
 - The app is bound to localhost, not exposed to public networks.
