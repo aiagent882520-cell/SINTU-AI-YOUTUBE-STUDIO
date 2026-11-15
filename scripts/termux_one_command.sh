@@ -244,7 +244,7 @@ if [ -f "$LOG_DIR/media-smoke-path.txt" ]; then
   SMOKE_VIDEO_PATH="$(cat "$LOG_DIR/media-smoke-path.txt")"
 fi
 if command -v espeak-ng >/dev/null 2>&1 || command -v espeak >/dev/null 2>&1; then
-  if [ ! -f "$LOG_DIR/media-smoke-success" ] || [ "\${SINTU_FORCE_MEDIA_SMOKE:-false}" = "true" ]; then
+  if [ ! -f "$LOG_DIR/media-smoke-success" ] || [ "${SINTU_FORCE_MEDIA_SMOKE:-false}" = "true" ]; then
     say "Running one real offline Hindi video render and black-frame validation"
     if .venv/bin/python scripts/live_e2e.py --offline-video \
       --topic "भारत की ऐतिहासिक विरासत का सिनेमाई दृश्य" \
