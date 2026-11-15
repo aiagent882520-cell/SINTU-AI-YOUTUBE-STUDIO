@@ -3,10 +3,10 @@
 Run inside the official Termux app (Android):
 
 ```bash
-pkg install -y curl && curl -fsSL https://raw.githubusercontent.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/feat/one-command-termux-production-bootstrap/scripts/termux_one_command.sh -o "$TMPDIR/sintu-install.sh" && bash "$TMPDIR/sintu-install.sh"
+pkg install -y curl && curl -fsSL https://raw.githubusercontent.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/main/scripts/termux_one_command.sh -o "$TMPDIR/sintu-install.sh" && bash "$TMPDIR/sintu-install.sh"
 ```
 
-The installer is idempotent: it installs Termux packages, clones or fast-forward-updates the selected branch, creates an isolated `.venv`, installs the repository's declared Python requirements, creates a private `.env` only when missing, checks FFmpeg/FFprobe, compiles Python modules and starts Uvicorn on `127.0.0.1:8000`. It preserves existing `.env` and project data.
+On the first run, the installer prints the generated admin username and password once. Save them privately; the password is not printed again on later runs.\n\nThe installer is idempotent: it installs Termux packages, clones or fast-forward-updates the selected branch, creates an isolated `.venv`, installs the repository's declared Python requirements, creates a private `.env` only when missing, checks FFmpeg/FFprobe, compiles Python modules and starts Uvicorn on `127.0.0.1:8000`. It preserves existing `.env` and project data.
 
 ## Important limits
 
