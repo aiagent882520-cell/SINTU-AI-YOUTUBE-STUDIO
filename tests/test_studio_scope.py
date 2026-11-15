@@ -42,3 +42,24 @@ def test_every_format_preset_routes_every_selected_role_to_a_stage():
         plan = production_plan(item["id"])
         routed = {pair["worker"] for stage in plan["pipeline"] for pair in stage["worker_checker_pairs"]}
         assert set(item["roles"]).issubset(routed), item["id"]
+
+
+def test_management_hierarchy_has_five_senior_agents_and_external_chatgpt_supervisor():
+    registry = agent_registry()
+    hierarchy = registry["management_hierarchy"]
+    assert registry["senior_manager_total"] == 5
+    assert hierarchy["top_supervisor"]["name"] == "ChatGPT Supervisor"
+    assert hierarchy["top_supervisor"]["local_execution"] is False
+    assert [item["name"] for item in hierarchy["senior_managers"]] == [
+        "HR Agent", "Manager Agent", "GM Agent", "HO Agent", "Owner Agent"
+    ]
+
+
+def test_every_named_video_feature_has_its_own_checker_pair():
+    from app.management_hierarchy import FEATURE_CHECKER_PAIRS
+    registry = agent_registry()
+    available = {pair["specialist"]: pair["checker"] for pair in registry["checker_pairs"]}
+    for item in FEATURE_CHECKER_PAIRS:
+        assert item["agent"] in available
+        assert item["checker"] == available[item["agent"]]
+    assert registry["feature_checker_count"] == len(FEATURE_CHECKER_PAIRS)
