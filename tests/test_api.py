@@ -64,7 +64,10 @@ def test_installable_app_shell(tmp_path, monkeypatch):
     assert 'rel="manifest"' in page.text
     assert 'id="adminBackupCreate"' in page.text
     assert 'id="adminBackups"' in page.text
-    assert 'navigator.serviceWorker.register("/sw.js")' in page.text
+    assert '<script src="/static/register-sw.js"></script>' in page.text
+    service_worker_script = client.get("/static/register-sw.js")
+    assert service_worker_script.status_code == 200
+    assert 'navigator.serviceWorker.register("/sw.js")' in service_worker_script.text
     manifest = client.get("/static/manifest.json")
     assert manifest.status_code == 200
     assert manifest.json()["display"] == "standalone"
