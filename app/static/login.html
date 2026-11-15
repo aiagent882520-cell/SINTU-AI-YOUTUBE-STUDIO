@@ -8,6 +8,4 @@
 </style></head>
 <body><main class="card"><img src="/static/brand-logo.svg" alt="SINTU AI YOUTUBE STUDIO" style="display:block;width:min(100%,300px);height:150px;object-fit:contain;margin:0 auto 12px"><div class="brand">SINTU AI YOUTUBE STUDIO</div><h1>Admin Login</h1><p>Apne private studio dashboard mein sign in karein.</p>
 <form id="login"><label for="username">Username</label><input id="username" autocomplete="username" required maxlength="80"><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required maxlength="256"><button id="submit" type="submit">Secure Login</button><p id="message" role="status" aria-live="polite"></p></form></main>
-<script>
-document.getElementById("login").addEventListener("submit",async e=>{e.preventDefault();const b=document.getElementById("submit"),m=document.getElementById("message");b.disabled=true;m.textContent="Checking credentials…";try{const r=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:document.getElementById("username").value,password:document.getElementById("password").value})});const d=await r.json();if(!r.ok)throw new Error(d.detail||"Login failed");location.replace("/");}catch(err){m.textContent=err.message;}finally{b.disabled=false;}});
-</script></body></html>
+<script src="/static/login.js"></script></body></html>
