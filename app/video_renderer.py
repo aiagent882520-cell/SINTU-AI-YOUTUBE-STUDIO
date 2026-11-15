@@ -137,6 +137,66 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
             "frame_count": frame_count, "fps": actual_fps,
             "resolution": f"{width}x{height}", "video_codec": codec, "audio": has_audio}
 
+
+def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> dict:
+    """Fail closed before upload if an MP4 is corrupt, truncated, or not a supported render."""
+    path = Path(path)
+    if path.is_symlink() or not path.is_file():
+        raise RenderFailed("Upload ke liye MP4 missing hai ya unsafe file hai.")
+    try:
+        size = path.stat().st_size
+    except OSError:
+        raise RenderFailed("Upload MP4 file read nahi ho sakti.") from None
+    if size <= 0 or size > max_bytes:
+        raise RenderFailed("Upload MP4 empty hai ya 512 MB safety limit se badi hai.")
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        raise RendererUnavailable("Upload se pehle MP4 verify karne ke liye FFprobe required hai.")
+    try:
+        result = subprocess.run(
+            [ffprobe, "-v", "error", "-count_frames", "-show_entries",
+             "format=format_name,duration:stream=codec_type,codec_name,width,height,duration,nb_read_frames,avg_frame_rate",
+             "-of", "json", str(path)],
+            capture_output=True, text=True, timeout=45, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise RenderFailed("Upload MP4 verification fail ya timeout ho gaya.") from None
+    if result.returncode != 0:
+        raise RenderFailed("Upload MP4 corrupt hai; FFprobe verify nahi kar saka.")
+    try:
+        import json
+        metadata = json.loads(result.stdout)
+        streams = metadata.get("streams", [])
+        video = next(item for item in streams if item.get("codec_type") == "video")
+        fmt = metadata.get("format", {})
+        duration = float(fmt.get("duration", 0))
+        video_duration = float(video.get("duration", 0))
+        frame_count = int(video.get("nb_read_frames", 0))
+        width, height = int(video.get("width", 0)), int(video.get("height", 0))
+        codec = str(video.get("codec_name", "")).lower()
+        names = str(fmt.get("format_name", "")).lower().split(",")
+        numerator, denominator = (int(part) for part in str(video.get("avg_frame_rate", "0/1")).split("/", 1))
+        fps = numerator / denominator if denominator else 0
+    except (AttributeError, TypeError, ValueError, StopIteration, json.JSONDecodeError, ZeroDivisionError):
+        raise RenderFailed("Upload MP4 mein valid video stream/frame metadata nahi hai.") from None
+    if not any(name in {"mov", "mp4", "m4a", "3gp", "3g2", "mj2"} for name in names):
+        raise RenderFailed("Upload file MP4 container nahi hai.")
+    if codec != "h264" or (width, height) not in set(OUTPUT_PROFILES.values()):
+        raise RenderFailed("Upload MP4 H.264 ya supported SINTU resolution mein nahi hai.")
+    if not math.isfinite(duration) or duration <= 0 or not math.isfinite(video_duration) or video_duration <= 0:
+        raise RenderFailed("Upload MP4 ki duration invalid hai.")
+    if not math.isfinite(fps) or fps not in {24, 30, 60}:
+        raise RenderFailed("Upload MP4 ka frame rate supported profile se match nahi karta.")
+    minimum_frames = max(1, math.floor(duration * fps * 0.95))
+    if frame_count < minimum_frames or abs(duration - video_duration) > max(0.5, 2 / fps):
+        raise RenderFailed("Upload MP4 truncated hai: actual frames aur video duration match nahi karte.")
+    return {
+        "verified": True, "size_bytes": size, "duration_seconds": duration,
+        "video_duration_seconds": video_duration, "frame_count": frame_count,
+        "fps": fps, "resolution": f"{width}x{height}", "video_codec": codec,
+    }
+
+
 def _font(size: int):
     candidates = [
         Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
