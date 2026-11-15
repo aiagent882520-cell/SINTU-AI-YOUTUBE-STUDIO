@@ -13,6 +13,7 @@ The installer is idempotent: it installs Termux packages, clones or fast-forward
 ## Important limits
 
 - This installs the application and available local media utilities. It also attempts to install Termux `llama-cpp` and download a Qwen GGUF model when the package is available and available RAM/storage meet safe thresholds. This optional step can be skipped when the package or network is unavailable. ComfyUI workflows and image/video models still require separate compatible setup.
+- The installer also attempts the Termux `espeak` package (the Termux package name for eSpeak NG) as a free Hindi TTS fallback. It is synthetic speech, not a natural neural voice; review pronunciation before publishing.
 - Ollama is not assumed to be available as a supported Termux package. The local llama.cpp server uses `127.0.0.1:8080`; SINTU detects it automatically. If the installer skips it, configure a compatible local model endpoint after verifying device compatibility.
 - YouTube/Meta/TikTok publishing requires the owner's developer app credentials, OAuth consent and platform permissions. The installer never fabricates credentials or publishes without authorization.
 - The generated admin password is in the new `.env`; keep it private. If the app's current auth bootstrap does not print credentials, inspect `.env` locally.
