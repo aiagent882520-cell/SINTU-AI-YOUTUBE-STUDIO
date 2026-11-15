@@ -58,7 +58,9 @@
       <p id="providerStatus" class="muted">AI provider status checking…</p>
     </section>
     <section class="panel">
-      <div class="panel-head"><div><h2>MP4 Storyboard Renderer</h2><p>AI clips ko order mein join karein, ya still-image storyboard ke saath voiceover, music aur transitions se text-free MP4 banayein.</p></div></div>
+      <div class="panel-head"><div><h2>MP4 Storyboard Renderer</h2><p>AI clips, still-image scenes aur local 2D character animation ko voiceover, music, SFX, subtitles aur camera movement ke saath final MP4 mein banayein.</p></div></div>
+      <label for="renderFormat">Video format</label>
+      <select id="renderFormat"><option value="youtube-shorts">YouTube Shorts</option><option value="youtube-long">Long-form YouTube</option><option value="2d-cartoon">2D Cartoon Animation</option><option value="story-animation">2D Story Animation</option></select>
       <label for="renderTitle">Video title</label>
       <input id="renderTitle" maxlength="100" placeholder="Video ka title">
       <label for="renderScenes">Scenes (har line ek scene)</label>
