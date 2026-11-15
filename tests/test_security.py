@@ -15,7 +15,9 @@ def test_same_origin_requires_matching_host_and_effective_port():
     assert same_origin_request("https://studio.example.test:443", "studio.example.test")
     assert same_origin_request("http://localhost:8000", "localhost:8000")
     assert not same_origin_request("https://evil.example.test", "studio.example.test")
-    assert not same_origin_request("http://studio.example.test", "studio.example.test")
+    assert same_origin_request("http://studio.example.test", "studio.example.test")
+    assert not same_origin_request("http://studio.example.test", "studio.example.test", "https")
+    assert not same_origin_request("https://studio.example.test", "studio.example.test", "http")
     assert not same_origin_request("javascript:alert(1)", "studio.example.test")
     assert not same_origin_request("https://studio.example.test:444", "studio.example.test")
 
