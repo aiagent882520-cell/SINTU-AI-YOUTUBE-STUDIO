@@ -38,7 +38,7 @@ from app.comfyui_client import image_workflow_status, video_workflow_status
 from app.image_generator import IMAGE_DIR, generate_image, image_status
 from app.voice_generator import AUDIO_DIR, generate_voiceover
 from app.video_renderer import render_storyboard
-from app.music_generator import generate_music, music_status
+from app.music_generator import MUSIC_DIR, generate_music, music_status
 from app.production_runtime import REVIEWERS, attach_render_result, create_run, execute_run, get_run
 from app.video_generator import AI_VIDEO_DIR, generate_video, video_status
 from app.video_renderer import OUTPUT_DIR, render_ai_clips
@@ -203,7 +203,7 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         f"subtle suspense, warm strings and deep percussion, topic: {clean_topic}",
         duration=duration,
     )
-    music_path = Path(__file__).resolve().parents[1] / "generated_music" / f"{music['music_id']}.wav"
+    music_path = MUSIC_DIR / (music["music_id"] + ".wav")
     if not music_path.is_file() or music_path.stat().st_size <= 0:
         raise RuntimeError("Local cinematic background soundtrack was not saved.")
 
