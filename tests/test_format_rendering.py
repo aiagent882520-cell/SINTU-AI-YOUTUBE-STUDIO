@@ -16,7 +16,7 @@ def test_all_sixty_formats_have_a_render_profile_and_explicit_capability():
         assert profile["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
         assert profile["burned_in_text"] is False
         assert isinstance(profile["generic_export_available"], bool)
-        assert profile["native_generation_ready"] is False
+        assert profile["native_generation_ready"] is (profile["format_id"] in {"2d-cartoon", "story-animation"})
 
 
 def test_specialized_immersive_and_virtual_production_formats_are_not_overclaimed():
@@ -34,3 +34,13 @@ def test_short_vertical_formats_default_to_vertical_export():
 def test_unknown_format_has_no_render_profile():
     with pytest.raises(KeyError):
         format_render_profile("not-a-real-format")
+
+
+
+def test_2d_animation_formats_generate_from_scene_prompts_without_source_media():
+    for format_id in ("2d-cartoon", "story-animation"):
+        profile = format_render_profile(format_id)
+        assert profile["generic_export_available"] is True
+        assert profile["native_generation_ready"] is True
+        assert "no input images required" in profile["required_source"]
+        assert "SINTU Procedural 2D Animation" in profile["engine"]
