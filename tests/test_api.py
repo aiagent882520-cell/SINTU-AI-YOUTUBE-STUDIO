@@ -533,6 +533,9 @@ def test_renderer_builds_music_mix_and_fade_filter(tmp_path, monkeypatch):
     music = tmp_path / "music.mp3"
     voice.write_bytes(b"voice")
     music.write_bytes(b"music")
+    from PIL import Image
+    scene = tmp_path / "scene.png"
+    Image.new("RGB", (160, 284), (80, 120, 180)).save(scene)
     captured = {}
     def fake_run(command, **kwargs):
         captured["command"] = command
@@ -545,7 +548,7 @@ def test_renderer_builds_music_mix_and_fade_filter(tmp_path, monkeypatch):
     monkeypatch.setattr(video_renderer, "_verify_rendered_output", lambda *args, **kwargs: {"duration_seconds": 6.0})
     result = video_renderer.render_storyboard(
         "Cinematic", ["Scene one", "Scene two"], 3,
-        audio_path=voice, music_path=music, music_volume=0.2, transition="fade",
+        image_paths=[scene, scene], audio_path=voice, music_path=music, music_volume=0.2, transition="fade",
         resolution="1920x1080", fps=24, quality="maximum"
     )
     command = captured["command"]
@@ -592,6 +595,9 @@ def test_renderer_builds_slow_zoom_filter(tmp_path, monkeypatch):
     from pathlib import Path
     output_dir = tmp_path / "videos"
     output_dir.mkdir()
+    from PIL import Image
+    scene = tmp_path / "scene.png"
+    Image.new("RGB", (160, 284), (80, 120, 180)).save(scene)
     captured = {}
     def fake_run(command, **kwargs):
         captured["command"] = command
@@ -602,7 +608,7 @@ def test_renderer_builds_slow_zoom_filter(tmp_path, monkeypatch):
     monkeypatch.setattr(video_renderer.subprocess, "run", fake_run)
     monkeypatch.setattr(video_renderer, "_verify_rendered_output", lambda *args, **kwargs: {"duration_seconds": 3.0})
     result = video_renderer.render_storyboard(
-        "Motion", ["Scene one"], 3, motion="slow-zoom-in"
+        "Motion", ["Scene one"], 3, image_paths=[scene], motion="slow-zoom-in"
     )
     command = captured["command"]
     video_filter = command[command.index("-vf") + 1]
