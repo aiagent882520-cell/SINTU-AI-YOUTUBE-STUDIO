@@ -3363,3 +3363,27 @@ def test_youtube_publish_rejects_symlinked_render(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "OUTPUT_DIR", render_dir)
     response = client.post(f"/api/admin/youtube/publish/{calendar_id}?video_id={'c' * 32}&title=Test")
     assert response.status_code == 404
+
+def test_youtube_publish_blocks_unverified_truncated_mp4_before_oauth(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    output_dir = tmp_path / "generated_videos"
+    output_dir.mkdir()
+    video_id = "a" * 32
+    (output_dir / (video_id + ".mp4")).write_bytes(b"present-but-corrupt-mp4")
+    monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    with main.db() as conn:
+        conn.execute(
+            "INSERT INTO content_calendar(title,platform,prompt,scheduled_at,status,created_at) VALUES(?,?,?,?,?,?)",
+            ("Approved test", "youtube", "Test publish gate", "2026-11-15T12:00:00+00:00", "Approved", "2026-11-15T12:00:00+00:00"),
+        )
+    monkeypatch.setattr(
+        main, "verify_publishable_mp4",
+        lambda path: (_ for _ in ()).throw(main.RenderFailed("truncated MP4")),
+    )
+    monkeypatch.setattr(main, "_youtube_access_token", lambda: pytest.fail("OAuth must not run for invalid media"))
+    response = client.post(
+        f"/api/admin/youtube/publish/1?video_id={video_id}&title=Test",
+    )
+    assert response.status_code == 409
+    assert "quality verification failed" in response.json()["detail"].lower()
+
