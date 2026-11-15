@@ -1,6 +1,8 @@
 """Assemble clean MP4 videos with optional audio and mandatory SINTU branding."""
 from pathlib import Path
+from functools import lru_cache
 import os
+import re
 import math
 import shutil
 import subprocess
@@ -90,6 +92,77 @@ class RendererUnavailable(Exception):
 
 class RenderFailed(Exception):
     pass
+
+
+
+@lru_cache(maxsize=8)
+def _ffmpeg_supports_subtitles(ffmpeg: str) -> bool:
+    try:
+        result = subprocess.run(
+            [ffmpeg, "-hide_banner", "-filters"],
+            capture_output=True, text=True, timeout=15, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0 and bool(re.search(r"\bsubtitles\b", result.stdout + result.stderr))
+
+
+def _srt_timestamp(seconds: float) -> str:
+    milliseconds = max(0, int(round(seconds * 1000)))
+    hours, remainder = divmod(milliseconds, 3_600_000)
+    minutes, remainder = divmod(remainder, 60_000)
+    whole_seconds, millis = divmod(remainder, 1000)
+    return f"{hours:02d}:{minutes:02d}:{whole_seconds:02d},{millis:03d}"
+
+
+def _create_subtitle_track(work: Path, subtitles: list[str] | None,
+                           durations: list[float], height: int,
+                           ffmpeg: str) -> tuple[Path | None, str | None]:
+    """Create a timed SRT track and an FFmpeg libass filter for explicit user captions."""
+    subtitles = subtitles or []
+    if not subtitles or not any(isinstance(line, str) and line.strip() for line in subtitles):
+        return None, None
+    if len(subtitles) != len(durations):
+        raise ValueError("Subtitle lines ki sankhya timeline scenes/clips ke barabar honi chahiye.")
+    if any(not isinstance(line, str) or len(line) > 1000 for line in subtitles):
+        raise ValueError("Har subtitle line text hona chahiye aur 1000 characters se chhoti honi chahiye.")
+    if not _ffmpeg_supports_subtitles(ffmpeg):
+        raise RendererUnavailable(
+            "Burned-in subtitles ke liye FFmpeg ka libass subtitles filter chahiye. "
+            "Termux mein libass aur fontconfig install karke FFmpeg support check karein."
+        )
+    cues = []
+    cursor = 0.0
+    cue_index = 1
+    for line, duration in zip(subtitles, durations):
+        duration = float(duration)
+        if not math.isfinite(duration) or duration <= 0:
+            raise ValueError("Subtitle timing duration positive aur finite honi chahiye.")
+        clean = line.replace("\r", " ").replace("{", "(").replace("}", ")")
+        clean = clean.replace("<", "‹").replace(">", "›").strip()
+        if clean:
+            wrapped = textwrap.fill(clean, width=42, break_long_words=False, break_on_hyphens=False)
+            cues.append(
+                f"{cue_index}\n{_srt_timestamp(cursor)} --> {_srt_timestamp(cursor + duration)}\n{wrapped}\n"
+            )
+            cue_index += 1
+        cursor += duration
+    if not cues:
+        return None, None
+    subtitle_path = work / "sintu-subtitles.srt"
+    subtitle_path.write_text("\n".join(cues), encoding="utf-8")
+    raw_path = subtitle_path.as_posix().replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace(",", "\\,")
+    font = re.sub(r"[^A-Za-z0-9 _-]", "", os.getenv("SINTU_SUBTITLE_FONT", "Noto Sans Devanagari")).strip()
+    if not font:
+        font = "Noto Sans Devanagari"
+    font_size = max(22, round(height * 0.027))
+    margin = max(28, round(height * 0.055))
+    style = (
+        f"FontName={font},FontSize={font_size},PrimaryColour=&H00FFFFFF,"
+        "OutlineColour=&H80000000,BackColour=&H50000000,BorderStyle=1,"
+        f"Outline=2,Shadow=1,Alignment=2,MarginV={margin},WrapStyle=2"
+    )
+    return subtitle_path, f"subtitles=filename='{raw_path}':force_style='{style}'"
 
 
 def _verify_rendered_output(path: Path, expected_width: int, expected_height: int,
