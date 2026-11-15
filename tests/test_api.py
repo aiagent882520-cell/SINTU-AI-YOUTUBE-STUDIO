@@ -3480,3 +3480,19 @@ def test_dashboard_exposes_agent_operations_panel(tmp_path, monkeypatch):
     script = client.get("/static/app.js")
     assert script.status_code == 200
     assert "/api/admin/agent-system/status" in script.text
+
+
+
+def test_application_firewall_sets_browser_security_headers(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.get("/api/health")
+    assert response.status_code == 200
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+    assert response.headers["permissions-policy"] == "camera=(), microphone=(), geolocation=()"
+    csp = response.headers["content-security-policy"]
+    assert "default-src 'self'" in csp
+    assert "object-src 'none'" in csp
+    assert "frame-ancestors 'none'" in csp
+    assert "script-src 'self'" in csp
