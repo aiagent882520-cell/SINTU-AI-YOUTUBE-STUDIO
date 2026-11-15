@@ -85,15 +85,17 @@ class RenderFailed(Exception):
 
 
 def _verify_rendered_output(path: Path, expected_width: int, expected_height: int,
-                            expected_duration: float, require_audio: bool | None = None) -> dict:
-    """Verify the finished MP4 on disk before exposing it to the user."""
+                            expected_duration: float, require_audio: bool | None = None,
+                            expected_fps: int = 30) -> dict:
+    """Verify real video frames and video-stream duration, not just container/audio duration."""
     ffprobe = shutil.which("ffprobe")
     if not ffprobe:
         raise RendererUnavailable("Final video verification ke liye FFprobe installed hona chahiye.")
     try:
         result = subprocess.run(
-            [ffprobe, "-v", "error", "-show_entries",
-             "format=format_name,duration:stream=codec_type,codec_name,width,height",
+            [ffprobe, "-v", "error", "-count_frames", "-select_streams", "v:0",
+             "-show_entries",
+             "format=format_name,duration:stream=codec_type,codec_name,width,height,duration,nb_read_frames,avg_frame_rate",
              "-of", "json", str(path)],
             capture_output=True, text=True, timeout=30, check=False,
         )
@@ -108,22 +110,32 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         video = next(item for item in streams if item.get("codec_type") == "video")
         fmt = metadata.get("format", {})
         duration = float(fmt.get("duration", 0))
+        video_duration = float(video.get("duration", 0))
+        frame_count = int(video.get("nb_read_frames", 0))
         width, height = int(video.get("width", 0)), int(video.get("height", 0))
         codec = str(video.get("codec_name", "")).lower()
         names = str(fmt.get("format_name", "")).lower().split(",")
-        has_audio = any(item.get("codec_type") == "audio" for item in streams)
-    except (AttributeError, TypeError, ValueError, StopIteration, json.JSONDecodeError):
-        raise RenderFailed("Final MP4 mein valid video stream/duration metadata nahi hai.") from None
+        has_audio = any(item.get("codec_type") == "audio" for item in metadata.get("streams", []))
+        frame_rate_num, frame_rate_den = (int(part) for part in str(video.get("avg_frame_rate", "0/1")).split("/", 1))
+        actual_fps = frame_rate_num / frame_rate_den if frame_rate_den else 0
+    except (AttributeError, TypeError, ValueError, StopIteration, json.JSONDecodeError, ZeroDivisionError):
+        raise RenderFailed("Final MP4 mein valid video stream/frame metadata nahi hai.") from None
     if not any(name in {"mov", "mp4", "m4a", "3gp", "3g2", "mj2"} for name in names):
         raise RenderFailed("Final output MP4 container nahi hai.")
     if codec != "h264" or (width, height) != (expected_width, expected_height):
         raise RenderFailed("Final video codec ya resolution expected profile se match nahi karta.")
     if not math.isfinite(duration) or duration <= 0 or abs(duration - expected_duration) > max(1.0, expected_duration * 0.03):
-        raise RenderFailed("Final video duration expected timeline se match nahi karti.")
+        raise RenderFailed("Final MP4 container duration expected timeline se match nahi karti.")
+    minimum_frames = max(1, math.floor(expected_duration * expected_fps * 0.95))
+    if frame_count < minimum_frames or not math.isfinite(video_duration) or video_duration < expected_duration - (2 / expected_fps):
+        raise RenderFailed("Final video mein actual frames ya video-stream duration expected timeline se kam hai.")
+    if not math.isfinite(actual_fps) or abs(actual_fps - expected_fps) > 0.1:
+        raise RenderFailed("Final video frame rate expected FPS se match nahi karta.")
     if require_audio is not None and has_audio != require_audio:
         raise RenderFailed("Final video audio stream expected setting se match nahi karti.")
-    return {"duration_seconds": duration, "resolution": f"{width}x{height}",
-            "video_codec": codec, "audio": has_audio}
+    return {"duration_seconds": duration, "video_duration_seconds": video_duration,
+            "frame_count": frame_count, "fps": actual_fps,
+            "resolution": f"{width}x{height}", "video_codec": codec, "audio": has_audio}
 
 def _font(size: int):
     candidates = [
@@ -307,7 +319,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             if completed.returncode != 0 or not temporary_output_path.is_file():
                 detail = (completed.stderr or "FFmpeg render failed")[-1200:]
                 raise RenderFailed(detail)
-            _verify_rendered_output(temporary_output_path, width, height, duration, require_audio=bool(audio_path or music_path))
+            _verify_rendered_output(temporary_output_path, width, height, duration, require_audio=bool(audio_path or music_path), expected_fps=fps)
             os.replace(temporary_output_path, output_path)
             temporary_output_path = None
     except subprocess.TimeoutExpired:
@@ -500,7 +512,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             if completed.returncode != 0 or not temporary_output_path.is_file():
                 detail = (completed.stderr or "FFmpeg AI clip assembly failed")[-1600:]
                 raise RenderFailed(detail)
-            _verify_rendered_output(temporary_output_path, width, height, total_duration, require_audio=True)
+            _verify_rendered_output(temporary_output_path, width, height, total_duration, require_audio=True, expected_fps=fps)
             os.replace(temporary_output_path, output_path)
             temporary_output_path = None
     except subprocess.TimeoutExpired:
