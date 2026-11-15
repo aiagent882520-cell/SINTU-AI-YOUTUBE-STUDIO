@@ -211,6 +211,8 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
     try:
         team = format_team(run["format_id"])
         pairs = [item for item in team if item.get("role_type") == "specialist"]
+        owner_pair = next((item for item in pairs if item["name"] == "Owner Agent"), None)
+        pairs = [item for item in pairs if item["name"] != "Owner Agent"]
         deliverables: dict[str, str] = {}
         management_reports: dict[str, str] = {}
         sequence = 0
@@ -311,6 +313,61 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 _set_run(run_id, "paused", current_role=reviewer,
                          error=f"Final reviewer failed: {reviewer}. Production run paused for correction.")
                 return
+        # Owner Agent runs after all five independent final reviewers so it can
+        # evaluate their actual reports. Its checker is separate, and it cannot
+        # replace the authenticated human owner's publishing approval.
+        if owner_pair:
+            owner_prompt = (
+                "You are the SINTU Owner Agent. Review the complete production package, "
+                "the HR/Manager/GM/HO reports, and every final reviewer report below. "
+                "Return a concise release-readiness recommendation with risks, unresolved "
+                "items and a clear READY or NOT READY conclusion. Never claim the video "
+                "was uploaded. Never treat your recommendation as human owner approval.\\n"
+                f"Topic: {run['topic']}\\n"
+                "Production deliverables: " + json.dumps(deliverables, ensure_ascii=False) + "\\n"
+                "Senior management reports: " + json.dumps(management_reports, ensure_ascii=False) + "\\n"
+                "Final reviewer reports: " + json.dumps(review_results, ensure_ascii=False)
+            )
+            owner_output = ""
+            owner_verdict = None
+            for attempt in range(MAX_REVISION_ATTEMPTS + 1):
+                current_prompt = owner_prompt
+                if attempt:
+                    current_prompt += (
+                        "\\nREVISION REQUIRED: address the independent checker's findings.\\n"
+                        "Issues: " + json.dumps(owner_verdict["issues"], ensure_ascii=False) + "\\n"
+                        "Instructions: " + json.dumps(owner_verdict["revision_instructions"], ensure_ascii=False) + "\\n"
+                        "Previous owner report: " + owner_output
+                    )
+                owner_worker = generate_text(current_prompt, "content", "local")
+                owner_output = owner_worker["output"]
+                sequence += 1
+                _save_step(run_id, sequence, "Owner Agent", "builder", "completed",
+                           current_prompt, owner_output, attempts=attempt + 1)
+                owner_checker_prompt = (
+                    "Act as the independent Owner Agent Checker. Verify that the owner report "
+                    "uses the actual management and final reviewer evidence, identifies blockers, "
+                    "does not invent a rendered/uploaded state, and does not bypass human approval. "
+                    "Return ONLY JSON with decision (PASS or FAIL), evidence (array), issues (array), "
+                    "and revision_instructions (array).\\n"
+                    "Owner report: " + owner_output + "\\n"
+                    "Reviewer evidence: " + json.dumps(review_results, ensure_ascii=False)
+                )
+                owner_checked = generate_text(owner_checker_prompt, "content", "local")
+                owner_verdict = _checker_payload(owner_checked["output"])
+                sequence += 1
+                _save_step(run_id, sequence, "Owner Agent Checker", "checker",
+                           owner_verdict["decision"].lower(), owner_checker_prompt,
+                           owner_checked["output"], owner_verdict["evidence"],
+                           owner_verdict["issues"], attempts=attempt + 1)
+                if owner_verdict["decision"] == "PASS":
+                    management_reports["Owner Agent"] = owner_output
+                    break
+            if not owner_verdict or owner_verdict["decision"] != "PASS":
+                _set_run(run_id, "paused", current_role="Owner Agent Checker",
+                         error="Owner Agent report failed its independent checker; human review required.")
+                return
+
         result = {
             "format": selected,
             "deliverables": deliverables,
