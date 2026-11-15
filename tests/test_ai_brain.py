@@ -47,7 +47,8 @@ def test_explicit_provider_without_key_fails(monkeypatch):
 def test_video_generation_prompt_enforces_hindi_and_no_text_overlay(monkeypatch):
     monkeypatch.setenv("AI_PROVIDER", "local")
     monkeypatch.setattr(ai_brain, "_active_local_backend", lambda: {
-        "backend": "ollama", "model_available": True, "model": "qwen2.5:3b"
+        "backend": "ollama", "service_running": True, "model_available": True,
+        "model": "qwen2.5:3b", "base_url": "http://127.0.0.1:11434"
     })
     captured = {}
 
