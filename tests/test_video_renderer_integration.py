@@ -265,3 +265,29 @@ def test_storyboard_renderer_mixes_procedural_sound_effects(tmp_path, monkeypatc
     )
     assert probe.returncode == 0
     assert "audio" in probe.stdout
+
+
+
+def test_ai_clip_renderer_mixes_procedural_scene_sound_effects(tmp_path, monkeypatch):
+    ffmpeg, ffprobe = _ffmpeg_tools()
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
+    source = _make_source_clip(tmp_path / "source-sfx.mp4")
+
+    result = video_renderer.render_ai_clips(
+        [source], scene_descriptions=["किले का भारी दरवाज़ा खुलता है"],
+        sound_effects_enabled=True, sound_effects_volume=0.2,
+        resolution="720x1280", fps=24, quality="standard", transition="cut",
+    )
+
+    output = tmp_path / result["filename"]
+    assert output.is_file() and output.stat().st_size > 1000
+    assert result["sound_effects"] is True
+    assert result["sound_effect_cue_count"] >= 1
+    assert "sound-effects" in result["audio"]
+    probe = subprocess.run(
+        [ffprobe, "-v", "error", "-show_entries", "stream=codec_type",
+         "-of", "csv=p=0", str(output)],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert probe.returncode == 0
+    assert "audio" in probe.stdout
