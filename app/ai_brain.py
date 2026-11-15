@@ -77,15 +77,119 @@ def _ollama_status():
             payload = json.loads(response.read().decode("utf-8"))
         names = [str(item.get("name", "")) for item in payload.get("models", [])]
         available = any(name == model or name.startswith(model + ":") for name in names)
-        return {"service_running": True, "model_available": available}
+        return {"service_running": True, "model_available": available, "model": model, "base_url": base_url}
     except Exception:
-        return {"service_running": False, "model_available": False}
+        return {"service_running": False, "model_available": False, "model": model, "base_url": base_url}
+
+
+def _local_openai_compatible_status():
+    """Probe a loopback OpenAI-compatible server (llama.cpp, LocalAI, LM Studio)."""
+    base_url = os.getenv("LOCAL_OPENAI_BASE_URL", "http://127.0.0.1:8080/v1").rstrip("/")
+    configured_model = os.getenv("LOCAL_OPENAI_MODEL", "auto").strip()
+    try:
+        from urllib.parse import urlsplit
+        parsed = urlsplit(base_url)
+        if (parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost", "::1", "host.docker.internal"}
+                or parsed.username or parsed.password or parsed.query or parsed.fragment):
+            raise ValueError("Local model endpoint must use HTTP loopback or the Docker host bridge.")
+        request = urllib.request.Request(base_url + "/models")
+        api_key = os.getenv("LOCAL_OPENAI_API_KEY", "").strip()
+        if api_key:
+            request.add_header("Authorization", "Bearer " + api_key)
+        with urllib.request.urlopen(request, timeout=0.5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        models = payload.get("data", []) if isinstance(payload, dict) else []
+        names = [str(item.get("id", "")) for item in models if isinstance(item, dict) and item.get("id")]
+        selected = names[0] if configured_model == "auto" and names else configured_model
+        available = bool(names) and (configured_model == "auto" or configured_model in names)
+        return {"service_running": True, "model_available": available,
+                "model": selected, "base_url": base_url}
+    except Exception:
+        return {"service_running": False, "model_available": False,
+                "model": configured_model, "base_url": base_url}
+
+
+def _active_local_backend():
+    """Choose a ready free local engine; never fall through to a paid provider."""
+    requested = os.getenv("LOCAL_AI_BACKEND", "auto").strip().lower()
+    if requested not in {"auto", "ollama", "openai-compatible", "llama.cpp", "llamacpp"}:
+        requested = "auto"
+    ollama = _ollama_status()
+    compatible = _local_openai_compatible_status() if requested in {"auto", "openai-compatible", "llama.cpp", "llamacpp"} else {
+        "service_running": False, "model_available": False,
+        "model": os.getenv("LOCAL_OPENAI_MODEL", "auto"),
+        "base_url": os.getenv("LOCAL_OPENAI_BASE_URL", "http://127.0.0.1:8080/v1"),
+    }
+    if requested in {"auto", "ollama"} and ollama["model_available"]:
+        return {"backend": "ollama", **ollama}
+    if requested in {"auto", "openai-compatible", "llama.cpp", "llamacpp"} and compatible["model_available"]:
+        return {"backend": "openai-compatible", **compatible}
+    if requested == "ollama":
+        return {"backend": "ollama", **ollama}
+    if requested != "auto":
+        return {"backend": "openai-compatible", **compatible}
+    return {"backend": "none",
+            "service_running": bool(ollama["service_running"] or compatible["service_running"]),
+            "model_available": False, "model": ollama.get("model"),
+            "base_url": ollama.get("base_url"),
+            "alternate_backend": compatible}
+
+
+def _generate_local(user_input: str) -> str:
+    backend = _active_local_backend()
+    if not backend["model_available"]:
+        raise ProviderNotConfigured(
+            "Free local AI model is not ready. Start Ollama with OLLAMA_MODEL, or start a loopback "
+            "OpenAI-compatible llama.cpp server at LOCAL_OPENAI_BASE_URL and set LOCAL_OPENAI_MODEL=auto. "
+            "No paid API will be used automatically."
+        )
+    if backend["backend"] == "ollama":
+        return _generate_ollama(user_input)
+    return _generate_openai_compatible(user_input, backend)
+
+
+def _generate_openai_compatible(user_input: str, backend: dict) -> str:
+    """Call a local llama.cpp/LocalAI/LM Studio OpenAI-compatible chat endpoint."""
+    base_url = backend["base_url"].rstrip("/")
+    payload = {
+        "model": backend["model"],
+        "messages": [
+            {"role": "system", "content": SYSTEM_INSTRUCTIONS},
+            {"role": "user", "content": user_input},
+        ],
+        "temperature": 0.7,
+    }
+    request = urllib.request.Request(
+        base_url + "/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    api_key = os.getenv("LOCAL_OPENAI_API_KEY", "").strip()
+    if api_key:
+        request.add_header("Authorization", "Bearer " + api_key)
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise ProviderRequestError(f"Local OpenAI-compatible server returned HTTP {exc.code}. Check the loaded model and endpoint.") from None
+    except (urllib.error.URLError, TimeoutError):
+        raise ProviderNotConfigured("Local OpenAI-compatible model server is not reachable. No paid API will be used.") from None
+    choices = data.get("choices", [])
+    message = choices[0].get("message", {}) if choices and isinstance(choices[0], dict) else {}
+    content = message.get("content", "")
+    if isinstance(content, list):
+        content = "\n".join(part.get("text", "") for part in content if isinstance(part, dict))
+    if not isinstance(content, str) or not content.strip():
+        raise ProviderRequestError("Local OpenAI-compatible server returned an empty response.")
+    return content.strip()
 
 def provider_status(selected_override=None):
     selected = (selected_override or os.getenv("AI_PROVIDER", "local")).strip().lower()
     if selected not in {"auto", "local", "openai", "gemini"}:
         selected = "auto"
-    local_status = _ollama_status()
+    local_status = _active_local_backend()
+    compatible_status = _local_openai_compatible_status()
     return {
         "selected": selected,
         "paid_upgrades_allowed": paid_upgrades_allowed(),
@@ -93,8 +197,16 @@ def provider_status(selected_override=None):
             "configured": local_status["model_available"],
             "service_running": local_status["service_running"],
             "model_available": local_status["model_available"],
-            "model": os.getenv("OLLAMA_MODEL", "qwen2.5:3b"),
-            "base_url": os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
+            "model": local_status.get("model") or os.getenv("OLLAMA_MODEL", "qwen2.5:3b"),
+            "base_url": local_status.get("base_url") or os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
+            "backend": local_status["backend"],
+            "backend_preference": os.getenv("LOCAL_AI_BACKEND", "auto"),
+            "openai_compatible": {
+                "service_running": compatible_status["service_running"],
+                "model_available": compatible_status["model_available"],
+                "model": compatible_status["model"],
+                "base_url": compatible_status["base_url"],
+            },
         },
         "openai": {
             "configured": bool(os.getenv("OPENAI_API_KEY")),
@@ -142,7 +254,7 @@ def generate_text(prompt: str, workflow: str, provider_override=None) -> dict:
     )
     try:
         if provider == "local":
-            output = _generate_ollama(user_input)
+            output = _generate_local(user_input)
         elif provider == "openai":
             from openai import OpenAI
             client = OpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=60.0, max_retries=1)

@@ -24,6 +24,15 @@ pkg upgrade -y
 # repository snapshots. Their absence must never block the studio installation.
 pkg install -y git python python-pip python-pillow python-cryptography ffmpeg openssl curl libjpeg-turbo libpng freetype clang make pkg-config
 
+# Termux packages the eSpeak NG engine under the name "espeak".
+if ! command -v espeak-ng >/dev/null 2>&1 && ! command -v espeak >/dev/null 2>&1; then
+  if pkg install -y espeak; then
+    say "Optional local Hindi eSpeak voice engine installed"
+  else
+    say "eSpeak package is unavailable on this mirror; install continues without local TTS"
+  fi
+fi
+
 say "Checking shared storage permission (optional)"
 if [ ! -d "$HOME/storage/shared" ]; then
   termux-setup-storage || true
@@ -47,7 +56,13 @@ cd "$APP_DIR"
 
 say "Creating isolated Python environment"
 if [ ! -x .venv/bin/python ]; then
-  python -m venv .venv
+  python -m venv --system-site-packages .venv
+fi
+# Termux ships native Pillow and cryptography builds as system packages. Expose
+# those ABI-compatible builds inside the venv instead of trying to compile them
+# from PyPI on Android; also repair existing isolated venvs on safe reruns.
+if [ -f .venv/pyvenv.cfg ] && grep -q '^include-system-site-packages = false' .venv/pyvenv.cfg; then
+  sed -i 's/^include-system-site-packages = false/include-system-site-packages = true/' .venv/pyvenv.cfg
 fi
 .venv/bin/python -m pip install --upgrade pip setuptools wheel
 .venv/bin/python -m pip install -r requirements.txt
@@ -93,6 +108,116 @@ else
   say "No eSpeak binary found; studio setup continues. Configure Piper or another TTS engine later."
 fi
 
+
+say "Preparing optional free local llama.cpp engine"
+if ! command -v llama-server >/dev/null 2>&1; then
+  if pkg install -y llama-cpp; then
+    say "Termux llama.cpp package installed"
+  else
+    say "llama-cpp package is unavailable on this Termux mirror; continuing without local LLM bootstrap"
+  fi
+fi
+
+if command -v llama-server >/dev/null 2>&1; then
+  RAM_KB="$(awk '/MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+  FREE_KB="$(df -Pk "$HOME" 2>/dev/null | awk 'NR==2 {print $4}' || echo 0)"
+  MODEL_DIR="$HOME/.sintu/models"
+  mkdir -p "$MODEL_DIR"
+  MODEL_URL=""
+  MODEL_NAME=""
+  MIN_MODEL_BYTES=0
+  if [ "${RAM_KB:-0}" -ge 4194304 ] && [ "${FREE_KB:-0}" -ge 3145728 ]; then
+    MODEL_NAME="qwen2.5-3b-instruct-q4_k_m.gguf"
+    MODEL_URL="https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/$MODEL_NAME"
+    MIN_MODEL_BYTES=1700000000
+  elif [ "${RAM_KB:-0}" -ge 2097152 ] && [ "${FREE_KB:-0}" -ge 900000 ]; then
+    MODEL_NAME="qwen2.5-0.5b-instruct-q4_k_m.gguf"
+    MODEL_URL="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/$MODEL_NAME"
+    MIN_MODEL_BYTES=350000000
+  fi
+
+  if [ -n "$MODEL_URL" ]; then
+    MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
+    if [ ! -s "$MODEL_PATH" ] && [ -s "$MODEL_PATH.part" ]; then
+      PART_BYTES="$(wc -c < "$MODEL_PATH.part" | tr -d ' ')"
+      if [ "${PART_BYTES:-0}" -ge "$MIN_MODEL_BYTES" ]; then
+        mv "$MODEL_PATH.part" "$MODEL_PATH"
+      fi
+    fi
+    if [ ! -s "$MODEL_PATH" ]; then
+      say "Downloading free Qwen GGUF model selected from available RAM and storage"
+      if curl --fail --location --retry 3 --retry-all-errors --continue-at - \
+        --output "$MODEL_PATH.part" "$MODEL_URL"; then
+        MODEL_BYTES="$(wc -c < "$MODEL_PATH.part" | tr -d ' ')"
+        if [ "${MODEL_BYTES:-0}" -ge "$MIN_MODEL_BYTES" ]; then
+          mv "$MODEL_PATH.part" "$MODEL_PATH"
+        else
+          say "Model download was incomplete; keeping partial file for a later resume"
+        fi
+      else
+        say "Model download failed; the app will still install and can use an existing local model"
+      fi
+    fi
+
+    if [ -s "$MODEL_PATH" ]; then
+      MODEL_BYTES="$(wc -c < "$MODEL_PATH" | tr -d ' ')"
+      if [ "${MODEL_BYTES:-0}" -ge "$MIN_MODEL_BYTES" ]; then
+        if [ -f "$LOG_DIR/llama-server.pid" ] && kill -0 "$(cat "$LOG_DIR/llama-server.pid")" 2>/dev/null; then
+          say "Existing local llama.cpp server process found"
+        else
+          say "Starting local llama.cpp model server on 127.0.0.1:8080"
+          nohup llama-server -m "$MODEL_PATH" --host 127.0.0.1 --port 8080 -c 4096 -t 4 \
+            >>"$LOG_DIR/llama-server.log" 2>&1 </dev/null &
+          echo $! > "$LOG_DIR/llama-server.pid"
+        fi
+        AI_READY=0
+        for _ in $(seq 1 60); do
+          if curl -fsS http://127.0.0.1:8080/v1/models >/dev/null 2>&1; then AI_READY=1; break; fi
+          if [ -f "$LOG_DIR/llama-server.pid" ] && ! kill -0 "$(cat "$LOG_DIR/llama-server.pid")" 2>/dev/null; then break; fi
+          sleep 2
+        done
+        if [ "$AI_READY" -eq 1 ]; then
+          say "Free local AI model server is ready"
+        else
+          say "Local AI server did not become ready in time; inspect $LOG_DIR/llama-server.log"
+        fi
+      fi
+    fi
+  else
+    say "Device RAM/storage is below the safe automatic model-download threshold; no large model was downloaded"
+  fi
+else
+  say "llama-server is unavailable; local LLM setup is deferred, but the studio installation continues"
+fi
+
+# Add local backend defaults without overwriting any existing operator settings.
+.venv/bin/python - <<'PY'
+from pathlib import Path
+import shutil
+path = Path(".env")
+content = path.read_text(encoding="utf-8")
+defaults = {
+    "LOCAL_AI_BACKEND": "auto",
+    "LOCAL_OPENAI_BASE_URL": "http://127.0.0.1:8080/v1",
+    "LOCAL_OPENAI_MODEL": "auto",
+    "LOCAL_OPENAI_API_KEY": "",
+}
+lines = content.splitlines()
+for key, value in defaults.items():
+    if not any(line.startswith(key + "=") for line in lines):
+        lines.append(key + "=" + value)
+path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+speech = shutil.which("espeak-ng") or shutil.which("espeak")
+if speech:
+    current = next((line.split("=", 1)[1].strip() for line in lines
+                    if line.startswith("ESPEAK_EXECUTABLE=")), "")
+    if not current or not (shutil.which(current) or Path(current).is_file()):
+        lines = [line for line in lines if not line.startswith("ESPEAK_EXECUTABLE=")]
+        lines.append("ESPEAK_EXECUTABLE=" + speech)
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+path.chmod(0o600)
+PY
+
 say "Running Python compile check"
 .venv/bin/python -m compileall -q app scripts
 
@@ -119,6 +244,63 @@ if [ "$READY" -ne 1 ]; then
   fail "App startup health check failed. Server was not marked ready."
 fi
 
+
+SMOKE_VIDEO_PATH=""
+if [ -f "$LOG_DIR/media-smoke-path.txt" ]; then
+  SMOKE_VIDEO_PATH="$(cat "$LOG_DIR/media-smoke-path.txt")"
+fi
+if command -v espeak-ng >/dev/null 2>&1 || command -v espeak >/dev/null 2>&1; then
+  if [ ! -f "$LOG_DIR/media-smoke-success" ] || [ "${SINTU_FORCE_MEDIA_SMOKE:-false}" = "true" ]; then
+    say "Running one real offline Hindi video render and black-frame validation"
+    if .venv/bin/python scripts/live_e2e.py --offline-video \
+      --topic "भारत की ऐतिहासिक विरासत का सिनेमाई दृश्य" \
+      >"$LOG_DIR/media-smoke.json" 2>&1; then
+      if SMOKE_VIDEO_PATH="$(.venv/bin/python - "$LOG_DIR/media-smoke.json" <<'PY'
+import json
+import shutil
+import sys
+from pathlib import Path
+
+report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+video = report["live_tests"]["offline_storyboard_video"]
+source = Path(video["final_render_path"])
+if not source.is_file() or source.stat().st_size <= 1000:
+    raise SystemExit("Smoke-test MP4 is missing or too small.")
+shared = Path.home() / "storage" / "shared" / "Movies" / "SINTU"
+try:
+    if (Path.home() / "storage" / "shared").is_dir():
+        shared.mkdir(parents=True, exist_ok=True)
+        target = shared / ("SINTU_INSTALL_TEST_" + source.stem + ".mp4")
+        shutil.copy2(source, target)
+    else:
+        target = source
+except OSError:
+    target = source
+print(target)
+PY
+      )"; then
+        printf '%s\n' "$SMOKE_VIDEO_PATH" > "$LOG_DIR/media-smoke-path.txt"
+        touch "$LOG_DIR/media-smoke-success"
+        say "Verified real MP4 created with Hindi voice, music, SINTU branding and renderer checks"
+      else
+        say "Media smoke report could not be copied; inspect $LOG_DIR/media-smoke.json"
+        SMOKE_VIDEO_PATH=""
+      fi
+    else
+      say "Offline video smoke test did not pass; installation remains available. Report: $LOG_DIR/media-smoke.json"
+      tail -n 35 "$LOG_DIR/media-smoke.json" || true
+      SMOKE_VIDEO_PATH=""
+    fi
+  else
+    say "Previous verified media smoke test found; skipping duplicate render"
+  fi
+else
+  say "No local Hindi TTS binary is installed; offline video smoke test is deferred"
+fi
+if [ -n "$SMOKE_VIDEO_PATH" ]; then
+  say "Verified sample video: $SMOKE_VIDEO_PATH"
+fi
+
 cat <<EOF
 
 ====================================================
@@ -133,7 +315,9 @@ Useful commands:
   cd "$APP_DIR"
   bash scripts/termux_one_command.sh   # rerun safe setup/update
   tail -f "$LOG_FILE"                  # live server log
-  kill \$(cat "$PID_FILE")               # stop server
+  tail -f "$LOG_DIR/llama-server.log"    # local AI model log
+  kill \$(cat "$PID_FILE")               # stop SINTU
+  kill \$(cat "$LOG_DIR/llama-server.pid")  # stop local AI
 
 Security:
   .env is private (mode 600); do not share it.
