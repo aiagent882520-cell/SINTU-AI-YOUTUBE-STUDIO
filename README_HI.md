@@ -349,11 +349,11 @@ Follow-up workload CSV export: the community review workload panel can download 
 ## Mandatory video branding and clean-frame policy
 - हर final MP4 export (storyboard, AI clips, mixed timeline और Blender 3D) में SINTU AI YOUTUBE STUDIO का logo watermark नीचे दाएँ अपने-आप लगाया जाता है।
 - वीडियो narration/dialogue कम से कम 95% हिंदी (देवनागरी) होनी चाहिए; voiceover generator इससे कम हिंदी text अस्वीकार करता है।
-- Scene titles, descriptions, spoken words, subtitles, captions, transcripts, karaoke highlights और दूसरे text overlays वीडियो frames पर नहीं लिखे जाते। Render API subtitle/caption payload अस्वीकार करता है और Blender scene builder 3D text objects अस्वीकार करता है।
+- Generated scene images/clips में text bake नहीं होता। User-requested subtitles/lyrics अलग timed SRT track से FFmpeg/libass द्वारा final MP4 में burn होते हैं; lyrics user-supplied, original, public-domain या licensed होने चाहिए। Blender scene builder arbitrary 3D text objects को अभी भी reject करता है.
 - AI visual prompts request clean frames with no generated logos or watermarks; the final renderer adds the official SINTU brand mark after the visual is generated.
 - Thumbnail and YouTube metadata text are separate assets and are not burned into video frames.
 - SRT sidecar generation, if used, creates a separate file; it is not included in the MP4.
-
+- SRT sidecar generation भी उपलब्ध है; अब उसी timed track को final MP4 में burn किया जा सकता है।
 
 ### 60 format render capability map
 - `GET /api/rendering/formats` सभी 60 catalog formats के export profiles, default resolution, FPS options, H.264 output, watermark policy और current capability limits देता है।
