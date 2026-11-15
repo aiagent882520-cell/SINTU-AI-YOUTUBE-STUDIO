@@ -14,6 +14,21 @@ Project folder already open ho to sirf `bash INSTALL_SINTU_TERMUX.sh` chalayein.
 
 Pehli baar script Termux packages, Python virtual environment aur Studio dependencies install karegi, secure local admin login banayegi, local engine diagnostics dikhayegi aur dashboard start karegi. Browser mein `http://127.0.0.1:8000` kholein. Server chalta rakhne ke liye Termux session khula rakhein; band karne ke liye `CTRL+C` dabayein. Ye responsive website PWA bhi hai: browser menu se “Add to Home screen” karke home-screen app banayein; ye native APK nahi hai.
 
+## Complete video-format groups
+
+The format selector contains all 60 registered formats, grouped for the requested production categories:
+
+- Films: Cinematic, Short, Fantasy, Sci-Fi, Action, Romantic, Horror and Historical.
+- Stop Motion: Stop Motion, Clay and Puppet.
+- Music: Lyric Video and Music Video.
+- Visual Effects: VFX and Green Screen.
+- Business: Product Demo, Advertisement and Corporate Training.
+- Live: Live Action, Event, Sports Highlights and News.
+- Special: 360°, VR, AR, Virtual Production, AI Avatar and Talking Photo.
+- Hybrid: 2D + 3D Animation, Timelapse and Hyperlapse.
+
+These are registered format workflows and export profiles, not a claim that every format has its own native generation engine. 360/VR/AR and live virtual-production workflows require specialized capture, projection, metadata and platform tooling; AI avatar/talking-photo generation requires a configured local model. The studio blocks unsupported native exports rather than silently producing an invalid file.
+
 ## Senior management and feature checkers
 
 - ChatGPT Supervisor: external advisory layer; Termux ke andar ChatGPT service ya paid API ka fake local agent nahi banaya gaya.
@@ -23,6 +38,14 @@ Pehli baar script Termux packages, Python virtual environment aur Studio depende
 - Owner Agent final approval recommendation banata hai. YouTube publish karne se pehle authenticated human owner ki approval aur YouTube OAuth connection mandatory hain.
 
 **Android hardware limitation:** is launcher se dashboard aur API chal sakte hain, lekin isse Ollama model, ComfyUI video workflow/model weights ya Piper Hindi voice model automatically install nahi hote. Real AI video generation ke liye compatible local PC/server aur uske model files ki zaroorat ho sakti hai. Diagnostics missing components ko clearly report karte hain; app fake AI output ya paid fallback nahi chalata.
+
+## Automatic earnings ledger and application firewall
+
+- When an admin loads connected-channel YouTube Analytics, SINTU can sync the official estimated revenue for that date range into the ledger. The sync is idempotent and records the amount as **estimated**, never as received; a manually marked received payment is not overwritten.
+- Actual revenue depends on YouTube Partner Program eligibility, channel monetization, Google's monetary OAuth scope and the official Analytics API. AdSense/bank settlement is not independently verified by this ledger.
+- Affiliate, sponsorship, brand-deal and digital-product income are tracked when real transactions are recorded; SINTU does not fabricate customers, sales or guaranteed income.
+- The application firewall includes optional IP/CIDR allowlisting, per-client API throttling, a separate login-attempt limiter, same-origin/CSRF checks, role-based admin access, audit logging, strict script CSP, anti-framing and browser security headers.
+- The app firewall is defense-in-depth, not a replacement for a maintained OS firewall, HTTPS/TLS reverse proxy/WAF, private engine network and encrypted backups. Keep Termux bound to loopback unless a trusted network and firewall are deliberately configured.
 
 ## Run locally
 

@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 import csv
 import io
+import math
 import os
 import re
 import sqlite3
@@ -88,6 +89,48 @@ def _record(row):
     item = dict(row)
     item["amount"] = round(float(item["amount"]), 2)
     return item
+
+def sync_youtube_estimate(amount: float, currency: str, start_date: str, end_date: str) -> dict:
+    """Idempotently save official YouTube Analytics estimates without marking them received."""
+    try:
+        start = date.fromisoformat(start_date)
+        end = date.fromisoformat(end_date)
+        value = float(amount)
+    except (TypeError, ValueError):
+        raise ValueError("YouTube revenue sync dates and amount are invalid.") from None
+    if end < start or not math.isfinite(value) or value < 0 or value > 1_000_000_000:
+        raise ValueError("YouTube revenue sync range or amount is outside allowed limits.")
+    if currency not in CURRENCIES:
+        raise ValueError("Unsupported YouTube revenue currency.")
+    reference = f"youtube-analytics-estimate:{start.isoformat()}:{end.isoformat()}"
+    title = f"YouTube estimated revenue {start.isoformat()} to {end.isoformat()}"
+    notes = "Automatically synced from the official YouTube Analytics API. This is an estimate, not an AdSense/bank payment."
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT * FROM earning_records WHERE kind='income' AND source='youtube_ads' AND reference=?",
+            (reference,),
+        ).fetchone()
+        if row and row["status"] != "estimated":
+            return {"record": _record(row), "created": False, "updated": False,
+                    "preserved_manual_status": True}
+        if row:
+            conn.execute(
+                "UPDATE earning_records SET title=?,amount=?,currency=?,record_date=?,notes=?,updated_at=? WHERE id=?",
+                (title, value, currency, end.isoformat(), notes, now, row["id"]),
+            )
+            updated = conn.execute("SELECT * FROM earning_records WHERE id=?", (row["id"],)).fetchone()
+            return {"record": _record(updated), "created": False, "updated": True,
+                    "preserved_manual_status": False}
+        cursor = conn.execute(
+            """INSERT INTO earning_records(kind,source,title,amount,currency,status,record_date,reference,notes,created_at,updated_at)
+               VALUES('income','youtube_ads',?, ?, ?, 'estimated', ?, ?, ?, ?, ?)""",
+            (title, value, currency, end.isoformat(), reference, notes, now, now),
+        )
+        created = conn.execute("SELECT * FROM earning_records WHERE id=?", (cursor.lastrowid,)).fetchone()
+        return {"record": _record(created), "created": True, "updated": False,
+                "preserved_manual_status": False}
 
 @router.get("/earnings", include_in_schema=False)
 def earnings_page():

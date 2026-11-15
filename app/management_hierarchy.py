@@ -52,7 +52,7 @@ FEATURE_CHECKER_PAIRS = [
     {"feature": "Research & fact checking", "agent": "Fact Checker", "checker": "Fact Checker Checker"},
     {"feature": "Hindi script & story", "agent": "Script Writer", "checker": "Script Writer Checker"},
     {"feature": "Storyboard & scene order", "agent": "Scene Order Agent", "checker": "Scene Order Agent Checker"},
-    {"feature": "2D animation", "agent": "2D Animator", "checker": "2D Animator Checker"},
+    {"feature": "2D & 3D animation", "agent": "Animation Director", "checker": "Animation Director Checker"},
     {"feature": "Camera movement", "agent": "Camera Movement Planner", "checker": "Camera Movement Planner Checker"},
     {"feature": "Hindi narration", "agent": "Hindi Narration Agent", "checker": "Hindi Narration Agent Checker"},
     {"feature": "Background music", "agent": "Background Music Agent", "checker": "Background Music Agent Checker"},
@@ -66,6 +66,10 @@ FEATURE_CHECKER_PAIRS = [
     {"feature": "Copyright & originality", "agent": "Copyright Checker Agent", "checker": "Copyright Checker Agent Checker"},
     {"feature": "Final MP4 export", "agent": "Final Render Agent", "checker": "Final Render Agent Checker"},
     {"feature": "YouTube SEO & publishing", "agent": "Upload Agent", "checker": "Upload Agent Checker"},
+    {"feature": "Stop Motion, Clay & Puppet", "agent": "Stop Motion Animator", "checker": "Stop Motion Animator Checker"},
+    {"feature": "VFX & Green Screen", "agent": "Green Screen Compositor", "checker": "Green Screen Compositor Checker"},
+    {"feature": "Music Video & Lyric Video", "agent": "Music Video Director", "checker": "Music Video Director Checker"},
+    {"feature": "Business & Product Demo", "agent": "Product Demo Agent", "checker": "Product Demo Agent Checker"},
 ]
 
 FEATURE_ROLE_NAMES = tuple(dict.fromkeys(

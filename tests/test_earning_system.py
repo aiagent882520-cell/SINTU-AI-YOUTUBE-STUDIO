@@ -1,3 +1,5 @@
+import sqlite3
+import pytest
 from fastapi.testclient import TestClient
 from app import main
 
@@ -58,7 +60,10 @@ def test_earning_dashboard_is_available(tmp_path, monkeypatch):
     page = client.get("/earnings")
     assert page.status_code == 200
     assert "SINTU AI" in page.text
-    assert "/api/earnings/summary" in page.text
+    assert '<script src="/static/earnings.js"></script>' in page.text
+    script = client.get("/static/earnings.js")
+    assert script.status_code == 200
+    assert "/api/earnings/summary" in script.text
 
 
 
@@ -108,24 +113,28 @@ def test_csv_export_neutralizes_spreadsheet_formula_injection(tmp_path, monkeypa
 def test_earning_dashboard_has_record_management_controls(tmp_path, monkeypatch):
     client = setup_client(tmp_path, monkeypatch)
     page = client.get("/earnings").text
-    assert "data-edit-id" in page
-    assert "data-delete-id" in page
+    assert '<script src="/static/earnings.js"></script>' in page
+    script = client.get("/static/earnings.js").text
+    assert "data-edit-id" in script
+    assert "data-delete-id" in script
     assert "recordKindFilter" in page
-    assert "cancelEdit" in page
+    assert "cancelEdit" in script
 
 
 def test_earning_dashboard_includes_official_youtube_analytics_panel(tmp_path, monkeypatch):
     client = setup_client(tmp_path, monkeypatch)
     page = client.get("/earnings").text
+    script = client.get("/static/earnings.js").text
     assert 'id="youtubeAnalyticsPanel"' in page
     assert 'id="youtubeAnalyticsLoad"' in page
     assert 'id="youtubeAnalyticsMetrics"' in page
     assert 'id="youtubeAnalyticsRevenue"' in page
     assert 'id="youtubeAnalyticsDailyChart"' in page
     assert 'id="youtubeAnalyticsRevenueComparison"' in page
-    assert "renderDailyAnalytics" in page
-    assert "Ledger में दर्ज प्राप्त YouTube Ads रकम" in page
-    assert '/api/admin/youtube/analytics' in page
+    assert "renderDailyAnalytics" in script
+    assert "Ledger में दर्ज प्राप्त YouTube Ads रकम" in script
+    assert '/api/admin/youtube/analytics' in script
+    assert '/api/admin/youtube/analytics/sync-revenue' in script
     assert "अनुमानित रकम वास्तविक भुगतान नहीं है" in page
     assert "YouTube डेटा लोड करें" in page
 
@@ -259,3 +268,35 @@ def test_earning_records_pagination_bounds_are_enforced(tmp_path, monkeypatch):
     assert client.get("/api/earnings/records?limit=501").status_code == 422
     assert client.get("/api/earnings/records?offset=-1").status_code == 422
     assert client.get("/api/earnings/records?offset=1000001").status_code == 422
+
+
+
+def test_youtube_estimate_sync_is_idempotent_and_preserves_received_payment(tmp_path, monkeypatch):
+    from app.earning_system import sync_youtube_estimate
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    first = sync_youtube_estimate(120.50, "INR", "2026-11-01", "2026-11-07")
+    assert first["created"] is True
+    assert first["record"]["status"] == "estimated"
+    assert first["record"]["amount"] == 120.5
+    reference = first["record"]["reference"]
+
+    second = sync_youtube_estimate(135.75, "INR", "2026-11-01", "2026-11-07")
+    assert second["updated"] is True
+    assert second["record"]["id"] == first["record"]["id"]
+    assert second["record"]["amount"] == 135.75
+
+    with sqlite3.connect(tmp_path / "sintu_earnings.sqlite3") as conn:
+        conn.execute("UPDATE earning_records SET status='received',amount=130.00 WHERE reference=?", (reference,))
+    third = sync_youtube_estimate(140.00, "INR", "2026-11-01", "2026-11-07")
+    assert third["preserved_manual_status"] is True
+    assert third["record"]["status"] == "received"
+    assert third["record"]["amount"] == 130.0
+
+
+def test_youtube_estimate_sync_rejects_invalid_range_or_amount(tmp_path, monkeypatch):
+    from app.earning_system import sync_youtube_estimate
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    with pytest.raises(ValueError):
+        sync_youtube_estimate(10, "INR", "2026-11-08", "2026-11-01")
+    with pytest.raises(ValueError):
+        sync_youtube_estimate(float("nan"), "INR", "2026-11-01", "2026-11-07")

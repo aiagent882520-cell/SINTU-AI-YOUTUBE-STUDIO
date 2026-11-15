@@ -59,6 +59,9 @@ jobs:
         run: |
           node --check app/static/app.js
           node --check app/static/production_studio.js
+          node --check app/static/earnings.js
+          node --check app/static/login.js
+          node --check app/static/register-sw.js
       - name: Run test suite
         run: python -m pytest -q
 

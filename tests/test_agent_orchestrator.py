@@ -21,3 +21,15 @@ def test_selected_video_team_includes_feature_and_senior_roles():
     for manager in SENIOR_MANAGER_NAMES:
         assert manager in workers
         assert manager + " Checker" in checkers
+
+
+
+def test_every_requested_format_group_has_a_specialist_and_checker():
+    from app.studio_scope import video_formats
+    groups = {}
+    for item in video_formats():
+        groups.setdefault(item["group"], []).append(item)
+    required_groups = {"Films", "Stop Motion", "Music", "Visual Effects", "Business", "Live", "Special", "Hybrid"}
+    assert required_groups.issubset(groups)
+    for group in required_groups:
+        assert all(item["roles"] and len(item["roles"]) == len(item["checker_roles"]) for item in groups[group])

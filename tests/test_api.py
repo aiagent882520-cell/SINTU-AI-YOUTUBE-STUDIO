@@ -64,7 +64,10 @@ def test_installable_app_shell(tmp_path, monkeypatch):
     assert 'rel="manifest"' in page.text
     assert 'id="adminBackupCreate"' in page.text
     assert 'id="adminBackups"' in page.text
-    assert 'navigator.serviceWorker.register("/sw.js")' in page.text
+    assert '<script src="/static/register-sw.js"></script>' in page.text
+    service_worker_script = client.get("/static/register-sw.js")
+    assert service_worker_script.status_code == 200
+    assert 'navigator.serviceWorker.register("/sw.js")' in service_worker_script.text
     manifest = client.get("/static/manifest.json")
     assert manifest.status_code == 200
     assert manifest.json()["display"] == "standalone"
@@ -3480,3 +3483,68 @@ def test_dashboard_exposes_agent_operations_panel(tmp_path, monkeypatch):
     script = client.get("/static/app.js")
     assert script.status_code == 200
     assert "/api/admin/agent-system/status" in script.text
+
+
+
+def test_application_firewall_sets_browser_security_headers(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    response = client.get("/api/health")
+    assert response.status_code == 200
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+    assert response.headers["permissions-policy"] == "camera=(), microphone=(), geolocation=()"
+    csp = response.headers["content-security-policy"]
+    assert "default-src 'self'" in csp
+    assert "object-src 'none'" in csp
+    assert "frame-ancestors 'none'" in csp
+    assert "script-src 'self'" in csp
+    assert "script-src 'self' 'unsafe-inline'" not in csp
+    assert response.headers["cross-origin-opener-policy"] == "same-origin"
+    assert response.headers["cross-origin-resource-policy"] == "same-origin"
+
+
+
+def test_strict_csp_pages_load_only_external_scripts(tmp_path, monkeypatch):
+    import re
+    client = client_for_test(tmp_path, monkeypatch)
+    for path, script in [
+        ("/", "/static/app.js"),
+        ("/login", "/static/login.js"),
+        ("/earnings", "/static/earnings.js"),
+    ]:
+        response = client.get(path, follow_redirects=True)
+        assert response.status_code == 200
+        assert script in response.text
+        assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", response.text, re.I)
+
+
+
+def test_youtube_revenue_sync_endpoint_uses_server_analytics_and_saves_estimate(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "youtube_channel_analytics", lambda start, end: {
+        "start_date": start, "end_date": end,
+        "revenue": {"available": True, "estimated_revenue": 87.25, "currency": "INR"},
+    })
+    response = client.post("/api/admin/youtube/analytics/sync-revenue", json={
+        "start_date": "2026-11-01", "end_date": "2026-11-07"
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "estimated"
+    assert body["record"]["amount"] == 87.25
+    assert body["record"]["status"] == "estimated"
+    assert body["record"]["source"] == "youtube_ads"
+    assert body["record"]["reference"].startswith("youtube-analytics-estimate:")
+
+
+def test_youtube_revenue_sync_endpoint_rejects_unavailable_monetization(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "youtube_channel_analytics", lambda start, end: {
+        "start_date": start, "end_date": end,
+        "revenue": {"available": False, "note": "Monetary OAuth permission required."},
+    })
+    response = client.post("/api/admin/youtube/analytics/sync-revenue", json={
+        "start_date": "2026-11-01", "end_date": "2026-11-07"
+    })
+    assert response.status_code == 409

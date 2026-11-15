@@ -52,7 +52,7 @@ from .image_generator import generate_image, image_status, ImageUnavailable, Ima
 from .music_generator import generate_music, music_status, MusicUnavailable, MusicGenerationFailed
 from .video_generator import generate_video, video_status, VideoUnavailable, VideoGenerationFailed, AI_VIDEO_DIR
 from .production_runtime import create_run as create_production_run, get_run as get_production_run, list_runs as list_production_runs, execute_run as execute_production_run, attach_render_result
-from .earning_system import router as earning_router
+from .earning_system import router as earning_router, sync_youtube_estimate
 from .security import RequestRateLimiter, client_address_allowed, same_origin_request
 from .backup_restore import verify_backup, BackupValidationError, snapshot_database
 
@@ -100,6 +100,20 @@ async def application_firewall(request: Request, call_next):
             return JSONResponse(status_code=403, content={"detail": "Cross-origin request blocked by security policy."})
 
     response = await call_next(request)
+    # Defense-in-depth browser security headers. The app remains same-origin and
+    # does not embed third-party scripts, frames, plugins or remote assets.
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; "
+        "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+    )
     if request.url.scheme == "https":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
@@ -229,12 +243,16 @@ async def security_headers(request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
     response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; "
-        "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
-        "connect-src 'self'; object-src 'none'; base-uri 'self'; "
-        "form-action 'self'; frame-ancestors 'none'"
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; "
+        "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
     )
+    if request.url.scheme == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 def db():
@@ -2491,6 +2509,38 @@ def youtube_channel_analytics(
         "top_videos": top_videos,
         "revenue": revenue,
         "note": "YouTube ke official reported metrics. Recent dates par data delay ho sakta hai; thumbnail impressions aur CTR alag daily Reporting API report se aate hain.",
+    }
+
+
+class YoutubeRevenueSyncInput(BaseModel):
+    start_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+@app.post("/api/admin/youtube/analytics/sync-revenue")
+def sync_youtube_analytics_revenue(payload: YoutubeRevenueSyncInput):
+    """Fetch revenue from Google's API server-side and save it as estimated, never received."""
+    analytics = youtube_channel_analytics(payload.start_date, payload.end_date)
+    revenue = analytics.get("revenue") or {}
+    if not revenue.get("available"):
+        raise HTTPException(status_code=409, detail=revenue.get("note") or "YouTube estimated revenue is not available.")
+    try:
+        synced = sync_youtube_estimate(
+            revenue.get("estimated_revenue", 0),
+            revenue.get("currency", "INR"),
+            analytics["start_date"],
+            analytics["end_date"],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return {
+        "source": "YouTube Analytics API",
+        "status": "estimated",
+        "record": synced["record"],
+        "created": synced["created"],
+        "updated": synced["updated"],
+        "preserved_manual_status": synced["preserved_manual_status"],
+        "note": "Ledger mein estimate save hua hai; ise received payment nahi maana gaya.",
     }
 
 
