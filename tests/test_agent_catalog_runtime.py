@@ -14,7 +14,8 @@ def test_catalog_contains_all_61_roles_with_distinct_checkers():
     assert [item["name"] for item in workers] == AGENTS
     assert all(item["checks"] == worker["name"] for worker, item in zip(workers, checkers))
     assert all(item["name"] != item["checks"] for item in checkers)
-    assert all(item["status"] == "Runnable worker/checker role" for item in list_agents())
+    assert all(item["status"] == "Registered role; not a continuously running agent" for item in list_agents())
+    assert all(item["execution_mode"] == "invoked_on_demand_through_local_model_gateway" for item in list_agents())
 
 
 def test_full_catalog_run_executes_each_worker_checker_and_final_review(tmp_path, monkeypatch):
