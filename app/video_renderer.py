@@ -560,12 +560,10 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
     if len(clip_audio_volumes) != len(video_paths) or any(not isinstance(v, (int, float)) or not 0 <= v <= 2 for v in clip_audio_volumes):
         raise ValueError("Har clip ka source audio volume 0 se 2 (0–200%) hona chahiye.")
     subtitles = subtitles or []
-    if subtitles:
-        raise ValueError("Subtitles/captions are disabled. Exported videos contain no spoken-word text overlays.")
     if subtitles and len(subtitles) != len(video_paths):
         raise ValueError("Subtitle lines ki sankhya AI clips ke barabar honi chahiye.")
-    if any(len(line) > 1000 for line in subtitles):
-        raise ValueError("Subtitle line 1000 characters se chhoti honi chahiye.")
+    if any(not isinstance(line, str) or len(line) > 1000 for line in subtitles):
+        raise ValueError("Har subtitle line text hona chahiye aur 1000 characters se chhoti honi chahiye.")
     for path in video_paths:
         _validate_source_video(path)
     if audio_path and not audio_path.is_file():
@@ -610,6 +608,9 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
             brand_path = work / "sintu-watermark.png"
             _make_watermark_image(width=max(180, int(width * 0.22)), height=max(44, int(width * 0.05))).save(brand_path, format="PNG")
+            subtitle_file, subtitle_filter = _create_subtitle_track(
+                work, subtitles, [item["duration"] for item in clip_info], height, ffmpeg
+            )
             for path in video_paths:
                 command += ["-i", str(path)]
 
@@ -664,6 +665,10 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
 
             filters.append("".join(video_labels) + f"concat=n={len(video_paths)}:v=1:a=0[vout]")
             filters.append(f"[vout][{brand_index}:v]overlay=x=W-w-28:y=H-h-28:format=auto[vbrand]")
+            video_map = "[vbrand]"
+            if subtitle_filter:
+                filters.append(f"[vbrand]{subtitle_filter}[vsub]")
+                video_map = "[vsub]"
             filters.append("".join(audio_labels) + f"concat=n={len(video_paths)}:v=0:a=1[clipaudio]")
 
             mix_labels = []
@@ -680,8 +685,6 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                 )
                 mix_labels.append("[music]")
             filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,atrim=duration={total_duration:.3f}[aout]")
-
-            video_map = "[vbrand]"
 
             command += ["-filter_complex", ";".join(filters), "-map", video_map, "-map", "[aout]",
                         "-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
@@ -721,10 +724,10 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         "transition": transition,
         "motion": "source AI clip motion",
         "scene_images": 0,
-        "subtitles_burned_in": False,
+        "subtitles_burned_in": bool(subtitle_file),
         "brand_watermark": "SINTU AI YOUTUBE STUDIO",
         "format": "MP4 / H.264",
-        "note": "Original clip audio is retained at reduced ambient level and mixed with optional voiceover/music. The SINTU AI YOUTUBE STUDIO watermark is added to the final output; no subtitle or spoken-word overlay is burned in. Fade mode fades each clip at its boundaries; it is not a cross-dissolve."
+        "note": "Original clip audio is retained at reduced ambient level and mixed with optional voiceover/music. SINTU branding and any supplied timed subtitle track are burned into the final output. Fade mode fades each clip at its boundaries; it is not a cross-dissolve."
     }
 
 
@@ -743,9 +746,11 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
         raise ValueError("Timeline mein 1 se 25 items hon aur har item ka scene text ho.")
     if not 2 <= seconds_per_scene <= 12:
         raise ValueError("Still image duration 2 se 12 seconds honi chahiye.")
-    if subtitles:
-        raise ValueError("Subtitles/captions are disabled. Exported videos contain no spoken-word text overlays.")
-    subtitles = []
+    subtitles = subtitles or []
+    if subtitles and len(subtitles) != len(items):
+        raise ValueError("Mixed timeline subtitle lines ki sankhya timeline items ke barabar honi chahiye.")
+    if any(not isinstance(line, str) or len(line) > 1000 for line in subtitles):
+        raise ValueError("Har subtitle line text hona chahiye aur 1000 characters se chhoti honi chahiye.")
     transitions = transitions or [transition] * len(items)
     if len(transitions) != len(items) or any(x not in {"cut", "fade"} for x in transitions):
         raise ValueError("Har timeline scene ke liye cut ya fade transition chahiye.")
@@ -823,5 +828,5 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
         result["scene_transitions"] = transitions
         result["clip_audio_volumes"] = [item.get("audio_volume", 0.25) if item["kind"] == "video" else 0.0 for item in items]
         result["scene_durations"] = [item.get("duration") if item["kind"] == "image" else (round(float(item["trim_end"])-float(item.get("trim_start",0)),2) if item.get("trim_end") is not None else None) for item in items]
-        result["note"] = "Still images and AI video clips are joined in order. Still-image duration is configurable; video clips can be trimmed by start/end seconds without modifying original source files. Source audio, optional voiceover/music, mandatory SINTU branding and cut/fade transitions are supported. No text overlays are burned in."
+        result["note"] = "Still images and AI video clips are joined in order. Still-image duration is configurable; video clips can be trimmed by start/end seconds without modifying original source files. Source audio, optional voiceover/music, mandatory SINTU branding, timed subtitles and cut/fade transitions are supported."
         return result
