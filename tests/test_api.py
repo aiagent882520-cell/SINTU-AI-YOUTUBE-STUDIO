@@ -116,15 +116,20 @@ def test_admin_backup_contains_consistent_database_and_generated_media_but_no_se
         conn.execute("CREATE TABLE earning_records(id INTEGER PRIMARY KEY, title TEXT)")
         conn.execute("CREATE TABLE earning_targets(id INTEGER PRIMARY KEY, month TEXT)")
         conn.execute("INSERT INTO earning_records(title) VALUES('backup income')")
-
+    runtime_db = tmp_path / "production_runtime.sqlite3"
+    with sqlite3.connect(runtime_db) as conn:
+        conn.execute("CREATE TABLE production_runs(id TEXT PRIMARY KEY, status TEXT)")
+        conn.execute("CREATE TABLE production_steps(id INTEGER PRIMARY KEY, run_id TEXT)")
+        conn.execute("INSERT INTO production_runs VALUES('saved-run', 'completed')")
 
     created = client.post("/api/admin/backups")
     assert created.status_code == 200, created.text
     result = created.json()
     assert result["database_integrity"] == "ok"
     assert result["secrets_and_environment_files_included"] is False
-    assert result["file_count"] == 3
+    assert result["file_count"] == 4
     assert "sintu_earnings.sqlite3" in result["database_members"]
+    assert "production_runtime.sqlite3" in result["database_members"]
     archive_response = client.get(result["download_url"])
     assert archive_response.status_code == 200
     import zipfile
@@ -134,12 +139,13 @@ def test_admin_backup_contains_consistent_database_and_generated_media_but_no_se
         names = set(archive.namelist())
         assert "database/sintu_studio.db" in names
         assert "database/sintu_earnings.sqlite3" in names
+        assert "database/production_runtime.sqlite3" in names
         assert "media/generated_videos/sample.mp4" in names
         assert ".env" not in names
         manifest = json.loads(archive.read("manifest.json"))
         assert manifest["database_integrity"] == "ok"
-        assert manifest["file_count"] == 3
-        assert manifest["database_members"] == ["sintu_studio.db", "sintu_earnings.sqlite3"]
+        assert manifest["file_count"] == 4
+        assert manifest["database_members"] == ["sintu_studio.db", "sintu_earnings.sqlite3", "production_runtime.sqlite3"]
         database_file = tmp_path / "restored-snapshot.sqlite"
         database_file.write_bytes(archive.read("database/sintu_studio.db"))
     with sqlite3.connect(database_file) as snapshot:
@@ -151,7 +157,10 @@ def test_admin_backup_contains_consistent_database_and_generated_media_but_no_se
     assert verify.json()["verified"] is True
     assert verify.json()["database_integrity"] == "ok"
     assert len(verify.json()["archive_sha256"]) == 64
-    assert set(verify.json()["databases"]) == {"database/sintu_studio.db", "database/sintu_earnings.sqlite3"}
+    assert set(verify.json()["databases"]) == {
+        "database/sintu_studio.db", "database/sintu_earnings.sqlite3",
+        "database/production_runtime.sqlite3",
+    }
     health = client.get("/api/admin/backups/health")
     assert health.status_code == 200
     assert health.json()["archive_count"] == 1
@@ -262,17 +271,24 @@ def test_render_capabilities_list_export_profiles(tmp_path, monkeypatch):
     assert profiles["quality"] == ["standard", "high", "maximum"]
 
 
-def test_voiceover_is_disabled_by_default(tmp_path, monkeypatch):
+def test_paid_voiceover_is_disabled_by_default_but_local_tts_remains_available(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.delenv("ENABLE_PAID_MEDIA_GENERATION", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "test-token")
     info = client.get("/api/voice/capabilities")
     assert info.status_code == 200
-    assert info.json()["available"] is False
-    result = client.post("/api/voice", json={"text": "Namaste", "voice": "alloy"},
+    capabilities = info.json()
+    assert capabilities["enabled_by_admin"] is False
+    assert capabilities["available"] is capabilities["local_available"]
+    if capabilities["local_available"]:
+        monkeypatch.setattr(main, "generate_voiceover", lambda text, voice: {
+            "audio_id": "f" * 32, "url": "/api/audio/" + "f" * 32,
+            "format": "WAV", "voice": voice, "size_bytes": 123,
+        })
+    result = client.post("/api/voice", json={"text": "नमस्ते", "voice": "alloy"},
                          headers={"X-Media-Token": "test-token"})
-    assert result.status_code == 503
+    assert result.status_code == (200 if capabilities["local_available"] else 503)
 
 
 def test_voiceover_invalid_voice_is_rejected(tmp_path, monkeypatch):
@@ -300,6 +316,29 @@ def test_subtitle_srt_generation(tmp_path, monkeypatch):
     assert lines[6] == "Aaj hum seekhenge"
 
 
+
+def test_local_voiceover_does_not_require_paid_media_access_token(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.delenv("MEDIA_GENERATION_TOKEN", raising=False)
+    monkeypatch.setattr(main, "voice_status", lambda: {
+        "local_available": True,
+        "enabled_by_admin": True,
+        "provider_configured": True,
+    })
+    monkeypatch.setattr(main, "generate_voiceover", lambda text, voice: {
+        "audio_id": "c" * 32, "url": "/api/audio/" + "c" * 32,
+        "format": "WAV", "voice": "Local TTS", "size_bytes": 123,
+    })
+
+    response = client.post("/api/voice", json={"text": "नमस्ते", "voice": "alloy"})
+    assert response.status_code == 200
+    assert response.json()["voice"] == "Local TTS"
+
+
 def test_voiceover_requires_media_access_token(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
@@ -307,6 +346,11 @@ def test_voiceover_requires_media_access_token(tmp_path, monkeypatch):
     monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "expected-token")
+    monkeypatch.setattr(main, "voice_status", lambda: {
+        "local_available": False,
+        "enabled_by_admin": True,
+        "provider_configured": True,
+    })
     response = client.post("/api/voice", json={"text": "Hello", "voice": "alloy"})
     assert response.status_code == 403
     monkeypatch.setattr(main, "generate_voiceover", lambda text, voice: {
@@ -319,17 +363,19 @@ def test_voiceover_requires_media_access_token(tmp_path, monkeypatch):
     assert allowed.json()["format"] == "MP3"
 
 
-def test_image_generation_is_disabled_by_default(tmp_path, monkeypatch):
+def test_offline_procedural_image_generation_is_available_by_default(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.delenv("ENABLE_PAID_MEDIA_GENERATION", raising=False)
-    assert client.get("/api/images/capabilities").json()["available"] is False
-    monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "test-token")
-    response = client.post("/api/images", json={"prompt": "A cinematic mountain", "kind": "scene", "aspect": "portrait"},
-                           headers={"X-Media-Token": "test-token"})
-    assert response.status_code == 503
+    capabilities = client.get("/api/images/capabilities").json()
+    assert capabilities["available"] is True
+    assert capabilities["procedural_fallback_available"] is True
+    assert capabilities["comfyui_available"] is False
+    response = client.post("/api/images", json={"prompt": "A cinematic mountain", "kind": "scene", "aspect": "portrait"})
+    assert response.status_code == 200
+    assert response.json()["provider"] == "SINTU Procedural Art (offline)"
 
 
-def test_image_generation_requires_access_token(tmp_path, monkeypatch):
+def test_offline_image_fallback_does_not_require_paid_access_token(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("ENABLE_PAID_MEDIA_GENERATION", "true")
     monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
@@ -337,7 +383,8 @@ def test_image_generation_requires_access_token(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("MEDIA_GENERATION_TOKEN", "expected-token")
     response = client.post("/api/images", json={"prompt": "A cinematic mountain"})
-    assert response.status_code == 403
+    assert response.status_code == 200
+    assert response.json()["provider"] == "SINTU Procedural Art (offline)"
 
 
 def test_image_generation_endpoint_contract(tmp_path, monkeypatch):

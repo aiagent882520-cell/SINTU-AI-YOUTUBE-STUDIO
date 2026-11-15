@@ -9,7 +9,7 @@ import pytest
 from app.backup_restore import BackupValidationError, restore_backup, validate_database, verify_backup
 
 
-def make_backup(tmp_path, *, tamper=False, include_earnings=False):
+def make_backup(tmp_path, *, tamper=False, include_earnings=False, include_runtime=False):
     source = tmp_path / "source.sqlite"
     with sqlite3.connect(source) as conn:
         for table in ("tasks", "admin_users", "security_audit", "app_settings", "content_calendar"):
@@ -23,6 +23,13 @@ def make_backup(tmp_path, *, tamper=False, include_earnings=False):
             conn.execute("CREATE TABLE earning_targets(id INTEGER PRIMARY KEY, month TEXT)")
             conn.execute("INSERT INTO earning_records(title) VALUES('revenue-record')")
         members.append(("database/sintu_earnings.sqlite3", earnings, earnings.read_bytes()))
+    if include_runtime:
+        runtime = tmp_path / "production_runtime.sqlite3"
+        with sqlite3.connect(runtime) as conn:
+            conn.execute("CREATE TABLE production_runs(id TEXT PRIMARY KEY, status TEXT)")
+            conn.execute("CREATE TABLE production_steps(id INTEGER PRIMARY KEY, run_id TEXT)")
+            conn.execute("INSERT INTO production_runs VALUES('run-1', 'completed')")
+        members.append(("database/production_runtime.sqlite3", runtime, runtime.read_bytes()))
     members.append(("media/generated_videos/sample.mp4", None, b"video-data"))
     entries = []
     total = 0
@@ -50,12 +57,15 @@ def make_backup(tmp_path, *, tamper=False, include_earnings=False):
 
 
 def test_backup_verification_checks_all_hashes_and_sqlite(tmp_path):
-    archive = make_backup(tmp_path, include_earnings=True)
+    archive = make_backup(tmp_path, include_earnings=True, include_runtime=True)
     result = verify_backup(archive)
     assert result["verified"] is True
-    assert result["file_count"] == 3
+    assert result["file_count"] == 4
     assert result["database_integrity"] == "ok"
-    assert set(result["databases"]) == {"database/sintu_studio.db", "database/sintu_earnings.sqlite3"}
+    assert set(result["databases"]) == {
+        "database/sintu_studio.db", "database/sintu_earnings.sqlite3",
+        "database/production_runtime.sqlite3",
+    }
     assert len(result["archive_sha256"]) == 64
 
 
@@ -80,7 +90,7 @@ def test_restore_requires_explicit_stopped_app_confirmation(tmp_path):
 
 
 def test_restore_validates_databases_and_creates_safety_copies(tmp_path):
-    archive = make_backup(tmp_path, include_earnings=True)
+    archive = make_backup(tmp_path, include_earnings=True, include_runtime=True)
     data = tmp_path / "data"
     data.mkdir()
     current_db = data / "sintu_studio.db"
@@ -90,6 +100,10 @@ def test_restore_validates_databases_and_creates_safety_copies(tmp_path):
     current_earnings = data / "sintu_earnings.sqlite3"
     with sqlite3.connect(current_earnings) as conn:
         conn.execute("CREATE TABLE old_earning(value TEXT)")
+    current_runtime = data / "production_runtime.sqlite3"
+    with sqlite3.connect(current_runtime) as conn:
+        conn.execute("CREATE TABLE old_run(value TEXT)")
+        conn.execute("INSERT INTO old_run VALUES('preserve as safety copy')")
     media_dir = data / "generated_videos"
     media_dir.mkdir()
     (media_dir / "sample.mp4").write_bytes(b"existing-video")
@@ -97,8 +111,10 @@ def test_restore_validates_databases_and_creates_safety_copies(tmp_path):
     result = restore_backup(archive, data, app_stopped=True)
     assert result["restored"] is True
     assert result["recovery_validation"]["passed"] is True
-    assert result["recovery_validation"]["databases_checked"] == 2
-    assert set(result["database_safety_copies"]) == {"sintu_studio.db", "sintu_earnings.sqlite3"}
+    assert result["recovery_validation"]["databases_checked"] == 3
+    assert set(result["database_safety_copies"]) == {
+        "sintu_studio.db", "sintu_earnings.sqlite3", "production_runtime.sqlite3",
+    }
     for safety_path in result["database_safety_copies"].values():
         assert Path(safety_path).is_file()
     assert result["media_files_preserved"] == 1
@@ -112,6 +128,10 @@ def test_restore_validates_databases_and_creates_safety_copies(tmp_path):
         assert conn.execute("SELECT title FROM earning_records").fetchone() == ("revenue-record",)
     with sqlite3.connect(result["database_safety_copies"]["sintu_studio.db"]) as conn:
         assert conn.execute("SELECT value FROM current_data").fetchone() == ("keep as safety copy",)
+    with sqlite3.connect(data / "production_runtime.sqlite3") as conn:
+        assert conn.execute("SELECT status FROM production_runs WHERE id='run-1'").fetchone() == ("completed",)
+    with sqlite3.connect(result["database_safety_copies"]["production_runtime.sqlite3"]) as conn:
+        assert conn.execute("SELECT value FROM old_run").fetchone() == ("preserve as safety copy",)
 
 
 def test_restore_preserves_identical_existing_media_without_conflict(tmp_path):

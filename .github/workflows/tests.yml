@@ -12,9 +12,11 @@ on:
 permissions:
   contents: read
 
+# Do not cancel an in-progress validation when another commit is pushed quickly.
+# This keeps matrix jobs and the final Docker gate from being abandoned mid-run.
 concurrency:
   group: sintu-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   test:
@@ -123,4 +125,3 @@ jobs:
           echo "Production container did not become healthy within 90 seconds."
           docker logs sintu-ci-app || true
           exit 1
-
