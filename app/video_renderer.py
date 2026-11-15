@@ -444,7 +444,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             concat.write_text("\n".join(lines) + "\n", encoding="utf-8")
             duration = len(scenes) * seconds_per_scene
             sfx_result = None
-            if sound_effects_enabled:
+            if sound_effects_enabled and sound_effects_volume > 0:
                 from .sound_effects import generate_scene_sound_effects
                 sfx_result = generate_scene_sound_effects(
                     scenes, [seconds_per_scene] * len(scenes),
@@ -645,7 +645,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             temporary_output_path = Path(temporary_output.name)
         with tempfile.TemporaryDirectory(prefix="sintu-ai-join-") as temp:
             work = Path(temp)
-            if sound_effects_enabled:
+            if sound_effects_enabled and sound_effects_volume > 0:
                 from .sound_effects import generate_scene_sound_effects
                 sfx_result = generate_scene_sound_effects(
                     scene_descriptions or ["" for _ in video_paths],
