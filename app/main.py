@@ -1096,7 +1096,7 @@ def generate_production_project(project_id: str, payload: ProductionProjectGener
         "\nLanguage: " + project["language"] +
         "\nTarget duration: " + str(project["duration_seconds"]) +
         " seconds. Return a complete production package with scene-by-scene Hindi narration, clean visuals, sound cues, CTA, and publishing metadata.\n"\
-        "MANDATORY visual policy: do not include any visible text, titles, subtitles, captions, transcripts, labels, lower-thirds, signs, logos, or watermarks in generated scenes. Keep every frame clean and text-free. The final renderer adds only the SINTU AI YOUTUBE STUDIO brand watermark."
+        "MANDATORY visual policy: generated scene images/clips must remain clean and text-free (no baked-in words, signs, logos or watermarks). If the user requests subtitles or lyric captions, prepare them as a separate timed text track; the final renderer may burn that track over the footage. Lyrics must be supplied by the user, original, public-domain or otherwise rights-cleared. The renderer adds the SINTU AI YOUTUBE STUDIO brand watermark separately."
     )
     if len(prompt) > 10000:
         raise HTTPException(status_code=400, detail="Brief bahut lamba hai. AI generation ke liye ise 9,000 characters se chhota karein.")
@@ -3451,8 +3451,6 @@ def render_video(payload: RenderInput):
         raise HTTPException(status_code=400, detail="Mixed timeline use karte waqt alag image_ids/video_ids fields khaali rakhein.")
     if timeline_entries and len(timeline_entries) != len(scenes):
         raise HTTPException(status_code=400, detail="Har timeline item ke liye ek scene description dein.")
-    if payload.subtitles:
-        raise HTTPException(status_code=400, detail="Video par subtitles, captions ya spoken-word text allowed nahi hai. Sirf SINTU AI YOUTUBE STUDIO watermark rahega.")
     image_paths = []
     for image_id in payload.image_ids:
         if not re.fullmatch(r"[a-f0-9]{32}", image_id):
