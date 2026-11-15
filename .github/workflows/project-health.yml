@@ -30,7 +30,7 @@ jobs:
       - name: Install project and test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pytest
+          python -m pip install -r requirements-dev.txt
       - name: Run complete project health audit
         run: python scripts/project_health_audit.py --report project-health-report.json
       - name: Upload audit report
