@@ -258,23 +258,29 @@ mkdir -p generated_videos generated_images generated_audio generated_music
 if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
   say "Existing SINTU server is already running (PID $(cat "$PID_FILE"))."
 else
+  # Start a fresh log so errors from an older failed launch cannot be mistaken
+  # for the current process' startup output.
+  : > "$LOG_FILE"
   nohup .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 \
     >>"$LOG_FILE" 2>&1 </dev/null &
   echo $! > "$PID_FILE"
 fi
 
+# The public health endpoint is /api/health. /health is not a route and can
+# return 401 from the login middleware even while the application is healthy.
 READY=0
 for _ in $(seq 1 30); do
-  if curl -fsS http://127.0.0.1:8000/health >/dev/null 2>&1; then READY=1; break; fi
+  if curl --fail --silent --show-error http://127.0.0.1:8000/api/health >/dev/null 2>&1; then READY=1; break; fi
   if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then break; fi
   sleep 2
 done
 
 if [ "$READY" -ne 1 ]; then
-  say "Server did not answer /health yet. Recent log:"
+  say "Server did not answer /api/health yet. Recent current-run log:"
   tail -n 60 "$LOG_FILE" || true
   fail "App startup health check failed. Server was not marked ready."
 fi
+say "Application health endpoint /api/health returned HTTP 200."
 
 
 SMOKE_VIDEO_PATH=""
