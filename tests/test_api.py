@@ -2320,7 +2320,8 @@ def test_saved_production_project_generates_and_links_ai_task(tmp_path, monkeypa
     assert captured["workflow"] == "shorts"
     assert "scene-by-scene Hindi narration" in captured["prompt"]
     assert "on-screen text" not in captured["prompt"].lower()
-    assert "do not include any visible text" in captured["prompt"].lower()
+    assert "generated scene images/clips must remain clean and text-free" in captured["prompt"].lower()
+    assert "separate timed text track" in captured["prompt"].lower()
     assert "only the SINTU AI YOUTUBE STUDIO brand watermark" in captured["prompt"]
 
 
