@@ -259,3 +259,35 @@ def test_earning_records_pagination_bounds_are_enforced(tmp_path, monkeypatch):
     assert client.get("/api/earnings/records?limit=501").status_code == 422
     assert client.get("/api/earnings/records?offset=-1").status_code == 422
     assert client.get("/api/earnings/records?offset=1000001").status_code == 422
+
+
+
+def test_youtube_estimate_sync_is_idempotent_and_preserves_received_payment(tmp_path, monkeypatch):
+    from app.earning_system import sync_youtube_estimate
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    first = sync_youtube_estimate(120.50, "INR", "2026-11-01", "2026-11-07")
+    assert first["created"] is True
+    assert first["record"]["status"] == "estimated"
+    assert first["record"]["amount"] == 120.5
+    reference = first["record"]["reference"]
+
+    second = sync_youtube_estimate(135.75, "INR", "2026-11-01", "2026-11-07")
+    assert second["updated"] is True
+    assert second["record"]["id"] == first["record"]["id"]
+    assert second["record"]["amount"] == 135.75
+
+    with sqlite3.connect(tmp_path / "sintu_earnings.sqlite3") as conn:
+        conn.execute("UPDATE earning_records SET status='received',amount=130.00 WHERE reference=?", (reference,))
+    third = sync_youtube_estimate(140.00, "INR", "2026-11-01", "2026-11-07")
+    assert third["preserved_manual_status"] is True
+    assert third["record"]["status"] == "received"
+    assert third["record"]["amount"] == 130.0
+
+
+def test_youtube_estimate_sync_rejects_invalid_range_or_amount(tmp_path, monkeypatch):
+    from app.earning_system import sync_youtube_estimate
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    with pytest.raises(ValueError):
+        sync_youtube_estimate(10, "INR", "2026-11-08", "2026-11-01")
+    with pytest.raises(ValueError):
+        sync_youtube_estimate(float("nan"), "INR", "2026-11-01", "2026-11-07")
