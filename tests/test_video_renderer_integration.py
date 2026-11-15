@@ -168,3 +168,24 @@ def test_storyboard_renderer_preserves_full_multiscene_timeline_and_voiceover(tm
     assert verified["audio"] is True
     assert result["duration_seconds"] == 9
 
+def test_publish_verifier_accepts_real_mp4_and_rejects_corrupt_file(tmp_path):
+    ffmpeg, _ = _ffmpeg_tools()
+    source = tmp_path / "publishable.mp4"
+    result = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+         "-f", "lavfi", "-i", "color=c=green:s=720x1280:r=24:d=2",
+         "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(source)],
+        capture_output=True, check=False, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
+    verified = video_renderer.verify_publishable_mp4(source)
+    assert verified["verified"] is True
+    assert verified["frame_count"] >= 45
+    assert verified["fps"] == pytest.approx(24, abs=0.1)
+    assert verified["resolution"] == "720x1280"
+
+    corrupt = tmp_path / "corrupt.mp4"
+    corrupt.write_bytes(b"not-an-mp4")
+    with pytest.raises(video_renderer.RenderFailed, match="corrupt"):
+        video_renderer.verify_publishable_mp4(corrupt)
+
