@@ -1413,7 +1413,7 @@ function currentStudioRenderPayload(){
  const scenes=$("renderScenes").value.split("\n").map(x=>x.trim()).filter(Boolean);
  const timelineText=$("renderTimeline").value.trim();
  return {
-  title,scenes,seconds_per_scene:Number($("sceneSeconds").value||4),
+  title,scenes,format_id:$("renderFormat").value||"youtube-shorts",seconds_per_scene:Number($("sceneSeconds").value||4),
   timeline_items:structuredTimelineItems(),
   image_ids:timelineRows().length?[]:$("renderImageIds").value.split(",").map(x=>x.trim()).filter(Boolean),
   video_ids:timelineRows().length?[]:$("renderVideoIds").value.split(",").map(x=>x.trim()).filter(Boolean),
@@ -1432,9 +1432,8 @@ $("queueRenderButton")?.addEventListener("click",async()=>{
   if(!payload.title||!payload.scenes.length)throw new Error("Title aur kam se kam ek scene likhein.");
   let projectId=window.SINTU_ACTIVE_PROJECT_ID||"";
   if(!projectId){
-   const format=["720x1280","1080x1920"].includes(payload.resolution)?"youtube-shorts":"youtube-long";
    const created=await request("/api/projects",{method:"POST",body:JSON.stringify({
-    name:payload.title,brief:payload.scenes.join("\n"),format_id:format,language:"Hindi",
+    name:payload.title,brief:payload.scenes.join("\n"),format_id:payload.format_id,language:"Hindi",
     duration_seconds:Math.max(1,payload.scenes.length*payload.seconds_per_scene)
    })});
    projectId=created.project.id;window.SINTU_ACTIVE_PROJECT_ID=projectId;
