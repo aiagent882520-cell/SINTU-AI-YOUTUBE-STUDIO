@@ -12,7 +12,7 @@ pkg update -y && pkg install -y git && DEST="$HOME/SINTU-AI-YOUTUBE-STUDIO" && i
 
 Project folder already open ho to sirf `bash INSTALL_SINTU_TERMUX.sh` chalayein. Installer existing `.env`, database aur generated files ko overwrite nahi karta; local Git changes hon to fast-forward update safely ruk jayega.
 
-Pehli baar script Termux packages, Python virtual environment aur Studio dependencies install karegi, secure local admin login banayegi, local engine diagnostics dikhayegi aur dashboard start karegi. Browser mein `http://127.0.0.1:8000` kholein. Server chalta rakhne ke liye Termux session khula rakhein; band karne ke liye `CTRL+C` dabayein.
+Pehli baar script Termux packages, Python virtual environment aur Studio dependencies install karegi, secure local admin login banayegi, local engine diagnostics dikhayegi aur dashboard start karegi. Browser mein `http://127.0.0.1:8000` kholein. Server chalta rakhne ke liye Termux session khula rakhein; band karne ke liye `CTRL+C` dabayein. Ye responsive website PWA bhi hai: browser menu se “Add to Home screen” karke home-screen app banayein; ye native APK nahi hai.
 
 ## Senior management and feature checkers
 
