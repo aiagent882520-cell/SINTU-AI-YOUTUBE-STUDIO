@@ -14,6 +14,16 @@ Free-first, local-first AI creator workspace for planning, producing, reviewing,
 - Earning System at `/earnings`: income/expense ledger, source categories, status separation, currency-wise monthly summary, targets and CSV export. It does not generate guaranteed income or process payouts.
 - Admin-only backup manager: creates integrity-checked SQLite snapshots plus generated media archives, SHA-256 checksums, safe downloads, a five-backup retention limit, and excludes environment/secrets files.
 
+## One-command Android Termux install
+
+Inside Termux, paste this single command and press Enter:
+
+```bash
+pkg install -y curl && curl -fsSL https://raw.githubusercontent.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/main/scripts/termux_one_command.sh -o "$TMPDIR/sintu-install.sh" && bash "$TMPDIR/sintu-install.sh"
+```
+
+The installer is free/local-first, safe to rerun, preserves existing project data and `.env`, creates an isolated Python environment, installs Termux media dependencies, checks the app and starts it on `http://127.0.0.1:8000`. Save the first-run admin password printed in Termux. See [Termux installation details](docs/TERMUX_ONE_COMMAND.md).
+
 ## Quick start
 
 1. Install Python 3.11+.
