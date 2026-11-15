@@ -1,5 +1,6 @@
 """Complete, free-first SINTU production architecture."""
 from copy import deepcopy
+from .management_hierarchy import FEATURE_CHECKER_PAIRS, FEATURE_ROLE_NAMES, SENIOR_MANAGER_NAMES, management_hierarchy
 
 _FORMAT_ROWS = [
 ("youtube-shorts","YouTube Shorts","Short-form","9:16","1080x1920","15–60 sec","ready_for_api","short"),
@@ -63,7 +64,7 @@ _FORMAT_ROWS = [
 ("event-video","Event videos","Event","16:9","1920x1080","1–120 min","production_workflow","live"),
 ("timelapse-hyperlapse","Timelapse/hyperlapse videos","Cinematic","16:9","1920x1080","15 sec–10 min","production_workflow","film"),
 ]
-COMMON_ROLES = ["Master AI Director","Production Planner","Audience Analyst","Prompt Writer","Video Editor","Final Output Agent"]
+COMMON_ROLES = ["Master AI Director","Production Planner","Audience Analyst","Prompt Writer","Research Analyst","Fact Checker","Script Writer","Storyboard Artist","Scene Order Agent","Camera Movement Planner","Hindi Narration Agent","Background Music Agent","Sound Effects Agent","Video Editor","Audio Mixer","Subtitle Agent","Transition Designer","Branding Agent","Visual Consistency Agent","Audio Quality Agent","Copyright Checker Agent","Final Render Agent","Upload Agent","Final Output Agent"]
 ROLE_PRESETS = {
  "short":["Topic Researcher","Topic Writer","Research Analyst","Fact Checker","Story Writer","Script Writer","Dialogue Writer","Storyboard Artist","Visual Designer","Image Generation Agent","Video Generation Agent","Voice Generation Agent","Sound Designer","Subtitle Agent","Thumbnail Designer","YouTube SEO Agent","Final Render Agent"],
  "long":["Topic Researcher","Research Analyst","Fact Checker","Audience Analyst","Story Writer","Script Writer","Screenplay Writer","Storyboard Artist","Cinematographer","Video Generation Agent","Voice Director","Music Composer","Sound Designer","Video Editor","Color Correction Agent","Subtitle Agent","Thumbnail Designer","YouTube SEO Agent","Final Render Agent"],
@@ -88,7 +89,7 @@ SPECIALIST_ROLES = [
 "Master AI Director","Task Manager","Workflow Agent","Memory Agent","Automation Agent","Topic Researcher","Topic Writer","Research Analyst","Story Researcher","Fact Checker","Audience Analyst","Story Writer","Script Writer","Screenplay Writer","Dialogue Writer","Prompt Writer","Concept Artist","Layout Agent","R&D Agent","Storyboard Artist","Creative Director","Film Director","Animation Director","Cinematographer","Production Planner","Graphic Designer","Thumbnail Designer","Background Designer","Visual Designer","Logo Designer","Infographic Designer","Character Designer","Image Generation Agent","Video Generation Agent","Scene Generation Agent","Character Consistency Agent","Background Generation Agent","Visual Effects Agent","AI Avatar Agent","Lip Sync Agent","2D Animator","3D Animator","Character Animator","Motion Graphics Artist","Modeling Agent","3D Modeler","Texturing Agent","Text Training Agent","Rigging Setup Agent","Rigging Agent","Lighting Agent","Rendering Specialist","Recording Agent","Compositing Agent","2D VFX Agent","VFX Agent","Color Correction Agent","Final Output Agent","Voice Director","Voice Generation Agent","Consent-based Voice Cloning Agent","Music Composer","Sound Designer","Audio Editor","Audio Mixer","Subtitle Agent","Video Editor","Visual Editor","Cinematic Editor","Colorist","Transition Designer","Camera Movement Planner","VFX Compositor","Final Render Agent","Script Quality Agent","Video Quality Agent","Audio Quality Agent","Visual Consistency Agent","Copyright Checker Agent","Subtitle Quality Agent","Final Approval Agent","YouTube SEO Agent","Title Writer","Description Writer","Tags Researcher","Hashtag Researcher","Thumbnail Optimizer","Upload Agent","Scheduling Agent","Analytics Agent","Growth Strategist","Content Planner","Project Manager","Asset Manager","Security & Privacy Agent","Cost & Resource Manager"
 ]
 # Include every role used by a format preset, even if it was added after the base registry.
-SPECIALIST_ROLES = list(dict.fromkeys(SPECIALIST_ROLES + COMMON_ROLES + [role for preset in ROLE_PRESETS.values() for role in preset]))
+SPECIALIST_ROLES = list(dict.fromkeys(SPECIALIST_ROLES + COMMON_ROLES + [role for preset in ROLE_PRESETS.values() for role in preset] + list(FEATURE_ROLE_NAMES) + list(SENIOR_MANAGER_NAMES)))
 CHECKER_SUFFIX = " Checker"
 AGENT_PAIRS = [
  {"specialist": role, "checker": role + CHECKER_SUFFIX, "independent": True,
@@ -109,10 +110,10 @@ PIPELINE = [
 _STAGE_ROLES = {
  "brief":{"Master AI Director","Task Manager","Workflow Agent","Production Planner","Audience Analyst","Project Manager","Content Planner","Cost & Resource Manager"},
  "research":{"Topic Researcher","Research Analyst","Story Researcher","Fact Checker","R&D Agent","Trend Detector","Competitor Analyst","Keyword Research","Topic Predictor"},
- "script":{"Topic Writer","Story Writer","Script Writer","Screenplay Writer","Dialogue Writer","Prompt Writer","Storyboard Artist","Voice Director","Documentary Producer"},
+ "script":{"Topic Writer","Story Writer","Script Writer","Screenplay Writer","Dialogue Writer","Prompt Writer","Storyboard Artist","Scene Order Agent","Voice Director","Documentary Producer"},
  "design":{"Concept Artist","Layout Agent","Graphic Designer","Thumbnail Designer","Background Designer","Visual Designer","Logo Designer","Infographic Designer","Character Designer","Image Generation Agent","Scene Generation Agent","Background Generation Agent","Product Designer","Creative Director"},
  "production":{"Modeling Agent","3D Modeler","Texturing Agent","Text Training Agent","Rigging Setup Agent","Rigging Agent","2D Animator","3D Animator","Character Animator","Motion Graphics Artist","Lighting Agent","Recording Agent","Visual Effects Agent","VFX Agent","Video Generation Agent","AI Avatar Agent","Lip Sync Agent","Animation Director","Cinematographer","Film Director","Camera Movement Planner","Character Consistency Agent","Rendering Specialist"},
- "post":{"Compositing Agent","2D VFX Agent","Color Correction Agent","Video Editor","Visual Editor","Cinematic Editor","Colorist","Transition Designer","VFX Compositor","Sound Designer","Audio Editor","Audio Mixer","Music Composer","Voice Generation Agent","Subtitle Agent"},
+ "post":{"Compositing Agent","2D VFX Agent","Color Correction Agent","Video Editor","Visual Editor","Cinematic Editor","Colorist","Transition Designer","Branding Agent","VFX Compositor","Sound Designer","Sound Effects Agent","Background Music Agent","Music Composer","Audio Editor","Audio Mixer","Hindi Narration Agent","Voice Generation Agent","Subtitle Agent"},
  "quality":{"Script Quality Agent","Video Quality Agent","Audio Quality Agent","Visual Consistency Agent","Copyright Checker Agent","Subtitle Quality Agent","Final Approval Agent","Security & Privacy Agent","Testing & QA Agent"},
  "delivery":{"Final Output Agent","Final Render Agent","YouTube SEO Agent","Title Writer","Description Writer","Tags Researcher","Hashtag Researcher","Thumbnail Optimizer","Upload Agent","Scheduling Agent","Analytics Agent","Growth Strategist","Asset Manager","Memory Agent","Automation Agent"}
 }
@@ -145,9 +146,14 @@ def video_formats():
 def get_format(format_id):
     return next((item for item in video_formats() if item["id"]==format_id),None)
 def agent_registry():
+    hierarchy = management_hierarchy()
     return {"specialist_total":len(SPECIALIST_ROLES),"checker_total":len(AGENT_PAIRS),
       "total_role_instances":len(SPECIALIST_ROLES)+len(AGENT_PAIRS),"checker_pairs":deepcopy(AGENT_PAIRS),
-      "rule":"Worker and checker are distinct role instances. A checker never self-approves and returns PASS/FAIL, evidence and revision instructions."}
+      "management_hierarchy":hierarchy,
+      "senior_manager_total":len(SENIOR_MANAGER_NAMES),
+      "feature_checker_count":len(FEATURE_CHECKER_PAIRS),
+      "feature_checker_pairs":deepcopy(FEATURE_CHECKER_PAIRS),
+      "rule":"Every feature worker and each senior manager has a distinct independent checker. The Owner Agent cannot replace the human owner approval."}
 def production_plan(format_id):
     selected=get_format(format_id)
     if not selected: raise KeyError(format_id)
@@ -158,10 +164,15 @@ def production_plan(format_id):
           "checker_status":"blocked_until_worker_submission","gate":"checker_must_pass"} for role in applicable]
         tasks.append({"order":index,"stage":stage["id"],"name":stage["name"],"description":stage["description"],
           "required":True,"worker_checker_pairs":pairs,"gate":"PASS required; FAIL returns work for revision and independent re-check."})
-    return {"format":selected,"pipeline":tasks,"approval_required_before_publish":True,"paid_services_enabled":False,
+    return {"format":selected,"pipeline":tasks,"management_hierarchy":management_hierarchy(),
+      "feature_checker_pairs":deepcopy(FEATURE_CHECKER_PAIRS),
+      "approval_required_before_publish":True,"paid_services_enabled":False,
       "execution_status":"persistent_worker_checker_queue_available_local_ollama_required_for_automatic_execution"}
 def scope_summary():
     return {"video_format_count":len(_FORMAT_ROWS),"studio_module_count":len(STUDIO_MODULES),
       "specialist_count":len(SPECIALIST_ROLES),"independent_checker_count":len(AGENT_PAIRS),
       "free_first_policy":deepcopy(FREE_FIRST_POLICY),"studio_modules":list(STUDIO_MODULES),
-      "engines":deepcopy(ENGINE_CATALOG),"checker_rule":"Separate checker role; no self-approval; PASS/FAIL with revision loop."}
+      "engines":deepcopy(ENGINE_CATALOG),"senior_manager_count":len(SENIOR_MANAGER_NAMES),
+      "feature_checker_count":len(FEATURE_CHECKER_PAIRS),
+      "management_hierarchy":management_hierarchy(),
+      "checker_rule":"Separate checker role; no self-approval; PASS/FAIL with revision loop."}

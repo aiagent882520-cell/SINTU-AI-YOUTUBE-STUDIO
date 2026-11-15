@@ -2,15 +2,25 @@
 
 SINTU AI YOUTUBE STUDIO is a responsive web/PWA creator workspace. It currently provides an AI text-production desk, specialized content workflows, task history, a 61-role legacy registry and a complete worker/checker architecture, and export of generated text packages.
 
-## Android Termux quick start
+## Android Termux one-paste install
 
-Agar aap Android par Termux use kar rahe hain, project folder ke andar ye ek command chalayein:
+Fresh Termux ya existing SINTU install par ye poora block paste karke Enter dabayein. Ye Git install karega, repository ko clone/update karega aur full Termux launcher chalayega:
 
 ```bash
-bash START_SINTU_TERMUX.sh
+pkg update -y && pkg install -y git && DEST="$HOME/SINTU-AI-YOUTUBE-STUDIO" && if [ -d "$DEST/.git" ]; then git -C "$DEST" pull --ff-only origin main; else git clone --depth 1 https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO.git "$DEST"; fi && bash "$DEST/START_SINTU_TERMUX.sh"
 ```
 
-Pehli baar script Termux packages, Python virtual environment aur Studio dependencies install karegi, secure local admin login banayegi, local engine diagnostics dikhayegi aur dashboard start karegi. Browser mein `http://127.0.0.1:8000` kholein. Server chalta rakhne ke liye Termux session khula rakhein; band karne ke liye `CTRL+C` dabayein.
+Project folder already open ho to sirf `bash INSTALL_SINTU_TERMUX.sh` chalayein. Installer existing `.env`, database aur generated files ko overwrite nahi karta; local Git changes hon to fast-forward update safely ruk jayega.
+
+Pehli baar script Termux packages, Python virtual environment aur Studio dependencies install karegi, secure local admin login banayegi, local engine diagnostics dikhayegi aur dashboard start karegi. Browser mein `http://127.0.0.1:8000` kholein. Server chalta rakhne ke liye Termux session khula rakhein; band karne ke liye `CTRL+C` dabayein. Ye responsive website PWA bhi hai: browser menu se “Add to Home screen” karke home-screen app banayein; ye native APK nahi hai.
+
+## Senior management and feature checkers
+
+- ChatGPT Supervisor: external advisory layer; Termux ke andar ChatGPT service ya paid API ka fake local agent nahi banaya gaya.
+- HR Agent, Manager Agent, GM Agent, HO Agent aur Owner Agent: five senior management roles. Ye feature teams ke outputs aur checker reports supervise karte hain.
+- Har production feature ke liye alag worker aur independent Checker Agent: Hindi narration, background music, sound effects, scene order, 2D animation, camera movement, editing, subtitles, transitions, branding, visual/audio quality, copyright, MP4 export aur YouTube publishing.
+- Senior management agents ke apne checker roles bhi hain. Worker PASS ke bina checker gate pass nahi hota; failed work bounded revision aur re-check mein jata hai.
+- Owner Agent final approval recommendation banata hai. YouTube publish karne se pehle authenticated human owner ki approval aur YouTube OAuth connection mandatory hain.
 
 **Android hardware limitation:** is launcher se dashboard aur API chal sakte hain, lekin isse Ollama model, ComfyUI video workflow/model weights ya Piper Hindi voice model automatically install nahi hote. Real AI video generation ke liye compatible local PC/server aur uske model files ki zaroorat ho sakti hai. Diagnostics missing components ko clearly report karte hain; app fake AI output ya paid fallback nahi chalata.
 
