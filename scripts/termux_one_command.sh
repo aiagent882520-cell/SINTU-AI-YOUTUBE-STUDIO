@@ -187,6 +187,7 @@ fi
 # Add local backend defaults without overwriting any existing operator settings.
 .venv/bin/python - <<'PY'
 from pathlib import Path
+import shutil
 path = Path(".env")
 content = path.read_text(encoding="utf-8")
 defaults = {
@@ -200,6 +201,14 @@ for key, value in defaults.items():
     if not any(line.startswith(key + "=") for line in lines):
         lines.append(key + "=" + value)
 path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+speech = shutil.which("espeak-ng") or shutil.which("espeak")
+if speech:
+    current = next((line.split("=", 1)[1].strip() for line in lines
+                    if line.startswith("ESPEAK_EXECUTABLE=")), "")
+    if not current or not (shutil.which(current) or Path(current).is_file()):
+        lines = [line for line in lines if not line.startswith("ESPEAK_EXECUTABLE=")]
+        lines.append("ESPEAK_EXECUTABLE=" + speech)
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 path.chmod(0o600)
 PY
 
@@ -281,6 +290,9 @@ PY
   fi
 else
   say "No local Hindi TTS binary is installed; offline video smoke test is deferred"
+fi
+if [ -n "$SMOKE_VIDEO_PATH" ]; then
+  say "Verified sample video: $SMOKE_VIDEO_PATH"
 fi
 
 cat <<EOF
