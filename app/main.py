@@ -118,6 +118,14 @@ def _session_secret():
     return os.getenv("SINTU_SESSION_SECRET", "")
 
 
+def _session_cookie_secure(request: Request) -> bool:
+    """Use secure cookies on HTTPS; allow local HTTP unless explicitly overridden."""
+    configured = os.getenv("SINTU_COOKIE_SECURE")
+    if configured is not None:
+        return configured.strip().lower() == "true"
+    return request.url.scheme == "https"
+
+
 def _hash_password(password: str) -> str:
     salt = os.urandom(16).hex()
     digest = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), 310000).hex()
@@ -494,16 +502,16 @@ def admin_login(payload: AdminLoginInput, request: Request):
     request.state.user = actor
     response = JSONResponse({"authenticated": True, "username": actor["username"], "role": actor["role"], "expires_in": SESSION_TTL_SECONDS})
     response.set_cookie(SESSION_COOKIE, _session_token(actor, int(now + SESSION_TTL_SECONDS)),
-                        max_age=SESSION_TTL_SECONDS, httponly=True, secure=os.getenv("SINTU_COOKIE_SECURE", "true").lower() == "true",
+                        max_age=SESSION_TTL_SECONDS, httponly=True, secure=_session_cookie_secure(request),
                         samesite="lax", path="/")
     return response
 
 
 @app.post("/api/auth/logout")
-def admin_logout():
+def admin_logout(request: Request):
     response = JSONResponse({"authenticated": False})
     response.delete_cookie(SESSION_COOKIE, path="/", httponly=True,
-                           secure=os.getenv("SINTU_COOKIE_SECURE", "true").lower() == "true", samesite="strict")
+                           secure=_session_cookie_secure(request), samesite="strict")
     return response
 
 
