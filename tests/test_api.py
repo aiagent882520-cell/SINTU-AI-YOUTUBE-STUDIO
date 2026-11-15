@@ -1176,7 +1176,7 @@ def test_admin_auth_requires_credentials_and_protects_dashboard(tmp_path, monkey
     monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
     monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
     monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
-    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    monkeypatch.delenv("SINTU_COOKIE_SECURE", raising=False)
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
     protected = client.get("/", follow_redirects=False)
@@ -1188,11 +1188,30 @@ def test_admin_auth_requires_credentials_and_protects_dashboard(tmp_path, monkey
     login = client.post("/api/auth/login", json={"username": "owner", "password": "a-strong-test-password"})
     assert login.status_code == 200
     assert login.json()["authenticated"] is True
+    assert "sintu_admin_session=" in login.headers["set-cookie"]
+    assert "secure" not in login.headers["set-cookie"].lower()
     assert client.get("/api/auth/session").json()["authenticated"] is True
     assert client.get("/").status_code == 200
     assert client.get("/api/tasks").status_code == 200
     assert client.post("/api/auth/logout").status_code == 200
     assert client.get("/api/tasks").status_code == 401
+
+
+def test_admin_session_cookie_is_secure_on_https_by_default(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.delenv("SINTU_COOKIE_SECURE", raising=False)
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    https_client = TestClient(main.app, base_url="https://testserver")
+    login = https_client.post("/api/auth/login", json={
+        "username": "owner", "password": "a-strong-test-password"
+    })
+    assert login.status_code == 200
+    assert "secure" in login.headers["set-cookie"].lower()
+    assert https_client.get("/api/auth/session").json()["authenticated"] is True
 
 
 def test_admin_auth_fails_closed_without_host_secrets(tmp_path, monkeypatch):
