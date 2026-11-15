@@ -11,6 +11,7 @@ import gzip
 import sqlite3
 import re
 import shutil
+import tempfile
 import zipfile
 import secrets
 import urllib.parse
@@ -3573,6 +3574,29 @@ def render_video(payload: RenderInput):
                                          sound_effects_enabled=payload.sound_effects_enabled,
                                          sound_effects_volume=payload.sound_effects_volume,
                                          resolution=resolution, fps=payload.fps, quality=payload.quality)
+        if payload.format_id in {"2d-cartoon", "story-animation"} and not image_paths and not video_paths and not timeline_entries and not payload.auto_generate_images:
+            from .animation_2d import render_2d_animation_clips
+            try:
+                with tempfile.TemporaryDirectory(prefix="sintu-2d-animation-") as animation_temp:
+                    animation_clips = render_2d_animation_clips(
+                        scenes, payload.seconds_per_scene, Path(animation_temp),
+                        resolution=resolution, fps=payload.fps,
+                    )
+                    rendered = render_ai_clips(
+                        animation_clips, audio_path=audio_path, music_path=music_path,
+                        music_volume=payload.music_volume, subtitles=payload.subtitles,
+                        transition=payload.transition, scene_descriptions=scenes,
+                        sound_effects_enabled=payload.sound_effects_enabled,
+                        sound_effects_volume=payload.sound_effects_volume,
+                        resolution=resolution, fps=payload.fps, quality=payload.quality,
+                    )
+                rendered["animation_mode"] = "2D character animation"
+                rendered["animation_provider"] = "SINTU Procedural 2D Animation (local)"
+                rendered["camera_movement"] = "animated cinematic pan and zoom"
+                return {"status": "completed", "render": rendered, "published": False}
+            except (RuntimeError, ValueError) as exc:
+                raise HTTPException(status_code=503, detail=str(exc)) from None
+
         if video_paths:
             if payload.motion != "none":
                 raise HTTPException(status_code=400, detail="AI clip assembly mode mein source clips ka original motion use hota hai; extra zoom effects abhi supported nahi hain.")
