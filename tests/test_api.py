@@ -3599,3 +3599,54 @@ def test_render_ui_exposes_sound_effect_controls_and_subtitles(tmp_path, monkeyp
     assert 'id="renderSoundEffects" type="checkbox" checked' in page
     assert 'id="renderSfxVolume" type="range"' in page
     assert "whoosh, impact, wind, water, footsteps" in page
+
+
+
+def test_render_api_routes_2d_cartoon_format_through_procedural_animation(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    from app import animation_2d
+    generated = []
+    captured = {}
+
+    def fake_generate(scenes, seconds_per_scene, output_dir, **kwargs):
+        generated.append((list(scenes), seconds_per_scene, kwargs))
+        clip = tmp_path / "animated-scene.mp4"
+        clip.write_bytes(b"fake animated clip")
+        return [clip for _ in scenes]
+
+    def fake_assemble(paths, **kwargs):
+        captured["paths"] = paths
+        captured.update(kwargs)
+        return {"video_id": "f" * 32, "filename": "f" * 32 + ".mp4",
+                "url": "/api/videos/" + "f" * 32, "resolution": kwargs["resolution"],
+                "duration_seconds": 8, "format": "MP4 / H.264",
+                "subtitles_burned_in": bool(kwargs.get("subtitles")),
+                "sound_effects": bool(kwargs.get("sound_effects_enabled")),
+                "sound_effect_cue_count": 2}
+
+    monkeypatch.setattr(animation_2d, "render_2d_animation_clips", fake_generate)
+    monkeypatch.setattr(main, "render_ai_clips", fake_assemble)
+    response = client.post("/api/render", json={
+        "title": "2D fort story", "format_id": "2d-cartoon",
+        "scenes": ["किले का परिचय", "यात्री किले में प्रवेश करता है"],
+        "seconds_per_scene": 4, "resolution": "720x1280", "fps": 24,
+        "subtitles": ["किले का परिचय", "यात्री अंदर जाता है"],
+        "sound_effects_enabled": True, "sound_effects_volume": 0.18,
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body["render"]["animation_mode"] == "2D character animation"
+    assert body["render"]["animation_provider"] == "SINTU Procedural 2D Animation (local)"
+    assert body["render"]["camera_movement"] == "animated cinematic pan and zoom"
+    assert len(generated) == 1 and len(generated[0][0]) == 2
+    assert captured["scene_descriptions"] == ["किले का परिचय", "यात्री किले में प्रवेश करता है"]
+    assert captured["subtitles"] == ["किले का परिचय", "यात्री अंदर जाता है"]
+    assert captured["sound_effects_enabled"] is True
+
+
+def test_main_render_ui_exposes_2d_animation_format_options(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    page = client.get("/").text
+    assert 'id="renderFormat"' in page
+    assert '<option value="2d-cartoon">2D Cartoon Animation</option>' in page
+    assert '<option value="story-animation">2D Story Animation</option>' in page
