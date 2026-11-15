@@ -63,3 +63,50 @@ def test_every_named_video_feature_has_its_own_checker_pair():
         assert item["agent"] in available
         assert item["checker"] == available[item["agent"]]
     assert registry["feature_checker_count"] == len(FEATURE_CHECKER_PAIRS)
+
+
+
+def test_requested_video_categories_and_every_named_format_are_preserved():
+    from app.studio_scope import video_formats
+    formats = {item["id"]: item for item in video_formats()}
+    required = {
+        "Films": ["cinematic-movie", "short-film", "fantasy-film", "sci-fi-film",
+                  "action-film", "romantic-film", "horror-film", "historical-film"],
+        "Stop Motion": ["stop-motion", "clay-animation", "puppet-animation"],
+        "Music": ["lyric-video", "music-video"],
+        "Visual Effects": ["visual-effects-video", "green-screen"],
+        "Business": ["product-demonstration", "advertisement", "training-corporate"],
+        "Live": ["live-action", "event-video", "sports-highlights", "news-reportage"],
+        "Special": ["360-video", "vr-video", "ar-video", "virtual-production",
+                    "ai-avatar", "talking-photo"],
+        "Hybrid": ["hybrid-2d-3d", "timelapse-hyperlapse"],
+    }
+    assert len(formats) == 60
+    for group, ids in required.items():
+        for format_id in ids:
+            assert format_id in formats, format_id
+            assert formats[format_id]["group"] == group
+            assert formats[format_id]["category"] == group
+
+
+def test_exactly_twenty_one_feature_worker_checker_lanes_are_registered():
+    from app.management_hierarchy import FEATURE_CHECKER_PAIRS
+    registry = agent_registry()
+    assert len(FEATURE_CHECKER_PAIRS) == 21
+    assert registry["feature_checker_count"] == 21
+    assert registry["core_agent_total"] == 61
+    assert registry["feature_worker_checker_total"] == 21
+
+
+def test_new_format_specific_specialists_have_worker_checker_stage_routes():
+    from app.studio_scope import production_plan
+    for format_id, role in [
+        ("3d-animation", "3D Animator"),
+        ("stop-motion", "Stop Motion Animator"),
+        ("green-screen", "Green Screen Compositor"),
+        ("music-video", "Music Video Director"),
+        ("product-demonstration", "Product Demo Agent"),
+    ]:
+        plan = production_plan(format_id)
+        pairs = [pair for stage in plan["pipeline"] for pair in stage["worker_checker_pairs"]]
+        assert any(pair["worker"] == role and pair["checker"] == role + " Checker" for pair in pairs)
