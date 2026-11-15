@@ -3387,3 +3387,34 @@ def test_youtube_publish_blocks_unverified_truncated_mp4_before_oauth(tmp_path, 
     assert response.status_code == 409
     assert "quality verification failed" in response.json()["detail"].lower()
 
+@pytest.mark.parametrize(
+    ("calendar_platform", "route", "token_helper"),
+    [
+        ("facebook", "/api/admin/meta/facebook/publish/1", "_meta_tokens"),
+        ("tiktok", "/api/admin/tiktok/publish/1", "_tiktok_tokens"),
+    ],
+)
+def test_social_uploads_block_corrupt_mp4_before_provider_auth(
+    tmp_path, monkeypatch, calendar_platform, route, token_helper
+):
+    client = client_for_test(tmp_path, monkeypatch)
+    output_dir = tmp_path / "generated_videos"
+    output_dir.mkdir()
+    video_id = "b" * 32
+    (output_dir / (video_id + ".mp4")).write_bytes(b"present-but-corrupt-mp4")
+    monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    with main.db() as conn:
+        conn.execute(
+            "INSERT INTO content_calendar(title,platform,prompt,scheduled_at,status,created_at) VALUES(?,?,?,?,?,?)",
+            ("Approved social test", calendar_platform, "Test publish gate",
+             "2026-11-15T12:00:00+00:00", "Approved", "2026-11-15T12:00:00+00:00"),
+        )
+    monkeypatch.setattr(
+        main, "verify_publishable_mp4",
+        lambda path: (_ for _ in ()).throw(main.RenderFailed("truncated MP4")),
+    )
+    monkeypatch.setattr(main, token_helper, lambda: pytest.fail("Provider auth must not run for invalid media"))
+    response = client.post(route + "?video_id=" + video_id)
+    assert response.status_code == 409
+    assert "quality verification failed" in response.json()["detail"].lower()
+
