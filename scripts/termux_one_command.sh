@@ -123,6 +123,12 @@ if command -v llama-server >/dev/null 2>&1; then
 
   if [ -n "$MODEL_URL" ]; then
     MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
+    if [ ! -s "$MODEL_PATH" ] && [ -s "$MODEL_PATH.part" ]; then
+      PART_BYTES="$(wc -c < "$MODEL_PATH.part" | tr -d ' ')"
+      if [ "${PART_BYTES:-0}" -ge "$MIN_MODEL_BYTES" ]; then
+        mv "$MODEL_PATH.part" "$MODEL_PATH"
+      fi
+    fi
     if [ ! -s "$MODEL_PATH" ]; then
       say "Downloading free Qwen GGUF model selected from available RAM and storage"
       if curl --fail --location --retry 3 --retry-all-errors --continue-at - \
@@ -145,7 +151,7 @@ if command -v llama-server >/dev/null 2>&1; then
           say "Existing local llama.cpp server process found"
         else
           say "Starting local llama.cpp model server on 127.0.0.1:8080"
-          nohup llama-server -m "$MODEL_PATH" --host 127.0.0.1 --port 8080 -c 2048 -t 4 \
+          nohup llama-server -m "$MODEL_PATH" --host 127.0.0.1 --port 8080 -c 4096 -t 4 \
             >>"$LOG_DIR/llama-server.log" 2>&1 </dev/null &
           echo $! > "$LOG_DIR/llama-server.pid"
         fi
