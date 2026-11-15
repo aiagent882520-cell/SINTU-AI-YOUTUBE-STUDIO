@@ -29,7 +29,7 @@ The installer is free/local-first, safe to rerun, preserves existing project dat
 1. Install Python 3.11+.
 2. Install dependencies: `pip install -r requirements.txt`.
 3. Copy `.env.example` to `.env` and review the settings.
-4. For free local text generation, install Ollama and pull a compatible model such as `qwen2.5:3b`.
+4. For free local text generation, run Ollama with a compatible model such as `qwen2.5:3b`, or use a local llama.cpp/LocalAI/LM Studio OpenAI-compatible server.
 5. Start the app: `uvicorn app.main:app --host 127.0.0.1 --port 8000`.
 6. Open `http://127.0.0.1:8000`. After login, use the **Earning System** link or visit `/earnings`.
 
@@ -89,3 +89,17 @@ The restore command creates a verified pre-restore SQLite safety copy under `bac
 New backups include the main Studio database and, when present, the separate earnings ledger database (`sintu_earnings.sqlite3`), plus approved generated-media folders. The dashboard shows backup count, total archive storage and latest-backup age; this inventory is not a substitute for the per-archive Verify operation. Verify checks ZIP structure, every SHA-256 digest, SQLite integrity and foreign-key consistency.
 
 Offline restore validates the required application tables before installing databases and validates them again after installation. It restores the earnings ledger when that database is present in the archive, keeps pre-restore safety copies, and reports media conflicts without overwriting existing files. Restore remains an explicit offline operation while the service and workers are stopped.
+
+
+## Android and local AI engine options
+
+SINTU first uses a ready Ollama model. With `LOCAL_AI_BACKEND=auto`, it can also use a local OpenAI-compatible server such as llama.cpp, LocalAI or LM Studio. For llama.cpp, start its server on loopback (for example, `llama-server -m /path/to/model.gguf --host 127.0.0.1 --port 8080`) and configure:
+
+```dotenv
+AI_PROVIDER=local
+LOCAL_AI_BACKEND=auto
+LOCAL_OPENAI_BASE_URL=http://127.0.0.1:8080/v1
+LOCAL_OPENAI_MODEL=auto
+```
+
+The server must expose `/v1/models` and `/v1/chat/completions`. SINTU checks the advertised model and never sends prompts to a public endpoint through this setting. Installing llama.cpp and downloading a compatible GGUF model are separate device-specific steps; choose a quantized model that fits available RAM and storage. No model is silently downloaded and no paid API is selected.
