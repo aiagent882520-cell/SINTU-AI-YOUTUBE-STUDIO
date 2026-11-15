@@ -51,7 +51,7 @@ from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable,
 from .image_generator import generate_image, image_status, ImageUnavailable, ImageGenerationFailed, IMAGE_DIR
 from .music_generator import generate_music, music_status, MusicUnavailable, MusicGenerationFailed
 from .video_generator import generate_video, video_status, VideoUnavailable, VideoGenerationFailed, AI_VIDEO_DIR
-from .production_runtime import create_run as create_production_run, get_run as get_production_run, execute_run as execute_production_run, attach_render_result
+from .production_runtime import create_run as create_production_run, get_run as get_production_run, list_runs as list_production_runs, execute_run as execute_production_run, attach_render_result
 from .earning_system import router as earning_router
 from .security import RequestRateLimiter, client_address_allowed, same_origin_request
 from .backup_restore import verify_backup, BackupValidationError, snapshot_database
@@ -1269,6 +1269,45 @@ def validate_all_agent_roles(payload: dict, background_tasks: BackgroundTasks, r
         "registered_agent_roles": 61,
         "expected_worker_checker_pairs": 61,
         "note": "All 61 roles run sequentially with independent checker calls and five final reviewers. Local Ollama must be reachable; a failed gate pauses the run. This validation does not publish or spend money.",
+    }
+
+
+@app.get("/api/admin/agent-system/status")
+def agent_system_status(request: Request):
+    """Truthful operational view: registered roles are not reported as live processes."""
+    owner = _studio_owner(request)
+    runs = list_production_runs(owner, 20)
+    providers = provider_status(_get_app_setting("selected_provider", os.getenv("AI_PROVIDER", "auto").lower()))
+    local_provider = providers.get("local", {})
+    counts = {"queued": 0, "running": 0, "reviewing": 0, "paused": 0,
+              "blocked": 0, "failed": 0, "completed": 0}
+    for run in runs:
+        status = str(run.get("status", "")).lower()
+        if status in counts:
+            counts[status] += 1
+    registry = agent_registry()
+    return {
+        "agent_catalog_total": len(list_agents()),
+        "agent_catalog_execution_mode": "on_demand_local_model_gateway",
+        "independent_background_agents_running": 0,
+        "specialist_role_instances": registry["specialist_total"],
+        "independent_checker_role_instances": registry["checker_total"],
+        "checker_pairs": registry["checker_pairs"],
+        "local_model_configured": bool(local_provider.get("configured")),
+        "local_model_status": local_provider,
+        "recent_runs_limit": 20,
+        "recent_run_counts": counts,
+        "recent_runs": [{
+            "id": run["id"], "format_id": run["format_id"], "topic": run["topic"],
+            "status": run["status"], "current_role": run.get("current_role"),
+            "error": run.get("error"), "created_at": run["created_at"],
+            "updated_at": run["updated_at"],
+            "steps_completed": sum(1 for step in run["steps"] if step["status"] == "completed"),
+            "checker_passes": sum(1 for step in run["steps"] if step["step_type"] == "checker" and step["status"] == "pass"),
+            "checker_failures": sum(1 for step in run["steps"] if step["step_type"] == "checker" and step["status"] == "fail"),
+        } for run in runs],
+        "automatic_self_healing": False,
+        "note": "This endpoint reports persisted run evidence. Catalog roles are invoked on demand; no continuous background agent fleet is claimed."
     }
 
 

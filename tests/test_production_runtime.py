@@ -112,10 +112,10 @@ def test_runtime_stops_after_first_checker_failure(tmp_path, monkeypatch):
 
     assert result["status"] == "paused"
     assert result["current_role"].endswith("Checker")
-    assert len(calls) == 4
-    assert [step["step_type"] for step in result["steps"]] == ["builder", "checker", "builder", "checker"]
+    assert len(calls) == 6
+    assert [step["step_type"] for step in result["steps"]] == ["builder", "checker"] * 3
     assert result["steps"][-1]["status"] == "fail"
-    assert result["steps"][-1]["attempts"] == 2
+    assert result["steps"][-1]["attempts"] == 3
 
 
 def test_render_result_attaches_only_to_completed_run(tmp_path, monkeypatch):
@@ -219,3 +219,35 @@ def test_runtime_database_migrates_legacy_runs_to_local_owner(tmp_path, monkeypa
     assert legacy is not None
     assert legacy["owner_username"] == "local"
     assert runtime.get_run("f" * 32, "another-user") is None
+
+
+
+def test_list_runs_is_owner_scoped_and_newest_first(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    first = runtime.create_run("youtube-shorts", "first topic", "alice")
+    second = runtime.create_run("youtube-shorts", "second topic", "alice")
+    runtime.create_run("youtube-shorts", "private topic", "bob")
+
+    runs = runtime.list_runs("alice", limit=1)
+    assert len(runs) == 1
+    assert runs[0]["id"] == second["id"]
+    assert runtime.list_runs("bob")[0]["topic"] == "private topic"
+    assert all(run["owner_username"] == "alice" for run in runtime.list_runs("alice"))
+
+
+
+def test_revision_attempt_limit_is_bounded_by_configuration(monkeypatch):
+    import importlib
+    import app.production_runtime as runtime
+
+    monkeypatch.setenv("SINTU_MAX_REVISION_ATTEMPTS", "999")
+    importlib.reload(runtime)
+    assert runtime.MAX_REVISION_ATTEMPTS == 2
+    monkeypatch.setenv("SINTU_MAX_REVISION_ATTEMPTS", "0")
+    importlib.reload(runtime)
+    assert runtime.MAX_REVISION_ATTEMPTS == 0
+    monkeypatch.setenv("SINTU_MAX_REVISION_ATTEMPTS", "not-a-number")
+    importlib.reload(runtime)
+    assert runtime.MAX_REVISION_ATTEMPTS == 2

@@ -20,8 +20,8 @@ def list_agents():
         {
             "id": index + 1,
             "name": name,
-            "status": "Runnable worker/checker role",
-            "execution_mode": "on_demand_local_model",
+            "status": "Registered role; not a continuously running agent",
+            "execution_mode": "invoked_on_demand_through_local_model_gateway",
             "external_integration": "Requires configured platform credentials where applicable"
             if name in {"YouTube Publisher", "Social Media Publisher", "Scheduler", "Channel Analytics"}
             else None,

@@ -82,7 +82,7 @@ def test_installable_app_shell(tmp_path, monkeypatch):
     assert "SHA-256" in app_script.text
     assert "backup-verify" in app_script.text
     assert "adminBackupHealth" in page.text
-    assert "sintu-studio-shell-v12" in worker.text
+    assert "sintu-studio-shell-v13" in worker.text
     assert "/static/offline.html" in worker.text
 
 def test_agent_orchestration_catalog_and_teams(tmp_path, monkeypatch):
@@ -3442,3 +3442,35 @@ def test_social_uploads_block_corrupt_mp4_before_provider_auth(
     assert response.status_code == 409
     assert "quality verification failed" in response.json()["detail"].lower()
 
+
+
+
+def test_agent_system_status_endpoint_reports_catalog_and_run_health(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "list_production_runs", lambda owner, limit=20: [])
+    monkeypatch.setattr(main, "provider_status", lambda selected: {
+        "local": {"configured": False, "model": "qwen2.5:3b"}
+    })
+    response = client.get("/api/admin/agent-system/status")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["agent_catalog_total"] == 61
+    registry = main.agent_registry()
+    assert data["specialist_role_instances"] == registry["specialist_total"]
+    assert data["independent_checker_role_instances"] == registry["checker_total"]
+    assert data["checker_pairs"] == registry["checker_pairs"]
+    assert data["independent_background_agents_running"] == 0
+    assert data["automatic_self_healing"] is False
+    assert data["local_model_configured"] is False
+    assert data["recent_runs"] == []
+
+
+def test_dashboard_exposes_agent_operations_panel(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    page = client.get("/")
+    assert page.status_code == 200
+    assert 'id="agentOperationsPanel"' in page.text
+    assert 'id="agentSystemSummary"' in page.text
+    script = client.get("/static/app.js")
+    assert script.status_code == 200
+    assert "/api/admin/agent-system/status" in script.text

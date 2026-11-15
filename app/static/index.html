@@ -176,6 +176,12 @@
       <div class="panel-head"><div><h2>61-Agent Team</h2><p>Registry view — agents are planned; individual autonomous agents are not yet implemented.</p></div></div>
       <div id="agents" class="agents">Loading agent registry…</div>
     </section>
+    <section class="panel" id="agentOperationsPanel">
+      <div class="panel-head"><div><h2>Agent Operations & System Health</h2><p>Live execution evidence, checker results aur recent production runs. Registered roles ko running agents nahi maana jayega.</p></div><button id="agentSystemRefresh" class="secondary" type="button">Refresh status</button></div>
+      <div id="agentSystemSummary" class="integration-cards" aria-live="polite">System status loading…</div>
+      <h3>Recent Production Runs</h3>
+      <div id="agentSystemRuns" class="admin-list" aria-live="polite">Loading recent runs…</div>
+    </section>
     <section class="panel" id="adminPanel" hidden>
       <div class="panel-head"><div><h2>Security & User Management</h2><p>Admin-only: team accounts, access roles aur security activity.</p></div><button id="adminRefresh" class="secondary" type="button">Refresh</button></div>
       <form id="adminUserForm" class="admin-user-form">

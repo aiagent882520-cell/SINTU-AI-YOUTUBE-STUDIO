@@ -108,8 +108,39 @@ async function refresh() {
     ).join("");
     taskHistoryItems = tasks.tasks;
     renderTaskHistory();
+    refreshAgentSystem();
   } catch (error) { $("health").textContent = "API unavailable"; }
 }
+
+async function refreshAgentSystem() {
+  const summary = $("agentSystemSummary");
+  const runs = $("agentSystemRuns");
+  if (!summary || !runs) return;
+  try {
+    const data = await request("/api/admin/agent-system/status");
+    const counts = data.recent_run_counts || {};
+    summary.innerHTML = [
+      ["Specialist roles", data.specialist_role_instances],
+      ["Independent checker roles", data.independent_checker_role_instances],
+      ["Independent background agents running", data.independent_background_agents_running],
+      ["Local model", data.local_model_configured ? "Configured" : "Not configured"],
+      ["Recent runs", data.recent_runs_limit],
+      ["Completed", counts.completed || 0],
+      ["Paused / failed", (counts.paused || 0) + (counts.failed || 0)]
+    ].map(([label, value]) => '<article class="integration-card"><b>'+escapeHtml(label)+'</b><strong>'+escapeHtml(value)+'</strong></article>').join("");
+    runs.innerHTML = (data.recent_runs || []).map(run =>
+      '<div class="admin-row"><b>'+escapeHtml(run.topic || run.id)+'</b><span>'+escapeHtml(run.status)+'</span>'+
+      '<small>Role: '+escapeHtml(run.current_role || "—")+' · Steps: '+escapeHtml(run.steps_completed)+
+      ' · Checker PASS: '+escapeHtml(run.checker_passes)+' · FAIL: '+escapeHtml(run.checker_failures)+
+      (run.error ? ' · '+escapeHtml(run.error) : '')+'</small></div>'
+    ).join("") || '<p class="muted">No production runs recorded yet.</p>';
+  } catch (error) {
+    summary.textContent = "Agent operations status unavailable: " + error.message;
+    runs.textContent = "Run history unavailable.";
+  }
+}
+$("agentSystemRefresh")?.addEventListener("click", refreshAgentSystem);
+
 async function loadTeam() {
   try {
     const workflow = $("workflow").value;
