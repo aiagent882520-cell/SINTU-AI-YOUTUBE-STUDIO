@@ -101,6 +101,9 @@ def test_exactly_twenty_one_feature_worker_checker_lanes_are_registered():
 def test_new_format_specific_specialists_have_worker_checker_stage_routes():
     from app.studio_scope import production_plan
     for format_id, role in [
+        ("2d-cartoon", "Animation Director"),
+        ("3d-animation", "Animation Director"),
+        ("hybrid-2d-3d", "Animation Director"),
         ("3d-animation", "3D Animator"),
         ("stop-motion", "Stop Motion Animator"),
         ("green-screen", "Green Screen Compositor"),
