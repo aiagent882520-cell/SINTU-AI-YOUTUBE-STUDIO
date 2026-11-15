@@ -76,8 +76,13 @@ def test_runtime_executes_worker_and_checker_as_separate_calls(tmp_path, monkeyp
     def fake_generate(prompt, workflow, provider):
         calls.append((prompt, workflow, provider))
         is_gate = "independent quality checker" in prompt.lower() or "final video production reviewer" in prompt.lower()
-        output = ('{"decision":"PASS","evidence":["reviewed against acceptance criteria"],'
-                  '"issues":[],"revision_instructions":[]}') if is_gate else "Hindi production deliverable"
+        if is_gate:
+            output = ('{"decision":"PASS","evidence":["reviewed against acceptance criteria"],'
+                      '"issues":[],"revision_instructions":[]}')
+        elif "you are the sintu owner agent" in prompt.lower():
+            output = "READY: all feature and final reviewer gates passed; waiting for human owner approval."
+        else:
+            output = "Hindi production deliverable"
         return {"output": output, "provider": "test", "model": "fixture"}
     monkeypatch.setattr(runtime, "generate_text", fake_generate)
 
@@ -258,3 +263,41 @@ def test_revision_attempt_limit_is_bounded_by_configuration(monkeypatch):
     monkeypatch.setenv("SINTU_MAX_REVISION_ATTEMPTS", "not-a-number")
     importlib.reload(runtime)
     assert runtime.MAX_REVISION_ATTEMPTS == 2
+
+
+
+def test_owner_agent_not_ready_pauses_even_when_its_checker_passes(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+    from app.management_hierarchy import SENIOR_MANAGER_NAMES
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    roles = ["Script Writer", *SENIOR_MANAGER_NAMES]
+    monkeypatch.setattr(runtime, "format_team", lambda _format: [
+        item
+        for role in roles
+        for item in (
+            {"role_type": "specialist", "name": role, "mission": "Review assigned evidence."},
+            {"role_type": "independent_checker", "name": role + " Checker", "checks": role},
+        )
+    ])
+
+    def fake_generate(prompt, workflow, provider):
+        lower = prompt.lower()
+        if "you are the sintu owner agent" in lower:
+            output = "NOT READY: copyright permission for one visual is not verified."
+        elif "independent quality checker" in lower or "final video production reviewer" in lower:
+            output = '{"decision":"PASS","evidence":["report accurately identifies the blocker"],"issues":[],"revision_instructions":[]}'
+        else:
+            output = "Reviewed production report."
+        return {"output": output, "provider": "test", "model": "fixture"}
+
+    monkeypatch.setattr(runtime, "generate_text", fake_generate)
+    run = runtime.create_run("youtube-shorts", "भारत का इतिहास")
+    runtime.execute_run(run["id"])
+    result = runtime.get_run(run["id"])
+
+    assert result["status"] == "paused"
+    assert result["current_role"] == "Owner Agent"
+    assert "release blockers" in result["error"]
+    assert result["steps"][-2]["role"] == "Owner Agent"
+    assert result["steps"][-1]["role"] == "Owner Agent Checker"
