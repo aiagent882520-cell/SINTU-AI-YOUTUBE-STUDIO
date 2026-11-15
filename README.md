@@ -102,4 +102,4 @@ LOCAL_OPENAI_BASE_URL=http://127.0.0.1:8080/v1
 LOCAL_OPENAI_MODEL=auto
 ```
 
-The server must expose `/v1/models` and `/v1/chat/completions`. SINTU checks the advertised model and never sends prompts to a public endpoint through this setting. Installing llama.cpp and downloading a compatible GGUF model are separate device-specific steps; choose a quantized model that fits available RAM and storage. No model is silently downloaded and no paid API is selected.
+The server must expose `/v1/models` and `/v1/chat/completions`. SINTU checks the advertised model and never sends prompts to a public endpoint through this setting. On Termux, the one-command installer attempts to install the `llama-cpp` package and download an official Qwen GGUF model only when available-memory and free-storage thresholds are met. Outside that supported bootstrap path, install llama.cpp and choose a quantized model that fits the device. No paid API is selected.
