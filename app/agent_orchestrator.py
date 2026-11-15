@@ -49,7 +49,7 @@ def workflow_team(workflow: str) -> list[dict]:
 def catalog_team() -> list[dict]:
     """Build distinct worker/checker instances for every registered top-level agent role."""
     result = []
-    for name in SPECIALIST_ROLES:
+    for name in AGENTS:
         result.append({
             "name": name,
             "role_type": "specialist",
