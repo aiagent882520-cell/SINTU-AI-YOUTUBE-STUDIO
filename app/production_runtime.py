@@ -349,7 +349,9 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                     "uses the actual management and final reviewer evidence, identifies blockers, "
                     "does not invent a rendered/uploaded state, and does not bypass human approval. "
                     "Return ONLY JSON with decision (PASS or FAIL), evidence (array), issues (array), "
-                    "and revision_instructions (array).\n"
+                    "and revision_instructions (array). PASS only if the report gives a clear READY or NOT READY verdict "
+                    "and accurately reflects all five final reviewer reports. If READY, there must be no unresolved blockers. "
+                    "If NOT READY, cite the real blocker; the runtime will pause for the human owner.\n"
                     "Owner report: " + owner_output + "\n"
                     "Reviewer evidence: " + json.dumps(review_results, ensure_ascii=False)
                 )
@@ -362,6 +364,14 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                            owner_verdict["issues"], attempts=attempt + 1)
                 if owner_verdict["decision"] == "PASS":
                     management_reports["Owner Agent"] = owner_output
+                    if re.search(r"\bNOT\s+READY\b", owner_output, re.IGNORECASE):
+                        _set_run(run_id, "paused", current_role="Owner Agent",
+                                 error="Owner Agent identified release blockers; human review is required before continuing.")
+                        return
+                    if not re.search(r"\bREADY\b", owner_output, re.IGNORECASE):
+                        _set_run(run_id, "paused", current_role="Owner Agent",
+                                 error="Owner Agent did not provide an explicit READY verdict; human review is required.")
+                        return
                     break
             if not owner_verdict or owner_verdict["decision"] != "PASS":
                 _set_run(run_id, "paused", current_role="Owner Agent Checker",
