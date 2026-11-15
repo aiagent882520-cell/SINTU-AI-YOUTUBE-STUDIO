@@ -89,6 +89,9 @@ def test_runtime_executes_worker_and_checker_as_separate_calls(tmp_path, monkeyp
     assert result["result"]["video_rendered"] is False
     assert result["result"]["published"] is False
     assert len(result["result"]["reviewer_reports"]) == 5
+    assert set(result["result"]["management_reports"]) == {"HR Agent", "Manager Agent", "GM Agent", "HO Agent", "Owner Agent"}
+    assert len(result["result"]["management_hierarchy"]["senior_managers"]) == 5
+    assert result["result"]["management_hierarchy"]["top_supervisor"]["local_execution"] is False
     assert len(calls) == 2 * len([x for x in result["steps"] if x["step_type"] == "builder"]) + 5
     assert all(step["status"] in {"completed", "pass"} for step in result["steps"])
 
