@@ -104,18 +104,18 @@ if ! command -v llama-server >/dev/null 2>&1; then
 fi
 
 if command -v llama-server >/dev/null 2>&1; then
-  RAM_KB="$(awk '/MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+  RAM_KB="$(awk '/MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
   FREE_KB="$(df -Pk "$HOME" 2>/dev/null | awk 'NR==2 {print $4}' || echo 0)"
   MODEL_DIR="$HOME/.sintu/models"
   mkdir -p "$MODEL_DIR"
   MODEL_URL=""
   MODEL_NAME=""
   MIN_MODEL_BYTES=0
-  if [ "${RAM_KB:-0}" -ge 7864320 ] && [ "${FREE_KB:-0}" -ge 3145728 ]; then
+  if [ "${RAM_KB:-0}" -ge 4194304 ] && [ "${FREE_KB:-0}" -ge 3145728 ]; then
     MODEL_NAME="qwen2.5-3b-instruct-q4_k_m.gguf"
     MODEL_URL="https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/$MODEL_NAME"
     MIN_MODEL_BYTES=1700000000
-  elif [ "${RAM_KB:-0}" -ge 3670016 ] && [ "${FREE_KB:-0}" -ge 900000 ]; then
+  elif [ "${RAM_KB:-0}" -ge 2097152 ] && [ "${FREE_KB:-0}" -ge 900000 ]; then
     MODEL_NAME="qwen2.5-0.5b-instruct-q4_k_m.gguf"
     MODEL_URL="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/$MODEL_NAME"
     MIN_MODEL_BYTES=350000000
