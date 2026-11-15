@@ -64,6 +64,7 @@ text = text.replace("SINTU_SESSION_SECRET=CHANGE-THIS-TO-A-RANDOM-64-CHARACTER-S
                     "SINTU_SESSION_SECRET=" + secrets.token_hex(32))
 text = text.replace("SINTU_BIND_ADDRESS=127.0.0.1", "SINTU_BIND_ADDRESS=127.0.0.1")
 text = text.replace("AI_PROVIDER=local", "AI_PROVIDER=local")
+text = text.replace("ESPEAK_EXECUTABLE=espeak", "ESPEAK_EXECUTABLE=espeak-ng")
 Path(".env").write_text(text, encoding="utf-8")
 Path(".env").chmod(0o600)
 print("Created .env. Save these first-login credentials securely:")
