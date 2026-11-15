@@ -407,12 +407,12 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
     if image_paths is None or len(image_paths) != len(scenes):
         raise ValueError("Har scene ke liye real scene image required hai; blank placeholder render disabled hai.")
     subtitles = subtitles or []
-    if subtitles:
-        raise ValueError("Subtitles/captions are disabled. Exported videos contain no spoken-word text overlays.")
-    if image_paths and len(image_paths) != len(scenes):
-        raise ValueError("Scene images ki sankhya scenes ke barabar honi chahiye.")
     if subtitles and len(subtitles) != len(scenes):
         raise ValueError("Subtitle lines ki sankhya scenes ke barabar honi chahiye.")
+    if any(not isinstance(line, str) or len(line) > 1000 for line in subtitles):
+        raise ValueError("Har subtitle line text hona chahiye aur 1000 characters se chhoti honi chahiye.")
+    if image_paths and len(image_paths) != len(scenes):
+        raise ValueError("Scene images ki sankhya scenes ke barabar honi chahiye.")
     for image_path in image_paths:
         _validate_scene_image(image_path)
 
@@ -433,8 +433,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             for index, scene in enumerate(scenes, start=1):
                 frame = work / f"frame-{index:03d}.png"
                 source_image = image_paths[index - 1] if image_paths else None
-                subtitle = subtitles[index - 1] if subtitles else None
-                _make_frame(frame, title, scene, index, len(scenes), source_image, subtitle, width, height)
+                _make_frame(frame, title, scene, index, len(scenes), source_image, None, width, height)
                 lines.append(f"file '{frame.as_posix()}'")
                 lines.append(f"duration {seconds_per_scene}")
             lines.append(f"file '{(work / f'frame-{len(scenes):03d}.png').as_posix()}'")
@@ -458,7 +457,13 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             # The concat demuxer emits one timestamped packet per still image. Without an fps filter,
             # FFmpeg writes only one frame per scene while audio/container duration spans the full timeline.
             # Expand the still-image timestamps into a continuous CFR stream before motion/fade filters.
-            video_filter = ",".join([f"fps={fps}", *filters])
+            video_filter_parts = [f"fps={fps}", *filters]
+            subtitle_file, subtitle_filter = _create_subtitle_track(
+                work, subtitles, [seconds_per_scene] * len(scenes), height, ffmpeg
+            )
+            if subtitle_filter:
+                video_filter_parts.append(subtitle_filter)
+            video_filter = ",".join(video_filter_parts)
             command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
                        "-f", "concat", "-safe", "0", "-i", str(concat)]
             audio_inputs = []
@@ -522,10 +527,10 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         "transition": transition,
         "motion": motion,
         "scene_images": len(image_paths),
-        "subtitles_burned_in": False,
+        "subtitles_burned_in": bool(subtitle_file),
         "brand_watermark": "SINTU AI YOUTUBE STUDIO",
         "format": "MP4 / H.264",
-        "note": "Clean scene imagery with the mandatory SINTU AI YOUTUBE STUDIO watermark, optional narration and background music. Spoken words and scene descriptions are never burned into the frames.",
+        "note": "Clean generated scene imagery with mandatory SINTU branding, optional narration/music and a separate timed subtitle track burned in only when supplied.",
     }
 
 
