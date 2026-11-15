@@ -67,6 +67,6 @@ def test_full_catalog_run_pauses_on_first_failed_independent_checker(tmp_path, m
 
     assert result["status"] == "paused"
     assert result["current_role"] == AGENTS[0] + " Checker"
-    assert len([step for step in result["steps"] if step["step_type"] == "builder"]) == 2
-    assert len([step for step in result["steps"] if step["step_type"] == "checker"]) == 2
+    assert len([step for step in result["steps"] if step["step_type"] == "builder"]) == 3
+    assert len([step for step in result["steps"] if step["step_type"] == "checker"]) == 3
     assert not any(step["step_type"] == "reviewer" for step in result["steps"])
