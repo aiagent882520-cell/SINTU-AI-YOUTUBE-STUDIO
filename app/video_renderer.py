@@ -93,7 +93,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         raise RendererUnavailable("Final video verification ke liye FFprobe installed hona chahiye.")
     try:
         result = subprocess.run(
-            [ffprobe, "-v", "error", "-count_frames", "-select_streams", "v:0",
+            [ffprobe, "-v", "error", "-count_frames",
              "-show_entries",
              "format=format_name,duration:stream=codec_type,codec_name,width,height,duration,nb_read_frames,avg_frame_rate",
              "-of", "json", str(path)],
