@@ -35,7 +35,9 @@ _load_project_environment()
 from app.ai_brain import generate_text, provider_status
 from app.agents import AGENTS
 from app.comfyui_client import image_workflow_status, video_workflow_status
-from app.image_generator import image_status
+from app.image_generator import IMAGE_DIR, generate_image, image_status
+from app.voice_generator import AUDIO_DIR, generate_voiceover
+from app.video_renderer import render_storyboard
 from app.music_generator import music_status
 from app.production_runtime import REVIEWERS, attach_render_result, create_run, execute_run, get_run
 from app.video_generator import AI_VIDEO_DIR, generate_video, video_status
@@ -158,6 +160,72 @@ def _live_video(prompt: str | list[str]) -> dict:
     }
 
 
+
+def _offline_storyboard_e2e(topic: str) -> dict:
+    """Build a real, free local MP4 from procedural stills and Hindi TTS; no ComfyUI required."""
+    clean_topic = topic.strip()
+    if not clean_topic or len(clean_topic) > 300:
+        raise ValueError("Offline video test topic must contain 1 to 300 characters.")
+
+    scenes = [
+        f"{clean_topic}, establishing wide cinematic opening shot",
+        f"{clean_topic}, detailed dramatic middle scene",
+        f"{clean_topic}, atmospheric cinematic closing shot",
+    ]
+    image_results = [
+        generate_image(prompt, kind="scene", aspect="portrait")
+        for prompt in scenes
+    ]
+    image_paths = [IMAGE_DIR / f"{item['image_id']}.jpg" for item in image_results]
+    for index, path in enumerate(image_paths, start=1):
+        if not path.is_file() or path.stat().st_size <= 0:
+            raise RuntimeError(f"Local scene image {index} was not saved.")
+
+    narration = "नमस्कार, आप देख रहे हैं सिंटू ए आई यूट्यूब स्टूडियो। आज की इस कहानी में आपका स्वागत है।"
+    voice = generate_voiceover(narration)
+    audio_path = AUDIO_DIR / voice["filename"]
+    if not audio_path.is_file() or audio_path.stat().st_size <= 0:
+        raise RuntimeError("Local Hindi voiceover was not saved.")
+
+    rendered = render_storyboard(
+        title=clean_topic,
+        scenes=scenes,
+        seconds_per_scene=3,
+        image_paths=image_paths,
+        audio_path=audio_path,
+        transition="fade",
+        motion="slow-zoom-in",
+        resolution="720x1280",
+        fps=24,
+        quality="standard",
+    )
+    final_path = OUTPUT_DIR / rendered["filename"]
+    if not final_path.is_file() or final_path.stat().st_size <= 1000:
+        raise RuntimeError("Offline storyboard MP4 was not created.")
+    if rendered.get("brand_watermark") != "SINTU AI YOUTUBE STUDIO":
+        raise RuntimeError("Offline storyboard MP4 is missing the mandatory SINTU watermark.")
+    if rendered.get("subtitles_burned_in") is not False:
+        raise RuntimeError("Offline storyboard MP4 unexpectedly contains burned-in subtitles.")
+    if rendered.get("audio") != "voiceover":
+        raise RuntimeError("Offline storyboard MP4 does not contain the Hindi voiceover track.")
+
+    return {
+        "scene_count": len(scenes),
+        "image_providers": sorted({item.get("provider", "unknown") for item in image_results}),
+        "voice_engine": voice.get("voice"),
+        "voice_format": voice.get("format"),
+        "final_render_id": rendered["video_id"],
+        "final_render_path": str(final_path),
+        "final_render_bytes": final_path.stat().st_size,
+        "duration_seconds": rendered["duration_seconds"],
+        "resolution": rendered["resolution"],
+        "watermark": rendered["brand_watermark"],
+        "audio": rendered["audio"],
+        "subtitles_burned_in": rendered["subtitles_burned_in"],
+        "verified_by_renderer": True,
+    }
+
+
 def _live_agent_catalog(topic: str, include_result: bool = False):
     run = create_run("__agent_catalog__", topic, "local")
     execute_run(run["id"], "local")
@@ -260,6 +328,7 @@ def main() -> int:
     parser.add_argument("--live-text", action="store_true", help="Make one real local Ollama text inference.")
     parser.add_argument("--live-agent-catalog", action="store_true", help="Run all 61 workers, 61 checkers and five reviewers using local Ollama.")
     parser.add_argument("--generate-video", action="store_true", help="Generate a real 3-second ComfyUI clip and render a branded MP4.")
+    parser.add_argument("--offline-video", action="store_true", help="Generate procedural scene images, local Hindi voiceover and a verified branded MP4 without ComfyUI or paid APIs.")
     parser.add_argument("--full-studio-e2e", action="store_true", help="Run all 61 workers/checkers and five reviewers, use the approved AI Video Generator scene prompt, render a branded MP4, and attach it to the production run.")
     parser.add_argument("--topic", default="भारत के प्राचीन किले में सुबह का सिनेमाई दृश्य")
     parser.add_argument("--deployment-url", help="Probe a deployed /api/health URL.")
@@ -282,6 +351,8 @@ def main() -> int:
             report["live_tests"]["agent_catalog"] = _live_agent_catalog(args.topic)
         if args.full_studio_e2e:
             report["live_tests"]["full_studio_e2e"] = _full_studio_e2e(args.topic)
+        if args.offline_video:
+            report["live_tests"]["offline_storyboard_video"] = _offline_storyboard_e2e(args.topic)
         if args.generate_video:
             report["live_tests"]["comfyui_video_and_branded_render"] = _live_video(args.topic)
         if args.deployment_url:
