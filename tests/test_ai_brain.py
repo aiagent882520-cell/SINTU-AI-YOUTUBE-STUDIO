@@ -112,3 +112,16 @@ def test_local_openai_compatible_rejects_remote_endpoint(monkeypatch):
     status = ai_brain._local_openai_compatible_status()
     assert status["service_running"] is False
     assert status["model_available"] is False
+
+
+def test_invalid_local_backend_preference_falls_back_to_auto(monkeypatch):
+    monkeypatch.setenv("LOCAL_AI_BACKEND", "unknown-backend")
+    monkeypatch.setattr(ai_brain, "_ollama_status", lambda: {
+        "service_running": False, "model_available": False,
+        "model": "qwen2.5:3b", "base_url": "http://127.0.0.1:11434"
+    })
+    monkeypatch.setattr(ai_brain, "_local_openai_compatible_status", lambda: {
+        "service_running": True, "model_available": True,
+        "model": "qwen-local", "base_url": "http://127.0.0.1:8080/v1"
+    })
+    assert ai_brain._active_local_backend()["backend"] == "openai-compatible"
