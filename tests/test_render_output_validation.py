@@ -18,8 +18,12 @@ def _run_result(metadata, returncode=0):
 
 
 def _setup_probe(monkeypatch, metadata, returncode=0):
-    monkeypatch.setattr("app.video_renderer.shutil.which", lambda name: "/usr/bin/ffprobe")
-    monkeypatch.setattr("app.video_renderer.subprocess.run", lambda *args, **kwargs: _run_result(metadata, returncode))
+    monkeypatch.setattr("app.video_renderer.shutil.which", lambda name: f"/usr/bin/{name}")
+    def fake_run(command, **kwargs):
+        if "ffprobe" in command[0]:
+            return _run_result(metadata, returncode)
+        return SimpleNamespace(returncode=0, stdout=bytes(range(256)) * 12, stderr="")
+    monkeypatch.setattr("app.video_renderer.subprocess.run", fake_run)
 
 
 def test_final_mp4_verification_accepts_expected_video_and_audio(tmp_path, monkeypatch):
