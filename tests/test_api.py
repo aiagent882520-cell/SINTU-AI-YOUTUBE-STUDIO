@@ -1556,6 +1556,7 @@ def test_youtube_publish_completes_resumable_upload_and_records_history(tmp_path
     video_bytes = b"mock rendered mp4 bytes"
     (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(main, "verify_publishable_mp4", lambda path: {"verified": True})
     monkeypatch.setattr(main, "_youtube_access_token", lambda: "mock-youtube-access-token")
     requests = []
     streamed_uploads = []
@@ -3203,6 +3204,7 @@ def test_youtube_publish_requires_approved_calendar_and_records_success(tmp_path
     output_dir = tmp_path / "generated_videos"
     output_dir.mkdir()
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(main, "verify_publishable_mp4", lambda path: {"verified": True})
     video_id = "a" * 32
     video_bytes = b"fake-mp4-content"
     (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
@@ -3382,3 +3384,61 @@ def test_youtube_publish_rejects_symlinked_render(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "OUTPUT_DIR", render_dir)
     response = client.post(f"/api/admin/youtube/publish/{calendar_id}?video_id={'c' * 32}&title=Test")
     assert response.status_code == 404
+
+def test_youtube_publish_blocks_unverified_truncated_mp4_before_oauth(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    output_dir = tmp_path / "generated_videos"
+    output_dir.mkdir()
+    video_id = "a" * 32
+    (output_dir / (video_id + ".mp4")).write_bytes(b"present-but-corrupt-mp4")
+    monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    with main.db() as conn:
+        conn.execute(
+            "INSERT INTO content_calendar(title,platform,prompt,scheduled_at,status,created_at) VALUES(?,?,?,?,?,?)",
+            ("Approved test", "youtube", "Test publish gate", "2026-11-15T12:00:00+00:00", "Approved", "2026-11-15T12:00:00+00:00"),
+        )
+    monkeypatch.setattr(
+        main, "verify_publishable_mp4",
+        lambda path: (_ for _ in ()).throw(main.RenderFailed("truncated MP4")),
+    )
+    monkeypatch.setattr(main, "_youtube_access_token", lambda: pytest.fail("OAuth must not run for invalid media"))
+    response = client.post(
+        f"/api/admin/youtube/publish/1?video_id={video_id}&title=Test",
+    )
+    assert response.status_code == 409
+    assert "quality verification failed" in response.json()["detail"].lower()
+
+@pytest.mark.parametrize(
+    ("calendar_platform", "route", "token_helper"),
+    [
+        ("facebook", "/api/admin/meta/facebook/publish/1", "_meta_tokens"),
+        ("tiktok", "/api/admin/tiktok/publish/1", "_tiktok_tokens"),
+    ],
+)
+def test_social_uploads_block_corrupt_mp4_before_provider_auth(
+    tmp_path, monkeypatch, calendar_platform, route, token_helper
+):
+    client = client_for_test(tmp_path, monkeypatch)
+    output_dir = tmp_path / "generated_videos"
+    output_dir.mkdir()
+    video_id = "b" * 32
+    (output_dir / (video_id + ".mp4")).write_bytes(b"present-but-corrupt-mp4")
+    monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    with main.db() as conn:
+        conn.execute(
+            "INSERT INTO content_calendar(title,platform,prompt,scheduled_at,status,created_at) VALUES(?,?,?,?,?,?)",
+            ("Approved social test", calendar_platform, "Test publish gate",
+             "2026-11-15T12:00:00+00:00", "Approved", "2026-11-15T12:00:00+00:00"),
+        )
+    monkeypatch.setattr(
+        main, "verify_publishable_mp4",
+        lambda path: (_ for _ in ()).throw(main.RenderFailed("truncated MP4")),
+    )
+    monkeypatch.setattr(main, token_helper, lambda: pytest.fail("Provider auth must not run for invalid media"))
+    params = {"video_id": video_id}
+    if calendar_platform == "facebook":
+        params["title"] = "Test upload"
+    response = client.post(route, params=params)
+    assert response.status_code == 409
+    assert "quality verification failed" in response.json()["detail"].lower()
+

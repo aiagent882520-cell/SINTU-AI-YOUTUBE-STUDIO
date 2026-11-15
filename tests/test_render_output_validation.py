@@ -7,7 +7,7 @@ from app.video_renderer import RenderFailed, _verify_rendered_output
 
 
 def _metadata(width=720, height=1280, duration=8.0, audio=True, codec="h264"):
-    streams = [{"codec_type": "video", "codec_name": codec, "width": width, "height": height}]
+    streams = [{"codec_type": "video", "codec_name": codec, "width": width, "height": height, "duration": str(duration), "nb_read_frames": "240", "avg_frame_rate": "30/1"}]
     if audio:
         streams.append({"codec_type": "audio", "codec_name": "aac"})
     return {"streams": streams, "format": {"format_name": "mov,mp4,m4a", "duration": str(duration)}}
@@ -27,7 +27,7 @@ def test_final_mp4_verification_accepts_expected_video_and_audio(tmp_path, monke
     output = tmp_path / "final.mp4"
     output.write_bytes(b"mp4")
     result = _verify_rendered_output(output, 720, 1280, 8, require_audio=True)
-    assert result == {"duration_seconds": 8.0, "resolution": "720x1280", "video_codec": "h264", "audio": True}
+    assert result == {"duration_seconds": 8.0, "video_duration_seconds": 8.0, "frame_count": 240, "fps": 30.0, "resolution": "720x1280", "video_codec": "h264", "audio": True}
 
 
 @pytest.mark.parametrize("metadata", [
@@ -43,6 +43,21 @@ def test_final_mp4_verification_rejects_wrong_output_metadata(tmp_path, monkeypa
     output = tmp_path / "final.mp4"
     output.write_bytes(b"mp4")
     with pytest.raises(RenderFailed):
+        _verify_rendered_output(output, 720, 1280, 8, require_audio=True)
+
+
+@pytest.mark.parametrize("frame_count,video_duration", [
+    ("4", "0.166667"),
+    ("240", "4.0"),
+])
+def test_final_mp4_verification_rejects_incomplete_video_stream(tmp_path, monkeypatch, frame_count, video_duration):
+    metadata = _metadata()
+    metadata["streams"][0]["nb_read_frames"] = frame_count
+    metadata["streams"][0]["duration"] = video_duration
+    _setup_probe(monkeypatch, metadata)
+    output = tmp_path / "truncated.mp4"
+    output.write_bytes(b"mp4")
+    with pytest.raises(RenderFailed, match="actual frames"):
         _verify_rendered_output(output, 720, 1280, 8, require_audio=True)
 
 
