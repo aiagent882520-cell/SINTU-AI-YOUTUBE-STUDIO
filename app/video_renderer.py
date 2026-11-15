@@ -386,7 +386,8 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                       image_paths: list[Path] | None = None, audio_path: Path | None = None,
                       subtitles: list[str] | None = None, music_path: Path | None = None,
                       music_volume: float = 0.18, transition: str = "fade", motion: str = "none",
-                      resolution: str = "720x1280", fps: int = 30, quality: str = "high") -> dict:
+                      resolution: str = "720x1280", fps: int = 30, quality: str = "high",
+                      sound_effects_enabled: bool = False, sound_effects_volume: float = 0.18) -> dict:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RendererUnavailable("FFmpeg server par installed nahi hai. Video rendering filhaal unavailable hai.")
@@ -401,6 +402,8 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         raise ValueError("Motion none, slow-zoom-in ya slow-zoom-out hona chahiye.")
     if not 0.0 <= music_volume <= 1.0:
         raise ValueError("Music volume 0 se 1 ke beech hona chahiye.")
+    if not isinstance(sound_effects_enabled, bool) or not 0.0 <= sound_effects_volume <= 1.0:
+        raise ValueError("Sound effects enable flag ya volume invalid hai.")
     if music_path and not music_path.is_file():
         raise ValueError("Background music file nahi mili.")
 
@@ -440,6 +443,14 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             concat = work / "frames.txt"
             concat.write_text("\n".join(lines) + "\n", encoding="utf-8")
             duration = len(scenes) * seconds_per_scene
+            sfx_result = None
+            if sound_effects_enabled and sound_effects_volume > 0:
+                from .sound_effects import generate_scene_sound_effects
+                sfx_result = generate_scene_sound_effects(
+                    scenes, [seconds_per_scene] * len(scenes),
+                    work / "sintu-sound-effects.wav", 1.0,
+                )
+            sfx_path = sfx_result["path"] if sfx_result else None
             filters = []
             if transition == "fade":
                 # Chaining multiple timestamped fade filters after the concat
@@ -466,24 +477,44 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             video_filter = ",".join(video_filter_parts)
             command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
                        "-f", "concat", "-safe", "0", "-i", str(concat)]
-            audio_inputs = []
+            audio_tracks = []
+            next_audio_index = 1
             if audio_path:
                 command += ["-i", str(audio_path)]
-                audio_inputs.append("voice")
+                audio_tracks.append(("voice", next_audio_index))
+                next_audio_index += 1
             if music_path:
                 command += ["-stream_loop", "-1", "-i", str(music_path)]
-                audio_inputs.append("music")
-            if audio_inputs == ["voice", "music"]:
-                command += ["-filter_complex",
-                    f"[1:a]volume=1[voice];[2:a]volume={music_volume},afade=t=in:st=0:d=1.5,afade=t=out:st={max(0, duration - 2)}:d=2,atrim=duration={duration}[music];"
-                    "[voice][music]amix=inputs=2:duration=longest:dropout_transition=2,apad,atrim=duration="
-                    f"{duration}[aout]", "-map", "0:v:0", "-map", "[aout]", "-c:a", "aac", "-b:a", "192k"]
-            elif audio_inputs == ["voice"]:
-                command += ["-map", "0:v:0", "-map", "1:a:0", "-af", f"apad,atrim=duration={duration}",
-                            "-c:a", "aac", "-b:a", "192k"]
-            elif audio_inputs == ["music"]:
-                command += ["-map", "0:v:0", "-map", "1:a:0", "-af",
-                            f"volume={music_volume},afade=t=in:st=0:d=1.5,afade=t=out:st={max(0, duration - 2)}:d=2,atrim=duration={duration}", "-c:a", "aac", "-b:a", "192k"]
+                audio_tracks.append(("music", next_audio_index))
+                next_audio_index += 1
+            if sfx_path:
+                command += ["-i", str(sfx_path)]
+                audio_tracks.append(("sfx", next_audio_index))
+                next_audio_index += 1
+            if audio_tracks:
+                audio_filters, mix_labels = [], []
+                for kind, input_index in audio_tracks:
+                    label = kind
+                    if kind == "music":
+                        audio_filters.append(
+                            f"[{input_index}:a]aresample=48000,volume={music_volume},"
+                            f"afade=t=in:st=0:d=1.5,afade=t=out:st={max(0, duration - 2)}:d=2,"
+                            f"atrim=duration={duration}[{label}]"
+                        )
+                    else:
+                        track_volume = 1.0 if kind == "voice" else sound_effects_volume
+                        audio_filters.append(
+                            f"[{input_index}:a]aresample=48000,volume={track_volume},"
+                            f"apad,atrim=duration={duration}[{label}]"
+                        )
+                    mix_labels.append(f"[{label}]")
+                audio_filters.append(
+                    "".join(mix_labels) +
+                    f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,"
+                    f"apad,atrim=duration={duration}[aout]"
+                )
+                command += ["-filter_complex", ";".join(audio_filters),
+                            "-map", "0:v:0", "-map", "[aout]", "-c:a", "aac", "-b:a", "192k"]
             else:
                 command += ["-map", "0:v:0", "-an"]
             if video_filter:
@@ -498,7 +529,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             if completed.returncode != 0 or not temporary_output_path.is_file():
                 detail = (completed.stderr or "FFmpeg render failed")[-1200:]
                 raise RenderFailed(detail)
-            _verify_rendered_output(temporary_output_path, width, height, duration, require_audio=bool(audio_path or music_path), expected_fps=fps)
+            _verify_rendered_output(temporary_output_path, width, height, duration, require_audio=bool(audio_path or music_path or sfx_path), expected_fps=fps)
             os.replace(temporary_output_path, output_path)
             temporary_output_path = None
     except subprocess.TimeoutExpired:
@@ -521,9 +552,11 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         "fps": fps,
         "quality": quality,
         "video_codec": "H.264 / libx264",
-        "audio": "voiceover+music" if audio_path and music_path else "voiceover" if audio_path else "music" if music_path else "none",
+        "audio": "+".join([label for label, enabled in (("voiceover", audio_path), ("music", music_path), ("sound-effects", sfx_path)) if enabled]) or "none",
         "music": bool(music_path),
         "music_volume": music_volume if music_path else None,
+        "sound_effects": bool(sfx_path),
+        "sound_effect_cue_count": sfx_result["cue_count"] if sfx_result else 0,
         "transition": transition,
         "motion": motion,
         "scene_images": len(image_paths),
@@ -538,7 +571,9 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                     music_path: Path | None = None, music_volume: float = 0.18,
                     subtitles: list[str] | None = None, transition: str = "cut", transitions: list[str] | None = None,
                     clip_audio_volumes: list[float] | None = None, resolution: str = "720x1280",
-                    fps: int = 30, quality: str = "high") -> dict:
+                    fps: int = 30, quality: str = "high",
+                    scene_descriptions: list[str] | None = None,
+                    sound_effects_enabled: bool = False, sound_effects_volume: float = 0.18) -> dict:
     """Join AI MP4 clips, preserve audio, mix optional narration/music and add SINTU branding."""
     import json
 
@@ -551,6 +586,10 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         raise ValueError("1 se 25 AI video clips required hain.")
     if not 0.0 <= music_volume <= 1.0:
         raise ValueError("Music volume 0 se 1 ke beech hona chahiye.")
+    if not isinstance(sound_effects_enabled, bool) or not 0.0 <= sound_effects_volume <= 1.0:
+        raise ValueError("Sound effects enable flag ya volume invalid hai.")
+    if scene_descriptions is not None and len(scene_descriptions) != len(video_paths):
+        raise ValueError("Scene descriptions ki sankhya AI clips ke barabar honi chahiye.")
     if transition not in {"cut", "fade"}:
         raise ValueError("Transition cut ya fade hona chahiye.")
     transitions = transitions or [transition] * len(video_paths)
@@ -592,6 +631,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         total_duration += duration
     if total_duration > 1800:
         raise ValueError("Combined AI video 30 minutes se lambi nahi ho sakti.")
+    sfx_result = None
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     video_id = uuid.uuid4().hex
@@ -605,6 +645,14 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             temporary_output_path = Path(temporary_output.name)
         with tempfile.TemporaryDirectory(prefix="sintu-ai-join-") as temp:
             work = Path(temp)
+            if sound_effects_enabled and sound_effects_volume > 0:
+                from .sound_effects import generate_scene_sound_effects
+                sfx_result = generate_scene_sound_effects(
+                    scene_descriptions or ["" for _ in video_paths],
+                    [item["duration"] for item in clip_info],
+                    work / "sintu-sound-effects.wav",
+                    1.0,
+                )
             command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
             brand_path = work / "sintu-watermark.png"
             _make_watermark_image(width=max(180, int(width * 0.22)), height=max(44, int(width * 0.05))).save(brand_path, format="PNG")
@@ -637,6 +685,11 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                 next_index += 1
             brand_index = next_index
             command += ["-loop", "1", "-i", str(brand_path)]
+            next_index += 1
+            sound_effect_index = None
+            if sfx_result:
+                command += ["-i", str(sfx_result["path"])]
+                sound_effect_index = next_index
 
             filters = []
             video_labels = []
@@ -684,7 +737,13 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                     f"atrim=duration={total_duration:.3f}[music]"
                 )
                 mix_labels.append("[music]")
-            filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,atrim=duration={total_duration:.3f}[aout]")
+            if sound_effect_index is not None:
+                filters.append(
+                    f"[{sound_effect_index}:a:0]volume={sound_effects_volume},aresample=48000,"
+                    f"apad,atrim=duration={total_duration:.3f}[sfx]"
+                )
+                mix_labels.append("[sfx]")
+            filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,apad,atrim=duration={total_duration:.3f}[aout]")
 
             command += ["-filter_complex", ";".join(filters), "-map", video_map, "-map", "[aout]",
                         "-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
@@ -718,9 +777,11 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         "fps": fps,
         "quality": quality,
         "video_codec": "H.264 / libx264",
-        "audio": "source+voiceover+music" if audio_path and music_path else "source+voiceover" if audio_path else "source+music" if music_path else "source-audio",
+        "audio": "source" + ("+voiceover" if audio_path else "") + ("+music" if music_path else "") + ("+sound-effects" if sfx_result else ""),
         "music": bool(music_path),
         "music_volume": music_volume if music_path else None,
+        "sound_effects": bool(sfx_result),
+        "sound_effect_cue_count": sfx_result["cue_count"] if sfx_result else 0,
         "transition": transition,
         "motion": "source AI clip motion",
         "scene_images": 0,
@@ -736,7 +797,9 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                           music_path: Path | None = None, music_volume: float = 0.18,
                           subtitles: list[str] | None = None, transition: str = "cut",
                           transitions: list[str] | None = None, resolution: str = "720x1280",
-                          fps: int = 30, quality: str = "high") -> dict:
+                          fps: int = 30, quality: str = "high",
+                          sound_effects_enabled: bool = False,
+                          sound_effects_volume: float = 0.18) -> dict:
     """Create one ordered timeline from generated still images and AI video clips."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
@@ -746,6 +809,8 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
         raise ValueError("Timeline mein 1 se 25 items hon aur har item ka scene text ho.")
     if not 2 <= seconds_per_scene <= 12:
         raise ValueError("Still image duration 2 se 12 seconds honi chahiye.")
+    if not isinstance(sound_effects_enabled, bool) or not 0.0 <= sound_effects_volume <= 1.0:
+        raise ValueError("Sound effects enable flag ya volume invalid hai.")
     subtitles = subtitles or []
     if subtitles and len(subtitles) != len(items):
         raise ValueError("Mixed timeline subtitle lines ki sankhya timeline items ke barabar honi chahiye.")
@@ -821,6 +886,8 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
             clip_paths, audio_path=audio_path, music_path=music_path,
             music_volume=music_volume, subtitles=subtitles, transition=transition, transitions=transitions,
             clip_audio_volumes=[float(item.get("audio_volume", 0.25)) if item["kind"] == "video" else 0.0 for item in items],
+            scene_descriptions=scenes, sound_effects_enabled=sound_effects_enabled,
+            sound_effects_volume=sound_effects_volume,
             resolution=resolution, fps=fps, quality=quality
         )
         result["timeline_items"] = len(items)

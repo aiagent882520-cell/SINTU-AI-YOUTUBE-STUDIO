@@ -255,6 +255,8 @@ def test_render_export_profile_validation_and_forwarding(tmp_path, monkeypatch):
     assert captured["resolution"] == "1920x1080"
     assert captured["fps"] == 60
     assert captured["quality"] == "maximum"
+    assert captured["sound_effects_enabled"] is True
+    assert captured["sound_effects_volume"] == 0.18
     assert client.post("/api/render", json={
         "title": "Bad", "scenes": ["Opening"], "resolution": "7680x4320"
     }).status_code == 400
@@ -557,8 +559,8 @@ def test_renderer_builds_music_mix_and_fade_filter(tmp_path, monkeypatch):
     command = captured["command"]
     assert "-filter_complex" in command
     filter_graph = command[command.index("-filter_complex") + 1]
-    assert "[1:a]volume=1[voice]" in filter_graph
-    assert "[2:a]volume=0.2,afade=t=in:st=0:d=1.5" in filter_graph
+    assert "[1:a]aresample=48000,volume=1.0,apad,atrim=duration=6[voice]" in filter_graph
+    assert "[2:a]aresample=48000,volume=0.2,afade=t=in:st=0:d=1.5" in filter_graph
     assert "afade=t=out:st=4:d=2" in filter_graph
     video_filter = command[command.index("-vf") + 1]
     assert "fade=t=out" in video_filter and "fade=t=in" in video_filter
@@ -946,10 +948,15 @@ def test_ai_video_clip_assembly_contract(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "AI_VIDEO_DIR", clips_dir)
     called = {}
 
-    def fake_assembly(paths, audio_path=None, music_path=None, music_volume=0.18, subtitles=None, transition="cut", resolution="720x1280", fps=30, quality="high"):
+    def fake_assembly(paths, audio_path=None, music_path=None, music_volume=0.18, subtitles=None,
+                      transition="cut", resolution="720x1280", fps=30, quality="high",
+                      scene_descriptions=None, sound_effects_enabled=False, sound_effects_volume=0.18):
         called["paths"] = paths
         called["subtitles"] = subtitles
         called["transition"] = transition
+        called["scene_descriptions"] = scene_descriptions
+        called["sound_effects_enabled"] = sound_effects_enabled
+        called["sound_effects_volume"] = sound_effects_volume
         return {
             "video_id": "c" * 32, "url": "/api/videos/" + "c" * 32,
             "scenes": len(paths), "duration_seconds": None,
@@ -968,6 +975,9 @@ def test_ai_video_clip_assembly_contract(tmp_path, monkeypatch):
     assert len(called["paths"]) == 2
     assert called["subtitles"] == ["पहला दृश्य", "दूसरा दृश्य"]
     assert called["transition"] == "fade"
+    assert called["scene_descriptions"] == ["Opening clip", "Ending clip"]
+    assert called["sound_effects_enabled"] is True
+    assert called["sound_effects_volume"] == 0.18
     invalid = client.post("/api/render", json={
         "title": "AI Short", "scenes": ["Only one scene"],
         "video_ids": clip_ids, "transition": "cut"
@@ -2929,7 +2939,9 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
             "video_id": "d" * 32, "filename": "d" * 32 + ".mp4",
             "url": "/api/videos/" + "d" * 32, "resolution": kwargs["resolution"],
             "brand_watermark": "SINTU AI YOUTUBE STUDIO",
-            "subtitles_burned_in": bool(kwargs.get("subtitles"))
+            "subtitles_burned_in": bool(kwargs.get("subtitles")),
+            "sound_effects": bool(kwargs.get("sound_effects_enabled")),
+            "sound_effect_cue_count": max(0, len(scenes) - 1)
         }
     monkeypatch.setattr(main, "render_storyboard", fake_render)
     attached = {}
@@ -2957,7 +2969,11 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
     assert body["render"]["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
     assert body["render"]["subtitles_burned_in"] is True
     assert len(body["subtitles"]) == 2
+    assert body["render"]["sound_effects"] is True
+    assert body["render"]["sound_effect_cue_count"] >= 1
     assert rendered_options["subtitles"] == body["subtitles"]
+    assert rendered_options["sound_effects_enabled"] is True
+    assert rendered_options["sound_effects_volume"] == 0.18
     assert attached["owner"] == "local"
     assert generated == ["पुराने किले का सिनेमाई दृश्य", "रहस्यमयी जंगल का दृश्य"]
     assert aspects == ["portrait", "portrait"]
@@ -3572,3 +3588,14 @@ def test_render_ui_exposes_enabled_per_scene_subtitle_input(tmp_path, monkeypatc
     assert 'one line per scene or clip' in page
     assert 'id="renderSubtitles" rows="4" maxlength="25000"' in page
     assert 'id="renderSubtitles" rows="4" maxlength="25000" disabled' not in page
+    assert 'id="renderSoundEffects" type="checkbox" checked' in page
+    assert 'id="renderSfxVolume" type="range"' in page
+
+
+
+def test_render_ui_exposes_sound_effect_controls_and_subtitles(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    page = client.get("/").text
+    assert 'id="renderSoundEffects" type="checkbox" checked' in page
+    assert 'id="renderSfxVolume" type="range"' in page
+    assert "whoosh, impact, wind, water, footsteps" in page
