@@ -352,7 +352,6 @@ Follow-up workload CSV export: the community review workload panel can download 
 - Generated scene images/clips में text bake नहीं होता। User-requested subtitles/lyrics अलग timed SRT track से FFmpeg/libass द्वारा final MP4 में burn होते हैं; lyrics user-supplied, original, public-domain या licensed होने चाहिए। Blender scene builder arbitrary 3D text objects को अभी भी reject करता है.
 - AI visual prompts request clean frames with no generated logos or watermarks; the final renderer adds the official SINTU brand mark after the visual is generated.
 - Thumbnail and YouTube metadata text are separate assets and are not burned into video frames.
-- SRT sidecar generation, if used, creates a separate file; it is not included in the MP4.
 - SRT sidecar generation भी उपलब्ध है; अब उसी timed track को final MP4 में burn किया जा सकता है।
 
 ### 60 format render capability map
