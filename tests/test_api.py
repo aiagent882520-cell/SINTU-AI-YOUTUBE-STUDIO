@@ -2921,11 +2921,16 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
     monkeypatch.setattr(main, "generate_music", lambda prompt, duration: {
         "music_id": "c" * 32, "url": "/api/music/" + "c" * 32
     })
-    monkeypatch.setattr(main, "render_storyboard", lambda title, scenes, seconds, **kwargs: {
-        "video_id": "d" * 32, "filename": "d" * 32 + ".mp4",
-        "url": "/api/videos/" + "d" * 32, "resolution": kwargs["resolution"],
-        "brand_watermark": "SINTU AI YOUTUBE STUDIO", "subtitles_burned_in": False
-    })
+    rendered_options = {}
+    def fake_render(title, scenes, seconds, **kwargs):
+        rendered_options.update(kwargs)
+        return {
+            "video_id": "d" * 32, "filename": "d" * 32 + ".mp4",
+            "url": "/api/videos/" + "d" * 32, "resolution": kwargs["resolution"],
+            "brand_watermark": "SINTU AI YOUTUBE STUDIO",
+            "subtitles_burned_in": bool(kwargs.get("subtitles"))
+        }
+    monkeypatch.setattr(main, "render_storyboard", fake_render)
     attached = {}
     def fake_attach(value, rendered, owner):
         attached.update(run_id=value, render=rendered, owner=owner)
@@ -2949,7 +2954,9 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
     assert body["video_rendered"] is True and body["published"] is False
     assert len(body["generated_images"]) == 2
     assert body["render"]["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
-    assert body["render"]["subtitles_burned_in"] is False
+    assert body["render"]["subtitles_burned_in"] is True
+    assert len(body["subtitles"]) == 2
+    assert rendered_options["subtitles"] == body["subtitles"]
     assert attached["owner"] == "local"
     assert generated == ["पुराने किले का सिनेमाई दृश्य", "रहस्यमयी जंगल का दृश्य"]
     assert aspects == ["portrait", "portrait"]
@@ -2986,11 +2993,16 @@ def test_production_media_pipeline_uses_approved_storyboard_when_scene_prompts_o
     monkeypatch.setattr(main, "generate_music", lambda prompt, duration: {
         "music_id": "c" * 32, "url": "/api/music/" + "c" * 32
     })
-    monkeypatch.setattr(main, "render_storyboard", lambda title, scenes, seconds, **kwargs: {
-        "video_id": "d" * 32, "filename": "d" * 32 + ".mp4",
-        "url": "/api/videos/" + "d" * 32, "resolution": kwargs["resolution"],
-        "brand_watermark": "SINTU AI YOUTUBE STUDIO", "subtitles_burned_in": False
-    })
+    rendered_options = {}
+    def fake_render(title, scenes, seconds, **kwargs):
+        rendered_options.update(kwargs)
+        return {
+            "video_id": "d" * 32, "filename": "d" * 32 + ".mp4",
+            "url": "/api/videos/" + "d" * 32, "resolution": kwargs["resolution"],
+            "brand_watermark": "SINTU AI YOUTUBE STUDIO",
+            "subtitles_burned_in": bool(kwargs.get("subtitles"))
+        }
+    monkeypatch.setattr(main, "render_storyboard", fake_render)
     monkeypatch.setattr(main, "attach_render_result", lambda *args: {"status": "completed"})
     image_dir, audio_dir, music_dir = tmp_path / "images", tmp_path / "audio", tmp_path / "music"
     image_dir.mkdir(); audio_dir.mkdir(); music_dir.mkdir()
@@ -3010,6 +3022,8 @@ def test_production_media_pipeline_uses_approved_storyboard_when_scene_prompts_o
     ]
     assert response.json()["video_rendered"] is True
     assert response.json()["published"] is False
+    assert response.json()["render"]["subtitles_burned_in"] is True
+    assert len(response.json()["subtitles"]) == 2
 
 
 def test_scene_prompt_extraction_from_numbered_deliverable():
@@ -3536,3 +3550,14 @@ def test_youtube_revenue_sync_endpoint_rejects_unavailable_monetization(tmp_path
         "start_date": "2026-11-01", "end_date": "2026-11-07"
     })
     assert response.status_code == 409
+
+
+
+def test_scene_aligned_hindi_subtitle_splitter_preserves_order_and_scene_count():
+    lines = main._subtitle_lines_from_narration(
+        "पहला वाक्य। दूसरा वाक्य। तीसरा वाक्य। चौथा वाक्य।", 2
+    )
+    assert len(lines) == 2
+    assert "पहला वाक्य।" in lines[0]
+    assert "चौथा वाक्य।" in lines[1]
+    assert all(len(line) <= 1000 for line in lines)
