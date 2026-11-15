@@ -56,7 +56,13 @@ cd "$APP_DIR"
 
 say "Creating isolated Python environment"
 if [ ! -x .venv/bin/python ]; then
-  python -m venv .venv
+  python -m venv --system-site-packages .venv
+fi
+# Termux ships native Pillow and cryptography builds as system packages. Expose
+# those ABI-compatible builds inside the venv instead of trying to compile them
+# from PyPI on Android; also repair existing isolated venvs on safe reruns.
+if [ -f .venv/pyvenv.cfg ] && grep -q '^include-system-site-packages = false' .venv/pyvenv.cfg; then
+  sed -i 's/^include-system-site-packages = false/include-system-site-packages = true/' .venv/pyvenv.cfg
 fi
 .venv/bin/python -m pip install --upgrade pip setuptools wheel
 .venv/bin/python -m pip install -r requirements.txt
