@@ -946,10 +946,15 @@ def test_ai_video_clip_assembly_contract(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "AI_VIDEO_DIR", clips_dir)
     called = {}
 
-    def fake_assembly(paths, audio_path=None, music_path=None, music_volume=0.18, subtitles=None, transition="cut", resolution="720x1280", fps=30, quality="high"):
+    def fake_assembly(paths, audio_path=None, music_path=None, music_volume=0.18, subtitles=None,
+                      transition="cut", resolution="720x1280", fps=30, quality="high",
+                      scene_descriptions=None, sound_effects_enabled=False, sound_effects_volume=0.18):
         called["paths"] = paths
         called["subtitles"] = subtitles
         called["transition"] = transition
+        called["scene_descriptions"] = scene_descriptions
+        called["sound_effects_enabled"] = sound_effects_enabled
+        called["sound_effects_volume"] = sound_effects_volume
         return {
             "video_id": "c" * 32, "url": "/api/videos/" + "c" * 32,
             "scenes": len(paths), "duration_seconds": None,
@@ -968,6 +973,9 @@ def test_ai_video_clip_assembly_contract(tmp_path, monkeypatch):
     assert len(called["paths"]) == 2
     assert called["subtitles"] == ["पहला दृश्य", "दूसरा दृश्य"]
     assert called["transition"] == "fade"
+    assert called["scene_descriptions"] == ["Opening clip", "Ending clip"]
+    assert called["sound_effects_enabled"] is True
+    assert called["sound_effects_volume"] == 0.18
     invalid = client.post("/api/render", json={
         "title": "AI Short", "scenes": ["Only one scene"],
         "video_ids": clip_ids, "transition": "cut"
@@ -3572,3 +3580,5 @@ def test_render_ui_exposes_enabled_per_scene_subtitle_input(tmp_path, monkeypatc
     assert 'one line per scene or clip' in page
     assert 'id="renderSubtitles" rows="4" maxlength="25000"' in page
     assert 'id="renderSubtitles" rows="4" maxlength="25000" disabled' not in page
+    assert 'id="renderSoundEffects" type="checkbox" checked' in page
+    assert 'id="renderSfxVolume" type="range"' in page
