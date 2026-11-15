@@ -448,7 +448,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                 from .sound_effects import generate_scene_sound_effects
                 sfx_result = generate_scene_sound_effects(
                     scenes, [seconds_per_scene] * len(scenes),
-                    work / "sintu-sound-effects.wav", sound_effects_volume,
+                    work / "sintu-sound-effects.wav", 1.0,
                 )
             sfx_path = sfx_result["path"] if sfx_result else None
             filters = []
@@ -651,7 +651,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                     scene_descriptions or ["" for _ in video_paths],
                     [item["duration"] for item in clip_info],
                     work / "sintu-sound-effects.wav",
-                    sound_effects_volume,
+                    1.0,
                 )
             command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
             brand_path = work / "sintu-watermark.png"
