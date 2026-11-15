@@ -60,7 +60,10 @@ def test_earning_dashboard_is_available(tmp_path, monkeypatch):
     page = client.get("/earnings")
     assert page.status_code == 200
     assert "SINTU AI" in page.text
-    assert "/api/earnings/summary" in page.text
+    assert '<script src="/static/earnings.js"></script>' in page.text
+    script = client.get("/static/earnings.js")
+    assert script.status_code == 200
+    assert "/api/earnings/summary" in script.text
 
 
 
@@ -110,24 +113,28 @@ def test_csv_export_neutralizes_spreadsheet_formula_injection(tmp_path, monkeypa
 def test_earning_dashboard_has_record_management_controls(tmp_path, monkeypatch):
     client = setup_client(tmp_path, monkeypatch)
     page = client.get("/earnings").text
-    assert "data-edit-id" in page
-    assert "data-delete-id" in page
+    assert '<script src="/static/earnings.js"></script>' in page
+    script = client.get("/static/earnings.js").text
+    assert "data-edit-id" in script
+    assert "data-delete-id" in script
     assert "recordKindFilter" in page
-    assert "cancelEdit" in page
+    assert "cancelEdit" in script
 
 
 def test_earning_dashboard_includes_official_youtube_analytics_panel(tmp_path, monkeypatch):
     client = setup_client(tmp_path, monkeypatch)
     page = client.get("/earnings").text
+    script = client.get("/static/earnings.js").text
     assert 'id="youtubeAnalyticsPanel"' in page
     assert 'id="youtubeAnalyticsLoad"' in page
     assert 'id="youtubeAnalyticsMetrics"' in page
     assert 'id="youtubeAnalyticsRevenue"' in page
     assert 'id="youtubeAnalyticsDailyChart"' in page
     assert 'id="youtubeAnalyticsRevenueComparison"' in page
-    assert "renderDailyAnalytics" in page
-    assert "Ledger में दर्ज प्राप्त YouTube Ads रकम" in page
-    assert '/api/admin/youtube/analytics' in page
+    assert "renderDailyAnalytics" in script
+    assert "Ledger में दर्ज प्राप्त YouTube Ads रकम" in script
+    assert '/api/admin/youtube/analytics' in script
+    assert '/api/admin/youtube/analytics/sync-revenue' in script
     assert "अनुमानित रकम वास्तविक भुगतान नहीं है" in page
     assert "YouTube डेटा लोड करें" in page
 
