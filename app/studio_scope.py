@@ -2,6 +2,19 @@
 from copy import deepcopy
 from .management_hierarchy import FEATURE_CHECKER_PAIRS, FEATURE_ROLE_NAMES, SENIOR_MANAGER_NAMES, management_hierarchy
 
+_FORMAT_GROUPS = {
+ "cinematic-movie":"Films","short-film":"Films","fantasy-film":"Films","sci-fi-film":"Films",
+ "action-film":"Films","romantic-film":"Films","horror-film":"Films","historical-film":"Films",
+ "stop-motion":"Stop Motion","clay-animation":"Stop Motion","puppet-animation":"Stop Motion",
+ "lyric-video":"Music","music-video":"Music",
+ "visual-effects-video":"Visual Effects","green-screen":"Visual Effects",
+ "product-demonstration":"Business","advertisement":"Business","training-corporate":"Business",
+ "live-action":"Live","event-video":"Live","sports-highlights":"Live","news-reportage":"Live",
+ "360-video":"Special","vr-video":"Special","ar-video":"Special","virtual-production":"Special",
+ "ai-avatar":"Special","talking-photo":"Special",
+ "hybrid-2d-3d":"Hybrid","timelapse-hyperlapse":"Hybrid",
+}
+
 _FORMAT_ROWS = [
 ("youtube-shorts","YouTube Shorts","Short-form","9:16","1080x1920","15–60 sec","ready_for_api","short"),
 ("youtube-long","Long-form YouTube videos","Long-form","16:9","1920x1080","5–60+ min","production_workflow","long"),
@@ -70,16 +83,16 @@ ROLE_PRESETS = {
  "long":["Topic Researcher","Research Analyst","Fact Checker","Audience Analyst","Story Writer","Script Writer","Screenplay Writer","Storyboard Artist","Cinematographer","Video Generation Agent","Voice Director","Music Composer","Sound Designer","Video Editor","Color Correction Agent","Subtitle Agent","Thumbnail Designer","YouTube SEO Agent","Final Render Agent"],
  "documentary":["Topic Researcher","Research Analyst","Story Researcher","Fact Checker","Audience Analyst","Story Writer","Script Writer","Screenplay Writer","Documentary Producer","Storyboard Artist","Cinematographer","Image Generation Agent","Video Generation Agent","Voice Director","Voice Generation Agent","Music Composer","Sound Designer","Video Editor","Subtitle Agent","YouTube SEO Agent","Final Render Agent"],
  "education":["Topic Researcher","Research Analyst","Fact Checker","Audience Analyst","Topic Writer","Script Writer","Storyboard Artist","Graphic Designer","Infographic Designer","Image Generation Agent","Voice Generation Agent","Subtitle Agent","Video Editor","Final Render Agent"],
- "ad":["Audience Analyst","Research Analyst","Fact Checker","Creative Director","Script Writer","Dialogue Writer","Concept Artist","Graphic Designer","Product Designer","Cinematographer","Image Generation Agent","Video Generation Agent","Music Composer","Sound Designer","Video Editor","Color Correction Agent","Final Render Agent"],
+ "ad":["Audience Analyst","Research Analyst","Fact Checker","Creative Director","Script Writer","Dialogue Writer","Concept Artist","Graphic Designer","Product Designer","Product Demo Agent","Cinematographer","Image Generation Agent","Video Generation Agent","Music Composer","Sound Designer","Video Editor","Color Correction Agent","Final Render Agent"],
  "live":["Production Planner","Cinematographer","Recording Agent","Background Designer","Visual Effects Agent","Video Editor","Visual Editor","Colorist","Audio Editor","Audio Mixer","Subtitle Agent","Final Render Agent"],
  "podcast":["Topic Researcher","Audience Analyst","Topic Writer","Script Writer","Recording Agent","Voice Director","Audio Editor","Audio Mixer","Subtitle Agent","Video Editor","Thumbnail Designer"],
  "2d":["R&D Agent","Concept Artist","Character Designer","Layout Agent","Storyboard Artist","Background Designer","2D Animator","Character Animator","Motion Graphics Artist","2D VFX Agent","Compositing Agent","Recording Agent","Final Render Agent"],
  "3d":["R&D Agent","Concept Artist","Character Designer","Layout Agent","Modeling Agent","Texturing Agent","Text Training Agent","Rigging Setup Agent","Rigging Agent","Character Animator","3D Animator","Lighting Agent","VFX Agent","Compositing Agent","Rendering Specialist","Final Render Agent"],
  "motion":["Graphic Designer","Visual Designer","Layout Agent","Motion Graphics Artist","2D Animator","Compositing Agent","Sound Designer","Video Editor","Final Render Agent"],
  "film":["R&D Agent","Story Researcher","Fact Checker","Story Writer","Screenplay Writer","Dialogue Writer","Creative Director","Film Director","Cinematographer","Production Planner","Concept Artist","Storyboard Artist","Character Designer","Modeling Agent","Texturing Agent","Rigging Setup Agent","3D Animator","Recording Agent","VFX Agent","Lighting Agent","Compositing Agent","Color Correction Agent","Cinematic Editor","Audio Mixer","Final Render Agent"],
- "stop":["R&D Agent","Concept Artist","Story Writer","Storyboard Artist","Layout Agent","Character Designer","Recording Agent","2D Animator","Video Editor","Compositing Agent","Final Render Agent"],
- "music":["Music Composer","Sound Designer","Audio Editor","Audio Mixer","Motion Graphics Artist","Visual Editor","Subtitle Agent","Video Editor","Final Render Agent"],
- "vfx":["R&D Agent","Cinematographer","Modeling Agent","Texturing Agent","Lighting Agent","VFX Agent","2D VFX Agent","Compositing Agent","VFX Compositor","Color Correction Agent","Final Render Agent"],
+ "stop":["R&D Agent","Concept Artist","Story Writer","Storyboard Artist","Layout Agent","Character Designer","Recording Agent","2D Animator","Stop Motion Animator","Video Editor","Compositing Agent","Final Render Agent"],
+ "music":["Music Composer","Music Video Director","Sound Designer","Audio Editor","Audio Mixer","Motion Graphics Artist","Visual Editor","Subtitle Agent","Video Editor","Final Render Agent"],
+ "vfx":["R&D Agent","Cinematographer","Modeling Agent","Texturing Agent","Lighting Agent","VFX Agent","Green Screen Compositor","2D VFX Agent","Compositing Agent","VFX Compositor","Color Correction Agent","Final Render Agent"],
  "immersive":["R&D Agent","Concept Artist","3D Modeler","Texturing Agent","Lighting Agent","3D Animator","VFX Agent","Compositing Agent","Rendering Specialist","Final Render Agent"],
  "hybrid":["R&D Agent","Concept Artist","Layout Agent","2D Animator","Modeling Agent","Texturing Agent","Rigging Setup Agent","3D Animator","Motion Graphics Artist","VFX Agent","Compositing Agent","Final Render Agent"],
  "avatar":["Script Writer","AI Avatar Agent","Voice Director","Voice Generation Agent","Lip Sync Agent","Character Consistency Agent","Video Editor","Subtitle Agent","Final Render Agent"],
@@ -111,8 +124,8 @@ _STAGE_ROLES = {
  "brief":{"Master AI Director","Task Manager","Workflow Agent","Production Planner","Audience Analyst","Project Manager","Content Planner","Cost & Resource Manager"},
  "research":{"Topic Researcher","Research Analyst","Story Researcher","Fact Checker","R&D Agent","Trend Detector","Competitor Analyst","Keyword Research","Topic Predictor"},
  "script":{"Topic Writer","Story Writer","Script Writer","Screenplay Writer","Dialogue Writer","Prompt Writer","Storyboard Artist","Scene Order Agent","Voice Director","Documentary Producer"},
- "design":{"Concept Artist","Layout Agent","Graphic Designer","Thumbnail Designer","Background Designer","Visual Designer","Logo Designer","Infographic Designer","Character Designer","Image Generation Agent","Scene Generation Agent","Background Generation Agent","Product Designer","Creative Director"},
- "production":{"Modeling Agent","3D Modeler","Texturing Agent","Text Training Agent","Rigging Setup Agent","Rigging Agent","2D Animator","3D Animator","Character Animator","Motion Graphics Artist","Lighting Agent","Recording Agent","Visual Effects Agent","VFX Agent","Video Generation Agent","AI Avatar Agent","Lip Sync Agent","Animation Director","Cinematographer","Film Director","Camera Movement Planner","Character Consistency Agent","Rendering Specialist"},
+ "design":{"Concept Artist","Layout Agent","Graphic Designer","Thumbnail Designer","Background Designer","Visual Designer","Logo Designer","Infographic Designer","Character Designer","Image Generation Agent","Scene Generation Agent","Background Generation Agent","Product Designer","Product Demo Agent","Creative Director"},
+ "production":{"Modeling Agent","3D Modeler","Texturing Agent","Text Training Agent","Rigging Setup Agent","Rigging Agent","2D Animator","3D Animator","Stop Motion Animator","Music Video Director","Character Animator","Motion Graphics Artist","Lighting Agent","Recording Agent","Visual Effects Agent","VFX Agent","Green Screen Compositor","Video Generation Agent","AI Avatar Agent","Lip Sync Agent","Animation Director","Cinematographer","Film Director","Camera Movement Planner","Character Consistency Agent","Rendering Specialist"},
  "post":{"Compositing Agent","2D VFX Agent","Color Correction Agent","Video Editor","Visual Editor","Cinematic Editor","Colorist","Transition Designer","Branding Agent","VFX Compositor","Sound Designer","Sound Effects Agent","Background Music Agent","Music Composer","Audio Editor","Audio Mixer","Hindi Narration Agent","Voice Generation Agent","Subtitle Agent"},
  "quality":{"Script Quality Agent","Video Quality Agent","Audio Quality Agent","Visual Consistency Agent","Copyright Checker Agent","Subtitle Quality Agent","Final Approval Agent","Security & Privacy Agent","Testing & QA Agent"},
  "delivery":{"Final Output Agent","Final Render Agent","YouTube SEO Agent","Title Writer","Description Writer","Tags Researcher","Hashtag Researcher","Thumbnail Optimizer","Upload Agent","Scheduling Agent","Analytics Agent","Growth Strategist","Asset Manager","Memory Agent","Automation Agent"}
@@ -139,7 +152,8 @@ def video_formats():
     result=[]
     for fid,name,category,ratio,resolution,duration,stage,preset in _FORMAT_ROWS:
         roles=list(dict.fromkeys(COMMON_ROLES+ROLE_PRESETS[preset]))
-        result.append({"id":fid,"name":name,"category":category,"aspect_ratio":ratio,"recommended_resolution":resolution,
+        group = _FORMAT_GROUPS.get(fid, category)
+        result.append({"id":fid,"name":name,"category":group,"group":group,"aspect_ratio":ratio,"recommended_resolution":resolution,
           "duration":duration,"stage":stage,"description":f"{name}: format-specific production preset with relevant specialist/checker roles.",
           "preset":preset,"roles":roles,"checker_roles":[role+CHECKER_SUFFIX for role in roles]})
     return result
