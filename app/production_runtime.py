@@ -17,6 +17,7 @@ from typing import Any
 from .studio_scope import get_format, production_plan
 from .agent_orchestrator import format_team
 from .agents import AGENTS
+from .management_hierarchy import SENIOR_MANAGER_NAMES, management_hierarchy
 from .ai_brain import generate_text, ProviderNotConfigured, ProviderRequestError
 
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(Path(__file__).resolve().parent.parent))).expanduser().resolve()
@@ -211,6 +212,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
         team = format_team(run["format_id"])
         pairs = [item for item in team if item.get("role_type") == "specialist"]
         deliverables: dict[str, str] = {}
+        management_reports: dict[str, str] = {}
         sequence = 0
         for pair in pairs:
             role = pair["name"]
@@ -223,6 +225,11 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 "titles, labels or text overlays in video frames. Only the final SINTU watermark is permitted.\n"
                 f"Format: {selected['name']} ({selected['aspect_ratio']}, {selected['recommended_resolution']}).\n"
                 f"Topic: {run['topic']}\nRole: {role}\nMission: {pair.get('mission','Perform your specialist task.')}\n"
+                + (
+                    "You are a senior management agent. Review completed specialist deliverables and earlier management reports; identify missing hand-offs, contradictions, risks and release blockers. Do not claim media was rendered or uploaded.\n"
+                    "Current production evidence: " + json.dumps({**deliverables, **management_reports}, ensure_ascii=False) + "\n"
+                    if role in SENIOR_MANAGER_NAMES else ""
+                )
                 + (
                     "Include a section headed exactly SCENE PROMPTS, then provide 6 to 12 numbered lines "
                     "(1. prompt, 2. prompt...). Each line must be a standalone, richly detailed, text-free "
@@ -267,7 +274,10 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                            checker_prompt, checked["output"], verdict["evidence"], verdict["issues"],
                            attempts=attempt + 1)
                 if verdict["decision"] == "PASS":
-                    deliverables[role] = worker["output"]
+                    if role in SENIOR_MANAGER_NAMES:
+                        management_reports[role] = worker["output"]
+                    else:
+                        deliverables[role] = worker["output"]
                     break
             if verdict["decision"] != "PASS":
                 _set_run(run_id, "paused", current_role=checker,
@@ -283,7 +293,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 "issues (array), and revision_instructions (array). PASS only when evidence supports every "
                 "critical acceptance criterion. Do not claim a rendered video.\n"
                 f"Reviewer: {reviewer}\nTopic: {run['topic']}\n"
-                f"Package summary: {json.dumps({k:v[:3500] for k,v in deliverables.items()}, ensure_ascii=False)}"
+                f"Package summary: {json.dumps({k:v[:3500] for k,v in {**deliverables, **management_reports}.items()}, ensure_ascii=False)}"
             )
             review = generate_text(review_prompt, "content", "local")
             verdict = _review_payload(review["output"])
@@ -305,6 +315,8 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             "format": selected,
             "deliverables": deliverables,
             "reviewer_reports": review_results,
+            "management_reports": management_reports,
+            "management_hierarchy": management_hierarchy(),
             "publishing_approval_required": True,
             "video_rendered": False,
             "published": False,
