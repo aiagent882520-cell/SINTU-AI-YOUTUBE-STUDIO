@@ -18,7 +18,7 @@
  function renderPipeline(){document.getElementById("pipelineCards").innerHTML=state.catalog.pipeline.map((x,i)=>'<div class="pipeline-step"><b>'+String(i+1).padStart(2,"0")+' · '+esc(x.name)+'</b><span>'+esc(x.description)+'</span></div>').join("");}
  function renderArchitecture(){
   const scope=state.catalog.scope||{},registry=state.catalog.agent_registry||{};
-  document.getElementById("studioArchitectureStats").textContent=(scope.video_format_count||state.catalog.formats.length)+" video formats · "+(scope.studio_module_count||state.catalog.studio_modules.length)+" Studio Modules · "+(registry.specialist_total||0)+" Specialist Agents · "+(registry.checker_total||0)+" independent Checker Agents · "+(registry.senior_manager_total||0)+" Senior Managers · ₹0-first policy";
+  document.getElementById("studioArchitectureStats").textContent=(scope.video_format_count||state.catalog.formats.length)+" video formats · "+(registry.core_agent_total||61)+" Core Agents · "+(registry.feature_worker_checker_total||21)+" Feature Worker/Checker lanes · "+(registry.senior_manager_total||0)+" Senior Managers · ₹0-first policy";
   document.getElementById("studioModulesGrid").innerHTML=(state.catalog.studio_modules||[]).map((name,i)=>'<article class="pipeline-step"><b>'+String(i+1).padStart(2,"0")+' · '+esc(name)+'</b><span>Included in the complete studio architecture</span></article>').join("");
   document.getElementById("studioAgentPairs").innerHTML=(registry.checker_pairs||[]).map((p,i)=>'<div class="agent-pair"><b>'+String(i+1)+'. '+esc(p.specialist)+'</b><span>→ '+esc(p.checker)+'</span></div>').join("");
   const hierarchy=registry.management_hierarchy||{};const supervisor=hierarchy.top_supervisor||{};
