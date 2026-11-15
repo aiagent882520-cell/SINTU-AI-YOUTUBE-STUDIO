@@ -20,7 +20,7 @@ mkdir -p "$LOG_DIR"
 say "Updating Termux packages"
 pkg update -y
 pkg upgrade -y
-pkg install -y git python python-pip ffmpeg espeak-ng openssl curl
+pkg install -y git python python-pip python-pillow python-cryptography ffmpeg espeak-ng openssl curl libjpeg-turbo libpng freetype clang make pkg-config
 
 say "Checking shared storage permission (optional)"
 if [ ! -d "$HOME/storage/shared" ]; then
@@ -56,19 +56,20 @@ if [ ! -f .env ]; then
 from pathlib import Path
 import secrets
 source = Path(".env.example")
-if source.exists():
-    text = source.read_text(encoding="utf-8")
-else:
-    text = ""
+text = source.read_text(encoding="utf-8") if source.exists() else ""
+admin_password = secrets.token_urlsafe(24)
 text = text.replace("SINTU_ADMIN_PASSWORD=CHANGE-THIS-TO-A-LONG-UNIQUE-PASSWORD",
-                    "SINTU_ADMIN_PASSWORD=" + secrets.token_urlsafe(24))
+                    "SINTU_ADMIN_PASSWORD=" + admin_password)
 text = text.replace("SINTU_SESSION_SECRET=CHANGE-THIS-TO-A-RANDOM-64-CHARACTER-SECRET",
                     "SINTU_SESSION_SECRET=" + secrets.token_hex(32))
 text = text.replace("SINTU_BIND_ADDRESS=127.0.0.1", "SINTU_BIND_ADDRESS=127.0.0.1")
 text = text.replace("AI_PROVIDER=local", "AI_PROVIDER=local")
+text = text.replace("ESPEAK_EXECUTABLE=espeak", "ESPEAK_EXECUTABLE=espeak-ng")
 Path(".env").write_text(text, encoding="utf-8")
 Path(".env").chmod(0o600)
-print("Created .env with a unique admin password and session secret.")
+print("Created .env. Save these first-login credentials securely:")
+print("Username: admin")
+print("Password: " + admin_password)
 PY
 else
   say "Existing .env preserved; secrets were not overwritten"
