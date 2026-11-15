@@ -31,7 +31,12 @@ ROLE_MISSIONS = {
  "Manager Agent":"Coordinate task assignments, sequence, progress and worker/checker hand-offs.",
  "GM Agent":"Supervise end-to-end production delivery, dependencies, quality gates and department coordination.",
  "HO Agent":"Audit policy, factual standards, copyright, privacy, security and operational compliance.",
- "Owner Agent":"Review business readiness and final release reports; prepare an approval request but never self-approve publishing."
+ "Owner Agent":"Review business readiness and final release reports; prepare an approval request but never self-approve publishing.",
+ "Animation Director":"Coordinate 2D and 3D animation style, timing, character continuity and shot-to-shot motion.",
+ "Stop Motion Animator":"Plan frame-by-frame stop-motion, clay and puppet movement with consistent lighting and physical continuity.",
+ "Green Screen Compositor":"Plan chroma-key cleanup, matte edges, background replacement, spill suppression and VFX compositing.",
+ "Music Video Director":"Build music-video and lyric-video visuals, beat-synced edits and rights-safe lyric presentation.",
+ "Product Demo Agent":"Create truthful product demonstration shots, feature sequences, usage steps and verified commercial claims."
 }
 def _checker_name(role):
     return role + CHECKER_SUFFIX
