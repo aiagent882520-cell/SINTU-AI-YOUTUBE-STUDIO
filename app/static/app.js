@@ -1445,7 +1445,9 @@ function currentStudioRenderPayload(){
   fps:Number($("renderFps").value),quality:$("renderQuality").value,
   transition:$("renderTransition").value,
   motion:timelineText||$("renderVideoIds").value.trim()?"none":$("renderMotion").value,
-  subtitles:[]
+  subtitles:subtitleLines(),
+  sound_effects_enabled:$("renderSoundEffects").checked,
+  sound_effects_volume:Number($("renderSfxVolume").value)
  };
 }
 $("queueRenderButton")?.addEventListener("click",async()=>{
