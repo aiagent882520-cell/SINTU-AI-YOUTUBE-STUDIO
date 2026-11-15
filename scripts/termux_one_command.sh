@@ -93,6 +93,101 @@ else
   say "No eSpeak binary found; studio setup continues. Configure Piper or another TTS engine later."
 fi
 
+
+say "Preparing optional free local llama.cpp engine"
+if ! command -v llama-server >/dev/null 2>&1; then
+  if pkg install -y llama-cpp; then
+    say "Termux llama.cpp package installed"
+  else
+    say "llama-cpp package is unavailable on this Termux mirror; continuing without local LLM bootstrap"
+  fi
+fi
+
+if command -v llama-server >/dev/null 2>&1; then
+  RAM_KB="$(awk '/MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+  FREE_KB="$(df -Pk "$HOME" 2>/dev/null | awk 'NR==2 {print $4}' || echo 0)"
+  MODEL_DIR="$HOME/.sintu/models"
+  mkdir -p "$MODEL_DIR"
+  MODEL_URL=""
+  MODEL_NAME=""
+  MIN_MODEL_BYTES=0
+  if [ "\${RAM_KB:-0}" -ge 7864320 ] && [ "\${FREE_KB:-0}" -ge 3145728 ]; then
+    MODEL_NAME="qwen2.5-3b-instruct-q4_k_m.gguf"
+    MODEL_URL="https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/$MODEL_NAME"
+    MIN_MODEL_BYTES=1700000000
+  elif [ "\${RAM_KB:-0}" -ge 3670016 ] && [ "\${FREE_KB:-0}" -ge 900000 ]; then
+    MODEL_NAME="qwen2.5-0.5b-instruct-q4_k_m.gguf"
+    MODEL_URL="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/$MODEL_NAME"
+    MIN_MODEL_BYTES=350000000
+  fi
+
+  if [ -n "$MODEL_URL" ]; then
+    MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
+    if [ ! -s "$MODEL_PATH" ]; then
+      say "Downloading free Qwen GGUF model selected from available RAM and storage"
+      if curl --fail --location --retry 3 --retry-all-errors --continue-at - \
+        --output "$MODEL_PATH.part" "$MODEL_URL"; then
+        MODEL_BYTES="$(wc -c < "$MODEL_PATH.part" | tr -d ' ')"
+        if [ "\${MODEL_BYTES:-0}" -ge "$MIN_MODEL_BYTES" ]; then
+          mv "$MODEL_PATH.part" "$MODEL_PATH"
+        else
+          say "Model download was incomplete; keeping partial file for a later resume"
+        fi
+      else
+        say "Model download failed; the app will still install and can use an existing local model"
+      fi
+    fi
+
+    if [ -s "$MODEL_PATH" ]; then
+      MODEL_BYTES="$(wc -c < "$MODEL_PATH" | tr -d ' ')"
+      if [ "\${MODEL_BYTES:-0}" -ge "$MIN_MODEL_BYTES" ]; then
+        if [ -f "$LOG_DIR/llama-server.pid" ] && kill -0 "$(cat "$LOG_DIR/llama-server.pid")" 2>/dev/null; then
+          say "Existing local llama.cpp server process found"
+        else
+          say "Starting local llama.cpp model server on 127.0.0.1:8080"
+          nohup llama-server -m "$MODEL_PATH" --host 127.0.0.1 --port 8080 -c 2048 -t 4 \
+            >>"$LOG_DIR/llama-server.log" 2>&1 </dev/null &
+          echo $! > "$LOG_DIR/llama-server.pid"
+        fi
+        AI_READY=0
+        for _ in $(seq 1 60); do
+          if curl -fsS http://127.0.0.1:8080/v1/models >/dev/null 2>&1; then AI_READY=1; break; fi
+          if [ -f "$LOG_DIR/llama-server.pid" ] && ! kill -0 "$(cat "$LOG_DIR/llama-server.pid")" 2>/dev/null; then break; fi
+          sleep 2
+        done
+        if [ "$AI_READY" -eq 1 ]; then
+          say "Free local AI model server is ready"
+        else
+          say "Local AI server did not become ready in time; inspect $LOG_DIR/llama-server.log"
+        fi
+      fi
+    fi
+  else
+    say "Device RAM/storage is below the safe automatic model-download threshold; no large model was downloaded"
+  fi
+else
+  say "llama-server is unavailable; local LLM setup is deferred, but the studio installation continues"
+fi
+
+# Add local backend defaults without overwriting any existing operator settings.
+.venv/bin/python - <<'PY'
+from pathlib import Path
+path = Path(".env")
+content = path.read_text(encoding="utf-8")
+defaults = {
+    "LOCAL_AI_BACKEND": "auto",
+    "LOCAL_OPENAI_BASE_URL": "http://127.0.0.1:8080/v1",
+    "LOCAL_OPENAI_MODEL": "auto",
+    "LOCAL_OPENAI_API_KEY": "",
+}
+lines = content.splitlines()
+for key, value in defaults.items():
+    if not any(line.startswith(key + "=") for line in lines):
+        lines.append(key + "=" + value)
+path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+path.chmod(0o600)
+PY
+
 say "Running Python compile check"
 .venv/bin/python -m compileall -q app scripts
 
