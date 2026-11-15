@@ -96,6 +96,20 @@ def create_run(format_id: str, topic: str, owner_username: str = "local") -> dic
     return get_run(run_id, owner_username)
 
 
+
+def list_runs(owner_username: str = "local", limit: int = 20) -> list[dict[str, Any]]:
+    """Return recent production runs for the authenticated owner, newest first."""
+    init_runtime_db()
+    safe_limit = max(1, min(int(limit), 100))
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id FROM production_runs WHERE owner_username=? ORDER BY updated_at DESC LIMIT ?",
+            (owner_username, safe_limit),
+        ).fetchall()
+    return [run for row in rows if (run := get_run(row["id"], owner_username)) is not None]
+
+
+
 def get_run(run_id: str, owner_username: str | None = None) -> dict[str, Any] | None:
     init_runtime_db()
     with _connect() as conn:
