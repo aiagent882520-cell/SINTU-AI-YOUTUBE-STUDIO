@@ -3455,8 +3455,10 @@ def test_agent_system_status_endpoint_reports_catalog_and_run_health(tmp_path, m
     assert response.status_code == 200
     data = response.json()
     assert data["agent_catalog_total"] == 61
-    assert data["specialist_role_instances"] == 61
-    assert data["independent_checker_role_instances"] == 61
+    registry = main.agent_registry()
+    assert data["specialist_role_instances"] == registry["specialist_total"]
+    assert data["independent_checker_role_instances"] == registry["checker_total"]
+    assert data["checker_pairs"] == registry["checker_pairs"]
     assert data["independent_background_agents_running"] == 0
     assert data["automatic_self_healing"] is False
     assert data["local_model_configured"] is False
