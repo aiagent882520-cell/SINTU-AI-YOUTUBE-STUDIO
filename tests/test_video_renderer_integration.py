@@ -131,3 +131,40 @@ def test_mixed_timeline_renders_ordered_still_and_video_items(tmp_path, monkeypa
     assert result["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
     assert result["subtitles_burned_in"] is False
     assert result["duration_seconds"] == pytest.approx(3.0, abs=0.15)
+
+
+def test_storyboard_renderer_preserves_full_multiscene_timeline_and_voiceover(tmp_path, monkeypatch):
+    ffmpeg, _ = _ffmpeg_tools()
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
+    image_paths = []
+    for index, color in enumerate(((30, 80, 120), (90, 40, 20), (20, 110, 70)), start=1):
+        image_path = tmp_path / f"scene-{index}.png"
+        Image.new("RGB", (160, 284), color).save(image_path)
+        image_paths.append(image_path)
+
+    voice_path = tmp_path / "voice.wav"
+    audio = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+         "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+         "-c:a", "pcm_s16le", str(voice_path)],
+        capture_output=True, check=False, timeout=30,
+    )
+    assert audio.returncode == 0, audio.stderr.decode("utf-8", "replace")
+
+    result = video_renderer.render_storyboard(
+        "Three scene regression", ["Opening", "Middle", "Closing"],
+        seconds_per_scene=3, image_paths=image_paths, audio_path=voice_path,
+        resolution="720x1280", fps=24, quality="standard", transition="fade",
+        motion="slow-zoom-in",
+    )
+
+    output = tmp_path / result["filename"]
+    assert output.is_file() and output.stat().st_size > 1000
+    verified = video_renderer._verify_rendered_output(
+        output, 720, 1280, expected_duration=9, require_audio=True, expected_fps=24,
+    )
+    assert verified["frame_count"] >= 9 * 24 * 0.95
+    assert verified["video_duration_seconds"] >= 9 - (2 / 24)
+    assert verified["audio"] is True
+    assert result["duration_seconds"] == 9
+
