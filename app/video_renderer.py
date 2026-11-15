@@ -59,6 +59,14 @@ def _validate_scene_image(path: Path) -> None:
                     or width * height > MAX_SCENE_IMAGE_PIXELS):
                 raise ValueError("Scene image dimensions allowed safety limit se bahar hain.")
             image.verify()
+        # A valid PNG/JPEG can still be a completely black placeholder.
+        with Image.open(path) as image:
+            rgb = image.convert("RGB").resize((32, 32))
+            extrema = rgb.getextrema()
+            # Reject genuinely near-black placeholders without rejecting
+            # valid low-texture/illustrative scenes (including flat-color art).
+            if max(channel[1] for channel in extrema) < 24:
+                raise ValueError("Scene image blank ya almost-black hai; real visual scene required hai.")
     except ValueError:
         raise
     except Exception:
@@ -133,6 +141,34 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         raise RenderFailed("Final video frame rate expected FPS se match nahi karta.")
     if require_audio is not None and has_audio != require_audio:
         raise RenderFailed("Final video audio stream expected setting se match nahi karti.")
+
+    # Decode real pixels at one frame per second. Metadata-only checks let an
+    # all-black H.264 file pass as a successful video; reject that failure mode.
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RendererUnavailable("Visual quality verification ke liye FFmpeg required hai.")
+    try:
+        pixels = subprocess.run(
+            [ffmpeg, "-v", "error", "-i", str(path), "-vf", "fps=1,scale=32:32",
+             "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
+            capture_output=True, timeout=45, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise RenderFailed("Final video ke actual visual frames decode nahi ho sake.") from None
+    frame_bytes = 32 * 32 * 3
+    if pixels.returncode != 0 or len(pixels.stdout) < frame_bytes:
+        raise RenderFailed("Final video mein decodable visual frames nahi hain.")
+    sampled = [pixels.stdout[i:i + frame_bytes]
+               for i in range(0, len(pixels.stdout) - frame_bytes + 1, frame_bytes)]
+    visible = 0
+    for frame in sampled:
+        mean_luma = sum(frame) / len(frame)
+        if mean_luma > 5.0 and max(frame) > 24:
+            visible += 1
+    if visible < max(1, math.ceil(len(sampled) * 0.70)):
+        raise RenderFailed(
+            f"Visual quality check failed: {visible}/{len(sampled)} sampled frames contain visible image content."
+        )
     return {"duration_seconds": duration, "video_duration_seconds": video_duration,
             "frame_count": frame_count, "fps": actual_fps,
             "resolution": f"{width}x{height}", "video_codec": codec, "audio": has_audio}
@@ -295,7 +331,8 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
     if music_path and not music_path.is_file():
         raise ValueError("Background music file nahi mili.")
 
-    image_paths = image_paths or []
+    if image_paths is None or len(image_paths) != len(scenes):
+        raise ValueError("Har scene ke liye real scene image required hai; blank placeholder render disabled hai.")
     subtitles = subtitles or []
     if subtitles:
         raise ValueError("Subtitles/captions are disabled. Exported videos contain no spoken-word text overlays.")
@@ -332,11 +369,15 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             concat.write_text("\n".join(lines) + "\n", encoding="utf-8")
             duration = len(scenes) * seconds_per_scene
             filters = []
-            if transition == "fade" and len(scenes) > 1:
-                for boundary in range(1, len(scenes)):
-                    point = boundary * seconds_per_scene
-                    filters.append(f"fade=t=out:st={point - 0.35}:d=0.35")
-                    filters.append(f"fade=t=in:st={point}:d=0.35")
+            if transition == "fade":
+                # Chaining multiple timestamped fade filters after the concat
+                # demuxer resets timestamps on some FFmpeg builds and can turn
+                # the entire output black. Use one deterministic opening fade
+                # and one closing fade; scene changes remain clean hard cuts.
+                filters.extend([
+                    "fade=t=in:st=0:d=0.35",
+                    f"fade=t=out:st={max(0, duration - 0.35)}:d=0.35",
+                ])
             if motion == "slow-zoom-in":
                 filters.insert(0, f"zoompan=z='min(zoom+0.0008,1.12)':d=1:s={width}x{height}:fps={fps}")
             elif motion == "slow-zoom-out":

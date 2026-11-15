@@ -38,7 +38,7 @@ from app.comfyui_client import image_workflow_status, video_workflow_status
 from app.image_generator import IMAGE_DIR, generate_image, image_status
 from app.voice_generator import AUDIO_DIR, generate_voiceover
 from app.video_renderer import render_storyboard
-from app.music_generator import music_status
+from app.music_generator import MUSIC_DIR, generate_music, music_status
 from app.production_runtime import REVIEWERS, attach_render_result, create_run, execute_run, get_run
 from app.video_generator import AI_VIDEO_DIR, generate_video, video_status
 from app.video_renderer import OUTPUT_DIR, render_ai_clips
@@ -162,42 +162,64 @@ def _live_video(prompt: str | list[str]) -> dict:
 
 
 def _offline_storyboard_e2e(topic: str) -> dict:
-    """Build a real, free local MP4 from procedural stills and Hindi TTS; no ComfyUI required."""
+    """Build a multi-scene local Hindi film-style MP4 with real visuals and soundtrack."""
     clean_topic = topic.strip()
     if not clean_topic or len(clean_topic) > 300:
         raise ValueError("Offline video test topic must contain 1 to 300 characters.")
 
-    scenes = [
-        f"{clean_topic}, establishing wide cinematic opening shot",
-        f"{clean_topic}, detailed dramatic middle scene",
-        f"{clean_topic}, atmospheric cinematic closing shot",
+    # Distinct establishing, detail, movement and closing compositions.
+    shot_specs = [
+        "wide aerial establishing shot at golden hour",
+        "slow cinematic push toward the ancient stone architecture",
+        "low-angle dramatic view showing monumental scale",
+        "close detail shot of weathered stone carvings and textures",
+        "side-angle view with atmospheric mist and layered depth",
+        "interior passage with shafts of warm light and deep shadows",
+        "dramatic sunset silhouette, cinematic contrast",
+        "wide closing shot, atmospheric light fading into dusk",
     ]
-    image_results = [
-        generate_image(prompt, kind="scene", aspect="portrait")
-        for prompt in scenes
-    ]
+    scenes = [f"{clean_topic}, {shot}" for shot in shot_specs]
+    image_results = [generate_image(prompt, kind="scene", aspect="portrait") for prompt in scenes]
     image_paths = [IMAGE_DIR / f"{item['image_id']}.jpg" for item in image_results]
     for index, path in enumerate(image_paths, start=1):
         if not path.is_file() or path.stat().st_size <= 0:
             raise RuntimeError(f"Local scene image {index} was not saved.")
 
-    narration = "नमस्कार, आप देख रहे हैं सिंटू ए आई यूट्यूब स्टूडियो। आज की इस कहानी में आपका स्वागत है।"
+    narration = (
+        "भारत की धरती पर ऐसे किले मौजूद हैं, जिनकी दीवारों में सदियों का इतिहास छिपा है। "
+        "ऊँची प्राचीरें, विशाल दरवाज़े और पत्थरों पर उकेरी गई कहानियाँ हमें उस दौर में ले जाती हैं, "
+        "जब हर किला साहस, रणनीति और शाही वैभव का प्रतीक हुआ करता था। "
+        "इन गलियारों में कदम रखते ही इतिहास मानो फिर से जीवित हो उठता है। "
+        "यह सिर्फ पत्थरों की इमारत नहीं, बल्कि हमारी विरासत की अमर पहचान है।"
+    )
     voice = generate_voiceover(narration)
     audio_path = AUDIO_DIR / voice["filename"]
     if not audio_path.is_file() or audio_path.stat().st_size <= 0:
         raise RuntimeError("Local Hindi voiceover was not saved.")
 
+    duration = len(scenes) * 4
+    music = generate_music(
+        f"cinematic Indian historical documentary background score, orchestral atmosphere, "
+        f"subtle suspense, warm strings and deep percussion, topic: {clean_topic}",
+        duration=duration,
+    )
+    music_path = MUSIC_DIR / (music["music_id"] + ".wav")
+    if not music_path.is_file() or music_path.stat().st_size <= 0:
+        raise RuntimeError("Local cinematic background soundtrack was not saved.")
+
     rendered = render_storyboard(
         title=clean_topic,
         scenes=scenes,
-        seconds_per_scene=3,
+        seconds_per_scene=4,
         image_paths=image_paths,
         audio_path=audio_path,
+        music_path=music_path,
+        music_volume=0.12,
         transition="fade",
         motion="slow-zoom-in",
         resolution="720x1280",
         fps=24,
-        quality="standard",
+        quality="high",
     )
     final_path = OUTPUT_DIR / rendered["filename"]
     if not final_path.is_file() or final_path.stat().st_size <= 1000:
@@ -206,14 +228,15 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         raise RuntimeError("Offline storyboard MP4 is missing the mandatory SINTU watermark.")
     if rendered.get("subtitles_burned_in") is not False:
         raise RuntimeError("Offline storyboard MP4 unexpectedly contains burned-in subtitles.")
-    if rendered.get("audio") != "voiceover":
-        raise RuntimeError("Offline storyboard MP4 does not contain the Hindi voiceover track.")
+    if rendered.get("audio") != "voiceover+music":
+        raise RuntimeError("Offline storyboard MP4 must contain Hindi narration and background music.")
 
     return {
         "scene_count": len(scenes),
         "image_providers": sorted({item.get("provider", "unknown") for item in image_results}),
         "voice_engine": voice.get("voice"),
         "voice_format": voice.get("format"),
+        "music_provider": music.get("provider"),
         "final_render_id": rendered["video_id"],
         "final_render_path": str(final_path),
         "final_render_bytes": final_path.stat().st_size,
@@ -224,7 +247,6 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "subtitles_burned_in": rendered["subtitles_burned_in"],
         "verified_by_renderer": True,
     }
-
 
 def _live_agent_catalog(topic: str, include_result: bool = False):
     run = create_run("__agent_catalog__", topic, "local")
