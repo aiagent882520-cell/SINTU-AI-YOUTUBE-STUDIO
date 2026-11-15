@@ -1,6 +1,7 @@
 """Workflow routing with distinct worker/checker roles and explicit execution limits."""
 from copy import deepcopy
 from .agents import AGENTS
+from .management_hierarchy import SENIOR_MANAGER_NAMES, management_hierarchy
 from .studio_scope import SPECIALIST_ROLES, AGENT_PAIRS, CHECKER_SUFFIX, ROLE_PRESETS, COMMON_ROLES, get_format
 
 WORKFLOW_TEAMS = {
@@ -25,7 +26,12 @@ ROLE_MISSIONS = {
  "Documentary Producer":"Shape evidence-led documentary structure.",
  "Filmmaking Director":"Specify framing, camera movement, lighting and continuity.",
  "Video Editor":"Prepare timeline, cuts, transitions and edit notes.",
- "Testing & QA Agent":"Check output completeness and measurable requirements."
+ "Testing & QA Agent":"Check output completeness and measurable requirements.",
+ "HR Agent":"Oversee every specialist and checker role, staffing, capability, assignment and performance.",
+ "Manager Agent":"Coordinate task assignments, sequence, progress and worker/checker hand-offs.",
+ "GM Agent":"Supervise end-to-end production delivery, dependencies, quality gates and department coordination.",
+ "HO Agent":"Audit policy, factual standards, copyright, privacy, security and operational compliance.",
+ "Owner Agent":"Review business readiness and final release reports; prepare an approval request but never self-approve publishing."
 }
 def _checker_name(role):
     return role + CHECKER_SUFFIX
@@ -33,6 +39,7 @@ def _checker_name(role):
 def workflow_team(workflow: str) -> list[dict]:
     names = WORKFLOW_TEAMS.get(workflow, WORKFLOW_TEAMS["content"])
     result = []
+    names = list(dict.fromkeys(names + list(SENIOR_MANAGER_NAMES)))
     for name in names:
         result.append({"name":name,"role_type":"specialist","mission":ROLE_MISSIONS.get(name,"Contribute specialist work to the selected workflow.")})
         result.append({"name":_checker_name(name),"role_type":"independent_checker",
@@ -42,7 +49,7 @@ def workflow_team(workflow: str) -> list[dict]:
 def catalog_team() -> list[dict]:
     """Build distinct worker/checker instances for every registered top-level agent role."""
     result = []
-    for name in AGENTS:
+    for name in SPECIALIST_ROLES:
         result.append({
             "name": name,
             "role_type": "specialist",
@@ -68,7 +75,7 @@ def format_team(format_id: str) -> list[dict]:
     if not item:
         raise KeyError(format_id)
     result = []
-    for name in item["roles"]:
+    for name in list(dict.fromkeys(item["roles"] + list(SENIOR_MANAGER_NAMES))):
         result.extend([
           {"name":name,"role_type":"specialist","mission":ROLE_MISSIONS.get(name,"Perform the assigned specialist task.")},
           {"name":_checker_name(name),"role_type":"independent_checker","checks":name,
@@ -87,5 +94,8 @@ def orchestration_summary() -> dict:
       "specialist_catalog_total":len(SPECIALIST_ROLES),
       "independent_checker_catalog_total":len(AGENT_PAIRS),
       "checker_pairs":len(AGENT_PAIRS),
-      "checker_policy":"Worker and checker are separate role instances; a checker must not self-approve. Execution is not represented as running background agents until a worker runtime is connected."
+      "checker_policy":"Every feature worker and each senior manager has a separate checker; a checker must not self-approve.",
+      "senior_manager_total":len(SENIOR_MANAGER_NAMES),
+      "management_hierarchy":management_hierarchy(),
+      "top_supervisor_execution":"ChatGPT is the external advisor; Termux local runs use the configured local model."
     }
