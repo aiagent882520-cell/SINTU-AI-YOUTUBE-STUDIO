@@ -255,6 +255,8 @@ def test_render_export_profile_validation_and_forwarding(tmp_path, monkeypatch):
     assert captured["resolution"] == "1920x1080"
     assert captured["fps"] == 60
     assert captured["quality"] == "maximum"
+    assert captured["sound_effects_enabled"] is True
+    assert captured["sound_effects_volume"] == 0.18
     assert client.post("/api/render", json={
         "title": "Bad", "scenes": ["Opening"], "resolution": "7680x4320"
     }).status_code == 400
