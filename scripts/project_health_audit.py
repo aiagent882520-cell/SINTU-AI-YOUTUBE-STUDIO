@@ -92,7 +92,7 @@ def main() -> int:
     print(rendered)
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
-        args.report.write_text(rendered + "\\n", encoding="utf-8")
+        args.report.write_text(rendered + "\n", encoding="utf-8")
     return 0 if ok else 1
 
 
