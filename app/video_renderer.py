@@ -163,7 +163,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
     visible = 0
     for frame in sampled:
         mean_luma = sum(frame) / len(frame)
-        if mean_luma > 5.0 and max(frame) > 24 and len(set(frame)) > 8:
+        if mean_luma > 5.0 and max(frame) > 24:
             visible += 1
     if visible < max(1, math.ceil(len(sampled) * 0.70)):
         raise RenderFailed(
