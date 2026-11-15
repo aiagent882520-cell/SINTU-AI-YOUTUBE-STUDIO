@@ -67,6 +67,38 @@ fi
 .venv/bin/python -m pip install --upgrade pip setuptools wheel
 .venv/bin/python -m pip install -r requirements.txt
 
+# Termux must use its Android-native python-cryptography package. PyPI's
+# abi3/manylinux Rust extension can be incompatible with Android's Python ABI
+# and fail at import time (for example: PyBaseObject_Type not found).
+if [ -n "${PREFIX:-}" ]; then
+  say "Verifying Android-native Python cryptography binding"
+  .venv/bin/python - <<'PY'
+from pathlib import Path
+import importlib.util
+import subprocess
+import sys
+
+venv = Path(sys.prefix).resolve()
+spec = importlib.util.find_spec("cryptography")
+origin = Path(spec.origin).resolve() if spec and spec.origin else None
+if origin and origin.is_relative_to(venv):
+    subprocess.run(
+        [sys.executable, "-m", "pip", "uninstall", "-y", "cryptography"],
+        check=True,
+    )
+import cryptography
+loaded = Path(cryptography.__file__).resolve()
+if loaded.is_relative_to(venv):
+    raise SystemExit(
+        "Incompatible venv cryptography remains installed; "
+        "Termux python-cryptography system package is required."
+    )
+from cryptography.fernet import Fernet
+Fernet.generate_key()
+print(f"Using Termux-native cryptography: {loaded}")
+PY
+fi
+
 say "Creating local-first environment file"
 if [ ! -f .env ]; then
   .venv/bin/python - <<'PY'
