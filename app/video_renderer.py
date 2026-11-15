@@ -797,7 +797,9 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                           music_path: Path | None = None, music_volume: float = 0.18,
                           subtitles: list[str] | None = None, transition: str = "cut",
                           transitions: list[str] | None = None, resolution: str = "720x1280",
-                          fps: int = 30, quality: str = "high") -> dict:
+                          fps: int = 30, quality: str = "high",
+                          sound_effects_enabled: bool = False,
+                          sound_effects_volume: float = 0.18) -> dict:
     """Create one ordered timeline from generated still images and AI video clips."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
@@ -807,6 +809,8 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
         raise ValueError("Timeline mein 1 se 25 items hon aur har item ka scene text ho.")
     if not 2 <= seconds_per_scene <= 12:
         raise ValueError("Still image duration 2 se 12 seconds honi chahiye.")
+    if not isinstance(sound_effects_enabled, bool) or not 0.0 <= sound_effects_volume <= 1.0:
+        raise ValueError("Sound effects enable flag ya volume invalid hai.")
     subtitles = subtitles or []
     if subtitles and len(subtitles) != len(items):
         raise ValueError("Mixed timeline subtitle lines ki sankhya timeline items ke barabar honi chahiye.")
@@ -882,6 +886,8 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
             clip_paths, audio_path=audio_path, music_path=music_path,
             music_volume=music_volume, subtitles=subtitles, transition=transition, transitions=transitions,
             clip_audio_volumes=[float(item.get("audio_volume", 0.25)) if item["kind"] == "video" else 0.0 for item in items],
+            scene_descriptions=scenes, sound_effects_enabled=sound_effects_enabled,
+            sound_effects_volume=sound_effects_volume,
             resolution=resolution, fps=fps, quality=quality
         )
         result["timeline_items"] = len(items)
