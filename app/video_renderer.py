@@ -571,7 +571,9 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                     music_path: Path | None = None, music_volume: float = 0.18,
                     subtitles: list[str] | None = None, transition: str = "cut", transitions: list[str] | None = None,
                     clip_audio_volumes: list[float] | None = None, resolution: str = "720x1280",
-                    fps: int = 30, quality: str = "high") -> dict:
+                    fps: int = 30, quality: str = "high",
+                    scene_descriptions: list[str] | None = None,
+                    sound_effects_enabled: bool = False, sound_effects_volume: float = 0.18) -> dict:
     """Join AI MP4 clips, preserve audio, mix optional narration/music and add SINTU branding."""
     import json
 
@@ -584,6 +586,10 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         raise ValueError("1 se 25 AI video clips required hain.")
     if not 0.0 <= music_volume <= 1.0:
         raise ValueError("Music volume 0 se 1 ke beech hona chahiye.")
+    if not isinstance(sound_effects_enabled, bool) or not 0.0 <= sound_effects_volume <= 1.0:
+        raise ValueError("Sound effects enable flag ya volume invalid hai.")
+    if scene_descriptions is not None and len(scene_descriptions) != len(video_paths):
+        raise ValueError("Scene descriptions ki sankhya AI clips ke barabar honi chahiye.")
     if transition not in {"cut", "fade"}:
         raise ValueError("Transition cut ya fade hona chahiye.")
     transitions = transitions or [transition] * len(video_paths)
@@ -625,6 +631,15 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         total_duration += duration
     if total_duration > 1800:
         raise ValueError("Combined AI video 30 minutes se lambi nahi ho sakti.")
+    sfx_result = None
+    if sound_effects_enabled:
+        from .sound_effects import generate_scene_sound_effects
+        sfx_result = generate_scene_sound_effects(
+            scene_descriptions or ["" for _ in video_paths],
+            [item["duration"] for item in clip_info],
+            OUTPUT_DIR / f".sintu-sfx-{uuid.uuid4().hex}.wav",
+            sound_effects_volume,
+        )
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     video_id = uuid.uuid4().hex
@@ -670,6 +685,11 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                 next_index += 1
             brand_index = next_index
             command += ["-loop", "1", "-i", str(brand_path)]
+            next_index += 1
+            sound_effect_index = None
+            if sfx_result:
+                command += ["-i", str(sfx_result["path"])]
+                sound_effect_index = next_index
 
             filters = []
             video_labels = []
@@ -717,7 +737,13 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                     f"atrim=duration={total_duration:.3f}[music]"
                 )
                 mix_labels.append("[music]")
-            filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,atrim=duration={total_duration:.3f}[aout]")
+            if sound_effect_index is not None:
+                filters.append(
+                    f"[{sound_effect_index}:a:0]volume={sound_effects_volume},aresample=48000,"
+                    f"apad,atrim=duration={total_duration:.3f}[sfx]"
+                )
+                mix_labels.append("[sfx]")
+            filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,apad,atrim=duration={total_duration:.3f}[aout]")
 
             command += ["-filter_complex", ";".join(filters), "-map", video_map, "-map", "[aout]",
                         "-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
@@ -751,9 +777,11 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         "fps": fps,
         "quality": quality,
         "video_codec": "H.264 / libx264",
-        "audio": "source+voiceover+music" if audio_path and music_path else "source+voiceover" if audio_path else "source+music" if music_path else "source-audio",
+        "audio": "source" + ("+voiceover" if audio_path else "") + ("+music" if music_path else "") + ("+sound-effects" if sfx_result else ""),
         "music": bool(music_path),
         "music_volume": music_volume if music_path else None,
+        "sound_effects": bool(sfx_result),
+        "sound_effect_cue_count": sfx_result["cue_count"] if sfx_result else 0,
         "transition": transition,
         "motion": "source AI clip motion",
         "scene_images": 0,
