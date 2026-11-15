@@ -2937,7 +2937,9 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
             "video_id": "d" * 32, "filename": "d" * 32 + ".mp4",
             "url": "/api/videos/" + "d" * 32, "resolution": kwargs["resolution"],
             "brand_watermark": "SINTU AI YOUTUBE STUDIO",
-            "subtitles_burned_in": bool(kwargs.get("subtitles"))
+            "subtitles_burned_in": bool(kwargs.get("subtitles")),
+            "sound_effects": bool(kwargs.get("sound_effects_enabled")),
+            "sound_effect_cue_count": max(0, len(scenes) - 1)
         }
     monkeypatch.setattr(main, "render_storyboard", fake_render)
     attached = {}
@@ -2968,6 +2970,8 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
     assert body["render"]["sound_effects"] is True
     assert body["render"]["sound_effect_cue_count"] >= 1
     assert rendered_options["subtitles"] == body["subtitles"]
+    assert rendered_options["sound_effects_enabled"] is True
+    assert rendered_options["sound_effects_volume"] == 0.18
     assert attached["owner"] == "local"
     assert generated == ["पुराने किले का सिनेमाई दृश्य", "रहस्यमयी जंगल का दृश्य"]
     assert aspects == ["portrait", "portrait"]
