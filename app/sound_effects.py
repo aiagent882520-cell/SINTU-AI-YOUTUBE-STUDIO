@@ -3,7 +3,6 @@ from array import array
 import math
 from pathlib import Path
 import random
-import re
 import sys
 import wave
 
