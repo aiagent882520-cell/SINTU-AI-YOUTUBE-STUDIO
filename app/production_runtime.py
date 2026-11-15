@@ -322,10 +322,10 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 "the HR/Manager/GM/HO reports, and every final reviewer report below. "
                 "Return a concise release-readiness recommendation with risks, unresolved "
                 "items and a clear READY or NOT READY conclusion. Never claim the video "
-                "was uploaded. Never treat your recommendation as human owner approval.\\n"
-                f"Topic: {run['topic']}\\n"
-                "Production deliverables: " + json.dumps(deliverables, ensure_ascii=False) + "\\n"
-                "Senior management reports: " + json.dumps(management_reports, ensure_ascii=False) + "\\n"
+                "was uploaded. Never treat your recommendation as human owner approval.\n"
+                f"Topic: {run['topic']}\n"
+                "Production deliverables: " + json.dumps(deliverables, ensure_ascii=False) + "\n"
+                "Senior management reports: " + json.dumps(management_reports, ensure_ascii=False) + "\n"
                 "Final reviewer reports: " + json.dumps(review_results, ensure_ascii=False)
             )
             owner_output = ""
@@ -334,9 +334,9 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 current_prompt = owner_prompt
                 if attempt:
                     current_prompt += (
-                        "\\nREVISION REQUIRED: address the independent checker's findings.\\n"
-                        "Issues: " + json.dumps(owner_verdict["issues"], ensure_ascii=False) + "\\n"
-                        "Instructions: " + json.dumps(owner_verdict["revision_instructions"], ensure_ascii=False) + "\\n"
+                        "\nREVISION REQUIRED: address the independent checker's findings.\n"
+                        "Issues: " + json.dumps(owner_verdict["issues"], ensure_ascii=False) + "\n"
+                        "Instructions: " + json.dumps(owner_verdict["revision_instructions"], ensure_ascii=False) + "\n"
                         "Previous owner report: " + owner_output
                     )
                 owner_worker = generate_text(current_prompt, "content", "local")
@@ -345,12 +345,12 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 _save_step(run_id, sequence, "Owner Agent", "builder", "completed",
                            current_prompt, owner_output, attempts=attempt + 1)
                 owner_checker_prompt = (
-                    "Act as the independent Owner Agent Checker. Verify that the owner report "
+                    "Act as an independent quality checker for the Owner Agent. Verify that the owner report "
                     "uses the actual management and final reviewer evidence, identifies blockers, "
                     "does not invent a rendered/uploaded state, and does not bypass human approval. "
                     "Return ONLY JSON with decision (PASS or FAIL), evidence (array), issues (array), "
-                    "and revision_instructions (array).\\n"
-                    "Owner report: " + owner_output + "\\n"
+                    "and revision_instructions (array).\n"
+                    "Owner report: " + owner_output + "\n"
                     "Reviewer evidence: " + json.dumps(review_results, ensure_ascii=False)
                 )
                 owner_checked = generate_text(owner_checker_prompt, "content", "local")
