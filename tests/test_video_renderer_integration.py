@@ -234,3 +234,34 @@ def test_ai_clip_renderer_burns_timed_subtitles_into_final_mp4(tmp_path, monkeyp
     assert output.is_file() and output.stat().st_size > 1000
     assert result["subtitles_burned_in"] is True
     assert result["duration_seconds"] == pytest.approx(1.0, abs=0.1)
+
+
+
+def test_storyboard_renderer_mixes_procedural_sound_effects(tmp_path, monkeypatch):
+    ffmpeg, ffprobe = _ffmpeg_tools()
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
+    image_paths = []
+    for index, color in enumerate(((40, 80, 120), (90, 50, 30))):
+        path = tmp_path / f"sfx-scene-{index}.png"
+        Image.new("RGB", (160, 284), color).save(path)
+        image_paths.append(path)
+
+    result = video_renderer.render_storyboard(
+        "SFX integration", ["किले का दरवाज़ा", "रहस्यमयी जंगल की रात"],
+        seconds_per_scene=2, image_paths=image_paths,
+        sound_effects_enabled=True, sound_effects_volume=0.2,
+        resolution="720x1280", fps=24, quality="standard", transition="cut",
+    )
+
+    output = tmp_path / result["filename"]
+    assert output.is_file() and output.stat().st_size > 1000
+    assert result["sound_effects"] is True
+    assert result["sound_effect_cue_count"] >= 3
+    assert "sound-effects" in result["audio"]
+    probe = subprocess.run(
+        [ffprobe, "-v", "error", "-show_entries", "stream=codec_type",
+         "-of", "csv=p=0", str(output)],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert probe.returncode == 0
+    assert "audio" in probe.stdout
