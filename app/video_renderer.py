@@ -269,7 +269,10 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                 filters.insert(0, f"zoompan=z='min(zoom+0.0008,1.12)':d=1:s={width}x{height}:fps={fps}")
             elif motion == "slow-zoom-out":
                 filters.insert(0, f"zoompan=z='max(zoom-0.0008,1.0)':d=1:s={width}x{height}:fps={fps}")
-            video_filter = ",".join(filters)
+            # The concat demuxer emits one timestamped packet per still image. Without an fps filter,
+            # FFmpeg writes only one frame per scene while audio/container duration spans the full timeline.
+            # Expand the still-image timestamps into a continuous CFR stream before motion/fade filters.
+            video_filter = ",".join([f"fps={fps}", *filters])
             command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
                        "-f", "concat", "-safe", "0", "-i", str(concat)]
             audio_inputs = []
