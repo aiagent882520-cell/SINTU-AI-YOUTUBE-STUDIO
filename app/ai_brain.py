@@ -89,7 +89,8 @@ def _local_openai_compatible_status():
     try:
         from urllib.parse import urlsplit
         parsed = urlsplit(base_url)
-        if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost", "::1", "host.docker.internal"}:
+        if (parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost", "::1", "host.docker.internal"}
+                or parsed.username or parsed.password or parsed.query or parsed.fragment):
             raise ValueError("Local model endpoint must use HTTP loopback or the Docker host bridge.")
         request = urllib.request.Request(base_url + "/models")
         api_key = os.getenv("LOCAL_OPENAI_API_KEY", "").strip()
