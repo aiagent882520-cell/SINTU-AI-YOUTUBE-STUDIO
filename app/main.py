@@ -45,7 +45,7 @@ from .policy import paid_upgrades_allowed
 from .blender_renderer import BLENDER_DIR, blender_status, render_scene, BlenderUnavailable, BlenderRenderFailed
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
-from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, RendererUnavailable, RenderFailed, OUTPUT_DIR
+from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, verify_publishable_mp4, RendererUnavailable, RenderFailed, OUTPUT_DIR
 from .format_rendering import all_format_render_profiles, format_render_profile
 from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable, VoiceGenerationFailed, AUDIO_DIR
 from .image_generator import generate_image, image_status, ImageUnavailable, ImageGenerationFailed, IMAGE_DIR
@@ -1856,6 +1856,12 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
     size = path.stat().st_size
     if size <= 0 or size > 512 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="MP4 size 1 byte se 512 MB ke beech honi chahiye.")
+    try:
+        verification = verify_publishable_mp4(path)
+    except RendererUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    except RenderFailed:
+        raise HTTPException(status_code=409, detail="Final MP4 quality verification failed. Video ko dobara render karein; upload blocked.") from None
     access_token = _youtube_access_token()
     metadata = json.dumps({"snippet": {"title": title.strip(), "description": description,
         "categoryId": "22"}, "status": {"privacyStatus": privacy_status}}).encode()
