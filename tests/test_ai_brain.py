@@ -60,8 +60,9 @@ def test_video_generation_prompt_enforces_hindi_and_no_text_overlay(monkeypatch)
     result = ai_brain.generate_text("भारत के रहस्य पर वीडियो बनाओ", "shorts")
     assert result["output"] == "निर्माण पैकेज"
     assert "At least 95% Hindi" in captured["prompt"]
-    assert "NO text overlay" in captured["prompt"]
-    assert "SINTU AI YOUTUBE STUDIO brand watermark logo" in captured["prompt"]
+    assert "Generated visual assets must be text-free" in captured["prompt"]
+    assert "separate timed text track" in captured["prompt"]
+    assert "SINTU AI YOUTUBE STUDIO brand watermark" in captured["prompt"]
 
 
 def test_auto_local_backend_falls_back_to_compatible_server(monkeypatch):
