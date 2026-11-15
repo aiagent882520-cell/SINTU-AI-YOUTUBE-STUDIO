@@ -559,7 +559,7 @@ def test_renderer_builds_music_mix_and_fade_filter(tmp_path, monkeypatch):
     command = captured["command"]
     assert "-filter_complex" in command
     filter_graph = command[command.index("-filter_complex") + 1]
-    assert "[1:a]volume=1[voice]" in filter_graph
+    assert "[1:a]aresample=48000,volume=1.0,apad,atrim=duration=6[voice]" in filter_graph
     assert "[2:a]volume=0.2,afade=t=in:st=0:d=1.5" in filter_graph
     assert "afade=t=out:st=4:d=2" in filter_graph
     video_filter = command[command.index("-vf") + 1]
