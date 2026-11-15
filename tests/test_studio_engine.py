@@ -11,6 +11,9 @@ def test_run_creates_ordered_worker_checker_gates(tmp_path, monkeypatch):
     assert all(task["status"] == "blocked" for task in run["tasks"][1:])
     assert any(task["specialist"] == "Rigging Setup Agent" for task in run["tasks"])
     assert any(task["specialist"] == "Text Training Agent" for task in run["tasks"])
+    managers = [task for task in run["tasks"] if task["stage_id"] == "senior_management"]
+    assert [task["specialist"] for task in managers] == ["HR Agent", "Manager Agent", "GM Agent", "HO Agent", "Owner Agent"]
+    assert all(task["checker"] == task["specialist"] + " Checker" for task in managers)
 
 def test_checker_pass_advances_and_fail_requires_revision(tmp_path, monkeypatch):
     monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
