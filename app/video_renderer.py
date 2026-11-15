@@ -63,9 +63,9 @@ def _validate_scene_image(path: Path) -> None:
         with Image.open(path) as image:
             rgb = image.convert("RGB").resize((32, 32))
             extrema = rgb.getextrema()
-            if max(channel[1] for channel in extrema) < 24 or sum(
-                channel[1] - channel[0] for channel in extrema
-            ) < 36:
+            # Reject genuinely near-black placeholders without rejecting
+            # valid low-texture/illustrative scenes (including flat-color art).
+            if max(channel[1] for channel in extrema) < 24:
                 raise ValueError("Scene image blank ya almost-black hai; real visual scene required hai.")
     except ValueError:
         raise
