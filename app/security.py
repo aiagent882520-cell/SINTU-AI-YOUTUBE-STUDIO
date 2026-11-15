@@ -29,15 +29,21 @@ def client_address_allowed(address: str, rules: str) -> bool:
         return False
 
 
-def same_origin_request(origin: str, host: str) -> bool:
-    """Compare browser Origin to the request Host without trusting forwarded headers."""
+def same_origin_request(origin: str, host: str, request_scheme: str | None = None) -> bool:
+    """Compare a browser Origin with the actual request origin, without proxy headers."""
     try:
         parsed_origin = urlsplit(origin)
         parsed_host = urlsplit("//" + host)
-        if parsed_origin.scheme not in {"http", "https"} or not parsed_origin.hostname or not parsed_host.hostname:
+        scheme = (request_scheme or parsed_origin.scheme).lower()
+        if (scheme not in {"http", "https"} or parsed_origin.scheme.lower() != scheme
+                or not parsed_origin.hostname or not parsed_host.hostname
+                or parsed_origin.username or parsed_origin.password
+                or parsed_host.username or parsed_host.password
+                or parsed_origin.path not in {"", "/"} or parsed_origin.query or parsed_origin.fragment
+                or parsed_host.path or parsed_host.query or parsed_host.fragment):
             return False
-        origin_port = parsed_origin.port or (443 if parsed_origin.scheme == "https" else 80)
-        host_port = parsed_host.port or (443 if parsed_origin.scheme == "https" else 80)
+        origin_port = parsed_origin.port or (443 if scheme == "https" else 80)
+        host_port = parsed_host.port or (443 if scheme == "https" else 80)
         return parsed_origin.hostname.lower() == parsed_host.hostname.lower() and origin_port == host_port
     except ValueError:
         return False
