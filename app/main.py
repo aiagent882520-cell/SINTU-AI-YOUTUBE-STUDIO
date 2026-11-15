@@ -1096,7 +1096,7 @@ def generate_production_project(project_id: str, payload: ProductionProjectGener
         "\nLanguage: " + project["language"] +
         "\nTarget duration: " + str(project["duration_seconds"]) +
         " seconds. Return a complete production package with scene-by-scene Hindi narration, clean visuals, sound cues, CTA, and publishing metadata.\n"\
-        "MANDATORY visual policy: do not include any visible text, titles, subtitles, captions, transcripts, labels, lower-thirds, signs, logos, or watermarks in generated scenes. Keep every frame clean and text-free. The final renderer adds only the SINTU AI YOUTUBE STUDIO brand watermark."
+        "MANDATORY visual policy: generated scene images/clips must remain clean and text-free (no baked-in words, signs, logos or watermarks). If the user requests subtitles or lyric captions, prepare them as a separate timed text track; the final renderer may burn that track over the footage. Lyrics must be supplied by the user, original, public-domain or otherwise rights-cleared. The renderer adds the SINTU AI YOUTUBE STUDIO brand watermark separately."
     )
     if len(prompt) > 10000:
         raise HTTPException(status_code=400, detail="Brief bahut lamba hai. AI generation ke liye ise 9,000 characters se chhota karein.")
@@ -3451,8 +3451,6 @@ def render_video(payload: RenderInput):
         raise HTTPException(status_code=400, detail="Mixed timeline use karte waqt alag image_ids/video_ids fields khaali rakhein.")
     if timeline_entries and len(timeline_entries) != len(scenes):
         raise HTTPException(status_code=400, detail="Har timeline item ke liye ek scene description dein.")
-    if payload.subtitles:
-        raise HTTPException(status_code=400, detail="Video par subtitles, captions ya spoken-word text allowed nahi hai. Sirf SINTU AI YOUTUBE STUDIO watermark rahega.")
     image_paths = []
     for image_id in payload.image_ids:
         if not re.fullmatch(r"[a-f0-9]{32}", image_id):
@@ -3826,10 +3824,33 @@ class ProductionMediaInput(BaseModel):
     # Empty means use the approved AI Video Generator / storyboard deliverable.
     scene_prompts: list[str] = Field(default_factory=list, max_length=25)
     narration: str | None = Field(default=None, max_length=4000)
+    subtitles: list[str] = Field(default_factory=list, max_length=25)
+    burn_subtitles: bool = True
     seconds_per_scene: int = Field(default=4, ge=2, le=12)
     resolution: str | None = Field(default=None, max_length=12)
     fps: int = Field(default=30, ge=24, le=60)
     quality: str = Field(default="high", max_length=12)
+
+
+def _subtitle_lines_from_narration(narration: str, scene_count: int) -> list[str]:
+    """Split approved Hindi narration into ordered, scene-aligned subtitle lines."""
+    import re
+    import textwrap
+    sentences = [part.strip() for part in re.split(r"(?<=[।!?])\s+|\n+", narration) if part.strip()]
+    if not sentences:
+        sentences = [narration.strip()] if narration.strip() else []
+    buckets = [[] for _ in range(scene_count)]
+    total = max(1, sum(len(sentence) for sentence in sentences))
+    cursor = 0
+    for sentence in sentences:
+        midpoint = cursor + len(sentence) / 2
+        index = min(scene_count - 1, int(midpoint / total * scene_count))
+        buckets[index].append(sentence)
+        cursor += len(sentence)
+    result = [" ".join(bucket).strip() for bucket in buckets]
+    if any(len(line) > 1000 for line in result):
+        raise ValueError("Auto subtitles bahut lambe hain. Narration ko chhote scenes mein baantein ya custom subtitle lines dein.")
+    return result
 
 
 def _scene_prompts_from_deliverables(deliverables: dict) -> list[str]:
@@ -3941,10 +3962,18 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         music_matches = list(MUSIC_DIR.glob(music_id + ".*"))
         if not all(path.is_file() for path in image_paths) or not audio_path.is_file() or not music_matches:
             raise RenderFailed("A generated media asset is missing; final render was stopped.")
+        if payload.subtitles and len(payload.subtitles) != len(scene_prompts):
+            raise HTTPException(status_code=400, detail="Custom subtitle lines ki sankhya scene prompts ke barabar honi chahiye.")
+        subtitle_lines = (
+            [line.strip() for line in payload.subtitles]
+            if payload.burn_subtitles and payload.subtitles
+            else _subtitle_lines_from_narration(narration, len(scene_prompts))
+            if payload.burn_subtitles else []
+        )
         rendered = render_storyboard(
             run.get("topic", "SINTU AI Studio Production"), scene_prompts,
             payload.seconds_per_scene, image_paths=image_paths, audio_path=audio_path,
-            music_path=music_matches[0], music_volume=0.16, subtitles=[],
+            music_path=music_matches[0], music_volume=0.16, subtitles=subtitle_lines,
             transition="fade", motion="none", resolution=resolution,
             fps=payload.fps, quality=payload.quality,
         )
@@ -3952,8 +3981,8 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         return {
             "run_id": run_id, "status": updated["status"],
             "generated_images": created_images, "voiceover": voice_result,
-            "background_music": music_result, "render": rendered,
-            "video_rendered": True, "published": False,
+            "background_music": music_result, "subtitles": subtitle_lines,
+            "render": rendered, "video_rendered": True, "published": False,
             "detail": "Local media generated and final MP4 verified. YouTube publishing still requires separate human approval.",
         }
     except (ImageUnavailable, VoiceUnavailable, MusicUnavailable, RendererUnavailable) as exc:

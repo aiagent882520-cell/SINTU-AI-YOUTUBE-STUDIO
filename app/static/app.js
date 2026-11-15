@@ -31,6 +31,7 @@ function parseTimelineEntry(entry) {
  const legacy=/^(image|video):([a-f0-9]{32}):(\d{1,2}):(cut|fade)$/i.exec(entry.trim());if(!legacy)return null;
  return {kind:legacy[1].toLowerCase(),id:legacy[2].toLowerCase(),duration:legacy[1].toLowerCase()==="image"?Number(legacy[3]):0,trimStart:0,trimEnd:null,audioVolume:.25,transition:legacy[4]};
 }
+function subtitleLines(){const raw=$("renderSubtitles").value.replace(/\r/g,"");if(!raw.trim())return [];const lines=raw.split("\n").map(line=>line.trim());while(lines.length&&!lines[lines.length-1])lines.pop();return lines;}
 function timelineRows(){const entries=$("renderTimeline").value.split("\n").map(parseTimelineEntry).filter(Boolean),scenes=$("renderScenes").value.split("\n");return entries.map((x,i)=>({...x,scene:scenes[i]||""}));}
 function structuredTimelineItems(rows=timelineRows()){
  return rows.map(x=>x.kind==="image"
@@ -825,12 +826,12 @@ $("renderButton").addEventListener("click", async () => {
         quality: $("renderQuality").value,
         transition: $("renderTransition").value,
         motion: $("renderTimeline").value.trim() || $("renderVideoIds").value.trim() ? "none" : $("renderMotion").value,
-        subtitles: []
+        subtitles: subtitleLines()
       })
     });
     $("renderVideo").src = result.url;
     $("renderDownload").href = result.url;
-    $("renderNotice").textContent = result.resolution + " · " + (result.fps || 30) + " FPS · " + (result.quality || "high") + " quality · " + result.duration_seconds + " sec · " + result.format + " · Audio: " + result.audio + " · Transition: " + result.transition + " · Motion: " + (result.motion || "none");
+    $("renderNotice").textContent = result.resolution + " · " + (result.fps || 30) + " FPS · " + (result.quality || "high") + " quality · " + result.duration_seconds + " sec · " + result.format + " · Audio: " + result.audio + " · Subtitles: " + (result.subtitles_burned_in ? "burned in" : "off") + " · Transition: " + result.transition + " · Motion: " + (result.motion || "none");
     $("renderResult").hidden = false;
   } catch (error) {
     $("renderNotice").textContent = error.message;

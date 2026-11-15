@@ -959,22 +959,14 @@ def test_ai_video_clip_assembly_contract(tmp_path, monkeypatch):
         }
 
     monkeypatch.setattr(main, "render_ai_clips", fake_assembly)
-    rejected = client.post("/api/render", json={
-        "title": "AI Short", "scenes": ["Opening clip", "Ending clip"],
-        "video_ids": clip_ids, "subtitles": ["Caption one", "Caption two"], "transition": "fade"
-    })
-    assert rejected.status_code == 400
-    assert "text" in rejected.json()["detail"].lower()
-    assert "paths" not in called
-
     result = client.post("/api/render", json={
         "title": "AI Short", "scenes": ["Opening clip", "Ending clip"],
-        "video_ids": clip_ids, "transition": "fade"
+        "video_ids": clip_ids, "subtitles": ["पहला दृश्य", "दूसरा दृश्य"], "transition": "fade"
     })
     assert result.status_code == 200
     assert result.json()["scenes"] == 2
     assert len(called["paths"]) == 2
-    assert called["subtitles"] == []
+    assert called["subtitles"] == ["पहला दृश्य", "दूसरा दृश्य"]
     assert called["transition"] == "fade"
     invalid = client.post("/api/render", json={
         "title": "AI Short", "scenes": ["Only one scene"],
@@ -1044,26 +1036,22 @@ def test_mixed_image_video_timeline_api_contract(tmp_path, monkeypatch):
         captured["scenes"] = scenes
         captured["durations"] = [item.get("duration") for item in items]
         captured["transitions"] = kwargs.get("transitions")
+        captured["subtitles"] = kwargs.get("subtitles")
         return {"video_id": "3" * 32, "url": "/api/videos/" + "3" * 32,
                 "timeline_items": len(items), "timeline_order": [x["kind"] for x in items],
                 "duration_seconds": 8, "format": "MP4 / H.264"}
     monkeypatch.setattr(main, "render_mixed_timeline", fake_mixed)
-    rejected = client.post("/api/render", json={
-        "title": "Mixed timeline", "scenes": ["Image intro", "Moving clip"],
-        "timeline": [f"image:{image_id}:6:fade", f"video:{video_id}:0:cut"],
-        "seconds_per_scene": 4, "subtitles": ["Intro caption", ""]
-    })
-    assert rejected.status_code == 400
     response = client.post("/api/render", json={
         "title": "Mixed timeline", "scenes": ["Image intro", "Moving clip"],
         "timeline": [f"image:{image_id}:6:fade", f"video:{video_id}:0:cut"],
-        "seconds_per_scene": 4
+        "seconds_per_scene": 4, "subtitles": ["पहला दृश्य", "दूसरा दृश्य"]
     })
     assert response.status_code == 200
     assert captured["items"] == [("image", f"{image_id}.jpg"), ("video", f"{video_id}.mp4")]
     assert captured["scenes"] == ["Image intro", "Moving clip"]
     assert captured["durations"] == [6, 0]
     assert captured["transitions"] == ["fade", "cut"]
+    assert captured["subtitles"] == ["पहला दृश्य", "दूसरा दृश्य"]
     invalid_duration = client.post("/api/render", json={
         "title": "Invalid video duration", "scenes": ["Clip"],
         "timeline": [f"video:{video_id}:5:cut"]
@@ -2332,8 +2320,9 @@ def test_saved_production_project_generates_and_links_ai_task(tmp_path, monkeypa
     assert captured["workflow"] == "shorts"
     assert "scene-by-scene Hindi narration" in captured["prompt"]
     assert "on-screen text" not in captured["prompt"].lower()
-    assert "do not include any visible text" in captured["prompt"].lower()
-    assert "only the SINTU AI YOUTUBE STUDIO brand watermark" in captured["prompt"]
+    assert "generated scene images/clips must remain clean and text-free" in captured["prompt"].lower()
+    assert "separate timed text track" in captured["prompt"].lower()
+    assert "the SINTU AI YOUTUBE STUDIO brand watermark separately" in captured["prompt"]
 
 
 def test_saved_production_project_generation_rejects_unknown_workflow(tmp_path, monkeypatch):
@@ -2933,11 +2922,16 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
     monkeypatch.setattr(main, "generate_music", lambda prompt, duration: {
         "music_id": "c" * 32, "url": "/api/music/" + "c" * 32
     })
-    monkeypatch.setattr(main, "render_storyboard", lambda title, scenes, seconds, **kwargs: {
-        "video_id": "d" * 32, "filename": "d" * 32 + ".mp4",
-        "url": "/api/videos/" + "d" * 32, "resolution": kwargs["resolution"],
-        "brand_watermark": "SINTU AI YOUTUBE STUDIO", "subtitles_burned_in": False
-    })
+    rendered_options = {}
+    def fake_render(title, scenes, seconds, **kwargs):
+        rendered_options.update(kwargs)
+        return {
+            "video_id": "d" * 32, "filename": "d" * 32 + ".mp4",
+            "url": "/api/videos/" + "d" * 32, "resolution": kwargs["resolution"],
+            "brand_watermark": "SINTU AI YOUTUBE STUDIO",
+            "subtitles_burned_in": bool(kwargs.get("subtitles"))
+        }
+    monkeypatch.setattr(main, "render_storyboard", fake_render)
     attached = {}
     def fake_attach(value, rendered, owner):
         attached.update(run_id=value, render=rendered, owner=owner)
@@ -2961,7 +2955,9 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
     assert body["video_rendered"] is True and body["published"] is False
     assert len(body["generated_images"]) == 2
     assert body["render"]["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
-    assert body["render"]["subtitles_burned_in"] is False
+    assert body["render"]["subtitles_burned_in"] is True
+    assert len(body["subtitles"]) == 2
+    assert rendered_options["subtitles"] == body["subtitles"]
     assert attached["owner"] == "local"
     assert generated == ["पुराने किले का सिनेमाई दृश्य", "रहस्यमयी जंगल का दृश्य"]
     assert aspects == ["portrait", "portrait"]
@@ -2998,11 +2994,16 @@ def test_production_media_pipeline_uses_approved_storyboard_when_scene_prompts_o
     monkeypatch.setattr(main, "generate_music", lambda prompt, duration: {
         "music_id": "c" * 32, "url": "/api/music/" + "c" * 32
     })
-    monkeypatch.setattr(main, "render_storyboard", lambda title, scenes, seconds, **kwargs: {
-        "video_id": "d" * 32, "filename": "d" * 32 + ".mp4",
-        "url": "/api/videos/" + "d" * 32, "resolution": kwargs["resolution"],
-        "brand_watermark": "SINTU AI YOUTUBE STUDIO", "subtitles_burned_in": False
-    })
+    rendered_options = {}
+    def fake_render(title, scenes, seconds, **kwargs):
+        rendered_options.update(kwargs)
+        return {
+            "video_id": "d" * 32, "filename": "d" * 32 + ".mp4",
+            "url": "/api/videos/" + "d" * 32, "resolution": kwargs["resolution"],
+            "brand_watermark": "SINTU AI YOUTUBE STUDIO",
+            "subtitles_burned_in": bool(kwargs.get("subtitles"))
+        }
+    monkeypatch.setattr(main, "render_storyboard", fake_render)
     monkeypatch.setattr(main, "attach_render_result", lambda *args: {"status": "completed"})
     image_dir, audio_dir, music_dir = tmp_path / "images", tmp_path / "audio", tmp_path / "music"
     image_dir.mkdir(); audio_dir.mkdir(); music_dir.mkdir()
@@ -3022,6 +3023,8 @@ def test_production_media_pipeline_uses_approved_storyboard_when_scene_prompts_o
     ]
     assert response.json()["video_rendered"] is True
     assert response.json()["published"] is False
+    assert response.json()["render"]["subtitles_burned_in"] is True
+    assert len(response.json()["subtitles"]) == 2
 
 
 def test_scene_prompt_extraction_from_numbered_deliverable():
@@ -3548,3 +3551,24 @@ def test_youtube_revenue_sync_endpoint_rejects_unavailable_monetization(tmp_path
         "start_date": "2026-11-01", "end_date": "2026-11-07"
     })
     assert response.status_code == 409
+
+
+
+def test_scene_aligned_hindi_subtitle_splitter_preserves_order_and_scene_count():
+    lines = main._subtitle_lines_from_narration(
+        "पहला वाक्य। दूसरा वाक्य। तीसरा वाक्य। चौथा वाक्य।", 2
+    )
+    assert len(lines) == 2
+    assert "पहला वाक्य।" in lines[0]
+    assert "चौथा वाक्य।" in lines[1]
+    assert all(len(line) <= 1000 for line in lines)
+
+
+
+def test_render_ui_exposes_enabled_per_scene_subtitle_input(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    page = client.get("/").text
+    assert 'id="renderSubtitles"' in page
+    assert 'one line per scene or clip' in page
+    assert 'id="renderSubtitles" rows="4" maxlength="25000"' in page
+    assert 'id="renderSubtitles" rows="4" maxlength="25000" disabled' not in page
