@@ -14,6 +14,21 @@ Project folder already open ho to sirf `bash INSTALL_SINTU_TERMUX.sh` chalayein.
 
 Pehli baar script Termux packages, Python virtual environment aur Studio dependencies install karegi, secure local admin login banayegi, local engine diagnostics dikhayegi aur dashboard start karegi. Browser mein `http://127.0.0.1:8000` kholein. Server chalta rakhne ke liye Termux session khula rakhein; band karne ke liye `CTRL+C` dabayein. Ye responsive website PWA bhi hai: browser menu se “Add to Home screen” karke home-screen app banayein; ye native APK nahi hai.
 
+## Complete video-format groups
+
+The format selector contains all 60 registered formats, grouped for the requested production categories:
+
+- Films: Cinematic, Short, Fantasy, Sci-Fi, Action, Romantic, Horror and Historical.
+- Stop Motion: Stop Motion, Clay and Puppet.
+- Music: Lyric Video and Music Video.
+- Visual Effects: VFX and Green Screen.
+- Business: Product Demo, Advertisement and Corporate Training.
+- Live: Live Action, Event, Sports Highlights and News.
+- Special: 360°, VR, AR, Virtual Production, AI Avatar and Talking Photo.
+- Hybrid: 2D + 3D Animation, Timelapse and Hyperlapse.
+
+These are registered format workflows and export profiles, not a claim that every format has its own native generation engine. 360/VR/AR and live virtual-production workflows require specialized capture, projection, metadata and platform tooling; AI avatar/talking-photo generation requires a configured local model. The studio blocks unsupported native exports rather than silently producing an invalid file.
+
 ## Senior management and feature checkers
 
 - ChatGPT Supervisor: external advisory layer; Termux ke andar ChatGPT service ya paid API ka fake local agent nahi banaya gaya.
