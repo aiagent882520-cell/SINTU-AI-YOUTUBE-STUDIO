@@ -3582,3 +3582,12 @@ def test_render_ui_exposes_enabled_per_scene_subtitle_input(tmp_path, monkeypatc
     assert 'id="renderSubtitles" rows="4" maxlength="25000" disabled' not in page
     assert 'id="renderSoundEffects" type="checkbox" checked' in page
     assert 'id="renderSfxVolume" type="range"' in page
+
+
+
+def test_render_ui_exposes_sound_effect_controls_and_subtitles(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    page = client.get("/").text
+    assert 'id="renderSoundEffects" type="checkbox" checked' in page
+    assert 'id="renderSfxVolume" type="range"' in page
+    assert "whoosh, impact, wind, water, footsteps" in page
