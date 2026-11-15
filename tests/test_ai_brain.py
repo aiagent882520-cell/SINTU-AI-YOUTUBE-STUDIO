@@ -5,6 +5,14 @@ from app import ai_brain
 def test_provider_status_never_exposes_keys(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "secret-test-value")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setattr(ai_brain, "_ollama_status", lambda: {
+        "service_running": False, "model_available": False,
+        "model": "qwen2.5:3b", "base_url": "http://127.0.0.1:11434"
+    })
+    monkeypatch.setattr(ai_brain, "_local_openai_compatible_status", lambda: {
+        "service_running": False, "model_available": False,
+        "model": "auto", "base_url": "http://127.0.0.1:8080/v1"
+    })
     status = ai_brain.provider_status()
     assert status["openai"]["configured"] is True
     assert "secret-test-value" not in repr(status)
@@ -38,6 +46,9 @@ def test_explicit_provider_without_key_fails(monkeypatch):
 
 def test_video_generation_prompt_enforces_hindi_and_no_text_overlay(monkeypatch):
     monkeypatch.setenv("AI_PROVIDER", "local")
+    monkeypatch.setattr(ai_brain, "_active_local_backend", lambda: {
+        "backend": "ollama", "model_available": True, "model": "qwen2.5:3b"
+    })
     captured = {}
 
     def fake_generate(prompt):
@@ -45,9 +56,36 @@ def test_video_generation_prompt_enforces_hindi_and_no_text_overlay(monkeypatch)
         return "निर्माण पैकेज"
 
     monkeypatch.setattr(ai_brain, "_generate_ollama", fake_generate)
-    monkeypatch.setattr(ai_brain, "_ollama_status", lambda: {"service_running": True, "model_available": True})
     result = ai_brain.generate_text("भारत के रहस्य पर वीडियो बनाओ", "shorts")
     assert result["output"] == "निर्माण पैकेज"
     assert "At least 95% Hindi" in captured["prompt"]
     assert "NO text overlay" in captured["prompt"]
     assert "SINTU AI YOUTUBE STUDIO brand watermark logo" in captured["prompt"]
+
+
+def test_auto_local_backend_falls_back_to_compatible_server(monkeypatch):
+    monkeypatch.setenv("LOCAL_AI_BACKEND", "auto")
+    monkeypatch.setattr(ai_brain, "_ollama_status", lambda: {
+        "service_running": False, "model_available": False,
+        "model": "qwen2.5:3b", "base_url": "http://127.0.0.1:11434"
+    })
+    monkeypatch.setattr(ai_brain, "_local_openai_compatible_status", lambda: {
+        "service_running": True, "model_available": True,
+        "model": "qwen2.5-3b-instruct", "base_url": "http://127.0.0.1:8080/v1"
+    })
+    selected = ai_brain._active_local_backend()
+    assert selected["backend"] == "openai-compatible"
+    assert selected["model"] == "qwen2.5-3b-instruct"
+
+
+def test_local_openai_compatible_response_is_parsed(monkeypatch):
+    class FakeResponse:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self): return b'{"choices":[{"message":{"content":"\\u0928\\u092e\\u0938\\u094d\\u0924\\u0947"}}]}'
+
+    monkeypatch.setattr(ai_brain.urllib.request, "urlopen", lambda *args, **kwargs: FakeResponse())
+    result = ai_brain._generate_openai_compatible("hello", {
+        "base_url": "http://127.0.0.1:8080/v1", "model": "local-model"
+    })
+    assert result == "नमस्ते"
