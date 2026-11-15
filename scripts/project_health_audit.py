@@ -79,6 +79,7 @@ def main() -> int:
     parser.add_argument("--skip-tests", action="store_true",
                         help="Skip pytest (useful for a fast on-device media-only check)")
     parser.add_argument("--media-dir", type=Path, default=ROOT / "generated_videos")
+    parser.add_argument("--report", type=Path, default=None, help="Also write the JSON report to this path")
     args = parser.parse_args()
     results: list[dict] = []
     ok = run_check("python-compile", [sys.executable, "-m", "compileall", "-q", "app", "scripts"], results)
@@ -87,7 +88,11 @@ def main() -> int:
     ok = audit_media(args.media_dir, results) and ok
     summary = {"project": "SINTU AI YOUTUBE STUDIO", "status": "PASS" if ok else "FAIL",
                "checks": results, "paid_services_used": False, "publishing_performed": False}
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    rendered = json.dumps(summary, ensure_ascii=False, indent=2)
+    print(rendered)
+    if args.report:
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        args.report.write_text(rendered + "\\n", encoding="utf-8")
     return 0 if ok else 1
 
 
