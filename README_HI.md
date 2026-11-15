@@ -39,6 +39,14 @@ These are registered format workflows and export profiles, not a claim that ever
 
 **Android hardware limitation:** is launcher se dashboard aur API chal sakte hain, lekin isse Ollama model, ComfyUI video workflow/model weights ya Piper Hindi voice model automatically install nahi hote. Real AI video generation ke liye compatible local PC/server aur uske model files ki zaroorat ho sakti hai. Diagnostics missing components ko clearly report karte hain; app fake AI output ya paid fallback nahi chalata.
 
+## Automatic earnings ledger and application firewall
+
+- When an admin loads connected-channel YouTube Analytics, SINTU can sync the official estimated revenue for that date range into the ledger. The sync is idempotent and records the amount as **estimated**, never as received; a manually marked received payment is not overwritten.
+- Actual revenue depends on YouTube Partner Program eligibility, channel monetization, Google's monetary OAuth scope and the official Analytics API. AdSense/bank settlement is not independently verified by this ledger.
+- Affiliate, sponsorship, brand-deal and digital-product income are tracked when real transactions are recorded; SINTU does not fabricate customers, sales or guaranteed income.
+- The application firewall includes optional IP/CIDR allowlisting, per-client API throttling, a separate login-attempt limiter, same-origin/CSRF checks, role-based admin access, audit logging, strict script CSP, anti-framing and browser security headers.
+- The app firewall is defense-in-depth, not a replacement for a maintained OS firewall, HTTPS/TLS reverse proxy/WAF, private engine network and encrypted backups. Keep Termux bound to loopback unless a trusted network and firewall are deliberately configured.
+
 ## Run locally
 
 1. Python 3.11+ install karein.
