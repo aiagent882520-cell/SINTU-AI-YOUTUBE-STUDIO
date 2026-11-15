@@ -826,7 +826,9 @@ $("renderButton").addEventListener("click", async () => {
         quality: $("renderQuality").value,
         transition: $("renderTransition").value,
         motion: $("renderTimeline").value.trim() || $("renderVideoIds").value.trim() ? "none" : $("renderMotion").value,
-        subtitles: subtitleLines()
+        subtitles: subtitleLines(),
+        sound_effects_enabled: $("renderSoundEffects").checked,
+        sound_effects_volume: Number($("renderSfxVolume").value)
       })
     });
     $("renderVideo").src = result.url;
