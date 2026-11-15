@@ -189,17 +189,21 @@ def test_offline_storyboard_e2e_creates_verified_local_video(monkeypatch, tmp_pa
 
     image_dir = tmp_path / "images"
     audio_dir = tmp_path / "audio"
+    music_dir = tmp_path / "music"
     output_dir = tmp_path / "videos"
     image_dir.mkdir()
     audio_dir.mkdir()
+    music_dir.mkdir()
     output_dir.mkdir()
-    for index in range(1, 4):
+    for index in range(1, 9):
         (image_dir / f"image-{index}.jpg").write_bytes(b"image")
     (audio_dir / "voice.wav").write_bytes(b"audio")
+    (music_dir / "music.wav").write_bytes(b"music")
     (output_dir / "final.mp4").write_bytes(b"x" * 2000)
 
     monkeypatch.setattr(live_e2e, "IMAGE_DIR", image_dir)
     monkeypatch.setattr(live_e2e, "AUDIO_DIR", audio_dir)
+    monkeypatch.setattr(live_e2e, "MUSIC_DIR", music_dir)
     monkeypatch.setattr(live_e2e, "OUTPUT_DIR", output_dir)
     calls = []
     monkeypatch.setattr(live_e2e, "generate_image", lambda *args, **kwargs: (
@@ -207,18 +211,19 @@ def test_offline_storyboard_e2e_creates_verified_local_video(monkeypatch, tmp_pa
             "image_id": f"image-{len(calls)}", "provider": "SINTU Procedural Art (offline)"
         }
     ))
+    monkeypatch.setattr(live_e2e, "generate_music", lambda *args, **kwargs: {"music_id": "music", "provider": "local"})
     monkeypatch.setattr(live_e2e, "generate_voiceover", lambda text: {
         "filename": "voice.wav", "voice": "eSpeak NG Hindi", "format": "WAV"
     })
     monkeypatch.setattr(live_e2e, "render_storyboard", lambda **kwargs: {
         "filename": "final.mp4", "video_id": "final-id", "duration_seconds": 9,
         "resolution": "720x1280", "brand_watermark": "SINTU AI YOUTUBE STUDIO",
-        "subtitles_burned_in": False, "audio": "voiceover",
+        "subtitles_burned_in": False, "audio": "voiceover+music",
     })
 
     result = live_e2e._offline_storyboard_e2e("भारत के किले")
-    assert len(calls) == 3
-    assert result["scene_count"] == 3
+    assert len(calls) == 8
+    assert result["scene_count"] == 8
     assert result["voice_engine"] == "eSpeak NG Hindi"
     assert result["verified_by_renderer"] is True
     assert result["final_render_bytes"] == 2000
