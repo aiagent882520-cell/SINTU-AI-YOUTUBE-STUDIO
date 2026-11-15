@@ -3845,7 +3845,6 @@ class ProductionMediaInput(BaseModel):
 def _subtitle_lines_from_narration(narration: str, scene_count: int) -> list[str]:
     """Split approved Hindi narration into ordered, scene-aligned subtitle lines."""
     import re
-    import textwrap
     sentences = [part.strip() for part in re.split(r"(?<=[।!?])\s+|\n+", narration) if part.strip()]
     if not sentences:
         sentences = [narration.strip()] if narration.strip() else []
