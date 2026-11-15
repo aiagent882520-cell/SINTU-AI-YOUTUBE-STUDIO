@@ -46,6 +46,21 @@ def test_final_mp4_verification_rejects_wrong_output_metadata(tmp_path, monkeypa
         _verify_rendered_output(output, 720, 1280, 8, require_audio=True)
 
 
+@pytest.mark.parametrize("frame_count,video_duration", [
+    ("4", "0.166667"),
+    ("240", "4.0"),
+])
+def test_final_mp4_verification_rejects_incomplete_video_stream(tmp_path, monkeypatch, frame_count, video_duration):
+    metadata = _metadata()
+    metadata["streams"][0]["nb_read_frames"] = frame_count
+    metadata["streams"][0]["duration"] = video_duration
+    _setup_probe(monkeypatch, metadata)
+    output = tmp_path / "truncated.mp4"
+    output.write_bytes(b"mp4")
+    with pytest.raises(RenderFailed, match="actual frames"):
+        _verify_rendered_output(output, 720, 1280, 8, require_audio=True)
+
+
 def test_final_mp4_verification_rejects_missing_expected_audio(tmp_path, monkeypatch):
     _setup_probe(monkeypatch, _metadata(audio=False))
     output = tmp_path / "final.mp4"
