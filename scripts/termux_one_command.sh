@@ -24,6 +24,15 @@ pkg upgrade -y
 # repository snapshots. Their absence must never block the studio installation.
 pkg install -y git python python-pip python-pillow python-cryptography ffmpeg openssl curl libjpeg-turbo libpng freetype clang make pkg-config
 
+# Termux packages the eSpeak NG engine under the name "espeak".
+if ! command -v espeak-ng >/dev/null 2>&1 && ! command -v espeak >/dev/null 2>&1; then
+  if pkg install -y espeak; then
+    say "Optional local Hindi eSpeak voice engine installed"
+  else
+    say "eSpeak package is unavailable on this mirror; install continues without local TTS"
+  fi
+fi
+
 say "Checking shared storage permission (optional)"
 if [ ! -d "$HOME/storage/shared" ]; then
   termux-setup-storage || true
