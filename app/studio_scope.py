@@ -1,6 +1,7 @@
 """Complete, free-first SINTU production architecture."""
 from copy import deepcopy
 from .management_hierarchy import FEATURE_CHECKER_PAIRS, FEATURE_ROLE_NAMES, SENIOR_MANAGER_NAMES, management_hierarchy
+from .agents import AGENTS
 
 _FORMAT_GROUPS = {
  "cinematic-movie":"Films","short-film":"Films","fantasy-film":"Films","sci-fi-film":"Films",
@@ -161,7 +162,8 @@ def get_format(format_id):
     return next((item for item in video_formats() if item["id"]==format_id),None)
 def agent_registry():
     hierarchy = management_hierarchy()
-    return {"specialist_total":len(SPECIALIST_ROLES),"checker_total":len(AGENT_PAIRS),
+    return {"core_agent_total":len(AGENTS),"feature_worker_checker_total":len(FEATURE_CHECKER_PAIRS),
+      "specialist_total":len(SPECIALIST_ROLES),"checker_total":len(AGENT_PAIRS),
       "total_role_instances":len(SPECIALIST_ROLES)+len(AGENT_PAIRS),"checker_pairs":deepcopy(AGENT_PAIRS),
       "management_hierarchy":hierarchy,
       "senior_manager_total":len(SENIOR_MANAGER_NAMES),
@@ -183,7 +185,8 @@ def production_plan(format_id):
       "approval_required_before_publish":True,"paid_services_enabled":False,
       "execution_status":"persistent_worker_checker_queue_available_local_ollama_required_for_automatic_execution"}
 def scope_summary():
-    return {"video_format_count":len(_FORMAT_ROWS),"studio_module_count":len(STUDIO_MODULES),
+    return {"video_format_count":len(_FORMAT_ROWS),"core_agent_total":len(AGENTS),
+      "feature_worker_checker_total":len(FEATURE_CHECKER_PAIRS),"studio_module_count":len(STUDIO_MODULES),
       "specialist_count":len(SPECIALIST_ROLES),"independent_checker_count":len(AGENT_PAIRS),
       "free_first_policy":deepcopy(FREE_FIRST_POLICY),"studio_modules":list(STUDIO_MODULES),
       "engines":deepcopy(ENGINE_CATALOG),"senior_manager_count":len(SENIOR_MANAGER_NAMES),
