@@ -3948,7 +3948,8 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=400, detail="Production format no longer exists.") from None
     if not profile["generic_export_available"]:
         raise HTTPException(status_code=501, detail=profile["limitations"][0])
-    if not image_status().get("local_available"):
+    use_procedural_2d = run["format_id"] in {"2d-cartoon", "story-animation"}
+    if not use_procedural_2d and not image_status().get("local_available"):
         raise HTTPException(status_code=503, detail="Local ComfyUI image workflow is not ready. Configure a validated free local workflow; paid providers are not enabled by this route.")
     if not voice_status().get("local_available"):
         raise HTTPException(status_code=503, detail="Local Piper TTS executable and Hindi voice model are required. Paid voice providers are not enabled by this route.")
@@ -3978,11 +3979,12 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=400, detail="Unsupported FPS or render quality.")
     created_images, audio_id, music_id = [], None, None
     try:
-        for prompt in scene_prompts:
-            width, height = (int(value) for value in resolution.split("x"))
-            aspect = "portrait" if height > width else ("square" if height == width else "landscape")
-            image_result = generate_image(prompt, "scene", aspect)
-            created_images.append(image_result["image_id"])
+        if not use_procedural_2d:
+            for prompt in scene_prompts:
+                width, height = (int(value) for value in resolution.split("x"))
+                aspect = "portrait" if height > width else ("square" if height == width else "landscape")
+                image_result = generate_image(prompt, "scene", aspect)
+                created_images.append(image_result["image_id"])
         voice_result = generate_voiceover(narration)
         audio_id = voice_result["audio_id"]
         music_result = generate_music(
@@ -3993,7 +3995,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         image_paths = [IMAGE_DIR / f"{image_id}.jpg" for image_id in created_images]
         audio_path = AUDIO_DIR / voice_result["filename"]
         music_matches = list(MUSIC_DIR.glob(music_id + ".*"))
-        if not all(path.is_file() for path in image_paths) or not audio_path.is_file() or not music_matches:
+        if (not use_procedural_2d and not all(path.is_file() for path in image_paths)) or not audio_path.is_file() or not music_matches:
             raise RenderFailed("A generated media asset is missing; final render was stopped.")
         if payload.subtitles and len(payload.subtitles) != len(scene_prompts):
             raise HTTPException(status_code=400, detail="Custom subtitle lines ki sankhya scene prompts ke barabar honi chahiye.")
@@ -4003,15 +4005,34 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
             else _subtitle_lines_from_narration(narration, len(scene_prompts))
             if payload.burn_subtitles else []
         )
-        rendered = render_storyboard(
-            run.get("topic", "SINTU AI Studio Production"), scene_prompts,
-            payload.seconds_per_scene, image_paths=image_paths, audio_path=audio_path,
-            music_path=music_matches[0], music_volume=0.16, subtitles=subtitle_lines,
-            transition="fade", motion="none", resolution=resolution,
-            sound_effects_enabled=payload.sound_effects_enabled,
-            sound_effects_volume=payload.sound_effects_volume,
-            fps=payload.fps, quality=payload.quality,
-        )
+        if use_procedural_2d:
+            from .animation_2d import render_2d_animation_clips
+            with tempfile.TemporaryDirectory(prefix="sintu-approved-2d-") as animation_temp:
+                animation_clips = render_2d_animation_clips(
+                    scene_prompts, payload.seconds_per_scene, Path(animation_temp),
+                    resolution=resolution, fps=payload.fps,
+                )
+                rendered = render_ai_clips(
+                    animation_clips, audio_path=audio_path, music_path=music_matches[0],
+                    music_volume=0.16, subtitles=subtitle_lines, transition="fade",
+                    scene_descriptions=scene_prompts,
+                    sound_effects_enabled=payload.sound_effects_enabled,
+                    sound_effects_volume=payload.sound_effects_volume,
+                    resolution=resolution, fps=payload.fps, quality=payload.quality,
+                )
+            rendered["animation_mode"] = "2D character animation"
+            rendered["animation_provider"] = "SINTU Procedural 2D Animation (local)"
+            rendered["camera_movement"] = "animated cinematic pan and zoom"
+        else:
+            rendered = render_storyboard(
+                run.get("topic", "SINTU AI Studio Production"), scene_prompts,
+                payload.seconds_per_scene, image_paths=image_paths, audio_path=audio_path,
+                music_path=music_matches[0], music_volume=0.16, subtitles=subtitle_lines,
+                transition="fade", motion="none", resolution=resolution,
+                sound_effects_enabled=payload.sound_effects_enabled,
+                sound_effects_volume=payload.sound_effects_volume,
+                fps=payload.fps, quality=payload.quality,
+            )
         updated = attach_render_result(run_id, rendered, owner)
         return {
             "run_id": run_id, "status": updated["status"],
@@ -4020,7 +4041,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
             "render": rendered, "video_rendered": True, "published": False,
             "detail": "Local media generated and final MP4 verified. YouTube publishing still requires separate human approval.",
         }
-    except (ImageUnavailable, VoiceUnavailable, MusicUnavailable, RendererUnavailable) as exc:
+    except (ImageUnavailable, VoiceUnavailable, MusicUnavailable, RendererUnavailable, RuntimeError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
     except (ImageGenerationFailed, VoiceGenerationFailed, MusicGenerationFailed, RenderFailed) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from None
