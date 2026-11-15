@@ -41,8 +41,21 @@ async function loadYouTubeAnalytics(){
   if(el("youtubeStartDate").value)params.set("start_date",el("youtubeStartDate").value);
   if(el("youtubeEndDate").value)params.set("end_date",el("youtubeEndDate").value);
   const data=await request("/api/admin/youtube/analytics"+(params.size?"?"+params.toString():""));
+  let revenueSyncMessage="";
+  if(data.revenue&&data.revenue.available){
+   try{
+    const synced=await request("/api/admin/youtube/analytics/sync-revenue",{
+     method:"POST",body:JSON.stringify({start_date:data.start_date,end_date:data.end_date})
+    });
+    revenueSyncMessage=synced.preserved_manual_status
+     ?" · Ledger का manually updated payment status सुरक्षित रखा गया"
+     :" · YouTube estimated revenue ledger में sync हुआ";
+   }catch(syncError){
+    revenueSyncMessage=" · Estimate sync नहीं हुआ: "+syncError.message;
+   }
+  }
   await renderYouTubeAnalytics(data);
-  status.textContent=(data.channel||"Connected channel")+" · "+data.start_date+" से "+data.end_date+" · "+(data.note||"Official YouTube data");
+  status.textContent=(data.channel||"Connected channel")+" · "+data.start_date+" से "+data.end_date+" · "+(data.note||"Official YouTube data")+revenueSyncMessage;
  }catch(err){status.textContent=err.message+" · YouTube channel connection और Analytics permission जाँचें।";}
  finally{button.disabled=false;}
 }
