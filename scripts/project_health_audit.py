@@ -59,6 +59,11 @@ def audit_media(path: Path, results: list[dict]) -> bool:
             [ffmpeg, "-hide_banner", "-i", str(video), "-vf",
              "blackdetect=d=0.5:pix_th=0.10", "-an", "-f", "null", "-"],
             text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        if black.returncode != 0:
+            results.append({"check": f"media:{video.name}", "status": "FAIL",
+                            "output": black.stderr[-2000:]})
+            ok = False
+            continue
         intervals = [(float(a), float(b)) for a, b in re.findall(
             r"black_start:([0-9.]+)\s+black_end:([0-9.]+)", black.stderr)]
         full_black = any(start <= 0.1 and end >= duration * 0.95 for start, end in intervals)
