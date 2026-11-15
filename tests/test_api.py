@@ -3561,3 +3561,13 @@ def test_scene_aligned_hindi_subtitle_splitter_preserves_order_and_scene_count()
     assert "पहला वाक्य।" in lines[0]
     assert "चौथा वाक्य।" in lines[1]
     assert all(len(line) <= 1000 for line in lines)
+
+
+
+def test_render_ui_exposes_enabled_per_scene_subtitle_input(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    page = client.get("/").text
+    assert 'id="renderSubtitles"' in page
+    assert 'one line per scene or clip' in page
+    assert 'id="renderSubtitles" rows="4" maxlength="25000"' in page
+    assert 'id="renderSubtitles" rows="4" maxlength="25000" disabled' not in page
