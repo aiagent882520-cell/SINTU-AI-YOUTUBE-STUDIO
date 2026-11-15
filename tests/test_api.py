@@ -2965,6 +2965,8 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
     assert body["render"]["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
     assert body["render"]["subtitles_burned_in"] is True
     assert len(body["subtitles"]) == 2
+    assert body["render"]["sound_effects"] is True
+    assert body["render"]["sound_effect_cue_count"] >= 1
     assert rendered_options["subtitles"] == body["subtitles"]
     assert attached["owner"] == "local"
     assert generated == ["पुराने किले का सिनेमाई दृश्य", "रहस्यमयी जंगल का दृश्य"]
