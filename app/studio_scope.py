@@ -113,7 +113,7 @@ _STAGE_ROLES = {
  "script":{"Topic Writer","Story Writer","Script Writer","Screenplay Writer","Dialogue Writer","Prompt Writer","Storyboard Artist","Scene Order Agent","Voice Director","Documentary Producer"},
  "design":{"Concept Artist","Layout Agent","Graphic Designer","Thumbnail Designer","Background Designer","Visual Designer","Logo Designer","Infographic Designer","Character Designer","Image Generation Agent","Scene Generation Agent","Background Generation Agent","Product Designer","Creative Director"},
  "production":{"Modeling Agent","3D Modeler","Texturing Agent","Text Training Agent","Rigging Setup Agent","Rigging Agent","2D Animator","3D Animator","Character Animator","Motion Graphics Artist","Lighting Agent","Recording Agent","Visual Effects Agent","VFX Agent","Video Generation Agent","AI Avatar Agent","Lip Sync Agent","Animation Director","Cinematographer","Film Director","Camera Movement Planner","Character Consistency Agent","Rendering Specialist"},
- "post":{"Compositing Agent","2D VFX Agent","Color Correction Agent","Video Editor","Visual Editor","Cinematic Editor","Colorist","Transition Designer","Branding Agent","VFX Compositor","Sound Designer","Sound Effects Agent","Background Music Agent","Audio Editor","Audio Mixer","Hindi Narration Agent","Voice Generation Agent","Subtitle Agent"},
+ "post":{"Compositing Agent","2D VFX Agent","Color Correction Agent","Video Editor","Visual Editor","Cinematic Editor","Colorist","Transition Designer","Branding Agent","VFX Compositor","Sound Designer","Sound Effects Agent","Background Music Agent","Music Composer","Audio Editor","Audio Mixer","Hindi Narration Agent","Voice Generation Agent","Subtitle Agent"},
  "quality":{"Script Quality Agent","Video Quality Agent","Audio Quality Agent","Visual Consistency Agent","Copyright Checker Agent","Subtitle Quality Agent","Final Approval Agent","Security & Privacy Agent","Testing & QA Agent"},
  "delivery":{"Final Output Agent","Final Render Agent","YouTube SEO Agent","Title Writer","Description Writer","Tags Researcher","Hashtag Researcher","Thumbnail Optimizer","Upload Agent","Scheduling Agent","Analytics Agent","Growth Strategist","Asset Manager","Memory Agent","Automation Agent"}
 }
@@ -151,6 +151,7 @@ def agent_registry():
       "total_role_instances":len(SPECIALIST_ROLES)+len(AGENT_PAIRS),"checker_pairs":deepcopy(AGENT_PAIRS),
       "management_hierarchy":hierarchy,
       "senior_manager_total":len(SENIOR_MANAGER_NAMES),
+      "feature_checker_count":len(FEATURE_CHECKER_PAIRS),
       "feature_checker_pairs":deepcopy(FEATURE_CHECKER_PAIRS),
       "rule":"Every feature worker and each senior manager has a distinct independent checker. The Owner Agent cannot replace the human owner approval."}
 def production_plan(format_id):
