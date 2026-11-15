@@ -201,9 +201,6 @@ def test_offline_storyboard_e2e_creates_verified_local_video(monkeypatch, tmp_pa
     monkeypatch.setattr(live_e2e, "IMAGE_DIR", image_dir)
     monkeypatch.setattr(live_e2e, "AUDIO_DIR", audio_dir)
     monkeypatch.setattr(live_e2e, "OUTPUT_DIR", output_dir)
-    monkeypatch.setattr(live_e2e, "generate_image", lambda *args, **kwargs: {
-        "image_id": f"image-{len(calls) + 1}", "provider": "SINTU Procedural Art (offline)"
-    })
     calls = []
     monkeypatch.setattr(live_e2e, "generate_image", lambda *args, **kwargs: (
         calls.append(args[0]) or {
