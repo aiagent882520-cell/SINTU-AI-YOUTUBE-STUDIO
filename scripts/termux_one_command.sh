@@ -229,6 +229,60 @@ if [ "$READY" -ne 1 ]; then
   fail "App startup health check failed. Server was not marked ready."
 fi
 
+
+SMOKE_VIDEO_PATH=""
+if [ -f "$LOG_DIR/media-smoke-path.txt" ]; then
+  SMOKE_VIDEO_PATH="$(cat "$LOG_DIR/media-smoke-path.txt")"
+fi
+if command -v espeak-ng >/dev/null 2>&1 || command -v espeak >/dev/null 2>&1; then
+  if [ ! -f "$LOG_DIR/media-smoke-success" ] || [ "\${SINTU_FORCE_MEDIA_SMOKE:-false}" = "true" ]; then
+    say "Running one real offline Hindi video render and black-frame validation"
+    if .venv/bin/python scripts/live_e2e.py --offline-video \
+      --topic "भारत की ऐतिहासिक विरासत का सिनेमाई दृश्य" \
+      >"$LOG_DIR/media-smoke.json" 2>&1; then
+      if SMOKE_VIDEO_PATH="$(.venv/bin/python - "$LOG_DIR/media-smoke.json" <<'PY'
+import json
+import shutil
+import sys
+from pathlib import Path
+
+report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+video = report["live_tests"]["offline_storyboard_video"]
+source = Path(video["final_render_path"])
+if not source.is_file() or source.stat().st_size <= 1000:
+    raise SystemExit("Smoke-test MP4 is missing or too small.")
+shared = Path.home() / "storage" / "shared" / "Movies" / "SINTU"
+try:
+    if (Path.home() / "storage" / "shared").is_dir():
+        shared.mkdir(parents=True, exist_ok=True)
+        target = shared / ("SINTU_INSTALL_TEST_" + source.stem + ".mp4")
+        shutil.copy2(source, target)
+    else:
+        target = source
+except OSError:
+    target = source
+print(target)
+PY
+      )"; then
+        printf '%s\n' "$SMOKE_VIDEO_PATH" > "$LOG_DIR/media-smoke-path.txt"
+        touch "$LOG_DIR/media-smoke-success"
+        say "Verified real MP4 created with Hindi voice, music, SINTU branding and renderer checks"
+      else
+        say "Media smoke report could not be copied; inspect $LOG_DIR/media-smoke.json"
+        SMOKE_VIDEO_PATH=""
+      fi
+    else
+      say "Offline video smoke test did not pass; installation remains available. Report: $LOG_DIR/media-smoke.json"
+      tail -n 35 "$LOG_DIR/media-smoke.json" || true
+      SMOKE_VIDEO_PATH=""
+    fi
+  else
+    say "Previous verified media smoke test found; skipping duplicate render"
+  fi
+else
+  say "No local Hindi TTS binary is installed; offline video smoke test is deferred"
+fi
+
 cat <<EOF
 
 ====================================================
