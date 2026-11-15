@@ -179,7 +179,7 @@ def _generate_openai_compatible(user_input: str, backend: dict) -> str:
     message = choices[0].get("message", {}) if choices and isinstance(choices[0], dict) else {}
     content = message.get("content", "")
     if isinstance(content, list):
-        content = "\\n".join(part.get("text", "") for part in content if isinstance(part, dict))
+        content = "\n".join(part.get("text", "") for part in content if isinstance(part, dict))
     if not isinstance(content, str) or not content.strip():
         raise ProviderRequestError("Local OpenAI-compatible server returned an empty response.")
     return content.strip()
