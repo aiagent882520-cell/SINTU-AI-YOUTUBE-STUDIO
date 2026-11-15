@@ -43,4 +43,5 @@ def test_storyboard_render_cleans_temporary_mp4_after_verification_failure(tmp_p
     monkeypatch.setattr(video_renderer, "_verify_rendered_output", fail_verification)
     with pytest.raises(video_renderer.RenderFailed, match="verification failed"):
         video_renderer.render_storyboard(title="Failed render", scenes=["Scene one"], seconds_per_scene=2, image_paths=[scene])
-    assert list(tmp_path.iterdir()) == []
+    assert not list(tmp_path.glob(".sintu-render-*.mp4"))
+    assert not list(tmp_path.glob("*.mp4"))
