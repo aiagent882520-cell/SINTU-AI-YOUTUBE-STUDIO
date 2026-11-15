@@ -632,14 +632,6 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
     if total_duration > 1800:
         raise ValueError("Combined AI video 30 minutes se lambi nahi ho sakti.")
     sfx_result = None
-    if sound_effects_enabled:
-        from .sound_effects import generate_scene_sound_effects
-        sfx_result = generate_scene_sound_effects(
-            scene_descriptions or ["" for _ in video_paths],
-            [item["duration"] for item in clip_info],
-            OUTPUT_DIR / f".sintu-sfx-{uuid.uuid4().hex}.wav",
-            sound_effects_volume,
-        )
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     video_id = uuid.uuid4().hex
@@ -653,6 +645,14 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             temporary_output_path = Path(temporary_output.name)
         with tempfile.TemporaryDirectory(prefix="sintu-ai-join-") as temp:
             work = Path(temp)
+            if sound_effects_enabled:
+                from .sound_effects import generate_scene_sound_effects
+                sfx_result = generate_scene_sound_effects(
+                    scene_descriptions or ["" for _ in video_paths],
+                    [item["duration"] for item in clip_info],
+                    work / "sintu-sound-effects.wav",
+                    sound_effects_volume,
+                )
             command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
             brand_path = work / "sintu-watermark.png"
             _make_watermark_image(width=max(180, int(width * 0.22)), height=max(44, int(width * 0.05))).save(brand_path, format="PNG")
