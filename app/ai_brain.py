@@ -112,14 +112,14 @@ def _local_openai_compatible_status():
 def _active_local_backend():
     """Choose a ready free local engine; never fall through to a paid provider."""
     requested = os.getenv("LOCAL_AI_BACKEND", "auto").strip().lower()
+    if requested not in {"auto", "ollama", "openai-compatible", "llama.cpp", "llamacpp"}:
+        requested = "auto"
     ollama = _ollama_status()
     compatible = _local_openai_compatible_status() if requested in {"auto", "openai-compatible", "llama.cpp", "llamacpp"} else {
         "service_running": False, "model_available": False,
         "model": os.getenv("LOCAL_OPENAI_MODEL", "auto"),
         "base_url": os.getenv("LOCAL_OPENAI_BASE_URL", "http://127.0.0.1:8080/v1"),
     }
-    if requested not in {"auto", "ollama", "openai-compatible", "llama.cpp", "llamacpp"}:
-        requested = "auto"
     if requested in {"auto", "ollama"} and ollama["model_available"]:
         return {"backend": "ollama", **ollama}
     if requested in {"auto", "openai-compatible", "llama.cpp", "llamacpp"} and compatible["model_available"]:
