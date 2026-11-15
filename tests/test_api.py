@@ -1537,6 +1537,7 @@ def test_youtube_publish_completes_resumable_upload_and_records_history(tmp_path
     video_bytes = b"mock rendered mp4 bytes"
     (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(main, "verify_publishable_mp4", lambda path: {"verified": True})
     monkeypatch.setattr(main, "_youtube_access_token", lambda: "mock-youtube-access-token")
     requests = []
     streamed_uploads = []
@@ -3184,6 +3185,7 @@ def test_youtube_publish_requires_approved_calendar_and_records_success(tmp_path
     output_dir = tmp_path / "generated_videos"
     output_dir.mkdir()
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(main, "verify_publishable_mp4", lambda path: {"verified": True})
     video_id = "a" * 32
     video_bytes = b"fake-mp4-content"
     (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
