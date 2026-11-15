@@ -2022,8 +2022,16 @@ def meta_facebook_publish(calendar_id:int, video_id:str=Query(...,min_length=32,
     if not item or item["status"]!="Approved" or item["platform"]!="facebook":
         raise HTTPException(status_code=409,detail="Facebook calendar item approved hona chahiye.")
     path=OUTPUT_DIR/(video_id+".mp4")
-    if not path.is_file() or path.stat().st_size<=0 or path.stat().st_size>512*1024*1024:
-        raise HTTPException(status_code=404,detail="Valid rendered MP4 (max 512 MB) nahi mili.")
+    if path.is_symlink() or not path.is_file():
+        raise HTTPException(status_code=404,detail="Rendered MP4 missing hai ya unsafe path hai.")
+    if path.stat().st_size<=0 or path.stat().st_size>512*1024*1024:
+        raise HTTPException(status_code=413,detail="MP4 size 1 byte se 512 MB ke beech honi chahiye.")
+    try:
+        verify_publishable_mp4(path)
+    except RendererUnavailable as exc:
+        raise HTTPException(status_code=503,detail=str(exc)) from None
+    except RenderFailed:
+        raise HTTPException(status_code=409,detail="Final MP4 quality verification failed. Video ko dobara render karein; upload blocked.") from None
     connection=_meta_connection()
     if not connection: raise HTTPException(status_code=409,detail="Meta Facebook Page connect nahi hai.")
     tokens=_meta_tokens()
@@ -2251,8 +2259,16 @@ def tiktok_publish(calendar_id:int,video_id:str=Query(...,min_length=32,max_leng
     if pending and pending["status"] not in {"PUBLISH_COMPLETE","FAILED","PUBLISH_FAILED","SEND_TO_USER_INBOX","INBOX_DELIVERED"}:
         raise HTTPException(status_code=409,detail="TikTok par ek post abhi processing mein hai. Pehle status check karein; duplicate upload roka gaya.")
     path=OUTPUT_DIR/(video_id+".mp4")
-    if not path.is_file() or path.stat().st_size<=0 or path.stat().st_size>512*1024*1024:
-        raise HTTPException(status_code=404,detail="Valid rendered MP4 (max 512 MB) nahi mili.")
+    if path.is_symlink() or not path.is_file():
+        raise HTTPException(status_code=404,detail="Rendered MP4 missing hai ya unsafe path hai.")
+    if path.stat().st_size<=0 or path.stat().st_size>512*1024*1024:
+        raise HTTPException(status_code=413,detail="MP4 size 1 byte se 512 MB ke beech honi chahiye.")
+    try:
+        verify_publishable_mp4(path)
+    except RendererUnavailable as exc:
+        raise HTTPException(status_code=503,detail=str(exc)) from None
+    except RenderFailed:
+        raise HTTPException(status_code=409,detail="Final MP4 quality verification failed. Video ko dobara render karein; upload blocked.") from None
     tokens=_tiktok_tokens(); creator=_tiktok_creator_info(tokens)
     allowed=creator.get("privacy_level_options",[])
     if privacy_level not in allowed:
