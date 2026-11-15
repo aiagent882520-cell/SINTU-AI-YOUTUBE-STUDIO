@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .studio_scope import get_format, production_plan
+from .management_hierarchy import SENIOR_MANAGER_NAMES
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -83,6 +84,13 @@ def create_run(owner: str, project_id: str, format_id: str):
                 "stage_id": stage["stage"], "stage_name": stage["name"],
                 "specialist": pair["worker"], "checker": pair["checker"]
             })
+    for manager in SENIOR_MANAGER_NAMES:
+        tasks.append({
+            "stage_id": "senior_management",
+            "stage_name": "Senior Management Review",
+            "specialist": manager,
+            "checker": manager + " Checker",
+        })
     if not tasks:
         raise ValueError("The selected format has no production roles.")
     run_id = uuid.uuid4().hex
