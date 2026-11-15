@@ -29,6 +29,69 @@ def _scene_palette(prompt):
             return name
     return "default"
 
+def _fort_shot(prompt: str) -> str:
+    """Select a distinct documentary composition from the requested camera shot."""
+    p = prompt.casefold()
+    if any(w in p for w in ("close detail", "carving", "texture", "नक्काशी")): return "detail"
+    if any(w in p for w in ("interior", "passage", "corridor", "गलियारा")): return "interior"
+    if any(w in p for w in ("low-angle", "low angle", "monumental")): return "low"
+    if any(w in p for w in ("aerial", "bird", "overhead")): return "aerial"
+    if any(w in p for w in ("side-angle", "side angle", "rampart", "wall", "प्राचीर")): return "wall"
+    if any(w in p for w in ("sunset", "silhouette", "dusk")): return "silhouette"
+    return "wide"
+
+
+def _draw_fort_shot(draw, width: int, height: int, shot: str, rng) -> None:
+    """Draw different fort architecture for each shot; still procedural art, not AI."""
+    stone, lit, dark = (91, 58, 49, 255), (183, 125, 79, 230), (12, 12, 20, 255)
+    if shot == "detail":
+        draw.rectangle((0, int(height*.28), width, height), fill=(49,35,39,255))
+        bh = max(24, height//12)
+        for y in range(int(height*.28), height, bh):
+            offset = (y//bh%2)*(width//8)
+            for x in range(-offset,width,width//4):
+                draw.rectangle((x+3,y+3,x+width//4-4,y+bh-4),fill=stone,outline=lit,width=2)
+        cx,cy,r=width//2,int(height*.53),min(width,height)//7
+        draw.ellipse((cx-r,cy-r,cx+r,cy+r),outline=(224,174,112,230),width=max(3,width//90))
+        for a in range(0,360,45):
+            import math
+            x=int(cx+math.cos(math.radians(a))*r*.72); y=int(cy+math.sin(math.radians(a))*r*.72)
+            draw.ellipse((x-r//7,y-r//7,x+r//7,y+r//7),fill=lit)
+    elif shot == "interior":
+        draw.rectangle((0,0,width,height),fill=(13,12,22,255))
+        draw.polygon([(0,0),(int(width*.28),int(height*.18)),(int(width*.28),height),(0,height)],fill=stone)
+        draw.polygon([(width,0),(int(width*.72),int(height*.18)),(int(width*.72),height),(width,height)],fill=(62,39,39,255))
+        draw.polygon([(int(width*.28),int(height*.18)),(int(width*.72),int(height*.18)),(int(width*.55),height),(int(width*.45),height)],fill=(183,119,70,95))
+        for y in (int(height*.25),int(height*.43),int(height*.65)):
+            draw.arc((int(width*.18),y-int(height*.18),int(width*.82),y+int(height*.28)),180,360,fill=lit,width=4)
+        draw.rectangle((int(width*.46),int(height*.46),int(width*.54),height),fill=dark)
+    elif shot == "aerial":
+        draw.polygon([(0,int(height*.78)),(int(width*.18),int(height*.48)),(int(width*.48),int(height*.34)),(int(width*.82),int(height*.5)),(width,int(height*.82)),(width,height),(0,height)],fill=(18,31,34,255))
+        for cx,cy,rx,ry in ((.5,.48,.29,.16),(.32,.57,.12,.07),(.69,.59,.13,.08)):
+            draw.ellipse((int(width*(cx-rx)),int(height*(cy-ry)),int(width*(cx+rx)),int(height*(cy+ry))),fill=stone,outline=lit,width=4)
+        draw.line([(0,int(height*.82)),(int(width*.18),int(height*.55)),(int(width*.48),int(height*.40)),(int(width*.82),int(height*.57)),(width,int(height*.86))],fill=lit,width=max(8,width//28))
+    elif shot == "wall":
+        draw.polygon([(0,int(height*.48)),(width,int(height*.25)),(width,int(height*.67)),(0,int(height*.86))],fill=stone)
+        draw.polygon([(0,int(height*.45)),(width,int(height*.22)),(width,int(height*.29)),(0,int(height*.53))],fill=lit)
+        for i in range(13):
+            x=int(width*i/12); y=int(height*(.43-.20*i/12))
+            draw.rectangle((x,y-max(12,height//35),x+max(8,width//35),y+height//12),fill=dark)
+    elif shot == "low":
+        draw.polygon([(0,height),(int(width*.12),int(height*.20)),(int(width*.36),int(height*.10)),(int(width*.49),height)],fill=stone)
+        draw.polygon([(width,height),(int(width*.88),int(height*.20)),(int(width*.64),int(height*.10)),(int(width*.51),height)],fill=(65,42,43,255))
+        draw.rectangle((int(width*.36),int(height*.26),int(width*.64),height),fill=(105,66,51,255))
+        for y in range(int(height*.30),int(height*.78),max(30,height//12)):
+            draw.line((int(width*.37),y,int(width*.63),y),fill=lit,width=3)
+    else:
+        base=int(height*.87)
+        draw.rectangle((int(width*.13),int(height*.48),int(width*.87),base),fill=stone,outline=lit,width=4)
+        draw.polygon([(int(width*.10),int(height*.50)),(int(width*.5),int(height*.25)),(int(width*.90),int(height*.50))],fill=dark)
+        for x in (int(width*.16),int(width*.72)):
+            draw.rectangle((x,int(height*.32),x+int(width*.12),base),fill=(71,45,42,255),outline=lit,width=3)
+        draw.ellipse((int(width*.42),int(height*.62),int(width*.58),int(height*.92)),fill=dark,outline=lit,width=3)
+        draw.rectangle((int(width*.42),int(height*.78),int(width*.58),base),fill=dark)
+
+
 def generate_procedural_scene_bytes(prompt: str, width: int, height: int) -> bytes:
     """Create a deterministic text-free cinematic illustration for offline storyboards."""
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 3000:
@@ -70,25 +133,20 @@ def generate_procedural_scene_bytes(prompt: str, width: int, height: int) -> byt
             draw.line((x, y, min(width, x+rng.randrange(20, max(21, width//2))), y),
                       fill=(145, 211, 210, rng.randrange(25, 100)), width=2)
         draw.polygon([(0,horizon),(int(width*.25),int(height*.49)),(int(width*.5),horizon)], fill=(8,35,53,230))
-    elif kind in {"city", "temple"}:
+    elif kind == "temple":
+        _draw_fort_shot(draw, width, height, _fort_shot(prompt), rng)
+    elif kind == "city":
         base = int(height * .88)
         x = 0
         while x < width:
             bw = rng.randrange(max(18,width//18), max(30,width//8))
             bh = rng.randrange(int(height*.14), int(height*.40))
             draw.rectangle((x,base-bh,min(width,x+bw),base), fill=(9,13,29,245))
-            if kind == "city":
-                for wx in range(x+5,min(width,x+bw-3),max(8,bw//4)):
-                    for wy in range(base-bh+8,base-5,max(10,height//45)):
-                        if rng.random() > .4:
-                            draw.rectangle((wx,wy,wx+3,wy+5),fill=(255,190,112,165))
+            for wx in range(x+5,min(width,x+bw-3),max(8,bw//4)):
+                for wy in range(base-bh+8,base-5,max(10,height//45)):
+                    if rng.random() > .4:
+                        draw.rectangle((wx,wy,wx+3,wy+5),fill=(255,190,112,165))
             x += bw
-        if kind == "temple":
-            c = width//2
-            draw.rectangle((int(width*.27),int(height*.50),int(width*.73),base),fill=(34,21,31,250))
-            draw.polygon([(int(width*.22),int(height*.51)),(c,int(height*.29)),(int(width*.78),int(height*.51))],fill=(55,31,40,250))
-            draw.polygon([(int(width*.39),int(height*.50)),(c,int(height*.18)),(int(width*.61),int(height*.50))],fill=(75,40,47,245))
-            draw.rectangle((int(width*.46),int(height*.70),int(width*.54),base),fill=(8,9,18,255))
     else:
         for layer, color in enumerate(((16,25,43,185),(8,18,34,225),(4,12,25,250))):
             base = int(height*(.72+layer*.09))
