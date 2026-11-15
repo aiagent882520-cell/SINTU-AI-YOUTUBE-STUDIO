@@ -3511,3 +3511,34 @@ def test_strict_csp_pages_load_only_external_scripts(tmp_path, monkeypatch):
         assert response.status_code == 200
         assert script in response.text
         assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", response.text, re.I)
+
+
+
+def test_youtube_revenue_sync_endpoint_uses_server_analytics_and_saves_estimate(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "youtube_channel_analytics", lambda start, end: {
+        "start_date": start, "end_date": end,
+        "revenue": {"available": True, "estimated_revenue": 87.25, "currency": "INR"},
+    })
+    response = client.post("/api/admin/youtube/analytics/sync-revenue", json={
+        "start_date": "2026-11-01", "end_date": "2026-11-07"
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "estimated"
+    assert body["record"]["amount"] == 87.25
+    assert body["record"]["status"] == "estimated"
+    assert body["record"]["source"] == "youtube_ads"
+    assert body["record"]["reference"].startswith("youtube-analytics-estimate:")
+
+
+def test_youtube_revenue_sync_endpoint_rejects_unavailable_monetization(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "youtube_channel_analytics", lambda start, end: {
+        "start_date": start, "end_date": end,
+        "revenue": {"available": False, "note": "Monetary OAuth permission required."},
+    })
+    response = client.post("/api/admin/youtube/analytics/sync-revenue", json={
+        "start_date": "2026-11-01", "end_date": "2026-11-07"
+    })
+    assert response.status_code == 409
