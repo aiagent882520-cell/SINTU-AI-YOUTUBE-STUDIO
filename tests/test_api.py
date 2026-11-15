@@ -2322,7 +2322,7 @@ def test_saved_production_project_generates_and_links_ai_task(tmp_path, monkeypa
     assert "on-screen text" not in captured["prompt"].lower()
     assert "generated scene images/clips must remain clean and text-free" in captured["prompt"].lower()
     assert "separate timed text track" in captured["prompt"].lower()
-    assert "only the SINTU AI YOUTUBE STUDIO brand watermark" in captured["prompt"]
+    assert "the SINTU AI YOUTUBE STUDIO brand watermark separately" in captured["prompt"]
 
 
 def test_saved_production_project_generation_rejects_unknown_workflow(tmp_path, monkeypatch):
