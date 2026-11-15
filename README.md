@@ -5,7 +5,7 @@ Free-first, local-first AI creator workspace for planning, producing, reviewing,
 ## Current project capabilities
 
 - FastAPI creator dashboard, admin login, responsive PWA foundation and Hindi-first interface.
-- AI production workflows backed by local Ollama or a loopback OpenAI-compatible server (llama.cpp, LocalAI or LM Studio); paid providers remain opt-in and locked by policy.
+- AI production workflows backed by local Ollama or a loopback OpenAI-compatible server (llama.cpp, LocalAI or LM Studio); the Termux bootstrap attempts a RAM/storage-aware Qwen GGUF setup when the Termux package is available; paid providers remain opt-in and locked by policy.
 - 60 video-format catalog, 15 studio-module catalog, specialist/checker role registry and format-aware production runtime.
 - Production runs execute specialist and independent checker model calls, persist evidence and PASS/FAIL results, pause on failed checks, and run five final review roles. This is a sequential orchestrated runtime, not 61 always-running independent services.
 - Local media tools and optional integrations: FFmpeg, Blender, ComfyUI and Piper; availability depends on local installation and hardware.
