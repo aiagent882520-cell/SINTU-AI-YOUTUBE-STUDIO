@@ -3416,7 +3416,10 @@ def test_social_uploads_block_corrupt_mp4_before_provider_auth(
         lambda path: (_ for _ in ()).throw(main.RenderFailed("truncated MP4")),
     )
     monkeypatch.setattr(main, token_helper, lambda: pytest.fail("Provider auth must not run for invalid media"))
-    response = client.post(route + "?video_id=" + video_id)
+    params = {"video_id": video_id}
+    if calendar_platform == "facebook":
+        params["title"] = "Test upload"
+    response = client.post(route, params=params)
     assert response.status_code == 409
     assert "quality verification failed" in response.json()["detail"].lower()
 
