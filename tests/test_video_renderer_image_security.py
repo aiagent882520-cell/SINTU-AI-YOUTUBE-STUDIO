@@ -6,7 +6,7 @@ from app.video_renderer import _validate_scene_image
 
 def test_scene_image_validation_accepts_supported_image(tmp_path):
     path = tmp_path / "scene.png"
-    Image.new("RGB", (64, 64)).save(path)
+    Image.new("RGB", (64, 64), (80, 120, 180)).save(path)
     _validate_scene_image(path)
 
 
@@ -43,7 +43,7 @@ def test_scene_image_validation_rejects_symlink(tmp_path):
     from PIL import Image
     from app.video_renderer import _validate_scene_image
     target = tmp_path / "real.png"
-    Image.new("RGB", (64, 64)).save(target)
+    Image.new("RGB", (64, 64), (80, 120, 180)).save(target)
     link = tmp_path / "scene.png"
     try:
         link.symlink_to(target)
