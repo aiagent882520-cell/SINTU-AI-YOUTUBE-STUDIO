@@ -3496,6 +3496,9 @@ def test_application_firewall_sets_browser_security_headers(tmp_path, monkeypatc
     assert "object-src 'none'" in csp
     assert "frame-ancestors 'none'" in csp
     assert "script-src 'self'" in csp
+    assert "script-src 'self' 'unsafe-inline'" not in csp
+    assert response.headers["cross-origin-opener-policy"] == "same-origin"
+    assert response.headers["cross-origin-resource-policy"] == "same-origin"
 
 
 
