@@ -356,7 +356,8 @@ Follow-up workload CSV export: the community review workload panel can download 
 
 
 ### वास्तविक Local E2E और Deployment Smoke Test
-- बिना ComfyUI के असली offline storyboard MP4, procedural scene images, local Hindi voiceover और SINTU watermark जाँचें: `python scripts/live_e2e.py --offline-video --topic "भारत के रहस्यमयी किले"`\n- केवल readiness report: `python scripts/live_e2e.py`
+- बिना ComfyUI के असली offline storyboard MP4, procedural scene images, local Hindi voiceover और SINTU watermark जाँचें: `python scripts/live_e2e.py --offline-video --topic "भारत के रहस्यमयी किले"`
+- केवल readiness report: `python scripts/live_e2e.py`
 - Ollama पर वास्तविक text inference: `python scripts/live_e2e.py --live-text`
 - सभी 61 Agent Workers + 61 Checkers + पाँच Final Reviewers का वास्तविक local run: `python scripts/live_e2e.py --live-agent-catalog --topic "SINTU Studio का पूर्ण परीक्षण"
 - पूरे Studio का linked live E2E (61 roles → approved scene prompts → ComfyUI MP4 → SINTU watermark render → production run में attach): `python scripts/live_e2e.py --full-studio-e2e --topic "भारत की रहस्यमयी जगहें"``
