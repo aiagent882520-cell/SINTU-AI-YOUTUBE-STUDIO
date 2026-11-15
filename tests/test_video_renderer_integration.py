@@ -189,3 +189,48 @@ def test_publish_verifier_accepts_real_mp4_and_rejects_corrupt_file(tmp_path):
     with pytest.raises(video_renderer.RenderFailed, match="corrupt"):
         video_renderer.verify_publishable_mp4(corrupt)
 
+
+
+
+def test_storyboard_renderer_burns_hindi_subtitles_into_final_mp4(tmp_path, monkeypatch):
+    ffmpeg, ffprobe = _ffmpeg_tools()
+    if not video_renderer._ffmpeg_supports_subtitles(ffmpeg):
+        pytest.skip("FFmpeg libass subtitles filter is unavailable")
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
+    image_path = tmp_path / "scene.png"
+    Image.new("RGB", (160, 284), (30, 80, 120)).save(image_path)
+
+    result = video_renderer.render_storyboard(
+        "Hindi subtitle test", ["Scene one"], seconds_per_scene=2,
+        image_paths=[image_path], subtitles=["नमस्ते दोस्तों, SINTU में आपका स्वागत है।"],
+        resolution="720x1280", fps=24, quality="standard", transition="cut",
+    )
+
+    output = tmp_path / result["filename"]
+    assert output.is_file() and output.stat().st_size > 1000
+    assert result["subtitles_burned_in"] is True
+    probe = subprocess.run(
+        [ffprobe, "-v", "error", "-show_entries", "stream=codec_type",
+         "-of", "csv=p=0", str(output)],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert probe.returncode == 0
+    assert "video" in probe.stdout
+
+
+def test_ai_clip_renderer_burns_timed_subtitles_into_final_mp4(tmp_path, monkeypatch):
+    ffmpeg, _ = _ffmpeg_tools()
+    if not video_renderer._ffmpeg_supports_subtitles(ffmpeg):
+        pytest.skip("FFmpeg libass subtitles filter is unavailable")
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
+    source = _make_source_clip(tmp_path / "source.mp4")
+
+    result = video_renderer.render_ai_clips(
+        [source], subtitles=["यह AI clip का हिंदी subtitle है।"],
+        resolution="720x1280", fps=24, quality="standard", transition="cut",
+    )
+
+    output = tmp_path / result["filename"]
+    assert output.is_file() and output.stat().st_size > 1000
+    assert result["subtitles_burned_in"] is True
+    assert result["duration_seconds"] == pytest.approx(1.0, abs=0.1)
