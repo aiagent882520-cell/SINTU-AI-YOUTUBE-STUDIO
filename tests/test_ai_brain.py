@@ -89,3 +89,25 @@ def test_local_openai_compatible_response_is_parsed(monkeypatch):
         "base_url": "http://127.0.0.1:8080/v1", "model": "local-model"
     })
     assert result == "नमस्ते"
+
+
+def test_local_openai_compatible_status_discovers_first_model(monkeypatch):
+    class FakeResponse:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self): return b'{"data":[{"id":"qwen-local"}]}'
+
+    monkeypatch.setenv("LOCAL_OPENAI_BASE_URL", "http://127.0.0.1:8080/v1")
+    monkeypatch.setenv("LOCAL_OPENAI_MODEL", "auto")
+    monkeypatch.setattr(ai_brain.urllib.request, "urlopen", lambda *args, **kwargs: FakeResponse())
+    status = ai_brain._local_openai_compatible_status()
+    assert status["service_running"] is True
+    assert status["model_available"] is True
+    assert status["model"] == "qwen-local"
+
+
+def test_local_openai_compatible_rejects_remote_endpoint(monkeypatch):
+    monkeypatch.setenv("LOCAL_OPENAI_BASE_URL", "http://example.com/v1")
+    status = ai_brain._local_openai_compatible_status()
+    assert status["service_running"] is False
+    assert status["model_available"] is False
