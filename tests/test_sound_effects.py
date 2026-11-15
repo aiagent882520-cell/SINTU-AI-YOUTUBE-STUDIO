@@ -41,3 +41,10 @@ def test_procedural_sound_effects_are_deterministic(tmp_path):
 def test_procedural_sound_effects_reject_invalid_inputs(tmp_path, scenes, durations, volume):
     with pytest.raises(ValueError):
         generate_scene_sound_effects(scenes, durations, tmp_path / "invalid.wav", volume)
+
+
+
+def test_procedural_sound_effects_can_be_silenced(tmp_path):
+    result = generate_scene_sound_effects(["युद्ध का दृश्य"], [2], tmp_path / "silent.wav", volume=0)
+    assert result is None
+    assert not (tmp_path / "silent.wav").exists()
