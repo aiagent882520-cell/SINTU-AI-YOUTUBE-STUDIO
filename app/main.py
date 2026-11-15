@@ -441,6 +441,8 @@ class RenderInput(BaseModel):
     subtitles: list[str] = Field(default_factory=list, max_length=25)
     music_id: str | None = Field(default=None, max_length=32)
     music_volume: float = Field(default=0.18, ge=0, le=1)
+    sound_effects_enabled: bool = True
+    sound_effects_volume: float = Field(default=0.18, ge=0, le=1)
     transition: str = Field(default="fade", max_length=10)
     motion: str = Field(default="none", max_length=20)
     resolution: str | None = Field(default=None, max_length=12)
@@ -3568,18 +3570,24 @@ def render_video(payload: RenderInput):
                                          audio_path=audio_path, music_path=music_path,
                                          music_volume=payload.music_volume,
                                          subtitles=payload.subtitles, transition=payload.transition, transitions=scene_transitions,
+                                         sound_effects_enabled=payload.sound_effects_enabled,
+                                         sound_effects_volume=payload.sound_effects_volume,
                                          resolution=resolution, fps=payload.fps, quality=payload.quality)
         if video_paths:
             if payload.motion != "none":
                 raise HTTPException(status_code=400, detail="AI clip assembly mode mein source clips ka original motion use hota hai; extra zoom effects abhi supported nahi hain.")
             return render_ai_clips(video_paths, audio_path=audio_path, music_path=music_path,
                                    music_volume=payload.music_volume, subtitles=payload.subtitles,
+                                   scene_descriptions=scenes, sound_effects_enabled=payload.sound_effects_enabled,
+                                   sound_effects_volume=payload.sound_effects_volume,
                                    transition=payload.transition, resolution=resolution,
                                    fps=payload.fps, quality=payload.quality)
         rendered = render_storyboard(title, scenes, payload.seconds_per_scene,
                                       image_paths=image_paths, audio_path=audio_path,
                                       subtitles=payload.subtitles, music_path=music_path,
                                       music_volume=payload.music_volume, transition=payload.transition, motion=payload.motion,
+                                      sound_effects_enabled=payload.sound_effects_enabled,
+                                      sound_effects_volume=payload.sound_effects_volume,
                                       resolution=resolution, fps=payload.fps, quality=payload.quality)
         if generated_scene_images:
             rendered["scene_images"] = [
@@ -3826,6 +3834,8 @@ class ProductionMediaInput(BaseModel):
     narration: str | None = Field(default=None, max_length=4000)
     subtitles: list[str] = Field(default_factory=list, max_length=25)
     burn_subtitles: bool = True
+    sound_effects_enabled: bool = True
+    sound_effects_volume: float = Field(default=0.18, ge=0, le=1)
     seconds_per_scene: int = Field(default=4, ge=2, le=12)
     resolution: str | None = Field(default=None, max_length=12)
     fps: int = Field(default=30, ge=24, le=60)
@@ -3975,6 +3985,8 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
             payload.seconds_per_scene, image_paths=image_paths, audio_path=audio_path,
             music_path=music_matches[0], music_volume=0.16, subtitles=subtitle_lines,
             transition="fade", motion="none", resolution=resolution,
+            sound_effects_enabled=payload.sound_effects_enabled,
+            sound_effects_volume=payload.sound_effects_volume,
             fps=payload.fps, quality=payload.quality,
         )
         updated = attach_render_result(run_id, rendered, owner)
