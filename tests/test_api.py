@@ -3496,3 +3496,18 @@ def test_application_firewall_sets_browser_security_headers(tmp_path, monkeypatc
     assert "object-src 'none'" in csp
     assert "frame-ancestors 'none'" in csp
     assert "script-src 'self'" in csp
+
+
+
+def test_strict_csp_pages_load_only_external_scripts(tmp_path, monkeypatch):
+    import re
+    client = client_for_test(tmp_path, monkeypatch)
+    for path, script in [
+        ("/", "/static/app.js"),
+        ("/login", "/static/login.js"),
+        ("/earnings", "/static/earnings.js"),
+    ]:
+        response = client.get(path, follow_redirects=True)
+        assert response.status_code == 200
+        assert script in response.text
+        assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", response.text, re.I)
