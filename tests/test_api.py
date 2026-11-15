@@ -82,7 +82,7 @@ def test_installable_app_shell(tmp_path, monkeypatch):
     assert "SHA-256" in app_script.text
     assert "backup-verify" in app_script.text
     assert "adminBackupHealth" in page.text
-    assert "sintu-studio-shell-v12" in worker.text
+    assert "sintu-studio-shell-v13" in worker.text
     assert "/static/offline.html" in worker.text
 
 def test_agent_orchestration_catalog_and_teams(tmp_path, monkeypatch):
