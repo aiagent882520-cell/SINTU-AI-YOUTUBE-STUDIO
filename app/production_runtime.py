@@ -22,7 +22,11 @@ from .ai_brain import generate_text, ProviderNotConfigured, ProviderRequestError
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(Path(__file__).resolve().parent.parent))).expanduser().resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "production_runtime.sqlite3"
-MAX_REVISION_ATTEMPTS = 1
+# Initial attempt plus at most two checker-guided revisions.
+try:
+    MAX_REVISION_ATTEMPTS = max(0, min(2, int(os.getenv('SINTU_MAX_REVISION_ATTEMPTS', '2'))))
+except ValueError:
+    MAX_REVISION_ATTEMPTS = 2
 REVIEWERS = [
     "Video Quality Reviewer",
     "Audio Quality Reviewer",
