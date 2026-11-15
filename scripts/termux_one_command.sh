@@ -20,7 +20,9 @@ mkdir -p "$LOG_DIR"
 say "Updating Termux packages"
 pkg update -y
 pkg upgrade -y
-pkg install -y git python python-pip python-pillow python-cryptography ffmpeg espeak-ng openssl curl libjpeg-turbo libpng freetype clang make pkg-config
+# Speech engines are deliberately optional: package names differ across Termux
+# repository snapshots. Their absence must never block the studio installation.
+pkg install -y git python python-pip python-pillow python-cryptography ffmpeg openssl curl libjpeg-turbo libpng freetype clang make pkg-config
 
 say "Checking shared storage permission (optional)"
 if [ ! -d "$HOME/storage/shared" ]; then
@@ -55,6 +57,7 @@ if [ ! -f .env ]; then
   .venv/bin/python - <<'PY'
 from pathlib import Path
 import secrets
+import shutil
 source = Path(".env.example")
 text = source.read_text(encoding="utf-8") if source.exists() else ""
 admin_password = secrets.token_urlsafe(24)
@@ -64,12 +67,16 @@ text = text.replace("SINTU_SESSION_SECRET=CHANGE-THIS-TO-A-RANDOM-64-CHARACTER-S
                     "SINTU_SESSION_SECRET=" + secrets.token_hex(32))
 text = text.replace("SINTU_BIND_ADDRESS=127.0.0.1", "SINTU_BIND_ADDRESS=127.0.0.1")
 text = text.replace("AI_PROVIDER=local", "AI_PROVIDER=local")
-text = text.replace("ESPEAK_EXECUTABLE=espeak", "ESPEAK_EXECUTABLE=espeak-ng")
+speech = shutil.which("espeak-ng") or shutil.which("espeak")
+if speech:
+    text = text.replace("ESPEAK_EXECUTABLE=espeak", "ESPEAK_EXECUTABLE=" + speech)
 Path(".env").write_text(text, encoding="utf-8")
 Path(".env").chmod(0o600)
 print("Created .env. Save these first-login credentials securely:")
 print("Username: admin")
 print("Password: " + admin_password)
+if not speech:
+    print("No eSpeak binary found; install will continue without this optional TTS fallback.")
 PY
 else
   say "Existing .env preserved; secrets were not overwritten"
@@ -78,7 +85,13 @@ fi
 say "Checking local media tools"
 command -v ffmpeg >/dev/null || fail "FFmpeg is required but unavailable."
 command -v ffprobe >/dev/null || fail "FFprobe is required but unavailable."
-command -v espeak-ng >/dev/null || command -v espeak >/dev/null || say "Hindi voice fallback not found; configure Piper later."
+if command -v espeak-ng >/dev/null; then
+  say "Optional eSpeak NG voice engine available"
+elif command -v espeak >/dev/null; then
+  say "Optional eSpeak voice engine available"
+else
+  say "No eSpeak binary found; studio setup continues. Configure Piper or another TTS engine later."
+fi
 
 say "Running Python compile check"
 .venv/bin/python -m compileall -q app scripts
