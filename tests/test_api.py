@@ -3648,5 +3648,6 @@ def test_main_render_ui_exposes_2d_animation_format_options(tmp_path, monkeypatc
     client = client_for_test(tmp_path, monkeypatch)
     page = client.get("/").text
     assert 'id="renderFormat"' in page
-    assert '<option value="2d-cartoon">2D Cartoon Animation</option>' in page
-    assert '<option value="story-animation">2D Story Animation</option>' in page
+    script = client.get("/static/app.js").text
+    assert 'populateRenderFormatOptions' in script
+    assert '"2d-cartoon","story-animation"' in script or '"2d-cartoon", "story-animation"' in script
