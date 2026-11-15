@@ -833,7 +833,7 @@ $("renderButton").addEventListener("click", async () => {
     });
     $("renderVideo").src = result.url;
     $("renderDownload").href = result.url;
-    $("renderNotice").textContent = result.resolution + " · " + (result.fps || 30) + " FPS · " + (result.quality || "high") + " quality · " + result.duration_seconds + " sec · " + result.format + " · Audio: " + result.audio + " · Subtitles: " + (result.subtitles_burned_in ? "burned in" : "off") + " · Transition: " + result.transition + " · Motion: " + (result.motion || "none");
+    $("renderNotice").textContent = result.resolution + " · " + (result.fps || 30) + " FPS · " + (result.quality || "high") + " quality · " + result.duration_seconds + " sec · " + result.format + " · Audio: " + result.audio + " · Subtitles: " + (result.subtitles_burned_in ? "burned in" : "off") + " · SFX: " + (result.sound_effects ? result.sound_effect_cue_count + " cues" : "off") + " · Transition: " + result.transition + " · Motion: " + (result.motion || "none");
     $("renderResult").hidden = false;
   } catch (error) {
     $("renderNotice").textContent = error.message;
