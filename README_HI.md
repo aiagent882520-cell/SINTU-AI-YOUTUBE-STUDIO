@@ -39,6 +39,8 @@ These are registered format workflows and export profiles, not a claim that ever
 
 **Android hardware limitation:** is launcher se dashboard aur API chal sakte hain, lekin isse Ollama model, ComfyUI video workflow/model weights ya Piper Hindi voice model automatically install nahi hote. Real AI video generation ke liye compatible local PC/server aur uske model files ki zaroorat ho sakti hai. Diagnostics missing components ko clearly report karte hain; app fake AI output ya paid fallback nahi chalata.
 
+- Local procedural sound effects are generated from scene descriptions (transition whooshes, impacts, wind, water and footsteps) and mixed with voiceover/music. No paid SFX API or copyrighted sample pack is used; each render can disable effects or adjust their volume.
+
 ## Automatic earnings ledger and application firewall
 
 - When an admin loads connected-channel YouTube Analytics, SINTU can sync the official estimated revenue for that date range into the ledger. The sync is idempotent and records the amount as **estimated**, never as received; a manually marked received payment is not overwritten.
