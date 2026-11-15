@@ -369,11 +369,15 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             concat.write_text("\n".join(lines) + "\n", encoding="utf-8")
             duration = len(scenes) * seconds_per_scene
             filters = []
-            if transition == "fade" and len(scenes) > 1:
-                for boundary in range(1, len(scenes)):
-                    point = boundary * seconds_per_scene
-                    filters.append(f"fade=t=out:st={point - 0.35}:d=0.35")
-                    filters.append(f"fade=t=in:st={point}:d=0.35")
+            if transition == "fade":
+                # Chaining multiple timestamped fade filters after the concat
+                # demuxer resets timestamps on some FFmpeg builds and can turn
+                # the entire output black. Use one deterministic opening fade
+                # and one closing fade; scene changes remain clean hard cuts.
+                filters.extend([
+                    "fade=t=in:st=0:d=0.35",
+                    f"fade=t=out:st={max(0, duration - 0.35)}:d=0.35",
+                ])
             if motion == "slow-zoom-in":
                 filters.insert(0, f"zoompan=z='min(zoom+0.0008,1.12)':d=1:s={width}x{height}:fps={fps}")
             elif motion == "slow-zoom-out":
