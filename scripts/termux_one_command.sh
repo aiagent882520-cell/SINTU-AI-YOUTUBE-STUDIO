@@ -111,11 +111,11 @@ if command -v llama-server >/dev/null 2>&1; then
   MODEL_URL=""
   MODEL_NAME=""
   MIN_MODEL_BYTES=0
-  if [ "\${RAM_KB:-0}" -ge 7864320 ] && [ "\${FREE_KB:-0}" -ge 3145728 ]; then
+  if [ "${RAM_KB:-0}" -ge 7864320 ] && [ "${FREE_KB:-0}" -ge 3145728 ]; then
     MODEL_NAME="qwen2.5-3b-instruct-q4_k_m.gguf"
     MODEL_URL="https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/$MODEL_NAME"
     MIN_MODEL_BYTES=1700000000
-  elif [ "\${RAM_KB:-0}" -ge 3670016 ] && [ "\${FREE_KB:-0}" -ge 900000 ]; then
+  elif [ "${RAM_KB:-0}" -ge 3670016 ] && [ "${FREE_KB:-0}" -ge 900000 ]; then
     MODEL_NAME="qwen2.5-0.5b-instruct-q4_k_m.gguf"
     MODEL_URL="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/$MODEL_NAME"
     MIN_MODEL_BYTES=350000000
@@ -128,7 +128,7 @@ if command -v llama-server >/dev/null 2>&1; then
       if curl --fail --location --retry 3 --retry-all-errors --continue-at - \
         --output "$MODEL_PATH.part" "$MODEL_URL"; then
         MODEL_BYTES="$(wc -c < "$MODEL_PATH.part" | tr -d ' ')"
-        if [ "\${MODEL_BYTES:-0}" -ge "$MIN_MODEL_BYTES" ]; then
+        if [ "${MODEL_BYTES:-0}" -ge "$MIN_MODEL_BYTES" ]; then
           mv "$MODEL_PATH.part" "$MODEL_PATH"
         else
           say "Model download was incomplete; keeping partial file for a later resume"
@@ -140,7 +140,7 @@ if command -v llama-server >/dev/null 2>&1; then
 
     if [ -s "$MODEL_PATH" ]; then
       MODEL_BYTES="$(wc -c < "$MODEL_PATH" | tr -d ' ')"
-      if [ "\${MODEL_BYTES:-0}" -ge "$MIN_MODEL_BYTES" ]; then
+      if [ "${MODEL_BYTES:-0}" -ge "$MIN_MODEL_BYTES" ]; then
         if [ -f "$LOG_DIR/llama-server.pid" ] && kill -0 "$(cat "$LOG_DIR/llama-server.pid")" 2>/dev/null; then
           say "Existing local llama.cpp server process found"
         else
@@ -228,7 +228,9 @@ Useful commands:
   cd "$APP_DIR"
   bash scripts/termux_one_command.sh   # rerun safe setup/update
   tail -f "$LOG_FILE"                  # live server log
-  kill \$(cat "$PID_FILE")               # stop server
+  tail -f "$LOG_DIR/llama-server.log"    # local AI model log
+  kill \$(cat "$PID_FILE")               # stop SINTU
+  kill \$(cat "$LOG_DIR/llama-server.pid")  # stop local AI
 
 Security:
   .env is private (mode 600); do not share it.
