@@ -1408,6 +1408,29 @@ $("blenderRenderButton")?.addEventListener("click",async()=>{
 checkBlenderStudio();
 
 
+async function populateRenderFormatOptions(){
+ const select=$("renderFormat");if(!select)return;
+ const previous=select.value||"youtube-shorts";
+ const catalog=await request("/api/production-catalog");
+ const formats=catalog.formats||[];
+ const blocked=new Set(["360-video","vr-video","ar-video","virtual-production"]);
+ const groups=new Map();
+ for(const format of formats){const group=format.group||format.category||"Other";if(!groups.has(group))groups.set(group,[]);groups.get(group).push(format);}
+ select.innerHTML="";
+ for(const [group,items] of groups){
+  const optgroup=document.createElement("optgroup");optgroup.label=group;
+  for(const format of items){
+   const option=document.createElement("option");option.value=format.id;
+   option.textContent=format.name+(["2d-cartoon","story-animation"].includes(format.id)?" · local 2D animation":"");
+   option.disabled=blocked.has(format.id);
+   optgroup.appendChild(option);
+  }
+  select.appendChild(optgroup);
+ }
+ if(formats.some(format=>format.id===previous&&!blocked.has(previous)))select.value=previous;
+ else select.value="youtube-shorts";
+}
+populateRenderFormatOptions().catch(()=>{});
 function currentStudioRenderPayload(){
  const title=$("renderTitle").value.trim();
  const scenes=$("renderScenes").value.split("\n").map(x=>x.trim()).filter(Boolean);
