@@ -3442,3 +3442,33 @@ def test_social_uploads_block_corrupt_mp4_before_provider_auth(
     assert response.status_code == 409
     assert "quality verification failed" in response.json()["detail"].lower()
 
+
+
+
+def test_agent_system_status_endpoint_reports_catalog_and_run_health(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(main, "list_production_runs", lambda owner, limit=20: [])
+    monkeypatch.setattr(main, "provider_status", lambda selected: {
+        "local": {"configured": False, "model": "qwen2.5:3b"}
+    })
+    response = client.get("/api/admin/agent-system/status")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["agent_catalog_total"] == 61
+    assert data["specialist_role_instances"] == 61
+    assert data["independent_checker_role_instances"] == 61
+    assert data["independent_background_agents_running"] == 0
+    assert data["automatic_self_healing"] is False
+    assert data["local_model_configured"] is False
+    assert data["recent_runs"] == []
+
+
+def test_dashboard_exposes_agent_operations_panel(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    page = client.get("/")
+    assert page.status_code == 200
+    assert 'id="agentOperationsPanel"' in page.text
+    assert 'id="agentSystemSummary"' in page.text
+    script = client.get("/static/app.js")
+    assert script.status_code == 200
+    assert "/api/admin/agent-system/status" in script.text
