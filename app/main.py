@@ -96,7 +96,7 @@ async def application_firewall(request: Request, call_next):
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         origin = request.headers.get("origin")
         fetch_site = request.headers.get("sec-fetch-site", "").lower()
-        if (origin and not same_origin_request(origin, request.headers.get("host", ""))) or fetch_site == "cross-site":
+        if (origin and not same_origin_request(origin, request.headers.get("host", ""), request.url.scheme)) or fetch_site == "cross-site":
             return JSONResponse(status_code=403, content={"detail": "Cross-origin request blocked by security policy."})
 
     response = await call_next(request)
