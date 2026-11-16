@@ -18,7 +18,7 @@ def test_self_test_runs_readiness_tests_offline_video_and_media_audit(tmp_path, 
         "operational_readiness", "pytest", "offline_video_e2e", "media_quality_audit"
     ]
     assert len(commands) == 4
-    assert commands[2][-3:] == ["--topic", "भारत के किले"][-3:]
+    assert commands[2][-2:] == ["--topic", "भारत के किले"]
     saved = (tmp_path / "sintu_self_test_report.json").read_text("utf-8")
     assert "private output" not in saved
     assert report["paid_services_used"] is False
