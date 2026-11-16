@@ -185,6 +185,15 @@ pytest -q
 - Google Flow aur Google AI Studio Build browser handoffs hain, direct SINTU API automation nahi. Google Flow se downloaded MP4 clips SINTU me import kiye ja sakte hain. DeepSeek text API adapter available hai; Claude, GLM, Doubao aur Kimi abhi implemented nahi hain.
 
 
+## Google Flow MP4 Auto-Import (Termux / Android)
+
+- SINTU server start hote hi Android shared Download/Downloads folders ko background mein har 5 second scan karta hai.
+- Nayi .mp4 file ka size/modified time do scans tak stable hone ke baad copy hoti hai; FFprobe se valid/publishable MP4 verify hone par hi SINTU AI-video library mein add hoti hai.
+- Original download delete ya move nahi hota. Invalid, incomplete, symlinked aur 512 MB se badi files import nahi hoti. Imported file duplicate dobara add nahi hoti.
+- Status endpoint: GET /api/flow/auto-import/status. Manual import endpoint fallback ke roop mein available hai.
+- Config: SINTU_FLOW_AUTO_IMPORT=true; disable karne ke liye false. Custom folders ke liye SINTU_FLOW_DOWNLOAD_DIRS mein path-separated paths dein. Termux ko Android storage permission aur termux-setup-storage access chahiye.
+- Important limitation: Google Flow ka supported public API yahan available nahi hai. Yeh watcher Flow generation/login/download button ko control nahi karta; Flow se file Android Downloads mein aate hi uska import automatic karta hai. Flow UI ko fully unattended chalane ka claim nahi hai.
+
 ## Content Calendar & Scheduling
 - Content ideas/prompts ko YouTube, Shorts, Instagram, Facebook, TikTok aur website ke liye date/time ke saath save karein.
 - Date/time ISO-8601 timezone ke saath store hota hai; dashboard mein local time dikhaya jata hai.
