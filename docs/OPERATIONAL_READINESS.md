@@ -32,3 +32,7 @@ Google/YouTube OAuth consent. The doctor does not publish or upload anything.
 If the worker is missing, run `bash scripts/start_services.sh`. If the API is
 down, inspect `~/.sintu/server.log`; worker diagnostics are in
 `~/.sintu/bridge-worker.log`.
+
+## One-command full self-test
+
+Run \`python scripts/sintu_self_test.py\` from the repository root. It executes the operational readiness doctor, full pytest suite, a real offline Hindi MP4 render, and a final media-quality audit. It writes a redacted summary to \`$SINTU_DATA_DIR/sintu_self_test_report.json\` (or the repository data directory when unset). Optional development shortcuts are \`--skip-tests\` and \`--skip-video\`; the secure Termux bridge exposes the complete workflow as \`full_self_test\`. The check uses local FFmpeg/eSpeak and procedural visuals; it does not call paid APIs or publish to YouTube.
