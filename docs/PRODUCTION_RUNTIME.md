@@ -12,3 +12,7 @@ The format-aware production runtime is persistent and uses the selected format's
 - YouTube publishing remains a separate approval-gated action.
 
 The runtime uses one model request per specialist, one separate request per checker, and five reviewer requests. Long format presets may therefore take substantial time and local compute.
+
+## Google Flow import recovery
+
+Termux watches the configured Android Downloads folders for stable MP4 files. Imported clips are validated with FFprobe, copied (never moved) into SINTU storage, and queued for automatic compilation. The pending queue is persisted in `flow_auto_pending.json`; it is restored when the app restarts. Queue entries are acknowledged only after a successful render, so a failed FFmpeg compilation remains eligible for retry. Source downloads are never deleted. Set `SINTU_FLOW_AUTO_RENDER=false` to disable compilation while retaining imported queue entries.
