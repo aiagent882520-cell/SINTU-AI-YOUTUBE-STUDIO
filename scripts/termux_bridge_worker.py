@@ -67,6 +67,14 @@ def command_for(job: dict) -> list[str]:
         if not isinstance(topic, str) or not topic.strip() or len(topic.strip()) > 300:
             raise ValueError("Rejected offline video topic.")
         return [PYTHON, "scripts/live_e2e.py", "--offline-video", "--topic", topic.strip()]
+    if action == "full_self_test":
+        topic = payload.get("topic")
+        if topic is not None and (not isinstance(topic, str) or not topic.strip() or len(topic.strip()) > 300):
+            raise ValueError("Rejected full self-test topic.")
+        command = [PYTHON, "scripts/sintu_self_test.py"]
+        if topic:
+            command += ["--topic", topic.strip()]
+        return command
     if action == "run_tests":
         test_path = payload.get("test_path")
         if test_path:
