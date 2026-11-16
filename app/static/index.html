@@ -79,6 +79,10 @@
       <p class="muted">Generated images aur AI video clips yahan preview honge. Move buttons se order badlein, remove karein, still image duration aur har scene ke baad transition chunein. Video clips ke start/end seconds trim aur har clip ka original audio volume alag set kar sakte hain. Har item ke liye scene description rakhein. Scene description video par print nahi hota.</p>
       <label for="renderImageIds">Scene image IDs (comma-separated, har scene ke liye ek; optional)</label>
       <input id="renderImageIds" placeholder="AI image result se image ID paste karein">
+      <label for="flowClipFiles">Google Flow clips import (MP4, max 512 MB per clip)</label>
+      <input id="flowClipFiles" type="file" accept="video/mp4,.mp4" multiple>
+      <div class="actions"><button id="flowClipImportButton" type="button">Import Flow MP4 clips</button></div>
+      <p id="flowClipImportNotice" class="muted" role="status" aria-live="polite">Flow se download ki hui MP4 files yahan select karein. Import ke baad clips timeline mein jud jayengi.</p>
       <label for="renderVideoIds">AI video clip IDs (comma-separated, optional; generated clips ko order mein join karein)</label>
       <input id="renderVideoIds" placeholder="AI Video ID yahan automatically add hogi">
       <p class="muted">AI clips generate karne par IDs yahan automatically add hongi. Clip mode mein original clip audio preserve hoti hai; optional voiceover/music mix add kar sakte hain. Spoken words screen par nahi dikhaye jaate. Fade ya cut transition select karein.</p>

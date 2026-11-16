@@ -51,6 +51,25 @@ function renderTimelineEditor(rows=timelineRows()){
   return '<article class="panel timeline-row" style="margin:10px 0;padding:12px"><div class="actions"><strong>Scene '+(i+1)+' · '+x.kind.toUpperCase()+'</strong><button type="button" data-action="up" data-index="'+i+'" '+(i===0?'disabled':'')+'>↑</button><button type="button" data-action="down" data-index="'+i+'" '+(i===rows.length-1?'disabled':'')+'>↓</button><button type="button" data-action="remove" data-index="'+i+'">Remove</button></div>'+preview+'<label>Scene description</label><input data-field="scene" data-index="'+i+'" maxlength="1000" value="'+escapeHtml(x.scene||"")+'">'+edit+'<label>Transition after this scene</label><select data-field="transition" data-index="'+i+'"><option value="cut" '+(x.transition==="cut"?"selected":"")+'>Cut</option><option value="fade" '+(x.transition==="fade"?"selected":"")+'>Fade to/from black</option></select></article>';
  }).join("");
 }
+$("flowClipImportButton")?.addEventListener("click", async () => {
+ const picker=$("flowClipFiles"),notice=$("flowClipImportNotice"),button=$("flowClipImportButton");
+ const files=Array.from(picker?.files||[]);
+ if(!files.length){notice.textContent="Pehle Google Flow se download ki hui MP4 clips select karein.";return;}
+ if(files.some(file=>!file.name.toLowerCase().endsWith(".mp4")||file.size<=0||file.size>512*1024*1024)){notice.textContent="Har file .mp4 honi chahiye aur 512 MB se chhoti honi chahiye.";return;}
+ button.disabled=true;let imported=0;const failures=[];
+ try{
+  for(const file of files){
+   notice.textContent="Importing "+(imported+1)+" / "+files.length+": "+file.name;
+   try{
+    const response=await fetch("/api/flow/import?filename="+encodeURIComponent(file.name),{method:"POST",headers:{"Content-Type":"video/mp4"},body:file});
+    const result=await response.json();if(!response.ok)throw new Error(result.detail||"Import failed");
+    queueTimelineAsset("video",result.video_id,"Google Flow: "+file.name);imported++;
+   }catch(error){failures.push(file.name+": "+error.message);}
+  }
+  notice.textContent=imported+" Flow clip(s) imported and added to timeline."+ (failures.length?" Failed: "+failures.join(" | "):"");
+  picker.value="";
+ }finally{button.disabled=false;}
+});
 function queueTimelineAsset(kind,id,sceneText){const rows=timelineRows();if(rows.some(x=>x.kind===kind&&x.id===id))return;rows.push({kind,id,duration:kind==="image"?Number($("sceneSeconds").value||4):0,trimStart:0,trimEnd:null,audioVolume:.25,transition:$("renderTransition").value||"fade",scene:sceneText||"Generated "+kind+" scene"});syncTimelineFields(rows);}
 $("timelineEditor").addEventListener("click",event=>{const b=event.target.closest("button[data-action]");if(!b)return;const rows=timelineRows(),i=Number(b.dataset.index);if(b.dataset.action==="remove")rows.splice(i,1);if(b.dataset.action==="up"&&i>0)[rows[i-1],rows[i]]=[rows[i],rows[i-1]];if(b.dataset.action==="down"&&i<rows.length-1)[rows[i+1],rows[i]]=[rows[i],rows[i+1]];syncTimelineFields(rows);});
 $("timelineEditor").addEventListener("input",event=>{

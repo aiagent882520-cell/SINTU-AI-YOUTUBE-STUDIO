@@ -214,6 +214,35 @@ def test_unknown_workflow_is_rejected(tmp_path, monkeypatch):
     assert response.status_code == 400
 
 
+def test_google_flow_mp4_import_verifies_and_adds_clip_to_ai_video_library(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    import app.main as main
+    monkeypatch.setattr(main, "AI_VIDEO_DIR", tmp_path / "ai_videos")
+    checked = {}
+    def fake_verify(path):
+        checked["path"] = path
+        assert path.is_file()
+        assert path.read_bytes() == b"flow-mp4-content"
+        return {"verified": True, "size_bytes": 16, "duration_seconds": 5.0,
+                "fps": 30, "resolution": "720x1280", "video_codec": "h264"}
+    monkeypatch.setattr(main, "verify_publishable_mp4", fake_verify)
+    response = client.post("/api/flow/import?filename=Scene%2001.mp4", content=b"flow-mp4-content",
+                           headers={"content-type": "video/mp4"})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["imported"] is True
+    assert body["filename"] == "Scene 01.mp4"
+    assert body["verified"] is True
+    assert (tmp_path / "ai_videos" / (body["video_id"] + ".mp4")).read_bytes() == b"flow-mp4-content"
+    assert client.get("/api/ai-videos/" + body["video_id"]).status_code == 200
+
+
+def test_google_flow_mp4_import_rejects_non_mp4_and_empty_upload(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    assert client.post("/api/flow/import?filename=clip.mov", content=b"video").status_code == 400
+    assert client.post("/api/flow/import?filename=clip.mp4", content=b"").status_code == 400
+
+
 def test_storyboard_render_api_contract(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setattr(main.shutil, "which", lambda name: None)

@@ -3683,6 +3683,55 @@ def _reject_symlinked_media(path: Path, label: str) -> None:
         raise HTTPException(status_code=404, detail=f"{label} not found")
 
 
+
+
+@app.post("/api/flow/import")
+async def import_google_flow_clip(request: Request, filename: str = Query(default="flow-clip.mp4")):
+    """Import one downloaded Google Flow MP4 into the managed AI-video library."""
+    safe_name = Path(filename).name
+    if Path(safe_name).suffix.lower() != ".mp4" or safe_name in {"", ".", ".."}:
+        raise HTTPException(status_code=400, detail="Google Flow se .mp4 video file select karein.")
+    max_bytes = 512 * 1024 * 1024
+    declared = request.headers.get("content-length")
+    if declared:
+        try:
+            if int(declared) <= 0 or int(declared) > max_bytes:
+                raise HTTPException(status_code=413, detail="MP4 file 512 MB se chhoti honi chahiye.")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid upload size.") from None
+    import uuid
+    AI_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+    video_id = uuid.uuid4().hex
+    temporary = AI_VIDEO_DIR / (video_id + ".upload")
+    final_path = AI_VIDEO_DIR / (video_id + ".mp4")
+    total = 0
+    try:
+        with temporary.open("xb") as output:
+            async for chunk in request.stream():
+                if not chunk:
+                    continue
+                total += len(chunk)
+                if total > max_bytes:
+                    raise HTTPException(status_code=413, detail="MP4 file 512 MB se chhoti honi chahiye.")
+                output.write(chunk)
+        if total <= 0:
+            raise HTTPException(status_code=400, detail="Empty MP4 upload.")
+        metadata = verify_publishable_mp4(temporary)
+        temporary.replace(final_path)
+    except HTTPException:
+        raise
+    except RendererUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    except RenderFailed as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except OSError:
+        raise HTTPException(status_code=500, detail="MP4 ko SINTU storage mein save nahi kar saka.") from None
+    finally:
+        temporary.unlink(missing_ok=True)
+    return {"video_id": video_id, "filename": safe_name, "url": "/api/ai-videos/" + video_id,
+            "imported": True, **metadata}
+
+
 @app.get("/api/ai-videos/{video_id}")
 def get_ai_video(video_id: str):
     if not re.fullmatch(r"[a-f0-9]{32}", video_id):
