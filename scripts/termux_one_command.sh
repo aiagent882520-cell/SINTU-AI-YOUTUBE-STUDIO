@@ -287,6 +287,13 @@ if [ "$READY" -ne 1 ]; then
 fi
 say "Application health endpoint /api/health returned HTTP 200."
 
+# Install the Termux:Boot entrypoint. It runs after Android boot only when the
+# separate Termux:Boot add-on is installed and enabled by the device owner.
+mkdir -p "$HOME/.termux/boot"
+install -m 700 scripts/termux_boot.sh "$HOME/.termux/boot/10-sintu.sh"
+install -m 700 scripts/start_services.sh "$APP_DIR/scripts/start_services.sh"
+say "Termux:Boot startup script installed (Termux:Boot add-on required)"
+
 # Keep the allowlisted local worker running alongside the API.
 WORKER_PID_FILE="$LOG_DIR/bridge-worker.pid"
 WORKER_LOG_FILE="$LOG_DIR/bridge-worker.log"

@@ -34,3 +34,13 @@ kill "$(cat ~/.sintu/server.pid)"
 The one-command installer also creates two independent random bridge credentials in the private `.env` (without printing or overwriting existing values), then starts the allowlisted Termux worker after the API health check. On rerunning the installer it reuses the existing worker process when its PID is alive. Worker output is written to `~/.sintu/bridge-worker.log`; its PID is stored in `~/.sintu/bridge-worker.pid`.
 
 The worker runs locally and polls `127.0.0.1:8000`. This makes the phone-side worker ready for locally queued jobs; it does **not** make the Android loopback endpoint reachable from cloud ChatGPT. Remote ChatGPT Actions still require a separately configured HTTPS tunnel and the ChatGPT Action configuration described in `CHATGPT_TERMUX_BRIDGE.md`. Never publish either generated token.
+
+
+## Start services after Android reboot
+
+The installer places a boot entrypoint at `~/.termux/boot/10-sintu.sh` and a service launcher at `scripts/start_services.sh`. If the separate **Termux:Boot** Android add-on is installed, enabled, and allowed to run by Android battery/background settings, it starts the local API and allowlisted worker after reboot. This is not possible without that add-on and Android's permission/background controls. You can also start both services manually at any time with:
+
+```bash
+cd ~/SINTU-AI-YOUTUBE-STUDIO
+bash scripts/start_services.sh
+```
