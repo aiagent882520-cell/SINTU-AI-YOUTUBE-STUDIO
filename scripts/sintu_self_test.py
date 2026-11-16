@@ -58,13 +58,13 @@ def run_self_test(*, skip_tests: bool = False, skip_video: bool = False,
     steps.append(_run_step(
         "operational_readiness",
         [python, "scripts/operational_readiness.py", "--json"],
-        90, env,
+        60, env,
     ))
     if skip_tests:
         steps.append({"name": "pytest", "status": "skipped", "reason": "--skip-tests"})
     else:
         steps.append(_run_step(
-            "pytest", [python, "-m", "pytest", "-q"], 1200, env,
+            "pytest", [python, "-m", "pytest", "-q"], 900, env,
         ))
     if skip_video:
         steps.append({"name": "offline_video_e2e", "status": "skipped", "reason": "--skip-video"})
@@ -72,14 +72,14 @@ def run_self_test(*, skip_tests: bool = False, skip_video: bool = False,
         steps.append(_run_step(
             "offline_video_e2e",
             [python, "scripts/live_e2e.py", "--offline-video", "--topic", topic],
-            900, env,
+            600, env,
         ))
     media_report = target_dir / "self_test_media_audit.json"
     steps.append(_run_step(
         "media_quality_audit",
         [python, "scripts/project_health_audit.py", "--skip-tests",
          "--media-dir", str(media_dir), "--report", str(media_report)],
-        180, env,
+        120, env,
     ))
 
     failed = [step["name"] for step in steps if step["status"] == "failed"]
