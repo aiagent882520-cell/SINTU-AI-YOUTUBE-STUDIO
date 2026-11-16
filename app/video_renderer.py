@@ -231,13 +231,13 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         raise RendererUnavailable("Visual quality verification ke liye FFmpeg required hai.")
     try:
         pixels = subprocess.run(
-            [ffmpeg, "-v", "error", "-i", str(path), "-vf", "fps=1,scale=32:32",
+            [ffmpeg, "-v", "error", "-i", str(path), "-vf", "fps=2,scale=48:48",
              "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
             capture_output=True, timeout=45, check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
         raise RenderFailed("Final video ke actual visual frames decode nahi ho sake.") from None
-    frame_bytes = 32 * 32 * 3
+    frame_bytes = 48 * 48 * 3
     if pixels.returncode != 0 or len(pixels.stdout) < frame_bytes:
         raise RenderFailed("Final video mein decodable visual frames nahi hain.")
     sampled = [pixels.stdout[i:i + frame_bytes]
@@ -250,6 +250,21 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
     if visible < max(1, math.ceil(len(sampled) * 0.70)):
         raise RenderFailed(
             f"Visual quality check failed: {visible}/{len(sampled)} sampled frames contain visible image content."
+        )
+    # A technically valid MP4 can still be a frozen still image. Sample at
+    # 2 fps and require sustained pixel changes across adjacent frames. This
+    # accepts deliberate camera motion/animation but rejects a frozen export.
+    if len(sampled) < 3:
+        raise RenderFailed("Visual motion check failed: too few decoded frames to establish motion.")
+    moving_pairs = 0
+    for previous, current in zip(sampled, sampled[1:]):
+        mean_delta = sum(abs(a - b) for a, b in zip(previous, current)) / frame_bytes
+        if mean_delta >= 2.0:
+            moving_pairs += 1
+    required_moving_pairs = max(1, math.ceil((len(sampled) - 1) * 0.25))
+    if moving_pairs < required_moving_pairs:
+        raise RenderFailed(
+            f"Visual motion check failed: only {moving_pairs}/{len(sampled) - 1} frame transitions show movement."
         )
     return {"duration_seconds": duration, "video_duration_seconds": video_duration,
             "frame_count": frame_count, "fps": actual_fps,
