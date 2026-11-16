@@ -31,7 +31,8 @@ Add the generated value to the private `.env` file (do not paste it into chat
 or commit it):
 
 ```dotenv
-SINTU_BRIDGE_TOKEN=replace-with-a-long-random-secret
+SINTU_BRIDGE_TOKEN=generate-a-different-long-random-secret-for-chatgpt
+SINTU_BRIDGE_WORKER_TOKEN=generate-another-long-random-secret-for-termux-worker
 SINTU_BRIDGE_BASE_URL=http://127.0.0.1:8000
 ```
 
@@ -42,7 +43,7 @@ cd ~/SINTU-AI-YOUTUBE-STUDIO
 .venv/bin/python scripts/termux_bridge_worker.py
 ```
 
-Check the worker log/status from the API using the same bearer token. Stop the
+Check the worker log/status from the API using the ChatGPT bearer token for status/job creation and the separate worker bearer token for polling/completion. Stop the
 worker with Ctrl+C.
 
 ## ChatGPT Action
@@ -51,6 +52,8 @@ The OpenAPI contract is in `docs/CHATGPT_TERMUX_BRIDGE_OPENAPI.yaml`. In a
 ChatGPT environment that supports custom GPT Actions, configure its server
 URL to the HTTPS endpoint you control and set Bearer authentication to the
 same secret. Do not use a plain HTTP public endpoint.
+
+The bridge uses two independent secrets: `SINTU_BRIDGE_TOKEN` for the ChatGPT/API client and `SINTU_BRIDGE_WORKER_TOKEN` for the Termux worker. Generate both independently and never share either in a public repository or chat.
 
 The current Termux installation binds to `127.0.0.1`; ChatGPT cannot reach
 that loopback address from the cloud or Android app. A secure HTTPS tunnel or
@@ -67,3 +70,12 @@ grant ChatGPT direct access to the phone.
 - `health_audit`
 
 Jobs and bounded output are persisted in `sintu_termux_bridge.sqlite3`.
+
+
+## Three-part development loop
+
+1. ChatGPT is the planning/review layer and uses the connected GitHub integration to inspect code, create branches/commits/PRs, and read CI results.
+2. GitHub stores the canonical project, runs the automated test/security matrix, and blocks unverified changes from being treated as release-ready.
+3. The Termux worker executes only allowlisted local checks/build tasks on the Android device and posts bounded logs/status back to SINTU.
+
+The loop is not magically connected by installing this code alone. A one-time local worker start and (for cloud ChatGPT Action access) a secured HTTPS tunnel plus Action configuration are required. Normal ChatGPT conversations do not gain direct access to Android shell just because this API exists. GitHub work can still be performed through an authorized GitHub connector; local device execution remains unavailable until the worker is running and reachable.
