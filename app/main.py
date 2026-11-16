@@ -463,7 +463,7 @@ class RenderInput(BaseModel):
     sound_effects_enabled: bool = True
     sound_effects_volume: float = Field(default=0.18, ge=0, le=1)
     transition: str = Field(default="fade", max_length=10)
-    motion: str = Field(default="none", max_length=20)
+    motion: str = Field(default="slow-zoom-in", max_length=20)
     resolution: str | None = Field(default=None, max_length=12)
     fps: int = Field(default=30, ge=24, le=60)
     quality: str = Field(default="high", max_length=12)
@@ -4103,7 +4103,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 run.get("topic", "SINTU AI Studio Production"), scene_prompts,
                 payload.seconds_per_scene, image_paths=image_paths, audio_path=audio_path,
                 music_path=music_matches[0], music_volume=0.16, subtitles=subtitle_lines,
-                transition="fade", motion="none", resolution=resolution,
+                transition="fade", motion="slow-zoom-in", resolution=resolution,
                 sound_effects_enabled=payload.sound_effects_enabled,
                 sound_effects_volume=payload.sound_effects_volume,
                 fps=payload.fps, quality=payload.quality,
