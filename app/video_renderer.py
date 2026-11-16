@@ -369,10 +369,27 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
     minimum_frames = max(1, math.floor(duration * fps * 0.95))
     if frame_count < minimum_frames or abs(duration - video_duration) > max(0.5, 2 / fps):
         raise RenderFailed("Upload MP4 truncated hai: actual frames aur video duration match nahi karte.")
+    motion_audit = None
+    if duration > 8:
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            raise RendererUnavailable("Long MP4 motion verification ke liye FFmpeg required hai.")
+        try:
+            pixels = subprocess.run(
+                [ffmpeg, "-v", "error", "-i", str(path), "-vf", "fps=1,scale=32:32",
+                 "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
+                capture_output=True, timeout=45, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            raise RenderFailed("Upload MP4 motion verification fail ya timeout ho gaya.") from None
+        if pixels.returncode != 0:
+            raise RenderFailed("Upload MP4 ke motion frames decode nahi ho sake.")
+        motion_audit = validate_sampled_motion(pixels.stdout, minimum_ratio=0.20)
     return {
         "verified": True, "size_bytes": size, "duration_seconds": duration,
         "video_duration_seconds": video_duration, "frame_count": frame_count,
         "fps": fps, "resolution": f"{width}x{height}", "video_codec": codec,
+        "motion_audit": motion_audit,
     }
 
 
