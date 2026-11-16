@@ -96,7 +96,7 @@ jobs:
           python -m pip install -r requirements-dev.txt
       - name: Generate real offline Hindi video
         env:
-          SINTU_DATA_DIR: \${{ github.workspace }}/.ci-data
+          SINTU_DATA_DIR: ${{ github.workspace }}/.ci-data
           ESPEAK_EXECUTABLE: espeak-ng
           SINTU_RENDER_TIMEOUT_SECONDS: "600"
         run: |
@@ -104,7 +104,7 @@ jobs:
           python scripts/live_e2e.py --offline-video --topic "भारत के प्राचीन किले और उनकी विरासत" | tee offline-video-report.json
       - name: Audit final MP4 metadata, black frames and sampled motion
         env:
-          SINTU_DATA_DIR: \${{ github.workspace }}/.ci-data
+          SINTU_DATA_DIR: ${{ github.workspace }}/.ci-data
         run: |
           python scripts/project_health_audit.py --skip-tests \
             --media-dir .ci-data/generated_videos --report offline-media-audit.json
