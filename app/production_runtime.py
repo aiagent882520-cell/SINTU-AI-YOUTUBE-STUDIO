@@ -223,13 +223,13 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             is_documentary = any(token in run["format_id"] for token in ("documentary", "biography", "crime-", "mystery-", "science-", "nature-", "travel-"))
             is_film = any(token in run["format_id"] for token in ("film", "cinematic"))
             cinematic_standard = (
-                "CINEMATIC / DOCUMENTARY PRODUCTION STANDARD:\\n"
-                "- This must read like a professionally directed film/documentary, never a slideshow with generic voiceover.\\n"
-                "- Specify shot duration, subject action, shot size, lens intent, camera movement, motivated lighting, composition, location continuity, sound/ambience and transition.\\n"
-                "- Build varied coverage and a coherent visual progression; prohibit repeated shots, filler and static background reuse.\\n"
-                "- Documentary claims require a source/evidence status; never invent interviews, archive footage, citations, statistics or facts.\\n"
-                "- Film scenes require blocking, character/prop/wardrobe continuity, screen direction, emotional beats and motivated edits.\\n"
-                "- Distinguish a written prompt from an actually generated video asset. Do not claim a clip was rendered.\\n"
+                "CINEMATIC / DOCUMENTARY PRODUCTION STANDARD:\n"
+                "- This must read like a professionally directed film/documentary, never a slideshow with generic voiceover.\n"
+                "- Specify shot duration, subject action, shot size, lens intent, camera movement, motivated lighting, composition, location continuity, sound/ambience and transition.\n"
+                "- Build varied coverage and a coherent visual progression; prohibit repeated shots, filler and static background reuse.\n"
+                "- Documentary claims require a source/evidence status; never invent interviews, archive footage, citations, statistics or facts.\n"
+                "- Film scenes require blocking, character/prop/wardrobe continuity, screen direction, emotional beats and motivated edits.\n"
+                "- Distinguish a written prompt from an actually generated video asset. Do not claim a clip was rendered.\n"
                 if is_documentary or is_film else ""
             )
             worker_prompt = cinematic_standard + (
