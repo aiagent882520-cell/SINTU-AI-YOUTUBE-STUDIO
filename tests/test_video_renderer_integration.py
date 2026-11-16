@@ -318,7 +318,7 @@ def test_storyboard_zoom_out_reverses_zoom_direction_and_none_disables_motion():
     )
     assert zoom_out is not None
     assert "mod(on,150)" in zoom_out
-    assert "1.120-0.120" in zoom_out
+    assert "1.160-0.160" in zoom_out
     assert video_renderer._storyboard_motion_filter(
         "none", width=720, height=1280, fps=24, seconds_per_scene=4
     ) is None
