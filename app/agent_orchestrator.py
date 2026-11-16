@@ -54,7 +54,10 @@ def workflow_team(workflow: str) -> list[dict]:
 def catalog_team() -> list[dict]:
     """Build distinct worker/checker instances for every registered top-level agent role."""
     result = []
-    for name in AGENTS:
+    # The complete catalog run validates every registered specialist plus all
+    # five senior managers. Owner Agent is retained here so execute_run can
+    # run it after the independent final reviewers.
+    for name in list(dict.fromkeys(list(AGENTS) + list(SENIOR_MANAGER_NAMES))):
         result.append({
             "name": name,
             "role_type": "specialist",
