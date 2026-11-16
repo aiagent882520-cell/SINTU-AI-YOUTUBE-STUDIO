@@ -10,8 +10,8 @@ def test_catalog_contains_all_61_roles_with_distinct_checkers():
     workers = [item for item in team if item["role_type"] == "specialist"]
     checkers = [item for item in team if item["role_type"] == "independent_checker"]
     assert len(AGENTS) == 61
-    assert len(workers) == len(checkers) == 61
-    assert [item["name"] for item in workers] == AGENTS
+    assert len(workers) == len(checkers) == 66
+    assert [item["name"] for item in workers] == AGENTS + list(runtime.SENIOR_MANAGER_NAMES)
     assert all(item["checks"] == worker["name"] for worker, item in zip(workers, checkers))
     assert all(item["name"] != item["checks"] for item in checkers)
     assert all(item["status"] == "Registered role; not a continuously running agent" for item in list_agents())
@@ -38,13 +38,14 @@ def test_full_catalog_run_executes_each_worker_checker_and_final_review(tmp_path
     result = runtime.get_run(run["id"], "test-owner")
 
     assert result["status"] == "completed"
-    assert len([step for step in result["steps"] if step["step_type"] == "builder"]) == 61
-    assert len([step for step in result["steps"] if step["step_type"] == "checker"]) == 61
+    assert len([step for step in result["steps"] if step["step_type"] == "builder"]) == 66
+    assert len([step for step in result["steps"] if step["step_type"] == "checker"]) == 66
     assert len([step for step in result["steps"] if step["step_type"] == "reviewer"]) == 5
     assert len(result["result"]["deliverables"]) == 61
     assert result["result"]["video_rendered"] is False
     assert result["result"]["published"] is False
-    assert len(calls) == 127
+    assert set(result["result"]["management_reports"]) == set(runtime.SENIOR_MANAGER_NAMES)
+    assert len(calls) == 137
 
 
 def test_full_catalog_run_pauses_on_first_failed_independent_checker(tmp_path, monkeypatch):
