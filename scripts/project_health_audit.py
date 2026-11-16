@@ -119,7 +119,7 @@ def audit_media(path: Path, results: list[dict]) -> bool:
             ok = False
             continue
         intervals = [(float(a), float(b)) for a, b in re.findall(
-            r"black_start:([0-9.]+)\\s+black_end:([0-9.]+)", black.stderr)]
+            r"black_start:([0-9.]+)\s+black_end:([0-9.]+)", black.stderr)]
         full_black = any(start <= 0.1 and end >= metadata["duration_seconds"] * 0.95
                          for start, end in intervals)
         status = "FAIL" if full_black else "PASS"
