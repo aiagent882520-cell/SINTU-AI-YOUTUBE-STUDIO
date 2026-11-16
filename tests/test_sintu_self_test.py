@@ -8,11 +8,11 @@ def test_self_test_runs_readiness_tests_offline_video_and_media_audit(tmp_path, 
 
     def fake_run(command, **kwargs):
         commands.append(command)
-        if "operational_readiness.py" in command:
+        if any("operational_readiness.py" in part for part in command):
             return SimpleNamespace(returncode=0, stdout='{"status":"PASS","checks":[{"name":"ffmpeg","status":"ok"}]}', stderr='')
-        if "live_e2e.py" in command:
+        if any("live_e2e.py" in part for part in command):
             return SimpleNamespace(returncode=0, stdout='{"status":"PASS","duration_seconds":32}', stderr='')
-        if "project_health_audit.py" in command:
+        if any("project_health_audit.py" in part for part in command):
             report_path = command[command.index("--report") + 1]
             with open(report_path, "w", encoding="utf-8") as handle:
                 handle.write('{"status":"PASS","checks":[{"name":"motion","motion_ratio":0.74}]}')
