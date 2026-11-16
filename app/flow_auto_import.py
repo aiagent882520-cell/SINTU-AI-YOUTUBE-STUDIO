@@ -11,13 +11,15 @@ import shutil
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from .video_renderer import verify_publishable_mp4, RendererUnavailable, RenderFailed
+from .video_renderer import verify_publishable_mp4, render_mixed_timeline, RendererUnavailable, RenderFailed
 
 MAX_BYTES = 512 * 1024 * 1024
 _POLL_SECONDS = 5.0
+_QUIET_SECONDS = 20.0
 _worker: "FlowAutoImporter | None" = None
 
 
@@ -36,11 +38,13 @@ def default_download_dirs() -> list[Path]:
 class FlowAutoImporter:
     def __init__(self, data_dir: Path, video_dir: Path,
                  source_dirs: list[Path] | None = None,
-                 validator: Callable = verify_publishable_mp4):
+                 validator: Callable = verify_publishable_mp4,
+                 renderer: Callable = render_mixed_timeline):
         self.data_dir = Path(data_dir)
         self.video_dir = Path(video_dir)
         self.source_dirs = source_dirs if source_dirs is not None else default_download_dirs()
         self.validator = validator
+        self.renderer = renderer
         self.ledger_path = self.data_dir / "flow_auto_imported.json"
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -50,6 +54,10 @@ class FlowAutoImporter:
         self.skipped = 0
         self.last_error = ""
         self.last_import = ""
+        self.pending: list[str] = []
+        self.last_added_at = 0.0
+        self.last_render_result: dict = {}
+        self.last_render_error = ""
 
     def start(self) -> bool:
         if self._thread and self._thread.is_alive():
@@ -75,6 +83,9 @@ class FlowAutoImporter:
             "skipped_or_invalid": self.skipped,
             "last_import": self.last_import,
             "last_error": self.last_error,
+            "pending_clips": len(self.pending),
+            "last_render": self.last_render_result,
+            "last_render_error": self.last_render_error,
             "poll_seconds": int(_POLL_SECONDS),
             "max_file_mb": MAX_BYTES // (1024 * 1024),
         }
@@ -128,6 +139,8 @@ class FlowAutoImporter:
                         self.ledger_path.write_text(json.dumps(ledger, ensure_ascii=False, indent=2), "utf-8")
                         self.imported += 1
                         self.last_import = source.name
+                        self.pending.append(video_id)
+                        self.last_added_at = time.monotonic()
                         self.last_error = ""
                         added += 1
                     except (RendererUnavailable, RenderFailed, OSError, ValueError) as exc:
@@ -142,9 +155,42 @@ class FlowAutoImporter:
                     self.last_error = (source.name + ": " + str(exc))[:300]
         return added
 
+    def flush_pending(self, force: bool = False) -> dict | None:
+        """Render a batch of imported clips after downloads have gone quiet."""
+        if not self.pending or (not force and time.monotonic() - self.last_added_at < _QUIET_SECONDS):
+            return None
+        if os.getenv("SINTU_FLOW_AUTO_RENDER", "true").strip().lower() == "false":
+            return None
+        batch = self.pending[:25]
+        self.pending = self.pending[25:]
+        items = []
+        scenes = []
+        for video_id in batch:
+            path = self.video_dir / (video_id + ".mp4")
+            if not path.is_file() or path.is_symlink():
+                continue
+            items.append({"kind": "video", "path": path, "trim_start": 0,
+                          "trim_end": None, "audio_volume": 0.25})
+            scenes.append("Google Flow video clip " + str(len(scenes) + 1))
+        if not items:
+            return None
+        title = "SINTU Flow Auto Compilation " + datetime.now(timezone.utc).strftime("%Y-%m-%d %H-%M UTC")
+        try:
+            result = self.renderer(items, title, scenes, seconds_per_scene=4,
+                                   transition="fade", resolution=os.getenv("SINTU_FLOW_AUTO_RESOLUTION", "720x1280"),
+                                   fps=30, quality="standard", sound_effects_enabled=False)
+            self.last_render_result = result if isinstance(result, dict) else {"result": str(result)}
+            self.last_render_error = ""
+            return self.last_render_result
+        except Exception as exc:
+            self.pending = batch + self.pending
+            self.last_render_error = str(exc)[:500]
+            return None
+
     def _run(self) -> None:
         while not self._stop.is_set():
             self.scan_once()
+            self.flush_pending()
             self._stop.wait(_POLL_SECONDS)
 
 
@@ -167,6 +213,7 @@ def stop_flow_auto_import() -> None:
 def flow_auto_import_status() -> dict:
     if _worker is None:
         return {"enabled": False, "watch_directories": [], "imported": 0,
-                "skipped_or_invalid": 0, "last_import": "", "last_error": "",
+                "skipped_or_invalid": 0, "last_import": "", "last_error": "", "pending_clips": 0,
+                "last_render": {}, "last_render_error": "",
                 "poll_seconds": int(_POLL_SECONDS), "max_file_mb": MAX_BYTES // (1024 * 1024)}
     return _worker.status()
