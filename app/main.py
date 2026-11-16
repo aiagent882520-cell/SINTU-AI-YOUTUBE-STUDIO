@@ -52,7 +52,7 @@ from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable,
 from .image_generator import generate_image, image_status, ImageUnavailable, ImageGenerationFailed, IMAGE_DIR
 from .music_generator import generate_music, music_status, MusicUnavailable, MusicGenerationFailed
 from .video_generator import generate_video, video_status, VideoUnavailable, VideoGenerationFailed, AI_VIDEO_DIR
-from .production_runtime import create_run as create_production_run, get_run as get_production_run, list_runs as list_production_runs, execute_run as execute_production_run, attach_render_result
+from .production_runtime import create_run as create_production_run, get_run as get_production_run, list_runs as list_production_runs, execute_run as execute_production_run, attach_render_result, recover_interrupted_runs
 from .earning_system import router as earning_router, sync_youtube_estimate
 from .security import RequestRateLimiter, client_address_allowed, same_origin_request
 from .backup_restore import verify_backup, BackupValidationError, snapshot_database
@@ -74,7 +74,8 @@ app.include_router(termux_bridge_router)
 
 @app.on_event("startup")
 def start_google_flow_auto_import():
-    """Watch Android Downloads and safely import completed Google Flow MP4 files."""
+    """Recover interrupted production jobs, then watch Android Downloads."""
+    recover_interrupted_runs()
     start_flow_auto_import(DATA_DIR, AI_VIDEO_DIR)
 
 
