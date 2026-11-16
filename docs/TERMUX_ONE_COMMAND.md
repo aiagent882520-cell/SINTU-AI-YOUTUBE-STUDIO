@@ -27,3 +27,10 @@ cd ~/SINTU-AI-YOUTUBE-STUDIO
 tail -f ~/.sintu/server.log
 kill "$(cat ~/.sintu/server.pid)"
 ```
+
+
+## Local bridge worker auto-start
+
+The one-command installer also creates two independent random bridge credentials in the private `.env` (without printing or overwriting existing values), then starts the allowlisted Termux worker after the API health check. On rerunning the installer it reuses the existing worker process when its PID is alive. Worker output is written to `~/.sintu/bridge-worker.log`; its PID is stored in `~/.sintu/bridge-worker.pid`.
+
+The worker runs locally and polls `127.0.0.1:8000`. This makes the phone-side worker ready for locally queued jobs; it does **not** make the Android loopback endpoint reachable from cloud ChatGPT. Remote ChatGPT Actions still require a separately configured HTTPS tunnel and the ChatGPT Action configuration described in `CHATGPT_TERMUX_BRIDGE.md`. Never publish either generated token.
