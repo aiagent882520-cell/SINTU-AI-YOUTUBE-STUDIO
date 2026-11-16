@@ -82,10 +82,11 @@ def _storyboard_motion_filter(motion: str, width: int, height: int,
         return None
     scene_frames = max(1, int(round(seconds_per_scene * fps)))
     phase = f"mod(on,{scene_frames})/{max(1, scene_frames - 1)}"
+    zoom_strength = min(0.24, max(0.12, seconds_per_scene * 0.02))
     if motion == "slow-zoom-in":
-        zoom = f"1+0.12*({phase})"
+        zoom = f"1+{zoom_strength:.3f}*({phase})"
     elif motion == "slow-zoom-out":
-        zoom = f"1.12-0.12*({phase})"
+        zoom = f"{1 + zoom_strength:.3f}-{zoom_strength:.3f}*({phase})"
     else:
         raise ValueError("Unsupported storyboard motion.")
     # Drift within the available crop margin, so pan remains in-bounds even at zoom=1.
