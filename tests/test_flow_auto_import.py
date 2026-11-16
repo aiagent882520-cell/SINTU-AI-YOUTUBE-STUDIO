@@ -57,3 +57,50 @@ def test_flow_auto_import_ignores_non_mp4_and_symlink(tmp_path):
     importer.scan_once()
     assert importer.scan_once() == 0
     assert not list((tmp_path / "videos").glob("*.mp4"))
+
+
+
+def test_flow_auto_import_auto_renders_batch_after_quiet_period(tmp_path, monkeypatch):
+    downloads = tmp_path / "Download"
+    downloads.mkdir()
+    (downloads / "clip.mp4").write_bytes(b"valid")
+    calls = []
+
+    def validator(_path):
+        return {"duration": 3}
+
+    def renderer(items, title, scenes, **kwargs):
+        calls.append((items, title, scenes, kwargs))
+        return {"video_id": "final123", "url": "/api/videos/final123"}
+
+    monkeypatch.setenv("SINTU_FLOW_AUTO_RENDER", "true")
+    importer = FlowAutoImporter(tmp_path / "data", tmp_path / "videos",
+                                [downloads], validator=validator, renderer=renderer)
+    importer.scan_once()
+    importer.scan_once()
+    assert len(importer.pending) == 1
+    result = importer.flush_pending(force=True)
+    assert result["video_id"] == "final123"
+    assert len(calls) == 1
+    assert calls[0][0][0]["kind"] == "video"
+    assert calls[0][2] == ["Google Flow video clip 1"]
+    assert importer.pending == []
+    assert importer.status()["last_render"]["video_id"] == "final123"
+
+
+def test_flow_auto_render_can_be_disabled(tmp_path, monkeypatch):
+    downloads = tmp_path / "Download"
+    downloads.mkdir()
+    (downloads / "clip.mp4").write_bytes(b"valid")
+    calls = []
+    importer = FlowAutoImporter(
+        tmp_path / "data", tmp_path / "videos", [downloads],
+        validator=lambda _path: {},
+        renderer=lambda *args, **kwargs: calls.append(args) or {"ok": True},
+    )
+    importer.scan_once()
+    importer.scan_once()
+    monkeypatch.setenv("SINTU_FLOW_AUTO_RENDER", "false")
+    assert importer.flush_pending(force=True) is None
+    assert not calls
+    assert len(importer.pending) == 1
