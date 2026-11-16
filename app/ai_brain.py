@@ -38,6 +38,32 @@ opening hook; chapter/timestamp outline; full narration script; scene-by-scene
 visual direction and generation prompts; b-roll, graphics, music and SFX cues;
 description, chapters, hashtags and tags; fact-check notes. Clearly label any
 estimated runtime.""",
+    "documentary": """Act as an experienced documentary showrunner, investigative researcher and field director.
+Build a fact-led, cinematic documentary package, not a slideshow or generic narration.
+Deliver: central question/thesis; audience; evidence ledger separating verified facts,
+claims needing verification and unknowns; source plan without fabricated citations;
+strong cold open; 3-act narrative with reveals and emotional stakes; chapter timings;
+complete natural Hindi narration; interview questions and contributor roles where relevant;
+scene-by-scene shot list with unique visual purpose, exact duration, subject action,
+location/time/weather, shot size, lens feel, camera movement, lighting, composition,
+b-roll/archival/map/diagram needs, ambient sound, SFX, music cue and transition.
+Maintain geography, chronology, wardrobe, props and visual continuity. Prefer real moving
+footage and purposeful coverage; still photographs/maps are supporting inserts only,
+never stretch one still image across a scene. Flag every reconstruction and uncertain claim.
+Finish with a powerful evidence-based conclusion, source notes, rights notes and edit plan.""",
+    "film": """Act as a feature-film director, screenwriter, cinematographer and editor.
+Create a production-ready cinematic film package, not a narrated slideshow.
+Deliver: logline; premise; genre/tone; character bible and arcs; world/production design
+bible; beat sheet; three-act structure; complete screenplay with scene headings, action,
+dialogue, subtext and pacing; shot-by-shot storyboard/shot list; exact scene and shot
+durations; blocking; shot size; lens and depth-of-field intent; motivated camera movement;
+lighting plan; color palette; VFX/practical effects; props/costume continuity; soundscape,
+dialogue recording, Foley, ambience, score and silence; match cuts/transitions; edit rhythm;
+color grade; final mix and delivery checklist. Every shot must contain visible action or
+intentional camera movement. Avoid repeated compositions, filler shots and static-image
+substitution.""",
+    "cinematic": "Create a cinematic film package using the film workflow: screenplay, character arcs, shot list, camera, lighting, blocking, continuity, production design, VFX, edit rhythm, color grade and sound design.",
+    "filmmaking": "Create a cinematic film package using the film workflow: screenplay, character arcs, shot list, camera, lighting, blocking, continuity, production design, VFX, edit rhythm, color grade and sound design.",
     "thumbnail": """Create 3 distinct high-click-potential thumbnail concepts.
 For each provide: one focal subject, composition, background, facial/emotional
 direction if relevant, contrast and color direction, mobile readability check,
@@ -250,6 +276,17 @@ def generate_text(prompt: str, workflow: str, provider_override=None) -> dict:
         "- The renderer adds the SINTU AI YOUTUBE STUDIO brand watermark separately.\n"
         "- Metadata stays outside the video unless the user requests a title card or subtitle track.\n\n"
         f"Selected workflow: {workflow_key}\n"
+        + (
+            "PREMIUM CINEMATIC / DOCUMENTARY ACCEPTANCE STANDARD:\\n"
+            "- Do not create a static image slideshow, repeated still frames, generic stock-like filler, or narration over one unchanged background.\\n"
+            "- Each shot needs a distinct story purpose, visible subject action or motivated camera movement, framing, lens intent, lighting, duration, sound cue and continuity note.\\n"
+            "- Use a real scene progression: establishing wide, action/coverage, medium, close-up, inserts, reaction, transitions and purposeful closing shot. Do not force every shot type where it makes no sense.\\n"
+            "- Documentary: maintain a claim/evidence ledger; never invent interviews, archive footage, sources, statistics or historical facts. Mark unverified claims for research.\\n"
+            "- Film: provide screenplay, character arcs, blocking, production design, shot list, camera and lighting plan, VFX, edit rhythm, grade and sound mix.\\n"
+            "- Still images may be short, clearly identified archival/map/photo inserts; they must not replace moving scenes or be stretched into fake footage.\\n"
+            "- Do not claim that AI video footage exists unless a real generated/imported clip is supplied. Clearly distinguish prompts from rendered media.\\n\\n"
+            if workflow_key in {"documentary", "film", "cinematic", "filmmaking"} else ""
+        )
         f"Workflow production requirements:\n{guide}\n\n"
         f"Assigned specialist roles and responsibilities:\n{json.dumps(workflow_team(workflow_key), ensure_ascii=False, indent=2)}\n\n"
         f"Orchestration mode: {orchestration_summary()['execution_mode']}. This is one model request guided by specialist roles, not separate autonomous agents.\n\n"
