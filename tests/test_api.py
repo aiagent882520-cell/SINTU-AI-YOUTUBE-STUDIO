@@ -87,6 +87,9 @@ def test_installable_app_shell(tmp_path, monkeypatch):
     assert "adminBackupHealth" in page.text
     assert "sintu-studio-shell-v13" in worker.text
     assert "/static/offline.html" in worker.text
+    assert 'id="flowPromptPreview"' in page.text
+    assert "USER-PROVIDED SCENE ORDER" in app_script.text
+    assert "download the clips and import/upload them into SINTU" in app_script.text
 
 def test_agent_orchestration_catalog_and_teams(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)

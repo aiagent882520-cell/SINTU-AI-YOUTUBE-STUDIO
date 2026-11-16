@@ -1263,16 +1263,26 @@ $("openGoogleFlow")?.addEventListener("click", () => {
   const format = $("renderFormat")?.selectedOptions?.[0]?.textContent || $("renderFormat")?.value || "video";
   const title = $("renderTitle")?.value?.trim() || $("prompt")?.value?.trim() || "Untitled SINTU video";
   const brief = $("prompt")?.value?.trim() || title;
+  const sceneText = $("renderScenes")?.value?.trim() || "";
+  const sceneLines = sceneText.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const aspect = $("renderResolution")?.value || "720x1280";
+  const fps = $("renderFps")?.value || "30";
+  const seconds = $("sceneSeconds")?.value || "4";
   const prompt = [
     "SINTU AI YOUTUBE STUDIO — GOOGLE FLOW VIDEO BRIEF",
-    "Create this video using the selected format. Keep visual continuity, subject identity, camera language, lighting, motion and scene geography consistent across shots.",
+    "Create actual video clips, not a storyboard or still-image sequence. Keep visual continuity, subject identity, camera language, lighting, motion and scene geography consistent across shots.",
     "Video format: " + format,
     "Project/title: " + title,
     "Creative brief: " + brief,
-    "Create a scene-by-scene shot list with suitable aspect ratio, duration, visual style, camera movement, transitions, sound design and native audio where appropriate.",
+    "Target aspect/resolution: " + aspect + " · Frame rate target: " + fps + " FPS · Target seconds per scene: " + seconds,
+    sceneLines.length ? "USER-PROVIDED SCENE ORDER (preserve this order; create one distinct clip per scene):\n" + sceneLines.map((line, index) => "Scene " + (index + 1) + ": " + line).join("\n") : "Create a coherent scene-by-scene shot list from the creative brief.",
+    "For each scene specify subject/action, location/background, shot size, camera movement, lighting, visual style, continuity details and transition. Avoid visual jumps between adjacent clips.",
     "Support the selected category faithfully: film/cinematic, short, fantasy, sci-fi, action, romantic, horror, historical, stop-motion/clay/puppet, lyric/music video, VFX/green-screen, product demo/advertisement/corporate training, live action/event/sports/news, 360/VR/AR/virtual production/AI avatar, or hybrid 2D+3D.",
-    "Do not add random captions, logos, watermarks or misspelled on-screen text. Keep spoken narration/dialogue in Hindi unless the brief specifies another language. Return editable scenes/assets where available."
+    "Generate clean visuals without captions, logos, watermarks or misspelled on-screen text; SINTU adds these during final assembly. Keep spoken narration/dialogue in Hindi unless the brief specifies another language. Prefer separate downloadable clips/assets and note each clip's duration and aspect ratio.",
+    "IMPORTANT WORKFLOW: Google Flow generation happens in the user's Google account. After generation, download the clips and import/upload them into SINTU's AI Video & Animation Studio; then assemble, add Hindi voice, music, subtitles and watermark, and verify the final MP4."
   ].join("\n\n");
+  const preview = $("flowPromptPreview");
+  if (preview) { preview.value = prompt; preview.hidden = false; }
   copyPromptAndOpen(prompt, "https://labs.google/fx/tools/flow", $("flowHandoffNotice"));
 });
 $("openAIStudioBuild")?.addEventListener("click", () => {
