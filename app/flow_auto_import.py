@@ -134,6 +134,8 @@ class FlowAutoImporter:
                                 (current.st_size, current.st_mtime_ns) != signature):
                             continue
                         metadata = self.validator(temporary)
+                        if not isinstance(metadata, dict) or not metadata:
+                            raise RenderFailed("MP4 validator ne valid video metadata return nahi kiya.")
                         temporary.replace(destination)
                         ledger[key] = [signature[0], signature[1]]
                         self.ledger_path.write_text(json.dumps(ledger, ensure_ascii=False, indent=2), "utf-8")
