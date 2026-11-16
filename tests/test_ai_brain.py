@@ -126,3 +126,49 @@ def test_invalid_local_backend_preference_falls_back_to_auto(monkeypatch):
         "model": "qwen-local", "base_url": "http://127.0.0.1:8080/v1"
     })
     assert ai_brain._active_local_backend()["backend"] == "openai-compatible"
+
+
+def test_deepseek_provider_status_never_exposes_key(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "deepseek-secret-test")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-flash")
+    monkeypatch.setattr(ai_brain, "_ollama_status", lambda: {
+        "service_running": False, "model_available": False,
+        "model": "qwen2.5:3b", "base_url": "http://127.0.0.1:11434"
+    })
+    monkeypatch.setattr(ai_brain, "_local_openai_compatible_status", lambda: {
+        "service_running": False, "model_available": False,
+        "model": "auto", "base_url": "http://127.0.0.1:8080/v1"
+    })
+    status = ai_brain.provider_status()
+    assert status["deepseek"] == {"configured": True, "model": "deepseek-flash"}
+    assert "deepseek-secret-test" not in repr(status)
+
+
+def test_deepseek_provider_is_locked_until_revenue_and_approval(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test")
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "false")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "false")
+    with pytest.raises(ai_brain.ProviderNotConfigured, match="Paid upgrade locked"):
+        ai_brain._selected_provider()
+
+
+def test_deepseek_chat_completion_uses_official_compatible_endpoint(monkeypatch):
+    class FakeResponse:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self):
+            return b'{"choices":[{"message":{"content":"Namaste from DeepSeek"}}]}'
+    captured = {}
+    def fake_urlopen(request, timeout=0):
+        captured["url"] = request.full_url
+        captured["auth"] = request.get_header("Authorization")
+        captured["body"] = request.data.decode("utf-8")
+        return FakeResponse()
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-flash")
+    monkeypatch.setattr(ai_brain.urllib.request, "urlopen", fake_urlopen)
+    assert ai_brain._generate_deepseek("hello") == "Namaste from DeepSeek"
+    assert captured["url"] == "https://api.deepseek.com/chat/completions"
+    assert captured["auth"] == "Bearer test-key"
+    assert '"model": "deepseek-flash"' in captured["body"]

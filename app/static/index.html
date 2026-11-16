@@ -56,6 +56,8 @@
         <div id="result" class="result"></div>
       </div>
       <p id="providerStatus" class="muted">AI provider status checking…</p>
+      <div class="integration-card"><strong>Google Flow — all video formats</strong><span>Use Flow for cinematic, short, fantasy, sci-fi, action, romance, horror, historical, stop-motion, clay, puppet, music, VFX, product demos, ads, training, live action, events, sports, news, 360°, VR, AR, virtual production, AI avatars and hybrid formats. SINTU prepares a format-aware prompt and opens Flow; generation and credits are handled in your Google Flow account.</span><div class="actions"><button id="openGoogleFlow" type="button">Prepare prompt & open Google Flow</button></div><p id="flowHandoffNotice" class="muted" role="status"></p></div>
+      <div class="integration-card"><strong>Google AI Studio — app, website, software & agent builder</strong><span>Use Build mode to create full-stack web apps, Android apps, software tools, assistants and AI agents from natural-language prompts. SINTU prepares a structured build prompt; project generation runs in Google AI Studio, not inside SINTU.</span><label for="aiStudioBuildPrompt">What should AI Studio build?</label><textarea id="aiStudioBuildPrompt" rows="3" maxlength="6000" placeholder="Example: Build a Hindi AI assistant with login, dashboard, database, admin panel and secure API integration."></textarea><div class="actions"><button id="openAIStudioBuild" type="button">Prepare build prompt & open AI Studio</button></div><p id="aiStudioHandoffNotice" class="muted" role="status"></p></div>
     </section>
     <section class="panel">
       <div class="panel-head"><div><h2>MP4 Storyboard Renderer</h2><p>AI clips, still-image scenes aur local 2D character animation ko voiceover, music, SFX, subtitles aur camera movement ke saath final MP4 mein banayein.</p></div></div>
@@ -210,7 +212,7 @@
     <section class="panel" id="providerAdminPanel" hidden>
       <div class="panel-head"><div><h2>AI Provider Settings</h2><p>Text AI provider choose karein. API keys server ke secure environment mein hi rahengi.</p></div><button id="providerRefresh" class="secondary" type="button">Refresh</button></div>
       <form id="providerSettingsForm" class="provider-settings-form">
-        <div><label for="selectedProvider">Preferred text AI provider</label><select id="selectedProvider"><option value="auto">Automatic (configured provider)</option><option value="openai">OpenAI</option><option value="gemini">Google Gemini</option></select></div>
+        <div><label for="selectedProvider">Preferred text AI provider</label><select id="selectedProvider"><option value="auto">Automatic (configured provider)</option><option value="openai">OpenAI</option><option value="gemini">Google Gemini / AI Studio</option><option value="deepseek">DeepSeek</option></select></div>
         <button type="submit">Save Provider</button>
       </form>
       <p id="providerAdminNotice" class="muted" role="status" aria-live="polite"></p>

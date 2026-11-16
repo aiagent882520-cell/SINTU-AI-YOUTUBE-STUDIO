@@ -186,7 +186,7 @@ def _generate_openai_compatible(user_input: str, backend: dict) -> str:
 
 def provider_status(selected_override=None):
     selected = (selected_override or os.getenv("AI_PROVIDER", "local")).strip().lower()
-    if selected not in {"auto", "local", "openai", "gemini"}:
+    if selected not in {"auto", "local", "openai", "gemini", "deepseek"}:
         selected = "auto"
     local_status = _active_local_backend()
     compatible_status = _local_openai_compatible_status()
@@ -216,6 +216,10 @@ def provider_status(selected_override=None):
             "configured": bool(os.getenv("GEMINI_API_KEY")),
             "model": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
         },
+        "deepseek": {
+            "configured": bool(os.getenv("DEEPSEEK_API_KEY")),
+            "model": os.getenv("DEEPSEEK_MODEL", "deepseek-flash"),
+        },
     }
 
 def _selected_provider(selected_override=None):
@@ -224,8 +228,8 @@ def _selected_provider(selected_override=None):
     if selected in {"auto", "local"}:
         # Free-first: auto always selects the local model. Paid providers are never auto-enabled.
         return "local"
-    if selected not in ("openai", "gemini"):
-        raise ProviderRequestError("AI_PROVIDER must be auto, local, openai, or gemini.")
+    if selected not in ("openai", "gemini", "deepseek"):
+        raise ProviderRequestError("AI_PROVIDER must be auto, local, openai, gemini, or deepseek.")
     if not paid_upgrades_allowed():
         raise ProviderNotConfigured("Paid upgrade locked: SINTU must earn revenue first and the user must explicitly approve paid upgrades.")
     if not status[selected]["configured"]:
@@ -264,8 +268,10 @@ def generate_text(prompt: str, workflow: str, provider_override=None) -> dict:
                 input=user_input,
             )
             output = response.output_text
-        else:
+        elif provider == "gemini":
             output = _generate_gemini(user_input)
+        else:
+            output = _generate_deepseek(user_input)
     except (ProviderNotConfigured, ProviderRequestError):
         raise
     except Exception as exc:
@@ -273,6 +279,41 @@ def generate_text(prompt: str, workflow: str, provider_override=None) -> dict:
     if not output or not output.strip():
         raise ProviderRequestError("AI provider returned an empty response.")
     return {"provider": provider, "model": provider_status()[provider]["model"], "output": output.strip()}
+
+def _generate_deepseek(user_input: str) -> str:
+    """Generate text with DeepSeek's documented OpenAI-compatible chat-completions API."""
+    model = os.getenv("DEEPSEEK_MODEL", "deepseek-flash")
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_INSTRUCTIONS},
+            {"role": "user", "content": user_input},
+        ],
+        "stream": False,
+    }
+    request = urllib.request.Request(
+        "https://api.deepseek.com/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + os.environ["DEEPSEEK_API_KEY"],
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise ProviderRequestError(f"DeepSeek API returned HTTP {exc.code}. Check API key, balance, model, and quota.") from None
+    except (urllib.error.URLError, TimeoutError):
+        raise ProviderRequestError("DeepSeek API connection timed out or network is unavailable.") from None
+    choices = data.get("choices", [])
+    message = choices[0].get("message", {}) if choices and isinstance(choices[0], dict) else {}
+    output = message.get("content", "")
+    if not isinstance(output, str) or not output.strip():
+        raise ProviderRequestError("DeepSeek API returned an empty response.")
+    return output.strip()
+
 
 def _generate_gemini(user_input: str) -> str:
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")

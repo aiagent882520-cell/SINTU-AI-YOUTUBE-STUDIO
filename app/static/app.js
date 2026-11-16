@@ -1091,7 +1091,7 @@ async function loadProviderAdminPanel() {
     ]);
     $("selectedProvider").value = settings.selected_provider;
     $("providerCards").innerHTML = Object.entries(settings.providers).map(([key,value]) => `
-      <div class="integration-card"><strong>${key==="openai"?"OpenAI":"Google Gemini"}</strong><span>${value.configured?"API key configured":"API key missing"}</span><small>Model: ${adminEscape(value.model)}</small></div>`).join("");
+      <div class="integration-card"><strong>${key==="openai"?"OpenAI":key==="gemini"?"Google Gemini / AI Studio":"DeepSeek"}</strong><span>${value.configured?"API key configured":"API key missing"}</span><small>Model: ${adminEscape(value.model)}</small></div>`).join("");
     const rows = [
       ["Text AI", integrations.text_ai.status, integrations.text_ai.selected],
       ["MP4 rendering", integrations.video_rendering.status, "FFmpeg server dependency"],
@@ -1099,7 +1099,7 @@ async function loadProviderAdminPanel() {
       ["YouTube publishing", integrations.youtube_publishing.status, integrations.youtube_publishing.note],
       ["Social publishing", integrations.social_publishing.status, integrations.social_publishing.note],
       ["Channel analytics", integrations.analytics.status, integrations.analytics.note],
-      ["Claude / DeepSeek / GLM / Doubao / Kimi", integrations.other_text_providers.status, "Not integrated in current adapter"]
+      ["DeepSeek", integrations.other_text_providers.status, integrations.other_text_providers.deepseek?.configured ? "API key configured · paid usage locked until revenue + owner approval" : "API key required · paid usage locked until revenue + owner approval"], ["Google Flow", "external_handoff", "Format-aware prompt handoff; generation happens in your Google Flow account"], ["Google AI Studio Build", "external_handoff", "Build apps, websites, Android apps, software and agents from prompts"]
     ];
     $("integrationCards").innerHTML = rows.map(([name,status,detail]) => `
       <div class="integration-card"><strong>${adminEscape(name)}</strong><span>${adminEscape(integrationStatusLabel(status))}</span><small>${adminEscape(detail)}</small></div>`).join("");
@@ -1246,6 +1246,47 @@ $("adminBackups")?.addEventListener("click", async event => {
 });
 $("adminBackupRefresh")?.addEventListener("click", loadAdminBackups);
 $("adminRefresh")?.addEventListener("click", loadAdminPanel);
+function copyPromptAndOpen(prompt, url, notice) {
+  const w = window.open(url, "_blank", "noopener");
+  if (!w) { notice.textContent = "Popup blocked. Allow popups, then press the button again."; return; }
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(prompt).then(
+      () => { notice.textContent = "Prompt copied. Paste it into the opened tool and review its plan before generating."; },
+      () => { notice.textContent = "Tool opened. Clipboard permission unavailable; copy the prompt from the SINTU prompt box manually."; }
+    );
+  } else {
+    notice.textContent = "Tool opened. Clipboard unavailable; copy the prompt manually.";
+  }
+}
+$("openGoogleFlow")?.addEventListener("click", () => {
+  const format = $("renderFormat")?.selectedOptions?.[0]?.textContent || $("renderFormat")?.value || "video";
+  const title = $("renderTitle")?.value?.trim() || $("prompt")?.value?.trim() || "Untitled SINTU video";
+  const brief = $("prompt")?.value?.trim() || title;
+  const prompt = [
+    "SINTU AI YOUTUBE STUDIO — GOOGLE FLOW VIDEO BRIEF",
+    "Create this video using the selected format. Keep visual continuity, subject identity, camera language, lighting, motion and scene geography consistent across shots.",
+    "Video format: " + format,
+    "Project/title: " + title,
+    "Creative brief: " + brief,
+    "Create a scene-by-scene shot list with suitable aspect ratio, duration, visual style, camera movement, transitions, sound design and native audio where appropriate.",
+    "Support the selected category faithfully: film/cinematic, short, fantasy, sci-fi, action, romantic, horror, historical, stop-motion/clay/puppet, lyric/music video, VFX/green-screen, product demo/advertisement/corporate training, live action/event/sports/news, 360/VR/AR/virtual production/AI avatar, or hybrid 2D+3D.",
+    "Do not add random captions, logos, watermarks or misspelled on-screen text. Keep spoken narration/dialogue in Hindi unless the brief specifies another language. Return editable scenes/assets where available."
+  ].join("\n\n");
+  copyPromptAndOpen(prompt, "https://labs.google/fx/tools/flow", $("flowHandoffNotice"));
+});
+$("openAIStudioBuild")?.addEventListener("click", () => {
+  const brief = $("aiStudioBuildPrompt")?.value?.trim() || $("prompt")?.value?.trim();
+  if (!brief) { $("aiStudioHandoffNotice").textContent = "Pehle app/software/assistant/agent ka idea likhein."; return; }
+  const prompt = [
+    "Build a complete, usable application from this brief. First plan the architecture, then implement the working product.",
+    "Product brief: " + brief,
+    "Choose the appropriate target: full-stack web app (responsive frontend, secure server-side runtime, database/auth where needed) or native Android app (Kotlin + Jetpack Compose).",
+    "For AI assistants and agents, define system instructions, tools/function calling, permissions, state/memory boundaries, error handling and human approval for consequential actions.",
+    "Include accessible UI, validation, loading/error/empty states, secure server-side secrets (never expose API keys in browser code), tests, setup instructions and deployment guidance.",
+    "Prefer free/open-source components and free tiers; clearly label any paid service or quota. Do not claim integrations work until tested. Provide complete source code and a README."
+  ].join("\n\n");
+  copyPromptAndOpen(prompt, "https://aistudio.google.com/apps", $("aiStudioHandoffNotice"));
+});
 $("providerSettingsForm")?.addEventListener("submit", async event => {
   event.preventDefault();
   const button = event.submitter;
