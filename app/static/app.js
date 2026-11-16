@@ -1455,7 +1455,7 @@ async function populateRenderFormatOptions(){
  const previous=select.value||"youtube-shorts";
  const catalog=await request("/api/production-catalog");
  const formats=catalog.formats||[];
- const blocked=new Set(["360-video","vr-video","ar-video","virtual-production"]);
+ const externalOnly=new Set(["360-video","vr-video","ar-video","virtual-production"]);
  const groups=new Map();
  for(const format of formats){const group=format.group||format.category||"Other";if(!groups.has(group))groups.set(group,[]);groups.get(group).push(format);}
  select.innerHTML="";
@@ -1463,13 +1463,13 @@ async function populateRenderFormatOptions(){
   const optgroup=document.createElement("optgroup");optgroup.label=group;
   for(const format of items){
    const option=document.createElement("option");option.value=format.id;
-   option.textContent=format.name+(["2d-cartoon","story-animation"].includes(format.id)?" · local 2D animation":"");
-   option.disabled=blocked.has(format.id);
+   option.textContent=format.name+(["2d-cartoon","story-animation"].includes(format.id)?" · local 2D animation":(externalOnly.has(format.id)?" · Google Flow / external engine":""));
+   option.disabled=false;
    optgroup.appendChild(option);
   }
   select.appendChild(optgroup);
  }
- if(formats.some(format=>format.id===previous&&!blocked.has(previous)))select.value=previous;
+ if(formats.some(format=>format.id===previous))select.value=previous;
  else select.value="youtube-shorts";
 }
 populateRenderFormatOptions().catch(()=>{});
