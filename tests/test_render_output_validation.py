@@ -115,6 +115,7 @@ def test_sampled_motion_accepts_continuous_camera_movement():
 
 def test_final_mp4_verification_rejects_frozen_long_video(tmp_path, monkeypatch):
     metadata = _metadata(duration=12.0)
+    metadata["streams"][0]["nb_read_frames"] = "360"
     monkeypatch.setattr("app.video_renderer.shutil.which", lambda name: f"/usr/bin/{name}")
 
     def fake_run(command, **kwargs):
@@ -132,6 +133,7 @@ def test_final_mp4_verification_rejects_frozen_long_video(tmp_path, monkeypatch)
 
 def test_final_mp4_verification_returns_motion_metrics_for_long_video(tmp_path, monkeypatch):
     metadata = _metadata(duration=12.0)
+    metadata["streams"][0]["nb_read_frames"] = "360"
     monkeypatch.setattr("app.video_renderer.shutil.which", lambda name: f"/usr/bin/{name}")
 
     def fake_run(command, **kwargs):
