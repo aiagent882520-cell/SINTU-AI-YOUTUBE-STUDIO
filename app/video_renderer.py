@@ -256,6 +256,46 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
             "resolution": f"{width}x{height}", "video_codec": codec, "audio": has_audio}
 
 
+def _verify_visual_motion(path: Path, minimum_motion_ratio: float = 0.10) -> dict:
+    """Reject long static-image exports while allowing short establishing shots."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RendererUnavailable("Motion quality verification ke liye FFmpeg required hai.")
+    try:
+        pixels = subprocess.run(
+            [ffmpeg, "-v", "error", "-i", str(path), "-vf", "fps=1,scale=48:48:flags=area",
+             "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
+            capture_output=True, timeout=90, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise RenderFailed("Video motion quality verification fail ya timeout ho gaya.") from None
+    frame_bytes = 48 * 48 * 3
+    if pixels.returncode != 0 or len(pixels.stdout) < frame_bytes:
+        raise RenderFailed("Video motion check ke liye frames decode nahi ho sake.")
+    frames = [pixels.stdout[i:i + frame_bytes]
+              for i in range(0, len(pixels.stdout) - frame_bytes + 1, frame_bytes)]
+    if len(frames) < 4:
+        return {"motion_checked": False, "motion_ratio": 0.0, "sampled_frames": len(frames)}
+    changes = []
+    for previous, current in zip(frames, frames[1:]):
+        difference = sum(abs(a - b) for a, b in zip(previous, current)) / frame_bytes
+        changes.append(difference)
+    changed = sum(1 for difference in changes if difference >= 1.25)
+    ratio = changed / max(1, len(changes))
+    # A long export that is effectively one still image is not a finished video.
+    if len(frames) >= 5 and (changed == 0 or ratio < minimum_motion_ratio):
+        raise RenderFailed(
+            "Visual motion quality check failed: video mostly static hai. "
+            "Real moving footage, scene changes ya motivated camera movement required hai."
+        )
+    return {
+        "motion_checked": True,
+        "motion_ratio": round(ratio, 3),
+        "motion_transitions": changed,
+        "sampled_frames": len(frames),
+    }
+
+
 def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> dict:
     """Fail closed before upload if an MP4 is corrupt, truncated, or not a supported render."""
     path = Path(path)
@@ -308,10 +348,13 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
     minimum_frames = max(1, math.floor(duration * fps * 0.95))
     if frame_count < minimum_frames or abs(duration - video_duration) > max(0.5, 2 / fps):
         raise RenderFailed("Upload MP4 truncated hai: actual frames aur video duration match nahi karte.")
+    motion = _verify_visual_motion(path) if duration >= 5 else {
+        "motion_checked": False, "motion_ratio": 0.0, "sampled_frames": 0
+    }
     return {
         "verified": True, "size_bytes": size, "duration_seconds": duration,
         "video_duration_seconds": video_duration, "frame_count": frame_count,
-        "fps": fps, "resolution": f"{width}x{height}", "video_codec": codec,
+        "fps": fps, "resolution": f"{width}x{height}", "video_codec": codec, **motion,
     }
 
 
