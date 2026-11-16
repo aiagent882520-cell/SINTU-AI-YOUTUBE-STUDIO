@@ -223,7 +223,7 @@ def validate_sampled_motion(frames: bytes, *, frame_bytes: int = 32 * 32 * 3,
 def _verify_rendered_output(path: Path, expected_width: int, expected_height: int,
                             expected_duration: float, require_audio: bool | None = None,
                             expected_fps: int = 30,
-                            minimum_motion_ratio: float = 0.20) -> dict:
+                            minimum_motion_ratio: float = 0.40) -> dict:
     """Verify real video frames and video-stream duration, not just container/audio duration."""
     ffprobe = shutil.which("ffprobe")
     if not ffprobe:
@@ -384,7 +384,7 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
             raise RenderFailed("Upload MP4 motion verification fail ya timeout ho gaya.") from None
         if pixels.returncode != 0:
             raise RenderFailed("Upload MP4 ke motion frames decode nahi ho sake.")
-        motion_audit = validate_sampled_motion(pixels.stdout, minimum_ratio=0.20)
+        motion_audit = validate_sampled_motion(pixels.stdout, minimum_ratio=0.40)
     return {
         "verified": True, "size_bytes": size, "duration_seconds": duration,
         "video_duration_seconds": video_duration, "frame_count": frame_count,
@@ -850,7 +850,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                 raise RenderFailed(detail)
             verified = _verify_rendered_output(
                 temporary_output_path, width, height, total_duration,
-                require_audio=True, expected_fps=fps, minimum_motion_ratio=0.20,
+                require_audio=True, expected_fps=fps, minimum_motion_ratio=0.40,
             )
             os.replace(temporary_output_path, output_path)
             temporary_output_path = None
