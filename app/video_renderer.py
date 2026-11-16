@@ -756,7 +756,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
 
             command += ["-filter_complex", ";".join(filters), "-map", video_map, "-map", "[aout]",
                         "-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
-                        "-c:a", "aac", "-b:a", "192k", "-t", f"{total_duration:.3f}",
+                        "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", "-t", f"{total_duration:.3f}",
                         "-movflags", "+faststart", str(temporary_output_path)]
             completed = subprocess.run(command, capture_output=True, text=True, timeout=900, check=False)
             if completed.returncode != 0 or not temporary_output_path.is_file():
