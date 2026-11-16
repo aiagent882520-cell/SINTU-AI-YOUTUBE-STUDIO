@@ -1247,8 +1247,9 @@ $("adminBackups")?.addEventListener("click", async event => {
 $("adminBackupRefresh")?.addEventListener("click", loadAdminBackups);
 $("adminRefresh")?.addEventListener("click", loadAdminPanel);
 function copyPromptAndOpen(prompt, url, notice) {
-  const w = window.open(url, "_blank", "noopener");
+  const w = window.open(url, "_blank");
   if (!w) { notice.textContent = "Popup blocked. Allow popups, then press the button again."; return; }
+  try { w.opener = null; } catch (_) {}
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(prompt).then(
       () => { notice.textContent = "Prompt copied. Paste it into the opened tool and review its plan before generating."; },

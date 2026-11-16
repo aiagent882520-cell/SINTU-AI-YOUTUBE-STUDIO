@@ -627,7 +627,7 @@ def update_admin_provider_settings(payload: ProviderSettingsInput):
     status = provider_status(payload.selected_provider)
     if payload.selected_provider in {"openai", "gemini", "deepseek"} and not paid_upgrades_allowed():
         raise HTTPException(status_code=403, detail="Paid upgrade locked until SINTU earns revenue and the user explicitly approves it.")
-    if payload.selected_provider in {"openai", "gemini"} and not status[payload.selected_provider]["configured"]:
+    if payload.selected_provider in {"openai", "gemini", "deepseek"} and not status[payload.selected_provider]["configured"]:
         raise HTTPException(status_code=400, detail=f"{payload.selected_provider} API key server par configured nahi hai.")
     _set_app_setting("selected_provider", payload.selected_provider)
     return admin_provider_settings()
