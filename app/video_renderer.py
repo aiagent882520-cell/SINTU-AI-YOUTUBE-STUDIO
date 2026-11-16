@@ -176,7 +176,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         result = subprocess.run(
             [ffprobe, "-v", "error", "-count_frames",
              "-show_entries",
-             "format=format_name,duration:stream=codec_type,codec_name,width,height,duration,nb_read_frames,avg_frame_rate",
+             "format=format_name,duration:stream=codec_type,codec_name,width,height,pix_fmt,duration,nb_read_frames,avg_frame_rate,sample_rate,channels",
              "-of", "json", str(path)],
             capture_output=True, text=True, timeout=30, check=False,
         )
@@ -195,6 +195,11 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         frame_count = int(video.get("nb_read_frames", 0))
         width, height = int(video.get("width", 0)), int(video.get("height", 0))
         codec = str(video.get("codec_name", "")).lower()
+        pixel_format = str(video.get("pix_fmt", "")).lower()
+        audio_stream = next((item for item in streams if item.get("codec_type") == "audio"), None)
+        audio_codec = str(audio_stream.get("codec_name", "")).lower() if audio_stream else ""
+        audio_sample_rate = int(audio_stream.get("sample_rate", 0)) if audio_stream else 0
+        audio_channels = int(audio_stream.get("channels", 0)) if audio_stream else 0
         names = str(fmt.get("format_name", "")).lower().split(",")
         has_audio = any(item.get("codec_type") == "audio" for item in metadata.get("streams", []))
         frame_rate_num, frame_rate_den = (int(part) for part in str(video.get("avg_frame_rate", "0/1")).split("/", 1))
@@ -205,6 +210,10 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         raise RenderFailed("Final output MP4 container nahi hai.")
     if codec != "h264" or (width, height) != (expected_width, expected_height):
         raise RenderFailed("Final video codec ya resolution expected profile se match nahi karta.")
+    if pixel_format != "yuv420p":
+        raise RenderFailed("Final MP4 Android-compatible yuv420p pixel format mein encode nahi hua.")
+    if has_audio and (audio_codec != "aac" or audio_sample_rate != 48000 or audio_channels != 2):
+        raise RenderFailed("Final MP4 audio Android-compatible AAC, 48 kHz stereo profile mein nahi hai.")
     if not math.isfinite(duration) or duration <= 0 or abs(duration - expected_duration) > max(1.0, expected_duration * 0.03):
         raise RenderFailed("Final MP4 container duration expected timeline se match nahi karti.")
     minimum_frames = max(1, math.floor(expected_duration * expected_fps * 0.95))
@@ -514,7 +523,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                     f"apad,atrim=duration={duration}[aout]"
                 )
                 command += ["-filter_complex", ";".join(audio_filters),
-                            "-map", "0:v:0", "-map", "[aout]", "-c:a", "aac", "-b:a", "192k"]
+                            "-map", "0:v:0", "-map", "[aout]", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
             else:
                 command += ["-map", "0:v:0", "-an"]
             if video_filter:
@@ -853,7 +862,7 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                 segment_duration=effective_end-trim_start
                 if segment_duration<0.25: raise ValueError("Trimmed video kam se kam 0.25 seconds ka hona chahiye.")
                 segment=work/f"trimmed-{index:03d}.mp4"
-                command=[ffmpeg,"-y","-hide_banner","-loglevel","error","-ss",f"{trim_start:.3f}","-i",str(path),"-t",f"{segment_duration:.3f}","-map","0:v:0","-map","0:a?","-c:v","libx264","-preset","veryfast","-pix_fmt","yuv420p","-c:a","aac","-b:a","128k","-movflags","+faststart",str(segment)]
+                command=[ffmpeg,"-y","-hide_banner","-loglevel","error","-ss",f"{trim_start:.3f}","-i",str(path),"-t",f"{segment_duration:.3f}","-map","0:v:0","-map","0:a?","-c:v","libx264","-preset","veryfast","-pix_fmt","yuv420p","-c:a","aac","-b:a","128k","-ar","48000","-ac","2","-movflags","+faststart",str(segment)]
                 completed=subprocess.run(command,capture_output=True,text=True,timeout=180,check=False)
                 if completed.returncode!=0 or not segment.is_file():
                     raise RenderFailed((completed.stderr or "Video trim failed")[-1200:])
@@ -874,7 +883,7 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                      "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
                      "-t", str(image_duration), "-shortest",
                      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
-                     "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(segment)],
+                     "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2", "-movflags", "+faststart", str(segment)],
                     capture_output=True, text=True, timeout=90, check=False
                 )
                 if completed.returncode != 0 or not segment.is_file():
