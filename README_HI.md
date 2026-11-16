@@ -69,7 +69,7 @@ These are registered format workflows and export profiles, not a claim that ever
 - `AI_PROVIDER=local` (default): local Ollama model; no API key, subscription, or paid request.
 - Paid APIs are locked unless BOTH `SINTU_REVENUE_CONFIRMED=true` and `ALLOW_PAID_UPGRADES=true` are set by the owner after revenue and approval. Paid media generation also needs its separate enable flag.
 - `AI_PROVIDER=auto`: free-first and always resolves to local Ollama; it never silently falls back to a paid provider.
-- `AI_PROVIDER=openai` or `gemini`: optional paid integrations; enable only after revenue and explicit approval.
+- `AI_PROVIDER=openai`, `gemini`, or `deepseek`: optional paid text integrations; enable only after revenue and explicit approval. DeepSeek uses its OpenAI-compatible Chat Completions endpoint.
 - Default local model: `qwen2.5:3b`; configure `OLLAMA_MODEL` and `OLLAMA_BASE_URL` as needed.
 - Free Hindi voice: local Piper executable plus a downloaded voice model at `PIPER_MODEL_PATH` (preferred when installed), or eSpeak NG Hindi (`espeak`) with no model download. On Termux, `START_SINTU_TERMUX.sh` installs eSpeak automatically. Configure `ESPEAK_EXECUTABLE=espeak` and optionally `ESPEAK_SPEED=135`; the voice capability endpoint reports the selected local engine.
 - Free images: optional local ComfyUI with an API-format workflow JSON at `COMFYUI_IMAGE_WORKFLOW_PATH`. A basic SD checkpoint workflow template is provided in config/comfyui_image_workflow.example.json; copy it, set your installed open checkpoint filename, and point the environment variable to the copied file. Replace workflow input values with `__SINTU_PROMPT__`, `__SINTU_NEGATIVE__`, `__SINTU_WIDTH__`, `__SINTU_HEIGHT__`, and `__SINTU_SEED__` placeholders.
@@ -82,7 +82,7 @@ If Ollama is not installed/running, generation displays setup guidance and does 
 
 - Responsive mobile-first Hindi creator dashboard / installable PWA foundation.
 - Dedicated AI workflows: Shorts, long video, thumbnail concepts, script/storytelling, research/fact-check plan, course/lesson/quiz, social content, general content.
-- Free-first local Ollama text generation; OpenAI/Gemini remain optional and never auto-selected.
+- Free-first local Ollama text generation; OpenAI, Gemini (Google AI Studio API), and DeepSeek text adapters are implemented as optional paid integrations and are never auto-selected.
 - Task history, task detail retrieval, status counters and TXT / Markdown / JSON exports.
 - MP4 assembly accepts saved scene-image IDs, optional generated MP3 narration, a mandatory SINTU AI YOUTUBE STUDIO watermark logo, and a user-uploaded licensed music track (MP3/WAV/M4A/AAC/OGG, 15 MB limit). Music uploads require the media access token; FFmpeg mixes narration and music with configurable music volume and automatic music fade-in/fade-out. Scene transitions support fade or cut. Music rights remain the user's responsibility. Optional Ken Burns slow-zoom-in/out motion is supported; this is not 2D/3D animation.
 - Optional Gemini Omni Flash AI video generation (text-to-video and image-to-video) via the Gemini Interactions API; this is a paid connector locked until revenue and explicit approval. Generated clip IDs are automatically queued in the MP4 renderer; multiple generated clips can be joined in order with optional narration and background music. Supports 3–10 second target-duration MP4 clips (duration is prompt-guided; verify actual output length), text-to-video and image-to-video task modes, 9:16 / 16:9, and 360p / 720p / 1080p / 4K output options; 1080p/4K may be upscaled. Requires `ENABLE_PAID_MEDIA_GENERATION=true`, `GEMINI_API_KEY`, and `MEDIA_GENERATION_TOKEN`; paid usage applies. 2D/3D animation choices are visual-style prompts, not a true 3D scene/model pipeline. Generated clips can be assembled into a final portrait MP4 in order. The AI-clip assembly path probes clip durations/audio, preserves source audio at a reduced ambient level, and can mix optional narration and background music. It rejects subtitle/caption burn-in and supports cut or fade-to-black transitions. Fade is not a cross-dissolve; Mixed timeline mode now supports generated still images and AI video clips in one ordered sequence. Still images use the configured scene duration; AI clips can be trimmed by start/end seconds; the original source file is unchanged. Each video clip has independent original-audio gain (0–200%) before mixing voiceover and background music. The interface automatically queues newly generated images/videos into the mixed timeline. The sequence supports optional voiceover, background music, mandatory brand watermark and no subtitle/text overlays, and cut/fade-to-black transitions. The source audio is retained but may need level adjustment per provider clip.
@@ -178,11 +178,11 @@ pytest -q
 
 ## Admin: AI Provider Settings & Integrations
 
-- Admin dashboard me **AI Provider Settings** se `auto`, `openai`, ya `gemini` preference select karke SQLite mein persist kar sakte hain. New text generation requests saved selection follow karte hain.
-- Provider selection tabhi save hota hai jab selected OpenAI/Gemini API key server environment mein configured ho. `auto` configured provider ko choose karta hai.
+- Admin dashboard me **AI Provider Settings** se `auto`, `local`, `openai`, `gemini`, ya `deepseek` preference select karke SQLite mein persist kar sakte hain. New text generation requests saved selection follow karte hain.
+- Paid provider selection tabhi save hota hai jab selected OpenAI/Gemini/DeepSeek API key server environment mein configured ho aur owner ne revenue confirmation + paid-upgrade approval enable kiya ho. `auto` hamesha free local provider use karta hai.
 - Dashboard sirf key configured hai ya nahi aur model ka naam dikhata hai; secret key kabhi read, accept, display, ya browser mein store nahi hoti.
 - Paid media, FFmpeg, YouTube/social publishing aur analytics readiness clearly show hoti hai. YouTube/social/analytics OAuth abhi connected nahi hai.
-- Claude, DeepSeek, GLM, Doubao aur Kimi current text adapter mein implemented nahi hain; unko connected/available nahi dikhaya jata.
+- Google Flow aur Google AI Studio Build browser handoffs hain, direct SINTU API automation nahi. Google Flow se downloaded MP4 clips SINTU me import kiye ja sakte hain. DeepSeek text API adapter available hai; Claude, GLM, Doubao aur Kimi abhi implemented nahi hain.
 
 
 ## Content Calendar & Scheduling
