@@ -6,10 +6,10 @@ import pytest
 from app.video_renderer import RenderFailed, _verify_rendered_output
 
 
-def _metadata(width=720, height=1280, duration=8.0, audio=True, codec="h264"):
-    streams = [{"codec_type": "video", "codec_name": codec, "width": width, "height": height, "duration": str(duration), "nb_read_frames": "240", "avg_frame_rate": "30/1"}]
+def _metadata(width=720, height=1280, duration=8.0, audio=True, codec="h264", pix_fmt="yuv420p", audio_codec="aac", sample_rate="48000", channels=2):
+    streams = [{"codec_type": "video", "codec_name": codec, "width": width, "height": height, "pix_fmt": pix_fmt, "duration": str(duration), "nb_read_frames": "240", "avg_frame_rate": "30/1"}]
     if audio:
-        streams.append({"codec_type": "audio", "codec_name": "aac"})
+        streams.append({"codec_type": "audio", "codec_name": audio_codec, "sample_rate": sample_rate, "channels": channels})
     return {"streams": streams, "format": {"format_name": "mov,mp4,m4a", "duration": str(duration)}}
 
 
@@ -38,6 +38,10 @@ def test_final_mp4_verification_accepts_expected_video_and_audio(tmp_path, monke
     _metadata(width=1080, height=1920),
     _metadata(duration=20),
     _metadata(codec="vp9"),
+    _metadata(pix_fmt="yuv444p"),
+    _metadata(audio_codec="opus"),
+    _metadata(sample_rate="44100"),
+    _metadata(channels=6),
     {"streams": [], "format": {"format_name": "mov,mp4", "duration": "8"}},
     {"streams": [{"codec_type": "video", "codec_name": "h264", "width": 720, "height": 1280}],
      "format": {"format_name": "matroska,webm", "duration": "8"}},
