@@ -2,7 +2,7 @@ import shutil
 import subprocess
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from app import video_renderer
 
@@ -139,9 +139,15 @@ def test_storyboard_renderer_preserves_full_multiscene_timeline_and_voiceover(tm
     image_paths = []
     for index, color in enumerate(((30, 80, 120), (90, 40, 20), (20, 110, 70)), start=1):
         image_path = tmp_path / f"scene-{index}.png"
-        base = Image.new("RGB", (160, 284), color)
-        texture = Image.effect_noise((160, 284), 100).convert("RGB")
-        Image.blend(base, texture, 0.35).save(image_path)
+        canvas = Image.new("RGB", (160, 284), color)
+        draw = ImageDraw.Draw(canvas)
+        contrast = tuple(255 - channel for channel in color)
+        for offset in range(0, 180, 20):
+            draw.line((offset, 0, 160 - offset // 2, 284), fill=contrast, width=5)
+        draw.ellipse((18 + index * 9, 70, 100 + index * 7, 165), outline=(255, 240, 80), width=9)
+        draw.rectangle((8, 8, 151, 275), outline=(245, 245, 245), width=5)
+        draw.text((16, 18), f"SCENE {index}", fill=(255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0))
+        canvas.save(image_path)
         image_paths.append(image_path)
 
     voice_path = tmp_path / "voice.wav"
