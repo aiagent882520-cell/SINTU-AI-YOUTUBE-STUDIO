@@ -220,7 +220,19 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             role = pair["name"]
             checker = role + " Checker"
             _set_run(run_id, "running", current_role=role)
-            worker_prompt = (
+            is_documentary = any(token in run["format_id"] for token in ("documentary", "biography", "crime-", "mystery-", "science-", "nature-", "travel-"))
+            is_film = any(token in run["format_id"] for token in ("film", "cinematic"))
+            cinematic_standard = (
+                "CINEMATIC / DOCUMENTARY PRODUCTION STANDARD:\\n"
+                "- This must read like a professionally directed film/documentary, never a slideshow with generic voiceover.\\n"
+                "- Specify shot duration, subject action, shot size, lens intent, camera movement, motivated lighting, composition, location continuity, sound/ambience and transition.\\n"
+                "- Build varied coverage and a coherent visual progression; prohibit repeated shots, filler and static background reuse.\\n"
+                "- Documentary claims require a source/evidence status; never invent interviews, archive footage, citations, statistics or facts.\\n"
+                "- Film scenes require blocking, character/prop/wardrobe continuity, screen direction, emotional beats and motivated edits.\\n"
+                "- Distinguish a written prompt from an actually generated video asset. Do not claim a clip was rendered.\\n"
+                if is_documentary or is_film else ""
+            )
+            worker_prompt = cinematic_standard + (
                 "You are a specialist builder in SINTU AI YOUTUBE STUDIO.\n"
                 "Produce only your assigned deliverable, with concrete production-ready detail.\n"
                 "Video policy: Hindi Devanagari >=95%; English <=5%; no subtitles, captions, transcripts, "
@@ -263,7 +275,10 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 checker_prompt = (
                     "Act as an independent quality checker. Do not rewrite the work. "
                     "Evaluate accuracy, completeness, format fit, Hindi-first policy, clean text-free video frames, "
-                    "copyright safety and actionable production detail. Return ONLY JSON with keys: "
+                    "copyright safety and actionable production detail. For film/documentary formats also verify "
+                    "shot variety, visible action or motivated camera movement, scene continuity, pacing, camera/lighting/sound "
+                    "specificity, no repeated still-image slideshow, and documentary evidence status. Fail generic or filler output. "
+                    "Return ONLY JSON with keys: "
                     "decision (PASS or FAIL), evidence (array), issues (array), revision_instructions (array).\n"
                     f"Topic: {run['topic']}\nSpecialist: {role}\n"
                     f"Revision attempt: {attempt + 1} of {MAX_REVISION_ATTEMPTS + 1}\n"
