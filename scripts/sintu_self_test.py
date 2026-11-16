@@ -16,7 +16,7 @@ DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT))).expanduser().resolve()
 DEFAULT_TOPIC = "भारत के प्राचीन किले और उनकी विरासत"
 
 
-def _run_step(name: str, command: list[str], timeout: int, env: dict[str, str]) -> dict:
+def _run_step(name: str, command: list[str], timeout: int, env: dict[str, str], *, parse_json: bool = False) -> dict:
     started = time.monotonic()
     try:
         result = subprocess.run(
@@ -24,12 +24,20 @@ def _run_step(name: str, command: list[str], timeout: int, env: dict[str, str]) 
             text=True, timeout=timeout, check=False,
         )
         code = int(result.returncode)
-        return {
+        step = {
             "name": name,
             "status": "passed" if code == 0 else "failed",
             "return_code": code,
             "duration_seconds": round(time.monotonic() - started, 2),
         }
+        if parse_json and result.stdout.strip():
+            try:
+                details = json.loads(result.stdout)
+                if isinstance(details, dict):
+                    step["details"] = details
+            except json.JSONDecodeError:
+                step["details_parse_error"] = "Command did not return valid JSON."
+        return step
     except subprocess.TimeoutExpired:
         return {
             "name": name, "status": "failed", "return_code": None,
@@ -58,7 +66,7 @@ def run_self_test(*, skip_tests: bool = False, skip_video: bool = False,
     steps.append(_run_step(
         "operational_readiness",
         [python, "scripts/operational_readiness.py", "--json"],
-        60, env,
+        60, env, parse_json=True,
     ))
     if skip_tests:
         steps.append({"name": "pytest", "status": "skipped", "reason": "--skip-tests"})
@@ -72,7 +80,7 @@ def run_self_test(*, skip_tests: bool = False, skip_video: bool = False,
         steps.append(_run_step(
             "offline_video_e2e",
             [python, "scripts/live_e2e.py", "--offline-video", "--topic", topic],
-            600, env,
+            600, env, parse_json=True,
         ))
     media_report = target_dir / "self_test_media_audit.json"
     steps.append(_run_step(
@@ -83,9 +91,24 @@ def run_self_test(*, skip_tests: bool = False, skip_video: bool = False,
     ))
 
     failed = [step["name"] for step in steps if step["status"] == "failed"]
+    media_audit = None
+    if media_report.is_file():
+        try:
+            media_audit = json.loads(media_report.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            media_audit = {"status": "UNREADABLE", "path": str(media_report)}
+    readiness_details = next(
+        (step.get("details") for step in steps if step["name"] == "operational_readiness"), None
+    )
+    offline_video_details = next(
+        (step.get("details") for step in steps if step["name"] == "offline_video_e2e"), None
+    )
     report = {
         "project": "SINTU AI YOUTUBE STUDIO",
         "status": "FAIL" if failed else "PASS",
+        "readiness_details": readiness_details,
+        "offline_video_details": offline_video_details,
+        "media_audit": media_audit,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "steps": steps,
         "failed_steps": failed,
