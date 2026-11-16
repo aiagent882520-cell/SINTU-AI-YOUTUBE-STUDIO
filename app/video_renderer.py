@@ -82,7 +82,7 @@ def _storyboard_motion_filter(motion: str, width: int, height: int,
         return None
     scene_frames = max(1, int(round(seconds_per_scene * fps)))
     phase = f"mod(on,{scene_frames})/{max(1, scene_frames - 1)}"
-    zoom_strength = min(0.24, max(0.12, seconds_per_scene * 0.02))
+    zoom_strength = min(0.24, max(0.16, seconds_per_scene * 0.02))
     if motion == "slow-zoom-in":
         zoom = f"1+{zoom_strength:.3f}*({phase})"
     elif motion == "slow-zoom-out":
@@ -882,7 +882,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         "sound_effect_cue_count": sfx_result["cue_count"] if sfx_result else 0,
         "transition": transition,
         "motion": "source AI clip motion",
-        "motion_audit": verified.get("motion_audit"),
+        "motion_audit": (verified or {}).get("motion_audit"),
         "scene_images": 0,
         "subtitles_burned_in": bool(subtitle_file),
         "brand_watermark": "SINTU AI YOUTUBE STUDIO",
