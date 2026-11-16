@@ -323,3 +323,17 @@ def test_long_storyboard_rejects_static_no_motion_mode(monkeypatch):
             "No slideshow", ["Opening", "Middle", "Closing"],
             seconds_per_scene=3, image_paths=[], motion="none",
         )
+
+
+def test_publish_verifier_rejects_long_frozen_mp4(tmp_path):
+    ffmpeg, _ = _ffmpeg_tools()
+    source = tmp_path / "frozen-long.mp4"
+    result = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+         "-f", "lavfi", "-i", "color=c=green:s=720x1280:r=24:d=12",
+         "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(source)],
+        capture_output=True, check=False, timeout=60,
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
+    with pytest.raises(video_renderer.RenderFailed, match="slideshow-like"):
+        video_renderer.verify_publishable_mp4(source)
