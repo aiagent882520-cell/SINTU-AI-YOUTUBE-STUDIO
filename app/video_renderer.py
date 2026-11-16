@@ -75,6 +75,28 @@ def _validate_scene_image(path: Path) -> None:
         raise ValueError("Selected scene image valid image file nahi hai.") from None
 
 
+def _storyboard_motion_filter(motion: str, width: int, height: int,
+                              fps: int, seconds_per_scene: int) -> str | None:
+    """Build repeatable per-scene camera motion; never let a zoom hit a global cap and freeze."""
+    if motion == "none":
+        return None
+    scene_frames = max(1, int(round(seconds_per_scene * fps)))
+    phase = f"mod(on,{scene_frames})/{max(1, scene_frames - 1)}"
+    if motion == "slow-zoom-in":
+        zoom = f"1+0.12*({phase})"
+    elif motion == "slow-zoom-out":
+        zoom = f"1.12-0.12*({phase})"
+    else:
+        raise ValueError("Unsupported storyboard motion.")
+    # Drift within the available crop margin, so pan remains in-bounds even at zoom=1.
+    x = f"(iw-iw/zoom)/2+sin(2*PI*({phase}))*((iw-iw/zoom)*0.22)"
+    y = f"(ih-ih/zoom)/2+cos(2*PI*({phase}))*((ih-ih/zoom)*0.12)"
+    return (
+        f"zoompan=z='{zoom}':x='{x}':y='{y}':d=1:"
+        f"s={width}x{height}:fps={fps}"
+    )
+
+
 def _render_settings(resolution: str, fps: int, quality: str):
     if resolution not in OUTPUT_PROFILES:
         raise ValueError("Unsupported render resolution profile.")
@@ -470,10 +492,11 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                     "fade=t=in:st=0:d=0.35",
                     f"fade=t=out:st={max(0, duration - 0.35)}:d=0.35",
                 ])
-            if motion == "slow-zoom-in":
-                filters.insert(0, f"zoompan=z='min(zoom+0.0008,1.12)':d=1:s={width}x{height}:fps={fps}")
-            elif motion == "slow-zoom-out":
-                filters.insert(0, f"zoompan=z='max(zoom-0.0008,1.0)':d=1:s={width}x{height}:fps={fps}")
+            motion_filter = _storyboard_motion_filter(
+                motion, width, height, fps, seconds_per_scene
+            )
+            if motion_filter:
+                filters.insert(0, motion_filter)
             # The concat demuxer emits one timestamped packet per still image. Without an fps filter,
             # FFmpeg writes only one frame per scene while audio/container duration spans the full timeline.
             # Expand the still-image timestamps into a continuous CFR stream before motion/fade filters.
