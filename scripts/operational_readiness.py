@@ -60,7 +60,7 @@ def build_report(root: Path = ROOT, env: dict[str, str] | None = None,
     checks.append(check("ffprobe", bool(ffprobe), ffprobe or "Install FFprobe"))
     checks.append(check("private_environment", (root / ".env").is_file(),
                         ".env exists; values are never displayed"))
-    checks.append(check("admin_auth", env.get("SINTU_AUTH_REQUIRED", "true").lower() == "true"
+    checks.append(check("admin_auth", file_env.get("SINTU_AUTH_REQUIRED", "true").lower() == "true"
                         and len(file_env.get("SINTU_ADMIN_PASSWORD", "")) >= 16
                         and len(file_env.get("SINTU_SESSION_SECRET", "")) >= 32,
                         "Authentication and strong credentials configured"))
