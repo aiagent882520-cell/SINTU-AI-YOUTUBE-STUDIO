@@ -11,7 +11,7 @@ import os
 import secrets
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -159,6 +159,14 @@ def claim_next_job(authorization: str | None = Header(default=None)):
         conn.execute(
             "INSERT INTO bridge_meta(key,value) VALUES('worker_last_seen',?) "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (_now(),)
+        )
+        # Recover jobs abandoned by a crashed worker. The worker command timeout
+        # is 30 minutes; a 35-minute lease avoids reclaiming a healthy long run.
+        stale_before = (datetime.now(timezone.utc) - timedelta(minutes=35)).isoformat()
+        conn.execute(
+            "UPDATE bridge_jobs SET status='queued',started_at=NULL "
+            "WHERE status='running' AND started_at < ?",
+            (stale_before,),
         )
         row = conn.execute(
             "SELECT id,action,payload_json FROM bridge_jobs WHERE status='queued' ORDER BY created_at,id LIMIT 1"
