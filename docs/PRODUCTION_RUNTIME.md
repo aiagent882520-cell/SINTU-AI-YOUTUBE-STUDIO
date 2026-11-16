@@ -16,3 +16,7 @@ The runtime uses one model request per specialist, one separate request per chec
 ## Google Flow import recovery
 
 Termux watches the configured Android Downloads folders for stable MP4 files. Imported clips are validated with FFprobe, copied (never moved) into SINTU storage, and queued for automatic compilation. The pending queue is persisted in `flow_auto_pending.json`; it is restored when the app restarts. Queue entries are acknowledged only after a successful render, so a failed FFmpeg compilation remains eligible for retry. Source downloads are never deleted. Set `SINTU_FLOW_AUTO_RENDER=false` to disable compilation while retaining imported queue entries.
+
+## Restart recovery and approved checkpoints
+
+On application startup, runs left in `running` or `reviewing` are moved to `paused` with a restart-recovery note. Resuming a paused run reuses specialist outputs only when their independent checker passed, and reuses final reviewer reports only when their persisted verdict passed. Work that had no passing checkpoint is executed again. This avoids silently treating interrupted or unchecked work as approved. Publishing still requires the authenticated owner's separate approval.

@@ -158,6 +158,54 @@ def _save_step(run_id: str, sequence: int, role: str, step_type: str,
              attempts, _now(), _now()))
 
 
+def _approved_builder_output(steps: list[dict], role: str) -> str | None:
+    """Return the latest builder output whose independent checker passed."""
+    pending_output = None
+    approved_output = None
+    for step in sorted(steps, key=lambda item: item.get("sequence", 0)):
+        if step.get("step_type") == "builder" and step.get("role") == role:
+            pending_output = step.get("output_text") or ""
+        elif step.get("step_type") == "checker" and step.get("role") == role + " Checker":
+            approved_output = pending_output if step.get("status") == "pass" and pending_output else None
+            pending_output = None
+    return approved_output
+
+
+def _approved_reviewer_report(steps: list[dict], reviewer: str) -> dict | None:
+    """Rebuild a saved reviewer result only when its latest persisted verdict passed."""
+    matches = [
+        step for step in steps
+        if step.get("step_type") == "reviewer" and step.get("role") == reviewer
+    ]
+    if not matches or matches[-1].get("status") != "pass":
+        return None
+    raw_output = matches[-1].get("output_text") or ""
+    verdict = _review_payload(raw_output)
+    if verdict["decision"] != "PASS":
+        return None
+    return {
+        "decision": verdict["decision"],
+        "evidence": verdict["evidence"],
+        "issues": verdict["issues"],
+        "revision_instructions": verdict["revision_instructions"],
+        "raw_output": raw_output,
+    }
+
+
+def recover_interrupted_runs() -> int:
+    """Move in-flight runs to resumable paused state after an application restart."""
+    init_runtime_db()
+    now = _now()
+    with _connect() as conn:
+        cursor = conn.execute(
+            """UPDATE production_runs
+               SET status='paused', error=?, updated_at=?
+               WHERE status IN ('running', 'reviewing')""",
+            ("Application restarted during production. Resume from the last independently approved checkpoint.", now),
+        )
+    return int(cursor.rowcount)
+
+
 def _checker_payload(text: str) -> dict:
     """Require machine-readable verdicts and evidence; fail closed on ambiguity."""
     candidate = (text or "").strip()
@@ -213,11 +261,23 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
         pairs = [item for item in team if item.get("role_type") == "specialist"]
         owner_pair = next((item for item in pairs if item["name"] == "Owner Agent"), None)
         pairs = [item for item in pairs if item["name"] != "Owner Agent"]
+        existing_steps = run.get("steps", [])
         deliverables: dict[str, str] = {}
         management_reports: dict[str, str] = {}
-        sequence = 0
+        sequence = max((step.get("sequence", 0) for step in existing_steps), default=0)
+        approved_roles = {}
+        for pair in pairs:
+            saved_output = _approved_builder_output(existing_steps, pair["name"])
+            if saved_output is not None:
+                approved_roles[pair["name"]] = saved_output
+                if pair["name"] in SENIOR_MANAGER_NAMES:
+                    management_reports[pair["name"]] = saved_output
+                else:
+                    deliverables[pair["name"]] = saved_output
         for pair in pairs:
             role = pair["name"]
+            if role in approved_roles:
+                continue
             checker = role + " Checker"
             _set_run(run_id, "running", current_role=role)
             worker_prompt = (
@@ -288,6 +348,10 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
 
         review_results = {}
         for reviewer in REVIEWERS:
+            saved_report = _approved_reviewer_report(existing_steps, reviewer)
+            if saved_report is not None:
+                review_results[reviewer] = saved_report
+                continue
             _set_run(run_id, "reviewing", current_role=reviewer)
             review_prompt = (
                 "You are an independent final video production reviewer. Review the assembled production package "
