@@ -139,7 +139,9 @@ def test_storyboard_renderer_preserves_full_multiscene_timeline_and_voiceover(tm
     image_paths = []
     for index, color in enumerate(((30, 80, 120), (90, 40, 20), (20, 110, 70)), start=1):
         image_path = tmp_path / f"scene-{index}.png"
-        Image.new("RGB", (160, 284), color).save(image_path)
+        base = Image.new("RGB", (160, 284), color)
+        texture = Image.effect_noise((160, 284), 100).convert("RGB")
+        Image.blend(base, texture, 0.35).save(image_path)
         image_paths.append(image_path)
 
     voice_path = tmp_path / "voice.wav"
