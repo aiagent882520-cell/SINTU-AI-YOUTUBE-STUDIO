@@ -5,7 +5,7 @@ from app.agent_orchestrator import catalog_team
 import app.production_runtime as runtime
 
 
-def test_catalog_contains_all_61_roles_with_distinct_checkers():
+def test_catalog_contains_61_specialists_and_five_senior_managers_with_distinct_checkers():
     team = catalog_team()
     workers = [item for item in team if item["role_type"] == "specialist"]
     checkers = [item for item in team if item["role_type"] == "independent_checker"]
