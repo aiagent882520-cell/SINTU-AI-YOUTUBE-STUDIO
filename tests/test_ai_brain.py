@@ -172,3 +172,46 @@ def test_deepseek_chat_completion_uses_official_compatible_endpoint(monkeypatch)
     assert captured["url"] == "https://api.deepseek.com/chat/completions"
     assert captured["auth"] == "Bearer test-key"
     assert '"model": "deepseek-flash"' in captured["body"]
+
+
+def test_documentary_brain_uses_evidence_led_cinematic_workflow(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "local")
+    monkeypatch.setattr(ai_brain, "_active_local_backend", lambda: {
+        "backend": "ollama", "service_running": True, "model_available": True,
+        "model": "qwen2.5:3b", "base_url": "http://127.0.0.1:11434"
+    })
+    captured = {}
+
+    def fake_generate(prompt):
+        captured["prompt"] = prompt
+        return "डॉक्यूमेंट्री निर्माण पैकेज"
+
+    monkeypatch.setattr(ai_brain, "_generate_ollama", fake_generate)
+    result = ai_brain.generate_text("भारत के प्राचीन किलों पर डॉक्यूमेंट्री", "documentary")
+    assert result["output"] == "डॉक्यूमेंट्री निर्माण पैकेज"
+    assert "experienced documentary showrunner" in captured["prompt"]
+    assert "evidence ledger" in captured["prompt"]
+    assert "scene-by-scene shot list" in captured["prompt"]
+    assert "PREMIUM CINEMATIC / DOCUMENTARY ACCEPTANCE STANDARD" in captured["prompt"]
+    assert "never invent interviews" in captured["prompt"]
+    assert "static image slideshow" in captured["prompt"]
+
+
+def test_film_brain_requires_screenplay_and_camera_craft(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "local")
+    monkeypatch.setattr(ai_brain, "_active_local_backend", lambda: {
+        "backend": "ollama", "service_running": True, "model_available": True,
+        "model": "qwen2.5:3b", "base_url": "http://127.0.0.1:11434"
+    })
+    captured = {}
+
+    def fake_generate(prompt):
+        captured["prompt"] = prompt
+        return "फिल्म पैकेज"
+
+    monkeypatch.setattr(ai_brain, "_generate_ollama", fake_generate)
+    ai_brain.generate_text("एक ऐतिहासिक फिल्म बनाओ", "film")
+    assert "feature-film director" in captured["prompt"]
+    assert "complete screenplay" in captured["prompt"]
+    assert "motivated camera movement" in captured["prompt"]
+    assert "character/prop/wardrobe continuity" in captured["prompt"]
