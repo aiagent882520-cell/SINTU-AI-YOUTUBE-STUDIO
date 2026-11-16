@@ -95,7 +95,7 @@ def test_flow_auto_render_can_be_disabled(tmp_path, monkeypatch):
     calls = []
     importer = FlowAutoImporter(
         tmp_path / "data", tmp_path / "videos", [downloads],
-        validator=lambda _path: {},
+        validator=lambda _path: {"duration": 3},
         renderer=lambda *args, **kwargs: calls.append(args) or {"ok": True},
     )
     importer.scan_once()
