@@ -73,6 +73,7 @@ grant ChatGPT direct access to the phone.
 - `operational_readiness` (JSON readiness report; never prints secret values)
 - `live_preflight` (checks local model/media engine availability without generating media)
 - `offline_video_e2e` (creates a real local branded MP4 using procedural visuals and local Hindi voice; optional topic is limited to 300 characters)
+- `full_self_test` (runs readiness, the full pytest suite, offline MP4 generation and final media-quality audit in one job; optional topic is limited to 300 characters)
 
 Jobs and bounded output are persisted in `sintu_termux_bridge.sqlite3`.
 
