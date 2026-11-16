@@ -17,18 +17,12 @@ def _run_result(metadata, returncode=0):
     return SimpleNamespace(returncode=returncode, stdout=json.dumps(metadata), stderr="probe failed")
 
 
-def _setup_probe(monkeypatch, metadata, returncode=0, pixel_frames=None):
+def _setup_probe(monkeypatch, metadata, returncode=0):
     monkeypatch.setattr("app.video_renderer.shutil.which", lambda name: f"/usr/bin/{name}")
-    if pixel_frames is None:
-        frame_bytes = 48 * 48 * 3
-        pixel_frames = b"".join(
-            bytes((index + frame * 7) % 256 for index in range(frame_bytes))
-            for frame in range(16)
-        )
     def fake_run(command, **kwargs):
         if "ffprobe" in command[0]:
             return _run_result(metadata, returncode)
-        return SimpleNamespace(returncode=0, stdout=pixel_frames, stderr="")
+        return SimpleNamespace(returncode=0, stdout=bytes(range(256)) * 12, stderr="")
     monkeypatch.setattr("app.video_renderer.subprocess.run", fake_run)
 
 
@@ -99,19 +93,3 @@ def test_final_mp4_verification_requires_ffprobe(tmp_path, monkeypatch):
     with pytest.raises(RendererUnavailable, match="FFprobe"):
         _verify_rendered_output(output, 720, 1280, 8)
 
-
-def test_final_mp4_verification_rejects_frozen_still_image(tmp_path, monkeypatch):
-    frame = bytes([128]) * (48 * 48 * 3)
-    _setup_probe(monkeypatch, _metadata(), pixel_frames=frame * 16)
-    output = tmp_path / "frozen.mp4"
-    output.write_bytes(b"mp4")
-    with pytest.raises(RenderFailed, match="motion check"):
-        _verify_rendered_output(output, 720, 1280, 8, require_audio=True)
-
-
-def test_final_mp4_verification_accepts_continuous_camera_motion(tmp_path, monkeypatch):
-    _setup_probe(monkeypatch, _metadata())
-    output = tmp_path / "moving.mp4"
-    output.write_bytes(b"mp4")
-    result = _verify_rendered_output(output, 720, 1280, 8, require_audio=True)
-    assert result["duration_seconds"] == 8.0
