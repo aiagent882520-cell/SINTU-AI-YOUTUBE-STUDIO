@@ -190,8 +190,9 @@ pytest -q
 - SINTU server start hote hi Android shared Download/Downloads folders ko background mein har 5 second scan karta hai.
 - Nayi .mp4 file ka size/modified time do scans tak stable hone ke baad copy hoti hai; FFprobe se valid/publishable MP4 verify hone par hi SINTU AI-video library mein add hoti hai.
 - Original download delete ya move nahi hota. Invalid, incomplete, symlinked aur 512 MB se badi files import nahi hoti. Imported file duplicate dobara add nahi hoti.
-- Status endpoint: GET /api/flow/auto-import/status. Manual import endpoint fallback ke roop mein available hai.
-- Config: SINTU_FLOW_AUTO_IMPORT=true; disable karne ke liye false. Custom folders ke liye SINTU_FLOW_DOWNLOAD_DIRS mein path-separated paths dein. Termux ko Android storage permission aur termux-setup-storage access chahiye.
+- Naye clips aane ke baad 20 second tak koi naya download na aaye to SINTU un sab ko ek mixed timeline mein automatically assemble karke final MP4 render karta hai. Default 720x1280, 30 FPS standard quality, original clip audio 25%, fade transitions.
+- Status endpoint: GET /api/flow/auto-import/status. Isme pending_clips, last_render (final video_id/url) aur render error milta hai. Manual import endpoint fallback ke roop mein available hai.
+- Config: SINTU_FLOW_AUTO_IMPORT=true; disable karne ke liye false. Auto render ko SINTU_FLOW_AUTO_RENDER=false se disable kar sakte hain. Custom folders ke liye SINTU_FLOW_DOWNLOAD_DIRS mein path-separated paths dein. Termux ko Android storage permission aur termux-setup-storage access chahiye.
 - Important limitation: Google Flow ka supported public API yahan available nahi hai. Yeh watcher Flow generation/login/download button ko control nahi karta; Flow se file Android Downloads mein aate hi uska import automatic karta hai. Flow UI ko fully unattended chalane ka claim nahi hai.
 
 ## Content Calendar & Scheduling
