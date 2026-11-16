@@ -73,7 +73,7 @@ def _selected_format(format_id: str) -> dict[str, Any] | None:
     if format_id == "__agent_catalog__":
         return {
             "id": format_id,
-            "name": "Complete 61-Agent Role Validation",
+            "name": "Complete 61 Specialists + 5 Senior Agents Validation",
             "aspect_ratio": "16:9",
             "recommended_resolution": "1920x1080",
             "roles": list(AGENTS),
