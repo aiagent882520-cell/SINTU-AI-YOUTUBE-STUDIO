@@ -61,3 +61,29 @@ def test_android_mp4_audit_rejects_missing_video_stream():
     data["streams"] = [stream for stream in data["streams"] if stream["codec_type"] != "video"]
     with pytest.raises(ValueError, match="missing video"):
         validate_mp4_metadata(data)
+
+
+
+def test_motion_audit_rejects_frozen_long_video_frames():
+    from scripts.project_health_audit import validate_sampled_motion
+    frame = bytes([120]) * (32 * 32 * 3)
+    with pytest.raises(ValueError, match="frozen or slideshow-like"):
+        validate_sampled_motion(frame * 12, frame_bytes=len(frame))
+
+
+def test_motion_audit_accepts_sustained_cinematic_motion():
+    from scripts.project_health_audit import validate_sampled_motion
+    frame_bytes = 32 * 32 * 3
+    frames = b"".join(bytes([(index * 24) % 256]) * frame_bytes for index in range(12))
+    result = validate_sampled_motion(frames, frame_bytes=frame_bytes)
+    assert result["moving_transitions"] == 11
+    assert result["motion_ratio"] == 1.0
+
+
+def test_motion_audit_rejects_still_slideshow_with_only_scene_cuts():
+    from scripts.project_health_audit import validate_sampled_motion
+    frame_bytes = 32 * 32 * 3
+    frames = b"".join(bytes([value]) * frame_bytes for value in
+                      [10, 10, 10, 10, 80, 80, 80, 80, 150, 150, 150, 150])
+    with pytest.raises(ValueError, match="frozen or slideshow-like"):
+        validate_sampled_motion(frames, frame_bytes=frame_bytes)

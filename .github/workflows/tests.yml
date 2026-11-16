@@ -12,11 +12,11 @@ on:
 permissions:
   contents: read
 
-# Do not cancel an in-progress validation when another commit is pushed quickly.
-# This keeps matrix jobs and the final Docker gate from being abandoned mid-run.
+# Keep only the newest validation for a branch/PR; stale commits must not
+# occupy runners while the current head waits in the queue.
 concurrency:
   group: sintu-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -57,7 +57,7 @@ jobs:
       - name: Compile Python
         run: python -m compileall -q app tests scripts
       - name: Validate Termux launcher syntax
-        run: bash -n START_SINTU_TERMUX.sh scripts/termux_one_command.sh
+        run: bash -n START_SINTU_TERMUX.sh scripts/termux_one_command.sh scripts/start_services.sh scripts/termux_boot.sh
       - name: Check browser JavaScript syntax
         run: |
           node --check app/static/app.js

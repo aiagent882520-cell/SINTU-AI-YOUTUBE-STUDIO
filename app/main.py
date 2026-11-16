@@ -57,6 +57,7 @@ from .earning_system import router as earning_router, sync_youtube_estimate
 from .security import RequestRateLimiter, client_address_allowed, same_origin_request
 from .backup_restore import verify_backup, BackupValidationError, snapshot_database
 from .flow_auto_import import start_flow_auto_import, stop_flow_auto_import, flow_auto_import_status
+from .termux_bridge import router as termux_bridge_router
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT.parent))).expanduser().resolve()
@@ -69,6 +70,7 @@ ALLOWED_MUSIC_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".ogg"}
 app = FastAPI(title="SINTU AI YOUTUBE STUDIO", version="0.3.0")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 app.include_router(earning_router)
+app.include_router(termux_bridge_router)
 
 @app.on_event("startup")
 def start_google_flow_auto_import():
@@ -230,7 +232,10 @@ async def admin_access_control(request, call_next):
     request.state.user = user
     if _auth_required():
         public_paths = {"/login", "/api/auth/login", "/api/auth/logout", "/api/health"}
-        if path not in public_paths and not path.startswith("/static/") and not user:
+        # Bridge routes authenticate independently with dedicated bearer tokens;
+        # do not require a browser admin-session cookie for trusted API clients.
+        bridge_path = path.startswith("/api/termux-bridge/")
+        if path not in public_paths and not path.startswith("/static/") and not bridge_path and not user:
             if path == "/":
                 from fastapi.responses import RedirectResponse
                 return RedirectResponse("/login", status_code=303)

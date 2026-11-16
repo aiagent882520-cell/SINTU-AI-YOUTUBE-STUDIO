@@ -233,11 +233,16 @@ defaults = {
     "LOCAL_OPENAI_BASE_URL": "http://127.0.0.1:8080/v1",
     "LOCAL_OPENAI_MODEL": "auto",
     "LOCAL_OPENAI_API_KEY": "",
+    "SINTU_BRIDGE_BASE_URL": "http://127.0.0.1:8000",
 }
 lines = content.splitlines()
 for key, value in defaults.items():
     if not any(line.startswith(key + "=") for line in lines):
         lines.append(key + "=" + value)
+import secrets
+for key in ("SINTU_BRIDGE_TOKEN", "SINTU_BRIDGE_WORKER_TOKEN"):
+    if not any(line.startswith(key + "=") and line.split("=", 1)[1].strip() for line in lines):
+        lines.append(key + "=" + secrets.token_urlsafe(48))
 path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 speech = shutil.which("espeak-ng") or shutil.which("espeak")
 if speech:
@@ -282,6 +287,30 @@ if [ "$READY" -ne 1 ]; then
 fi
 say "Application health endpoint /api/health returned HTTP 200."
 
+# Install the Termux:Boot entrypoint. It runs after Android boot only when the
+# separate Termux:Boot add-on is installed and enabled by the device owner.
+mkdir -p "$HOME/.termux/boot"
+install -m 700 scripts/termux_boot.sh "$HOME/.termux/boot/10-sintu.sh"
+say "Termux:Boot startup script installed (Termux:Boot add-on required)"
+
+# Keep the allowlisted local worker running alongside the API.
+WORKER_PID_FILE="$LOG_DIR/bridge-worker.pid"
+WORKER_LOG_FILE="$LOG_DIR/bridge-worker.log"
+if [ -f "$WORKER_PID_FILE" ] && kill -0 "$(cat "$WORKER_PID_FILE")" 2>/dev/null; then
+  say "Termux bridge worker is already running"
+else
+  : > "$WORKER_LOG_FILE"
+  nohup .venv/bin/python scripts/termux_bridge_worker.py \
+    >>"$WORKER_LOG_FILE" 2>&1 </dev/null &
+  echo $! > "$WORKER_PID_FILE"
+  sleep 2
+  if kill -0 "$(cat "$WORKER_PID_FILE")" 2>/dev/null; then
+    say "Allowlisted Termux bridge worker started"
+  else
+    say "Bridge worker did not stay running; inspect $WORKER_LOG_FILE"
+    tail -n 30 "$WORKER_LOG_FILE" || true
+  fi
+fi
 
 SMOKE_VIDEO_PATH=""
 if [ -f "$LOG_DIR/media-smoke-path.txt" ]; then

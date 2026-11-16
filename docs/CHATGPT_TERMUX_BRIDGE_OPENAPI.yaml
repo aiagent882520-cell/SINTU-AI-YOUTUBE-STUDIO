@@ -1,0 +1,80 @@
+openapi: 3.1.0
+info:
+  title: SINTU Termux Bridge
+  version: 1.0.0
+  description: Queue allowlisted jobs for the local Termux worker. No arbitrary shell execution.
+servers:
+  - url: https://YOUR-HTTPS-TUNNEL-HOST
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    JobRequest:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [git_status, git_pull_ff_only, run_tests, compile_check, health_audit]
+        test_path:
+          type: string
+          description: Optional Python test file directly inside tests/, only for run_tests.
+    Job:
+      type: object
+      properties:
+        job_id: { type: string }
+        action: { type: string }
+        status: { type: string }
+    JobResult:
+      type: object
+      properties:
+        id: { type: string }
+        action: { type: string }
+        status: { type: string }
+        exit_code: { type: integer }
+        output: { type: string }
+security:
+  - bearerAuth: []
+paths:
+  /api/termux-bridge/status:
+    get:
+      operationId: getBridgeStatus
+      summary: Check whether the Termux worker is online and inspect queued jobs
+      responses:
+        "200":
+          description: Bridge status
+  /api/termux-bridge/jobs:
+    post:
+      operationId: queueTermuxJob
+      summary: Queue one safe allowlisted Termux action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRequest'
+      responses:
+        "202":
+          description: Job queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+  /api/termux-bridge/jobs/{job_id}:
+    get:
+      operationId: getTermuxJob
+      summary: Read the status and bounded output of a queued Termux job
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Job result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResult'

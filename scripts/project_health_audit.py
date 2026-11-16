@@ -83,6 +83,33 @@ def validate_mp4_metadata(data: dict) -> dict:
     }
 
 
+def validate_sampled_motion(frames: bytes, *, frame_bytes: int, minimum_ratio: float = 0.20,
+                            minimum_delta: float = 1.5) -> dict:
+    """Reject long exports that are effectively one frozen frame or a still slideshow."""
+    if frame_bytes <= 0 or len(frames) % frame_bytes:
+        raise ValueError("sampled video frames are incomplete")
+    sampled = [frames[index:index + frame_bytes]
+               for index in range(0, len(frames), frame_bytes)]
+    if len(sampled) < 8:
+        raise ValueError("long video has too few decoded frames for a motion audit")
+    moving = 0
+    deltas = []
+    for previous, current in zip(sampled, sampled[1:]):
+        delta = sum(abs(a - b) for a, b in zip(previous, current)) / frame_bytes
+        deltas.append(delta)
+        if delta >= minimum_delta:
+            moving += 1
+    transitions = len(sampled) - 1
+    ratio = moving / transitions
+    if ratio < minimum_ratio:
+        raise ValueError(
+            f"video appears frozen or slideshow-like: {moving}/{transitions} sampled transitions show motion"
+        )
+    return {"sampled_frames": len(sampled), "moving_transitions": moving,
+            "sampled_transitions": transitions, "motion_ratio": round(ratio, 3),
+            "mean_frame_delta": round(sum(deltas) / len(deltas), 3)}
+
+
 def audit_media(path: Path, results: list[dict]) -> bool:
     ffprobe = shutil.which("ffprobe")
     ffmpeg = shutil.which("ffmpeg")
@@ -122,10 +149,25 @@ def audit_media(path: Path, results: list[dict]) -> bool:
             r"black_start:([0-9.]+)\s+black_end:([0-9.]+)", black.stderr)]
         full_black = any(start <= 0.1 and end >= metadata["duration_seconds"] * 0.95
                          for start, end in intervals)
-        status = "FAIL" if full_black else "PASS"
+        motion = None
+        motion_error = None
+        if metadata["duration_seconds"] >= 10:
+            sampled = subprocess.run(
+                [ffmpeg, "-v", "error", "-i", str(video), "-vf", "fps=1,scale=32:32",
+                 "-frames:v", "600", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False, timeout=90)
+            if sampled.returncode != 0:
+                motion_error = "could not decode sampled frames for motion audit"
+            else:
+                try:
+                    motion = validate_sampled_motion(sampled.stdout, frame_bytes=32 * 32 * 3)
+                except ValueError as exc:
+                    motion_error = str(exc)
+        status = "FAIL" if full_black or motion_error else "PASS"
         results.append({"check": f"media:{video.name}", "status": status,
-                        **metadata, "black_intervals": intervals})
-        ok = ok and not full_black
+                        **metadata, "black_intervals": intervals,
+                        "motion": motion, "motion_error": motion_error})
+        ok = ok and not full_black and not motion_error
     if not any(path.glob("*.mp4")):
         results.append({"check": "generated-videos", "status": "INFO",
                         "output": "No generated MP4 files present; nothing to inspect"})
