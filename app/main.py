@@ -232,7 +232,10 @@ async def admin_access_control(request, call_next):
     request.state.user = user
     if _auth_required():
         public_paths = {"/login", "/api/auth/login", "/api/auth/logout", "/api/health"}
-        if path not in public_paths and not path.startswith("/static/") and not user:
+        # Bridge routes authenticate independently with dedicated bearer tokens;
+        # do not require a browser admin-session cookie for trusted API clients.
+        bridge_path = path.startswith("/api/termux-bridge/")
+        if path not in public_paths and not path.startswith("/static/") and not bridge_path and not user:
             if path == "/":
                 from fastapi.responses import RedirectResponse
                 return RedirectResponse("/login", status_code=303)

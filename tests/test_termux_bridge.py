@@ -103,3 +103,15 @@ def test_bridge_requeues_jobs_abandoned_by_crashed_worker(tmp_path, monkeypatch)
     reclaimed = client.get("/api/termux-bridge/jobs/next", headers=worker_headers)
     assert reclaimed.status_code == 200
     assert reclaimed.json()["job_id"] == job_id
+
+
+
+def test_bridge_bearer_auth_works_without_admin_browser_session(tmp_path, monkeypatch):
+    client, api_headers, _ = bridge_client(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    # Bridge's own API token must be sufficient; browser login is a separate
+    # authentication system and should not block the dedicated service API.
+    response = client.get("/api/termux-bridge/status", headers=api_headers)
+    assert response.status_code == 200
+    assert response.json()["enabled"] is True
+    assert client.get("/api/termux-bridge/status").status_code == 401
