@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import threading
 import time
@@ -46,6 +47,7 @@ class FlowAutoImporter:
         self.validator = validator
         self.renderer = renderer
         self.ledger_path = self.data_dir / "flow_auto_imported.json"
+        self.pending_path = self.data_dir / "flow_auto_pending.json"
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._seen: dict[str, tuple[int, int]] = {}
@@ -54,10 +56,30 @@ class FlowAutoImporter:
         self.skipped = 0
         self.last_error = ""
         self.last_import = ""
-        self.pending: list[str] = []
+        self.pending: list[str] = self._load_pending()
         self.last_added_at = 0.0
         self.last_render_result: dict = {}
         self.last_render_error = ""
+
+    def _load_pending(self) -> list[str]:
+        """Restore queued imports after an app/process restart."""
+        try:
+            values = json.loads(self.pending_path.read_text("utf-8"))
+        except (OSError, ValueError):
+            return []
+        if not isinstance(values, list):
+            return []
+        return list(dict.fromkeys(
+            item for item in values
+            if isinstance(item, str) and re.fullmatch(r"[a-f0-9]{32}", item)
+        ))
+
+    def _save_pending(self) -> None:
+        """Atomically persist pending video IDs so a crash cannot lose the queue."""
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        temporary = self.pending_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(self.pending, ensure_ascii=False), encoding="utf-8")
+        temporary.replace(self.pending_path)
 
     def start(self) -> bool:
         if self._thread and self._thread.is_alive():
@@ -137,11 +159,12 @@ class FlowAutoImporter:
                         if not isinstance(metadata, dict) or not metadata:
                             raise RenderFailed("MP4 validator ne valid video metadata return nahi kiya.")
                         temporary.replace(destination)
+                        self.pending.append(video_id)
+                        self._save_pending()
                         ledger[key] = [signature[0], signature[1]]
                         self.ledger_path.write_text(json.dumps(ledger, ensure_ascii=False, indent=2), "utf-8")
                         self.imported += 1
                         self.last_import = source.name
-                        self.pending.append(video_id)
                         self.last_added_at = time.monotonic()
                         self.last_error = ""
                         added += 1
@@ -164,7 +187,6 @@ class FlowAutoImporter:
         if os.getenv("SINTU_FLOW_AUTO_RENDER", "true").strip().lower() == "false":
             return None
         batch = self.pending[:25]
-        self.pending = self.pending[25:]
         items = []
         scenes = []
         for video_id in batch:
@@ -175,6 +197,8 @@ class FlowAutoImporter:
                           "trim_end": None, "audio_volume": 0.25})
             scenes.append("Google Flow video clip " + str(len(scenes) + 1))
         if not items:
+            self.pending = self.pending[len(batch):]
+            self._save_pending()
             return None
         title = "SINTU Flow Auto Compilation " + datetime.now(timezone.utc).strftime("%Y-%m-%d %H-%M UTC")
         try:
@@ -183,9 +207,12 @@ class FlowAutoImporter:
                                    fps=30, quality="standard", sound_effects_enabled=False)
             self.last_render_result = result if isinstance(result, dict) else {"result": str(result)}
             self.last_render_error = ""
+            completed = set(batch)
+            self.pending = [video_id for video_id in self.pending if video_id not in completed]
+            self._save_pending()
             return self.last_render_result
         except Exception as exc:
-            self.pending = batch + self.pending
+            # Keep the durable queue untouched; the next poll/restart retries it.
             self.last_render_error = str(exc)[:500]
             return None
 
