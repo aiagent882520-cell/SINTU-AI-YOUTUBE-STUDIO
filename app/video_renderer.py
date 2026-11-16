@@ -454,7 +454,7 @@ def _make_frame(path: Path, title: str, scene: str, index: int, total: int,
 def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                       image_paths: list[Path] | None = None, audio_path: Path | None = None,
                       subtitles: list[str] | None = None, music_path: Path | None = None,
-                      music_volume: float = 0.18, transition: str = "fade", motion: str = "none",
+                      music_volume: float = 0.18, transition: str = "fade", motion: str = "slow-zoom-in",
                       resolution: str = "720x1280", fps: int = 30, quality: str = "high",
                       sound_effects_enabled: bool = False, sound_effects_volume: float = 0.18) -> dict:
     ffmpeg = shutil.which("ffmpeg")
