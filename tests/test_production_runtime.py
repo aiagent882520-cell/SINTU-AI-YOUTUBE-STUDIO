@@ -301,3 +301,90 @@ def test_owner_agent_not_ready_pauses_even_when_its_checker_passes(tmp_path, mon
     assert "release blockers" in result["error"]
     assert result["steps"][-2]["role"] == "Owner Agent"
     assert result["steps"][-1]["role"] == "Owner Agent Checker"
+
+
+def test_interrupted_production_runs_recover_to_paused(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    running = runtime.create_run("youtube-shorts", "Interrupted topic", "alice")
+    runtime._set_run(running["id"], "running", current_role="Script Writer")
+    reviewing = runtime.create_run("youtube-shorts", "Review interrupted", "bob")
+    runtime._set_run(reviewing["id"], "reviewing", current_role="Audio Quality Reviewer")
+    queued = runtime.create_run("youtube-shorts", "Still queued", "carol")
+
+    assert runtime.recover_interrupted_runs() == 2
+    assert runtime.get_run(running["id"], "alice")["status"] == "paused"
+    assert runtime.get_run(reviewing["id"], "bob")["status"] == "paused"
+    assert runtime.get_run(queued["id"], "carol")["status"] == "queued"
+    assert "last independently approved checkpoint" in runtime.get_run(running["id"], "alice")["error"]
+
+
+def test_resumed_run_skips_already_approved_specialist_checkpoints(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    monkeypatch.setattr(runtime, "format_team", lambda _format: [
+        {"role_type": "specialist", "name": "Script Writer", "mission": "write narration"},
+        {"role_type": "specialist", "name": "Voice Artist", "mission": "prepare voice direction"},
+    ])
+    run = runtime.create_run("youtube-shorts", "भारत के किले")
+    runtime._set_run(run["id"], "paused", current_role="Voice Artist",
+                     error="Simulated process interruption")
+    runtime._save_step(run["id"], 1, "Script Writer", "builder", "completed",
+                       "script brief", "Previously approved Hindi narration")
+    runtime._save_step(run["id"], 2, "Script Writer Checker", "checker", "pass",
+                       "check script", '{"decision":"PASS"}',
+                       ["Hindi narration is complete"], [])
+    calls = []
+
+    def fake_generate(prompt, workflow, provider):
+        calls.append(prompt)
+        if "independent quality checker" in prompt.lower() or "final video production reviewer" in prompt.lower():
+            output = '{"decision":"PASS","evidence":["acceptance criteria checked"],"issues":[],"revision_instructions":[]}'
+        elif "Role: Voice Artist" in prompt:
+            output = "Voice direction for the approved narration"
+        else:
+            output = "Unexpected duplicate specialist execution"
+        return {"output": output, "provider": "test", "model": "fixture"}
+
+    monkeypatch.setattr(runtime, "generate_text", fake_generate)
+    runtime.execute_run(run["id"])
+    result = runtime.get_run(run["id"])
+
+    assert result["status"] == "completed"
+    assert result["result"]["deliverables"]["Script Writer"] == "Previously approved Hindi narration"
+    assert result["result"]["deliverables"]["Voice Artist"] == "Voice direction for the approved narration"
+    assert not any("Role: Script Writer" in prompt for prompt in calls)
+    assert len([step for step in result["steps"] if step["role"] == "Script Writer" and step["step_type"] == "builder"]) == 1
+
+
+def test_resumed_run_reuses_passed_final_reviewer_checkpoint(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    monkeypatch.setattr(runtime, "format_team", lambda _format: [
+        {"role_type": "specialist", "name": "Script Writer", "mission": "write narration"},
+    ])
+    run = runtime.create_run("youtube-shorts", "भारत का इतिहास")
+    runtime._set_run(run["id"], "paused", current_role="Audio Quality Reviewer")
+    runtime._save_step(run["id"], 1, "Script Writer", "builder", "completed",
+                       "script brief", "Approved Hindi narration")
+    runtime._save_step(run["id"], 2, "Script Writer Checker", "checker", "pass",
+                       "check script", "PASS", ["Script checked"], [])
+    saved_review = '{"decision":"PASS","evidence":["audio review completed"],"issues":[],"revision_instructions":[]}'
+    runtime._save_step(run["id"], 3, "Audio Quality Reviewer", "reviewer", "pass",
+                       "review prompt", saved_review, ["audio reviewed"], [])
+    calls = []
+
+    def fake_generate(prompt, workflow, provider):
+        calls.append(prompt)
+        return {"output": '{"decision":"PASS","evidence":["review complete"],"issues":[],"revision_instructions":[]}',
+                "provider": "test", "model": "fixture"}
+
+    monkeypatch.setattr(runtime, "generate_text", fake_generate)
+    runtime.execute_run(run["id"])
+
+    assert not any("Reviewer: Audio Quality Reviewer" in prompt for prompt in calls)
+    assert len([step for step in runtime.get_run(run["id"])["steps"]
+                if step["role"] == "Audio Quality Reviewer" and step["step_type"] == "reviewer"]) == 1
