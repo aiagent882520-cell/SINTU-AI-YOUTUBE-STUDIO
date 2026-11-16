@@ -56,6 +56,7 @@ from .production_runtime import create_run as create_production_run, get_run as 
 from .earning_system import router as earning_router, sync_youtube_estimate
 from .security import RequestRateLimiter, client_address_allowed, same_origin_request
 from .backup_restore import verify_backup, BackupValidationError, snapshot_database
+from .flow_auto_import import start_flow_auto_import, stop_flow_auto_import
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT.parent))).expanduser().resolve()
@@ -68,6 +69,17 @@ ALLOWED_MUSIC_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".ogg"}
 app = FastAPI(title="SINTU AI YOUTUBE STUDIO", version="0.3.0")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 app.include_router(earning_router)
+
+@app.on_event("startup")
+def start_google_flow_auto_import():
+    """Watch Android Downloads and safely import completed Google Flow MP4 files."""
+    start_flow_auto_import(DATA_DIR, AI_VIDEO_DIR)
+
+
+@app.on_event("shutdown")
+def stop_google_flow_auto_import():
+    stop_flow_auto_import()
+
 
 # Application firewall: IP allowlist, API request throttling and browser CSRF checks.
 _FIREWALL_LIMITER = RequestRateLimiter()
