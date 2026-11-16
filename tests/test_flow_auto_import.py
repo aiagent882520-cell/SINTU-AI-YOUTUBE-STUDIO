@@ -104,3 +104,64 @@ def test_flow_auto_render_can_be_disabled(tmp_path, monkeypatch):
     assert importer.flush_pending(force=True) is None
     assert not calls
     assert len(importer.pending) == 1
+
+
+def test_flow_pending_queue_survives_importer_restart(tmp_path, monkeypatch):
+    downloads = tmp_path / "Download"
+    downloads.mkdir()
+    (downloads / "clip.mp4").write_bytes(b"valid")
+    monkeypatch.setenv("SINTU_FLOW_AUTO_RENDER", "true")
+    data = tmp_path / "data"
+    videos = tmp_path / "videos"
+    first = FlowAutoImporter(data, videos, [downloads], validator=lambda _p: {"duration": 3})
+    first.scan_once()
+    first.scan_once()
+    queued_id = first.pending[0]
+    assert (data / "flow_auto_pending.json").is_file()
+
+    restarted = FlowAutoImporter(data, videos, [downloads], validator=lambda _p: {"duration": 3})
+    assert restarted.pending == [queued_id]
+    assert restarted.status()["pending_clips"] == 1
+
+
+def test_flow_pending_queue_is_retained_after_render_failure_and_restart(tmp_path, monkeypatch):
+    downloads = tmp_path / "Download"
+    downloads.mkdir()
+    (downloads / "clip.mp4").write_bytes(b"valid")
+    monkeypatch.setenv("SINTU_FLOW_AUTO_RENDER", "true")
+
+    def broken_renderer(*_args, **_kwargs):
+        raise RuntimeError("temporary encoder failure")
+
+    data = tmp_path / "data"
+    videos = tmp_path / "videos"
+    importer = FlowAutoImporter(data, videos, [downloads],
+                                validator=lambda _p: {"duration": 3}, renderer=broken_renderer)
+    importer.scan_once()
+    importer.scan_once()
+    queued = list(importer.pending)
+    assert importer.flush_pending(force=True) is None
+    assert importer.pending == queued
+
+    restarted = FlowAutoImporter(data, videos, [downloads],
+                                 validator=lambda _p: {"duration": 3}, renderer=broken_renderer)
+    assert restarted.pending == queued
+    assert restarted.status()["last_render_error"] == ""
+
+
+def test_flow_pending_queue_is_acknowledged_only_after_successful_render(tmp_path, monkeypatch):
+    downloads = tmp_path / "Download"
+    downloads.mkdir()
+    (downloads / "clip.mp4").write_bytes(b"valid")
+    monkeypatch.setenv("SINTU_FLOW_AUTO_RENDER", "true")
+    data = tmp_path / "data"
+    videos = tmp_path / "videos"
+    importer = FlowAutoImporter(
+        data, videos, [downloads], validator=lambda _p: {"duration": 3},
+        renderer=lambda *_args, **_kwargs: {"video_id": "rendered"},
+    )
+    importer.scan_once()
+    importer.scan_once()
+    assert importer.flush_pending(force=True) == {"video_id": "rendered"}
+    assert importer.pending == []
+    assert (data / "flow_auto_pending.json").read_text("utf-8") == "[]"
