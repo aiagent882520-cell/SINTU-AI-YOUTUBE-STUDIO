@@ -2,17 +2,19 @@
 
 SINTU AI YOUTUBE STUDIO is a responsive web/PWA creator workspace. It currently provides an AI text-production desk, specialized content workflows, task history, a 61-role legacy registry and a complete worker/checker architecture, and export of generated text packages.
 
-## Android Termux one-paste install
+## Android Termux one-command install
 
-Fresh Termux ya existing SINTU install par ye poora block paste karke Enter dabayein. Ye Git install karega, repository ko clone/update karega aur full Termux launcher chalayega:
+Fresh Termux ya existing SINTU install par ye **ek command** paste karein:
 
 ```bash
-pkg update -y && pkg install -y git && DEST="$HOME/SINTU-AI-YOUTUBE-STUDIO" && if [ -d "$DEST/.git" ]; then git -C "$DEST" pull --ff-only origin main; else git clone --depth 1 https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO.git "$DEST"; fi && bash "$DEST/START_SINTU_TERMUX.sh"
+pkg install -y curl && curl -fsSL https://raw.githubusercontent.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/main/scripts/termux_one_command.sh -o "$TMPDIR/sintu-install.sh" && bash "$TMPDIR/sintu-install.sh"
 ```
 
-Project folder already open ho to sirf `bash INSTALL_SINTU_TERMUX.sh` chalayein. Installer existing `.env`, database aur generated files ko overwrite nahi karta; local Git changes hon to fast-forward update safely ruk jayega.
+Ye canonical installer repository ko clone ya fast-forward update karta hai, Termux-compatible Python environment/dependencies set karta hai, private `.env` banata hai (existing secrets/data ko preserve karta hai), FFmpeg/FFprobe aur optional local Hindi TTS/llama.cpp check karta hai, dashboard ko localhost par start karta hai aur available Hindi TTS hone par ek real offline MP4 smoke test chalata hai. Pehli install par admin username/password ek baar print hote hain—unhe private jagah save karein.
 
-Pehli baar script Termux packages, Python virtual environment aur Studio dependencies install karegi, secure local admin login banayegi, local engine diagnostics dikhayegi aur dashboard start karegi. Browser mein `http://127.0.0.1:8000` kholein. Server chalta rakhne ke liye Termux session khula rakhein; band karne ke liye `CTRL+C` dabayein. Ye responsive website PWA bhi hai: browser menu se “Add to Home screen” karke home-screen app banayein; ye native APK nahi hai.
+Dashboard: `http://127.0.0.1:8000`. Server stop karne ke liye `kill "$(cat ~/.sintu/server.pid)"`; logs: `tail -f ~/.sintu/server.log`. PWA ko browser menu se “Add to Home screen” kar sakte hain; ye native APK nahi hai.
+
+Full installer details aur limitations: [docs/TERMUX_ONE_COMMAND.md](docs/TERMUX_ONE_COMMAND.md). YouTube publishing ke liye owner OAuth credentials aur explicit approval ab bhi required hain.
 
 ## Complete video-format groups
 
