@@ -58,6 +58,15 @@ def command_for(job: dict) -> list[str]:
         return [PYTHON, "-m", "compileall", "-q", "app", "scripts"]
     if action == "health_audit":
         return [PYTHON, "scripts/project_health_audit.py"]
+    if action == "operational_readiness":
+        return [PYTHON, "scripts/operational_readiness.py", "--json"]
+    if action == "live_preflight":
+        return [PYTHON, "scripts/live_e2e.py"]
+    if action == "offline_video_e2e":
+        topic = payload.get("topic", "भारत के प्राचीन किले में सुबह का सिनेमाई दृश्य")
+        if not isinstance(topic, str) or not topic.strip() or len(topic.strip()) > 300:
+            raise ValueError("Rejected offline video topic.")
+        return [PYTHON, "scripts/live_e2e.py", "--offline-video", "--topic", topic.strip()]
     if action == "run_tests":
         test_path = payload.get("test_path")
         if test_path:
