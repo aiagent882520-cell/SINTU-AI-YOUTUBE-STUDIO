@@ -3582,8 +3582,6 @@ def render_video(payload: RenderInput):
                     raise HTTPException(status_code=404, detail=f"Timeline {kind} asset not found.")
                 timeline_items.append(item)
                 scene_transitions.append(transition_mode or payload.transition)
-            if payload.motion != "none":
-                raise HTTPException(status_code=400, detail="Mixed timeline mein abhi source clip motion use hota hai; extra zoom unsupported hai.")
             return render_mixed_timeline(timeline_items, title, scenes,
                                          seconds_per_scene=payload.seconds_per_scene,
                                          audio_path=audio_path, music_path=music_path,
@@ -3616,8 +3614,6 @@ def render_video(payload: RenderInput):
                 raise HTTPException(status_code=503, detail=str(exc)) from None
 
         if video_paths:
-            if payload.motion != "none":
-                raise HTTPException(status_code=400, detail="AI clip assembly mode mein source clips ka original motion use hota hai; extra zoom effects abhi supported nahi hain.")
             return render_ai_clips(video_paths, audio_path=audio_path, music_path=music_path,
                                    music_volume=payload.music_volume, subtitles=payload.subtitles,
                                    scene_descriptions=scenes, sound_effects_enabled=payload.sound_effects_enabled,
