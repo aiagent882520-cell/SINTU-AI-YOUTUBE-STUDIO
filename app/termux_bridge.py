@@ -76,10 +76,11 @@ def _connect():
         conn.close()
 
 
-def _authorize(authorization: str | None) -> None:
-    expected = os.getenv("SINTU_BRIDGE_TOKEN", "").strip()
+def _authorize(authorization: str | None, *, worker: bool = False) -> None:
+    secret_name = "SINTU_BRIDGE_WORKER_TOKEN" if worker else "SINTU_BRIDGE_TOKEN"
+    expected = os.getenv(secret_name, "").strip()
     if len(expected) < 32:
-        raise HTTPException(status_code=503, detail="Termux bridge is not configured. Create a strong SINTU_BRIDGE_TOKEN first.")
+        raise HTTPException(status_code=503, detail=f"Termux bridge credential {secret_name} is not configured. Configure a random secret of at least 32 characters.")
     supplied = ""
     if authorization and authorization.startswith("Bearer "):
         supplied = authorization[7:].strip()
@@ -148,7 +149,7 @@ def create_job(payload: CreateJobInput, authorization: str | None = Header(defau
 
 @router.get("/jobs/next")
 def claim_next_job(authorization: str | None = Header(default=None)):
-    _authorize(authorization)
+    _authorize(authorization, worker=True)
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         conn.execute(
@@ -181,7 +182,7 @@ def claim_next_job(authorization: str | None = Header(default=None)):
 
 @router.post("/jobs/{job_id}/complete")
 def complete_job(job_id: str, payload: CompleteJobInput, authorization: str | None = Header(default=None)):
-    _authorize(authorization)
+    _authorize(authorization, worker=True)
     if len(job_id) != 32 or any(ch not in "0123456789abcdef" for ch in job_id):
         raise HTTPException(status_code=400, detail="Invalid job ID.")
     with _connect() as conn:
