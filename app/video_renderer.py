@@ -187,9 +187,42 @@ def _create_subtitle_track(work: Path, subtitles: list[str] | None,
     return subtitle_path, f"subtitles=filename='{raw_path}':force_style='{style}'"
 
 
+def validate_sampled_motion(frames: bytes, *, frame_bytes: int = 32 * 32 * 3,
+                            minimum_ratio: float = 0.20, minimum_delta: float = 1.5) -> dict:
+    """Measure frame-to-frame visual movement and reject frozen/slideshow-like long renders."""
+    if frame_bytes <= 0 or len(frames) % frame_bytes:
+        raise RenderFailed("Sampled video frames are incomplete.")
+    if not 0.0 <= minimum_ratio <= 1.0:
+        raise ValueError("Minimum motion ratio must be between 0 and 1.")
+    sampled = [frames[index:index + frame_bytes]
+               for index in range(0, len(frames), frame_bytes)]
+    if len(sampled) < 8:
+        raise RenderFailed("Long video has too few decoded frames for a motion quality audit.")
+    deltas = [
+        sum(abs(a - b) for a, b in zip(previous, current)) / frame_bytes
+        for previous, current in zip(sampled, sampled[1:])
+    ]
+    moving = sum(delta >= minimum_delta for delta in deltas)
+    transitions = len(deltas)
+    ratio = moving / transitions if transitions else 0.0
+    if ratio < minimum_ratio:
+        raise RenderFailed(
+            f"Video appears frozen or slideshow-like: {moving}/{transitions} sampled transitions show motion "
+            f"({ratio:.1%}; minimum {minimum_ratio:.0%})."
+        )
+    return {
+        "sampled_frames": len(sampled),
+        "moving_transitions": moving,
+        "sampled_transitions": transitions,
+        "motion_ratio": round(ratio, 3),
+        "mean_frame_delta": round(sum(deltas) / len(deltas), 3),
+    }
+
+
 def _verify_rendered_output(path: Path, expected_width: int, expected_height: int,
                             expected_duration: float, require_audio: bool | None = None,
-                            expected_fps: int = 30) -> dict:
+                            expected_fps: int = 30,
+                            minimum_motion_ratio: float = 0.20) -> dict:
     """Verify real video frames and video-stream duration, not just container/audio duration."""
     ffprobe = shutil.which("ffprobe")
     if not ffprobe:
@@ -273,9 +306,14 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         raise RenderFailed(
             f"Visual quality check failed: {visible}/{len(sampled)} sampled frames contain visible image content."
         )
-    return {"duration_seconds": duration, "video_duration_seconds": video_duration,
-            "frame_count": frame_count, "fps": actual_fps,
-            "resolution": f"{width}x{height}", "video_codec": codec, "audio": has_audio}
+    verified = {"duration_seconds": duration, "video_duration_seconds": video_duration,
+                "frame_count": frame_count, "fps": actual_fps,
+                "resolution": f"{width}x{height}", "video_codec": codec, "audio": has_audio}
+    if duration > 8:
+        verified["motion_audit"] = validate_sampled_motion(
+            pixels.stdout, minimum_ratio=minimum_motion_ratio
+        )
+    return verified
 
 
 def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> dict:
@@ -427,6 +465,8 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         raise ValueError("1 se 25 scenes required hain.")
     if not 2 <= seconds_per_scene <= 12:
         raise ValueError("Har scene ki duration 2 se 12 seconds honi chahiye.")
+    if len(scenes) * seconds_per_scene > 8 and motion == "none":
+        raise ValueError("8 seconds se lambi storyboard video mein cinematic camera motion zaroori hai; static slideshow disabled hai.")
     if transition not in {"cut", "fade"}:
         raise ValueError("Transition cut ya fade hona chahiye.")
     if motion not in {"none", "slow-zoom-in", "slow-zoom-out"}:
@@ -561,7 +601,11 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             if completed.returncode != 0 or not temporary_output_path.is_file():
                 detail = (completed.stderr or "FFmpeg render failed")[-1200:]
                 raise RenderFailed(detail)
-            _verify_rendered_output(temporary_output_path, width, height, duration, require_audio=bool(audio_path or music_path or sfx_path), expected_fps=fps)
+            verified = _verify_rendered_output(
+                temporary_output_path, width, height, duration,
+                require_audio=bool(audio_path or music_path or sfx_path),
+                expected_fps=fps, minimum_motion_ratio=0.60,
+            )
             os.replace(temporary_output_path, output_path)
             temporary_output_path = None
     except subprocess.TimeoutExpired:
@@ -592,6 +636,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         "transition": transition,
         "motion": motion,
         "scene_images": len(image_paths),
+        "motion_audit": verified.get("motion_audit"),
         "subtitles_burned_in": bool(subtitle_file),
         "brand_watermark": "SINTU AI YOUTUBE STUDIO",
         "format": "MP4 / H.264",
@@ -785,7 +830,10 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             if completed.returncode != 0 or not temporary_output_path.is_file():
                 detail = (completed.stderr or "FFmpeg AI clip assembly failed")[-1600:]
                 raise RenderFailed(detail)
-            _verify_rendered_output(temporary_output_path, width, height, total_duration, require_audio=True, expected_fps=fps)
+            verified = _verify_rendered_output(
+                temporary_output_path, width, height, total_duration,
+                require_audio=True, expected_fps=fps, minimum_motion_ratio=0.20,
+            )
             os.replace(temporary_output_path, output_path)
             temporary_output_path = None
     except subprocess.TimeoutExpired:
@@ -816,6 +864,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         "sound_effect_cue_count": sfx_result["cue_count"] if sfx_result else 0,
         "transition": transition,
         "motion": "source AI clip motion",
+        "motion_audit": verified.get("motion_audit"),
         "scene_images": 0,
         "subtitles_burned_in": bool(subtitle_file),
         "brand_watermark": "SINTU AI YOUTUBE STUDIO",
