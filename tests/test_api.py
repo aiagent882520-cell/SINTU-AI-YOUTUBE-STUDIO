@@ -655,7 +655,7 @@ def test_renderer_builds_slow_zoom_filter(tmp_path, monkeypatch):
     assert "zoompan=" in video_filter
     assert "mod(on,90)" in video_filter
     assert "sin(" in video_filter and "cos(" in video_filter
-    assert "1+0.12" in video_filter
+    assert "1+0.160" in video_filter
     assert result["motion"] == "slow-zoom-in"
 
 
