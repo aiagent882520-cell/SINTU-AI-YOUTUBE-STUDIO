@@ -22,7 +22,7 @@ except ImportError:
     pass
 
 BASE_URL = os.getenv("SINTU_BRIDGE_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
-TOKEN = os.getenv("SINTU_BRIDGE_TOKEN", "").strip()
+TOKEN = os.getenv("SINTU_BRIDGE_WORKER_TOKEN", "").strip()
 PYTHON = str(ROOT / ".venv" / "bin" / "python")
 if not Path(PYTHON).exists():
     PYTHON = sys.executable
@@ -107,7 +107,7 @@ def main() -> int:
     parser.add_argument("--interval", type=float, default=3.0, help="Polling interval in seconds.")
     args = parser.parse_args()
     if len(TOKEN) < 32:
-        print("SINTU_BRIDGE_TOKEN missing or shorter than 32 characters.", file=sys.stderr)
+        print("SINTU_BRIDGE_WORKER_TOKEN missing or shorter than 32 characters.", file=sys.stderr)
         return 2
     if args.interval < 1 or args.interval > 60:
         print("--interval must be between 1 and 60 seconds.", file=sys.stderr)
