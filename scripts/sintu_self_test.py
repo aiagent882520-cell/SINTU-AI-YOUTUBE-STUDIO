@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT))).expanduser().resolve()
 DEFAULT_TOPIC = "भारत के प्राचीन किले और उनकी विरासत"
 
 
@@ -45,8 +46,6 @@ def _run_step(name: str, command: list[str], timeout: int, env: dict[str, str]) 
 
 def run_self_test(*, skip_tests: bool = False, skip_video: bool = False,
                   topic: str = DEFAULT_TOPIC, data_dir: Path | None = None) -> dict:
-    from app.config import DATA_DIR
-
     target_dir = Path(data_dir or DATA_DIR).expanduser().resolve()
     target_dir.mkdir(parents=True, exist_ok=True)
     media_dir = target_dir / "generated_videos"
