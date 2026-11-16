@@ -18,6 +18,7 @@ def test_env_parser_ignores_comments_and_splits_only_first_equals(tmp_path):
 
 
 def test_report_never_exposes_secret_values(tmp_path, monkeypatch):
+    monkeypatch.setattr(doctor.shutil, "which", lambda name: "/usr/bin/" + name)
     (tmp_path / "app" / "static").mkdir(parents=True)
     (tmp_path / "app" / "main.py").write_text("", encoding="utf-8")
     (tmp_path / "app" / "static" / "index.html").write_text("", encoding="utf-8")
