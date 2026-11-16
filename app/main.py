@@ -56,7 +56,7 @@ from .production_runtime import create_run as create_production_run, get_run as 
 from .earning_system import router as earning_router, sync_youtube_estimate
 from .security import RequestRateLimiter, client_address_allowed, same_origin_request
 from .backup_restore import verify_backup, BackupValidationError, snapshot_database
-from .flow_auto_import import start_flow_auto_import, stop_flow_auto_import
+from .flow_auto_import import start_flow_auto_import, stop_flow_auto_import, flow_auto_import_status
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT.parent))).expanduser().resolve()
@@ -3695,6 +3695,12 @@ def _reject_symlinked_media(path: Path, label: str) -> None:
         raise HTTPException(status_code=404, detail=f"{label} not found")
 
 
+
+
+@app.get("/api/flow/auto-import/status")
+def google_flow_auto_import_status():
+    """Report whether Android Downloads auto-import is running."""
+    return flow_auto_import_status()
 
 
 @app.post("/api/flow/import")
