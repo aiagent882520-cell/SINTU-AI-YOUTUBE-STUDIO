@@ -26,6 +26,63 @@ def run_check(name: str, command: list[str], results: list[dict], cwd: Path = RO
     return proc.returncode == 0
 
 
+def validate_mp4_metadata(data: dict) -> dict:
+    """Validate the Android-friendly MP4 profile used by the renderer."""
+    import math
+
+    if not isinstance(data, dict):
+        raise ValueError("ffprobe metadata is not an object")
+    format_info = data.get("format") or {}
+    format_names = str(format_info.get("format_name", "")).lower().split(",")
+    if not ({"mp4", "mov"} & set(format_names)):
+        raise ValueError("container is not MP4/MOV")
+    try:
+        duration = float(format_info.get("duration", 0))
+    except (TypeError, ValueError):
+        duration = 0
+    if not math.isfinite(duration) or duration < 1:
+        raise ValueError("duration is missing, invalid, or below 1 second")
+
+    streams = data.get("streams") or []
+    video_stream = next((item for item in streams if item.get("codec_type") == "video"), None)
+    if not video_stream:
+        raise ValueError("missing video stream")
+    try:
+        width, height = int(video_stream.get("width", 0)), int(video_stream.get("height", 0))
+    except (TypeError, ValueError):
+        width, height = 0, 0
+    if width < 64 or height < 64:
+        raise ValueError("video resolution is missing or below 64px")
+    if str(video_stream.get("codec_name", "")).lower() != "h264":
+        raise ValueError("video codec must be H.264")
+    if str(video_stream.get("pix_fmt", "")).lower() != "yuv420p":
+        raise ValueError("video pixel format must be yuv420p")
+
+    audio_stream = next((item for item in streams if item.get("codec_type") == "audio"), None)
+    audio_details = None
+    if audio_stream:
+        try:
+            sample_rate = int(audio_stream.get("sample_rate", 0))
+            channels = int(audio_stream.get("channels", 0))
+        except (TypeError, ValueError):
+            sample_rate, channels = 0, 0
+        if str(audio_stream.get("codec_name", "")).lower() != "aac":
+            raise ValueError("audio codec must be AAC")
+        if sample_rate != 48000:
+            raise ValueError("audio sample rate must be 48000 Hz")
+        if channels != 2:
+            raise ValueError("audio must be 2-channel stereo")
+        audio_details = {"codec": "aac", "sample_rate": sample_rate, "channels": channels}
+
+    return {
+        "duration_seconds": round(duration, 2),
+        "resolution": f"{width}x{height}",
+        "video_codec": "h264",
+        "pixel_format": "yuv420p",
+        "audio": audio_details,
+    }
+
+
 def audit_media(path: Path, results: list[dict]) -> bool:
     ffprobe = shutil.which("ffprobe")
     ffmpeg = shutil.which("ffmpeg")
@@ -37,7 +94,8 @@ def audit_media(path: Path, results: list[dict]) -> bool:
     for video in sorted(path.glob("*.mp4")):
         probe = subprocess.run(
             [ffprobe, "-v", "error", "-show_entries",
-             "format=duration,size:stream=codec_type,width,height", "-of", "json", str(video)],
+             "format=duration,size,format_name:stream=codec_type,codec_name,width,height,pix_fmt,sample_rate,channels",
+             "-of", "json", str(video)],
             text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
         if probe.returncode:
             results.append({"check": f"media:{video.name}", "status": "FAIL",
@@ -45,14 +103,10 @@ def audit_media(path: Path, results: list[dict]) -> bool:
             ok = False
             continue
         try:
-            data = json.loads(probe.stdout)
-            duration = float(data.get("format", {}).get("duration", 0))
-            streams = data.get("streams", [])
-            video_stream = next((x for x in streams if x.get("codec_type") == "video"), None)
-            if not video_stream or duration < 1 or int(video_stream.get("width", 0)) < 64 or int(video_stream.get("height", 0)) < 64:
-                raise ValueError("missing video stream, duration < 1s, or resolution below 64px")
-        except (ValueError, TypeError, StopIteration) as exc:
-            results.append({"check": f"media:{video.name}", "status": "FAIL", "output": str(exc)})
+            metadata = validate_mp4_metadata(json.loads(probe.stdout))
+        except (ValueError, TypeError, json.JSONDecodeError) as exc:
+            results.append({"check": f"media:{video.name}", "status": "FAIL",
+                            "output": str(exc)})
             ok = False
             continue
         black = subprocess.run(
@@ -65,13 +119,12 @@ def audit_media(path: Path, results: list[dict]) -> bool:
             ok = False
             continue
         intervals = [(float(a), float(b)) for a, b in re.findall(
-            r"black_start:([0-9.]+)\s+black_end:([0-9.]+)", black.stderr)]
-        full_black = any(start <= 0.1 and end >= duration * 0.95 for start, end in intervals)
+            r"black_start:([0-9.]+)\\s+black_end:([0-9.]+)", black.stderr)]
+        full_black = any(start <= 0.1 and end >= metadata["duration_seconds"] * 0.95
+                         for start, end in intervals)
         status = "FAIL" if full_black else "PASS"
         results.append({"check": f"media:{video.name}", "status": status,
-                        "duration_seconds": round(duration, 2),
-                        "resolution": f"{video_stream['width']}x{video_stream['height']}",
-                        "black_intervals": intervals})
+                        **metadata, "black_intervals": intervals})
         ok = ok and not full_black
     if not any(path.glob("*.mp4")):
         results.append({"check": "generated-videos", "status": "INFO",
