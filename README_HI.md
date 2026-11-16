@@ -121,7 +121,7 @@ Builder/checker aur five final reviewers se approved production run ke baad loca
 - Run current logged-in owner ka hona chahiye aur status `completed` hona chahiye. Format ka generic export profile supported hona chahiye.
 - Free local image ke liye validated ComfyUI image workflow; voice ke liye Piper executable + Hindi voice model; final MP4 ke liye FFmpeg + FFprobe chahiye. Original procedural background music local generate hota hai.
 - API paid providers ko is pipeline se automatically call nahi karti. Engine missing ho to request 503 ke saath fail closed hoti hai.
-- Final renderer SINTU watermark add karta hai; subtitles/captions burn nahi hote. Result run se attach hota hai. `published=false` rahega; YouTube upload alag human-approved step hai.
+- Final renderer SINTU watermark add karta hai; optional timed SRT subtitles/captions/lyrics FFmpeg/libass se final MP4 mein burn ho sakte hain. Specific AI-clip assembly path abhi subtitle/caption burn-in reject karta hai. Result run se attach hota hai. `published=false` rahega; YouTube upload alag human-approved step hai.
 - Yeh endpoint 25 scene prompts tak accept karta hai. Scene prompts abhi request mein dene honge; automatic scene prompt extraction, long-form AI video generation aur remote publishing is endpoint ka hissa nahi hain.
 
 ## Earning System
