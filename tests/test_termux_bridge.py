@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app import main
@@ -115,3 +116,48 @@ def test_bridge_bearer_auth_works_without_admin_browser_session(tmp_path, monkey
     assert response.status_code == 200
     assert response.json()["enabled"] is True
     assert client.get("/api/termux-bridge/status").status_code == 401
+
+
+def test_bridge_queues_safe_local_readiness_and_video_e2e_actions(tmp_path, monkeypatch):
+    client, api_headers, worker_headers = bridge_client(tmp_path, monkeypatch)
+    readiness = client.post("/api/termux-bridge/jobs", headers=api_headers,
+                            json={"action": "operational_readiness"})
+    assert readiness.status_code == 202
+    preflight = client.post("/api/termux-bridge/jobs", headers=api_headers,
+                            json={"action": "live_preflight"})
+    assert preflight.status_code == 202
+    video = client.post("/api/termux-bridge/jobs", headers=api_headers,
+                        json={"action": "offline_video_e2e", "topic": "भारत के किले"})
+    assert video.status_code == 202
+
+    jobs = [client.get("/api/termux-bridge/jobs/next", headers=worker_headers).json()
+            for _ in range(3)]
+    assert [job["action"] for job in jobs] == [
+        "operational_readiness", "live_preflight", "offline_video_e2e"
+    ]
+    assert jobs[2]["payload"] == {"topic": "भारत के किले"}
+
+
+def test_bridge_restricts_topics_to_offline_video_e2e(tmp_path, monkeypatch):
+    client, api_headers, _ = bridge_client(tmp_path, monkeypatch)
+    assert client.post("/api/termux-bridge/jobs", headers=api_headers,
+                       json={"action": "git_status", "topic": "not allowed"}).status_code == 400
+    assert client.post("/api/termux-bridge/jobs", headers=api_headers,
+                       json={"action": "offline_video_e2e", "topic": "x" * 301}).status_code == 422
+
+
+def test_worker_maps_e2e_actions_to_fixed_argument_arrays(monkeypatch):
+    from scripts import termux_bridge_worker as worker
+
+    monkeypatch.setattr(worker, "PYTHON", "/sintu/.venv/bin/python")
+    assert worker.command_for({"action": "operational_readiness", "payload": {}}) == [
+        "/sintu/.venv/bin/python", "scripts/operational_readiness.py", "--json"
+    ]
+    assert worker.command_for({"action": "live_preflight", "payload": {}}) == [
+        "/sintu/.venv/bin/python", "scripts/live_e2e.py"
+    ]
+    assert worker.command_for({"action": "offline_video_e2e", "payload": {"topic": "भारत के किले"}}) == [
+        "/sintu/.venv/bin/python", "scripts/live_e2e.py", "--offline-video", "--topic", "भारत के किले"
+    ]
+    with pytest.raises(ValueError, match="Rejected offline video topic"):
+        worker.command_for({"action": "offline_video_e2e", "payload": {"topic": "x" * 301}})
