@@ -251,12 +251,16 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         raise RenderFailed(
             f"Visual quality check failed: {visible}/{len(sampled)} sampled frames contain visible image content."
         )
+    motion = _verify_visual_motion(path) if duration >= 5 else {
+        "motion_checked": False, "motion_ratio": 0.0, "sampled_frames": 0
+    }
     return {"duration_seconds": duration, "video_duration_seconds": video_duration,
             "frame_count": frame_count, "fps": actual_fps,
-            "resolution": f"{width}x{height}", "video_codec": codec, "audio": has_audio}
+            "resolution": f"{width}x{height}", "video_codec": codec, "audio": has_audio,
+            **motion}
 
 
-def _verify_visual_motion(path: Path, minimum_motion_ratio: float = 0.10) -> dict:
+def _verify_visual_motion(path: Path, minimum_motion_ratio: float = 0.20) -> dict:
     """Reject long static-image exports while allowing short establishing shots."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
