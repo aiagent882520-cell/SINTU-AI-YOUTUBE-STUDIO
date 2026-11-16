@@ -1320,6 +1320,7 @@ def test_admin_integrations_reports_truthful_engine_readiness(tmp_path, monkeypa
             "local": {"configured": False, "model": "qwen2.5:3b"},
             "openai": {"configured": True, "model": "test"},
             "gemini": {"configured": False, "model": "test"},
+            "deepseek": {"configured": False, "model": "deepseek-flash"},
         },
     })
     monkeypatch.setattr(main, "paid_upgrades_allowed", lambda: False)
@@ -1334,6 +1335,8 @@ def test_admin_integrations_reports_truthful_engine_readiness(tmp_path, monkeypa
     body = integrations.json()
     assert body["text_ai"]["status"] == "needs_local_model"
     assert body["text_ai"]["paid_upgrades_allowed"] is False
+    assert body["other_text_providers"]["status"] == "needs_server_key"
+    assert body["other_text_providers"]["deepseek"]["configured"] is False
     assert body["image_generation"]["status"] == "needs_local_workflow"
     assert body["video_generation"]["status"] == "needs_local_workflow"
     assert body["voiceover"]["status"] == "needs_piper_model"
