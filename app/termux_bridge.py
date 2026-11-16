@@ -29,6 +29,7 @@ ALLOWED_ACTIONS = {
     "operational_readiness",
     "live_preflight",
     "offline_video_e2e",
+    "full_self_test",
 }
 MAX_OUTPUT_CHARS = 20000
 
@@ -146,14 +147,14 @@ def create_job(payload: CreateJobInput, authorization: str | None = Header(defau
         data["test_path"] = payload.test_path
     elif payload.test_path:
         raise HTTPException(status_code=400, detail="test_path is only valid for run_tests.")
-    if payload.action == "offline_video_e2e":
+    if payload.action in {"offline_video_e2e", "full_self_test"}:
         if payload.topic is not None:
             topic = payload.topic.strip()
             if not topic or len(topic) > 300:
                 raise HTTPException(status_code=400, detail="topic must contain 1 to 300 characters.")
             data["topic"] = topic
     elif payload.topic is not None:
-        raise HTTPException(status_code=400, detail="topic is only valid for offline_video_e2e.")
+        raise HTTPException(status_code=400, detail="topic is only valid for offline_video_e2e or full_self_test.")
     job_id = secrets.token_hex(16)
     with _connect() as conn:
         conn.execute(
