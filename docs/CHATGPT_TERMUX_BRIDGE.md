@@ -7,7 +7,7 @@ inside Termux can execute it locally.
 ## Security model
 
 - The API accepts only a fixed action allowlist: `git_status`,
-  `git_pull_ff_only`, `run_tests`, `compile_check`, and `health_audit`.
+  `git_pull_ff_only`, `run_tests`, `compile_check`, `health_audit`, `operational_readiness`, `live_preflight`, and `offline_video_e2e`.
 - No arbitrary shell text, executable path, environment variable, or command
   arguments are accepted from the remote caller.
 - A random bearer token of at least 32 characters is required on every route.
@@ -70,6 +70,9 @@ grant ChatGPT direct access to the phone.
 - `run_tests` (optionally one Python test file directly inside `tests/`)
 - `compile_check`
 - `health_audit`
+- `operational_readiness` (JSON readiness report; never prints secret values)
+- `live_preflight` (checks local model/media engine availability without generating media)
+- `offline_video_e2e` (creates a real local branded MP4 using procedural visuals and local Hindi voice; optional topic is limited to 300 characters)
 
 Jobs and bounded output are persisted in `sintu_termux_bridge.sqlite3`.
 
