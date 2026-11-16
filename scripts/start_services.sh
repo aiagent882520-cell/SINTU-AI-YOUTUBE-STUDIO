@@ -24,6 +24,20 @@ for _ in $(seq 1 45); do
 done
 [ "$ready" -eq 1 ] || { tail -n 60 "$LOG_DIR/server.log" >&2 || true; exit 1; }
 
+# Restore the optional local llama.cpp model server after Android reboot.
+if command -v llama-server >/dev/null 2>&1 && [ -d "$LOG_DIR/models" ]; then
+  MODEL_PATH="$(find "$LOG_DIR/models" -maxdepth 1 -type f -name '*.gguf' -size +100M -print -quit)"
+  if [ -n "$MODEL_PATH" ]; then
+    if [ -f "$LOG_DIR/llama-server.pid" ] && kill -0 "$(cat "$LOG_DIR/llama-server.pid")" 2>/dev/null; then
+      :
+    else
+      nohup llama-server -m "$MODEL_PATH" --host 127.0.0.1 --port 8080 -c 4096 -t 4 \
+        >>"$LOG_DIR/llama-server.log" 2>&1 </dev/null &
+      echo $! > "$LOG_DIR/llama-server.pid"
+    fi
+  fi
+fi
+
 if [ -f "$LOG_DIR/bridge-worker.pid" ] && kill -0 "$(cat "$LOG_DIR/bridge-worker.pid")" 2>/dev/null; then
   :
 else
