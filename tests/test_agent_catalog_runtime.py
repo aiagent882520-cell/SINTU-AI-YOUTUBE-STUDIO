@@ -25,11 +25,13 @@ def test_full_catalog_run_executes_each_worker_checker_and_final_review(tmp_path
     def fake_generate(prompt, workflow, provider):
         calls.append(prompt)
         is_gate = "independent quality checker" in prompt.lower() or "final video production reviewer" in prompt.lower()
-        output = (
-            json.dumps({"decision": "PASS", "evidence": ["role output checked against its mission"],
-                        "issues": [], "revision_instructions": []})
-            if is_gate else "Role-specific test deliverable."
-        )
+        if "you are the sintu owner agent" in prompt.lower():
+            output = "READY — all specialist, senior management and final review gates passed."
+        elif is_gate:
+            output = json.dumps({"decision": "PASS", "evidence": ["role output checked against its mission"],
+                                 "issues": [], "revision_instructions": []})
+        else:
+            output = "Role-specific test deliverable."
         return {"output": output, "provider": "test", "model": "fixture"}
 
     monkeypatch.setattr(runtime, "generate_text", fake_generate)
