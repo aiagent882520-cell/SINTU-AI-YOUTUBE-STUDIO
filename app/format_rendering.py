@@ -32,6 +32,7 @@ def format_render_profile(format_id: str) -> dict:
     if item is None:
         raise KeyError(format_id)
     blocked_reason = _SPECIALIZED_ONLY.get(format_id)
+    procedural_2d = item["id"] in {"2d-cartoon", "story-animation"}
     profile = {
         "format_id": item["id"],
         "name": item["name"],
@@ -43,13 +44,16 @@ def format_render_profile(format_id: str) -> dict:
         "brand_watermark": "SINTU AI YOUTUBE STUDIO",
         "burned_in_text": False,
         "generic_export_available": blocked_reason is None,
-        "native_generation_ready": False,
-        "required_source": "Approved scene images or generated MP4 clips",
-        "engine": "FFmpeg storyboard/clip assembly",
-        "limitations": [blocked_reason] if blocked_reason else [
-            "This profile assembles supplied media; it does not generate original scenes by itself.",
-            "Native format-specific generation and quality validation are not implied."
-        ],
+        "native_generation_ready": procedural_2d,
+        "required_source": "Scene descriptions; no input images required" if procedural_2d else "Approved scene images or generated MP4 clips",
+        "engine": "SINTU Procedural 2D Animation + FFmpeg" if procedural_2d else "FFmpeg storyboard/clip assembly",
+        "limitations": [blocked_reason] if blocked_reason else (
+            ["Local vector cartoon character animation with camera pan/zoom; not a full 3D rig or generative-AI art engine."]
+            if procedural_2d else [
+                "This profile assembles supplied media; it does not generate original scenes by itself.",
+                "Native format-specific generation and quality validation are not implied."
+            ]
+        ),
     }
     if item["preset"] in {"3d", "film", "immersive", "hybrid"}:
         profile["optional_native_engine"] = "Blender"

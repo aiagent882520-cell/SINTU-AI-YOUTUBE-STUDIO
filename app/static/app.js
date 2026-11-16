@@ -1408,12 +1408,35 @@ $("blenderRenderButton")?.addEventListener("click",async()=>{
 checkBlenderStudio();
 
 
+async function populateRenderFormatOptions(){
+ const select=$("renderFormat");if(!select)return;
+ const previous=select.value||"youtube-shorts";
+ const catalog=await request("/api/production-catalog");
+ const formats=catalog.formats||[];
+ const blocked=new Set(["360-video","vr-video","ar-video","virtual-production"]);
+ const groups=new Map();
+ for(const format of formats){const group=format.group||format.category||"Other";if(!groups.has(group))groups.set(group,[]);groups.get(group).push(format);}
+ select.innerHTML="";
+ for(const [group,items] of groups){
+  const optgroup=document.createElement("optgroup");optgroup.label=group;
+  for(const format of items){
+   const option=document.createElement("option");option.value=format.id;
+   option.textContent=format.name+(["2d-cartoon","story-animation"].includes(format.id)?" · local 2D animation":"");
+   option.disabled=blocked.has(format.id);
+   optgroup.appendChild(option);
+  }
+  select.appendChild(optgroup);
+ }
+ if(formats.some(format=>format.id===previous&&!blocked.has(previous)))select.value=previous;
+ else select.value="youtube-shorts";
+}
+populateRenderFormatOptions().catch(()=>{});
 function currentStudioRenderPayload(){
  const title=$("renderTitle").value.trim();
  const scenes=$("renderScenes").value.split("\n").map(x=>x.trim()).filter(Boolean);
  const timelineText=$("renderTimeline").value.trim();
  return {
-  title,scenes,seconds_per_scene:Number($("sceneSeconds").value||4),
+  title,scenes,format_id:$("renderFormat").value||"youtube-shorts",seconds_per_scene:Number($("sceneSeconds").value||4),
   timeline_items:structuredTimelineItems(),
   image_ids:timelineRows().length?[]:$("renderImageIds").value.split(",").map(x=>x.trim()).filter(Boolean),
   video_ids:timelineRows().length?[]:$("renderVideoIds").value.split(",").map(x=>x.trim()).filter(Boolean),
@@ -1422,7 +1445,9 @@ function currentStudioRenderPayload(){
   fps:Number($("renderFps").value),quality:$("renderQuality").value,
   transition:$("renderTransition").value,
   motion:timelineText||$("renderVideoIds").value.trim()?"none":$("renderMotion").value,
-  subtitles:[]
+  subtitles:subtitleLines(),
+  sound_effects_enabled:$("renderSoundEffects").checked,
+  sound_effects_volume:Number($("renderSfxVolume").value)
  };
 }
 $("queueRenderButton")?.addEventListener("click",async()=>{
@@ -1432,9 +1457,8 @@ $("queueRenderButton")?.addEventListener("click",async()=>{
   if(!payload.title||!payload.scenes.length)throw new Error("Title aur kam se kam ek scene likhein.");
   let projectId=window.SINTU_ACTIVE_PROJECT_ID||"";
   if(!projectId){
-   const format=["720x1280","1080x1920"].includes(payload.resolution)?"youtube-shorts":"youtube-long";
    const created=await request("/api/projects",{method:"POST",body:JSON.stringify({
-    name:payload.title,brief:payload.scenes.join("\n"),format_id:format,language:"Hindi",
+    name:payload.title,brief:payload.scenes.join("\n"),format_id:payload.format_id,language:"Hindi",
     duration_seconds:Math.max(1,payload.scenes.length*payload.seconds_per_scene)
    })});
    projectId=created.project.id;window.SINTU_ACTIVE_PROJECT_ID=projectId;

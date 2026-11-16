@@ -41,6 +41,8 @@ These are registered format workflows and export profiles, not a claim that ever
 
 - Local procedural sound effects are generated from scene descriptions (transition whooshes, impacts, wind, water and footsteps) and mixed with voiceover/music. No paid SFX API or copyrighted sample pack is used; each render can disable effects or adjust their volume.
 
+- 2D Cartoon aur Story Animation ke liye local frame-by-frame vector character engine hai: walking/arm motion ke saath automatic cinematic pan/zoom, phir FFmpeg final MP4, voice/music/SFX/subtitles aur watermark mix karta hai. Yeh procedural cartoon engine hai—full 3D rig ya generative-AI anime artwork nahi.
+
 ## Automatic earnings ledger and application firewall
 
 - When an admin loads connected-channel YouTube Analytics, SINTU can sync the official estimated revenue for that date range into the ledger. The sync is idempotent and records the amount as **estimated**, never as received; a manually marked received payment is not overwritten.
