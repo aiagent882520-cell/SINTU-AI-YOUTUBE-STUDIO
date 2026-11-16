@@ -36,12 +36,14 @@ SINTU_BRIDGE_WORKER_TOKEN=generate-another-long-random-secret-for-termux-worker
 SINTU_BRIDGE_BASE_URL=http://127.0.0.1:8000
 ```
 
-Start SINTU, then start the worker in another Termux session:
+The one-command Termux installer creates both random bridge credentials in the private `.env` and starts the worker automatically after the API health check. For a manual start or recovery:
 
 ```bash
 cd ~/SINTU-AI-YOUTUBE-STUDIO
 .venv/bin/python scripts/termux_bridge_worker.py
 ```
+
+For Android reboot startup, the installer also installs a Termux:Boot entrypoint. The separate Termux:Boot add-on must be installed/enabled; see `TERMUX_ONE_COMMAND.md`.
 
 Check the worker log/status from the API using the ChatGPT bearer token for status/job creation and the separate worker bearer token for polling/completion. Stop the
 worker with Ctrl+C.
@@ -78,4 +80,4 @@ Jobs and bounded output are persisted in `sintu_termux_bridge.sqlite3`.
 2. GitHub stores the canonical project, runs the automated test/security matrix, and blocks unverified changes from being treated as release-ready.
 3. The Termux worker executes only allowlisted local checks/build tasks on the Android device and posts bounded logs/status back to SINTU.
 
-The loop is not magically connected by installing this code alone. A one-time local worker start and (for cloud ChatGPT Action access) a secured HTTPS tunnel plus Action configuration are required. Normal ChatGPT conversations do not gain direct access to Android shell just because this API exists. GitHub work can still be performed through an authorized GitHub connector; local device execution remains unavailable until the worker is running and reachable.
+The installer starts the local worker automatically, but does not create a public tunnel. For cloud ChatGPT Action access, a secured HTTPS tunnel plus Action configuration are still required. Normal ChatGPT conversations do not gain direct access to Android shell just because this API exists. GitHub work can still be performed through an authorized GitHub connector; local device execution remains unavailable to cloud ChatGPT until the worker is reachable through the secured endpoint.
