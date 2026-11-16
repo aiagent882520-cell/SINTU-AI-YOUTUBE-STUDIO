@@ -291,3 +291,26 @@ def test_ai_clip_renderer_mixes_procedural_scene_sound_effects(tmp_path, monkeyp
     )
     assert probe.returncode == 0
     assert "audio" in probe.stdout
+
+
+def test_storyboard_motion_filter_repeats_camera_move_for_each_scene():
+    zoom_in = video_renderer._storyboard_motion_filter(
+        "slow-zoom-in", width=720, height=1280, fps=24, seconds_per_scene=4
+    )
+    assert zoom_in is not None
+    assert "mod(on,96)" in zoom_in
+    assert "sin(" in zoom_in and "cos(" in zoom_in
+    assert "0.12" in zoom_in
+    assert "0.22" in zoom_in and "0.12" in zoom_in
+
+
+def test_storyboard_zoom_out_reverses_zoom_direction_and_none_disables_motion():
+    zoom_out = video_renderer._storyboard_motion_filter(
+        "slow-zoom-out", width=720, height=1280, fps=30, seconds_per_scene=5
+    )
+    assert zoom_out is not None
+    assert "mod(on,150)" in zoom_out
+    assert "1.12-0.12" in zoom_out
+    assert video_renderer._storyboard_motion_filter(
+        "none", width=720, height=1280, fps=24, seconds_per_scene=4
+    ) is None

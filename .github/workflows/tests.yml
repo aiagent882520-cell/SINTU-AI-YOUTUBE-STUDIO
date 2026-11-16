@@ -108,6 +108,9 @@ jobs:
         run: |
           python scripts/project_health_audit.py --skip-tests \
             --media-dir .ci-data/generated_videos --report offline-media-audit.json
+      - name: Enforce continuous camera motion (not a still-image slideshow)
+        run: |
+          python -c 'import json; r=json.load(open("offline-media-audit.json", encoding="utf-8")); m=next(x for x in r["checks"] if x["check"].startswith("media:")); ratio=(m.get("motion") or {}).get("motion_ratio", 0); print("Sampled motion ratio:", ratio); assert ratio >= 0.60, "Storyboard camera motion is too weak or freezes between scenes"'
       - name: Preserve generated video and audit evidence
         if: always()
         uses: actions/upload-artifact@v4
