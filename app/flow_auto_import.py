@@ -80,6 +80,8 @@ class FlowAutoImporter:
         }
 
     def scan_once(self) -> int:
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.video_dir.mkdir(parents=True, exist_ok=True)
         try:
             ledger = json.loads(self.ledger_path.read_text("utf-8")) if self.ledger_path.exists() else {}
             if not isinstance(ledger, dict):
