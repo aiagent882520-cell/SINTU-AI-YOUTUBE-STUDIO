@@ -10,6 +10,7 @@ import json
 import os
 import secrets
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -41,7 +42,8 @@ def _db_path() -> Path:
     return data_dir.resolve() / "sintu_termux_bridge.sqlite3"
 
 
-def _connect() -> sqlite3.Connection:
+@contextmanager
+def _connect():
     path = _db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path, timeout=10)
@@ -68,7 +70,10 @@ def _connect() -> sqlite3.Connection:
         )
     """)
     conn.commit()
-    return conn
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def _authorize(authorization: str | None) -> None:
