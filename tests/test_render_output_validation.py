@@ -93,3 +93,56 @@ def test_final_mp4_verification_requires_ffprobe(tmp_path, monkeypatch):
     with pytest.raises(RendererUnavailable, match="FFprobe"):
         _verify_rendered_output(output, 720, 1280, 8)
 
+
+
+def test_sampled_motion_rejects_frozen_frames():
+    from app.video_renderer import validate_sampled_motion
+
+    frame = bytes([80]) * (32 * 32 * 3)
+    with pytest.raises(RenderFailed, match="slideshow-like"):
+        validate_sampled_motion(frame * 12, minimum_ratio=0.60)
+
+
+def test_sampled_motion_accepts_continuous_camera_movement():
+    from app.video_renderer import validate_sampled_motion
+
+    frame_bytes = 32 * 32 * 3
+    frames = b"".join(bytes([min(255, 30 + index * 20)]) * frame_bytes for index in range(12))
+    result = validate_sampled_motion(frames, minimum_ratio=0.60)
+    assert result["motion_ratio"] == 1.0
+    assert result["moving_transitions"] == 11
+
+
+def test_final_mp4_verification_rejects_frozen_long_video(tmp_path, monkeypatch):
+    metadata = _metadata(duration=12.0)
+    monkeypatch.setattr("app.video_renderer.shutil.which", lambda name: f"/usr/bin/{name}")
+
+    def fake_run(command, **kwargs):
+        if "ffprobe" in command[0]:
+            return _run_result(metadata)
+        frame_bytes = 32 * 32 * 3
+        return SimpleNamespace(returncode=0, stdout=bytes([80]) * frame_bytes * 12, stderr="")
+
+    monkeypatch.setattr("app.video_renderer.subprocess.run", fake_run)
+    output = tmp_path / "frozen.mp4"
+    output.write_bytes(b"mp4")
+    with pytest.raises(RenderFailed, match="slideshow-like"):
+        _verify_rendered_output(output, 720, 1280, 12, require_audio=True)
+
+
+def test_final_mp4_verification_returns_motion_metrics_for_long_video(tmp_path, monkeypatch):
+    metadata = _metadata(duration=12.0)
+    monkeypatch.setattr("app.video_renderer.shutil.which", lambda name: f"/usr/bin/{name}")
+
+    def fake_run(command, **kwargs):
+        if "ffprobe" in command[0]:
+            return _run_result(metadata)
+        frame_bytes = 32 * 32 * 3
+        frames = b"".join(bytes([min(255, 30 + index * 20)]) * frame_bytes for index in range(12))
+        return SimpleNamespace(returncode=0, stdout=frames, stderr="")
+
+    monkeypatch.setattr("app.video_renderer.subprocess.run", fake_run)
+    output = tmp_path / "moving.mp4"
+    output.write_bytes(b"mp4")
+    result = _verify_rendered_output(output, 720, 1280, 12, require_audio=True)
+    assert result["motion_audit"]["motion_ratio"] == 1.0
