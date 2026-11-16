@@ -17,14 +17,14 @@ components:
       properties:
         action:
           type: string
-          enum: [git_status, git_pull_ff_only, run_tests, compile_check, health_audit, operational_readiness, live_preflight, offline_video_e2e]
+          enum: [git_status, git_pull_ff_only, run_tests, compile_check, health_audit, operational_readiness, live_preflight, offline_video_e2e, full_self_test]
         test_path:
           type: string
           description: Optional Python test file directly inside tests/, only for run_tests.
         topic:
           type: string
           maxLength: 300
-          description: Optional topic for offline_video_e2e only.
+          description: Optional topic for offline_video_e2e or full_self_test only.
     Job:
       type: object
       properties:

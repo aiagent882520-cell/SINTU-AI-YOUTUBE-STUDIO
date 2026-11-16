@@ -161,3 +161,29 @@ def test_worker_maps_e2e_actions_to_fixed_argument_arrays(monkeypatch):
     ]
     with pytest.raises(ValueError, match="Rejected offline video topic"):
         worker.command_for({"action": "offline_video_e2e", "payload": {"topic": "x" * 301}})
+
+
+def test_bridge_queues_full_self_test_with_optional_topic(tmp_path, monkeypatch):
+    client, api_headers, worker_headers = bridge_client(tmp_path, monkeypatch)
+    created = client.post(
+        "/api/termux-bridge/jobs", headers=api_headers,
+        json={"action": "full_self_test", "topic": "भारत की विरासत"},
+    )
+    assert created.status_code == 202
+    job = client.get("/api/termux-bridge/jobs/next", headers=worker_headers).json()
+    assert job["action"] == "full_self_test"
+    assert job["payload"] == {"topic": "भारत की विरासत"}
+
+
+def test_worker_maps_full_self_test_to_fixed_local_script(monkeypatch):
+    from scripts import termux_bridge_worker as worker
+
+    monkeypatch.setattr(worker, "PYTHON", "/sintu/.venv/bin/python")
+    assert worker.command_for({"action": "full_self_test", "payload": {}}) == [
+        "/sintu/.venv/bin/python", "scripts/sintu_self_test.py"
+    ]
+    assert worker.command_for({"action": "full_self_test", "payload": {"topic": "भारत की विरासत"}}) == [
+        "/sintu/.venv/bin/python", "scripts/sintu_self_test.py", "--topic", "भारत की विरासत"
+    ]
+    with pytest.raises(ValueError, match="Rejected full self-test topic"):
+        worker.command_for({"action": "full_self_test", "payload": {"topic": "x" * 301}})
