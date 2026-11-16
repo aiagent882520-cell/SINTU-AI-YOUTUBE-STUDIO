@@ -89,6 +89,9 @@ def test_installable_app_shell(tmp_path, monkeypatch):
     assert "/static/offline.html" in worker.text
     assert 'id="flowPromptPreview"' in page.text
     assert "USER-PROVIDED SCENE ORDER" in app_script.text
+    assert "turn ON the built-in Flow Agent" in app_script.text
+    assert "ONE approval covering the total" in app_script.text
+    assert "do not stop after planning" in app_script.text
     assert "download the clips and import/upload them into SINTU" in app_script.text
 
 def test_agent_orchestration_catalog_and_teams(tmp_path, monkeypatch):
