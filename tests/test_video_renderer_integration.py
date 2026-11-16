@@ -2,7 +2,7 @@ import shutil
 import subprocess
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from app import video_renderer
 
@@ -139,7 +139,15 @@ def test_storyboard_renderer_preserves_full_multiscene_timeline_and_voiceover(tm
     image_paths = []
     for index, color in enumerate(((30, 80, 120), (90, 40, 20), (20, 110, 70)), start=1):
         image_path = tmp_path / f"scene-{index}.png"
-        Image.new("RGB", (160, 284), color).save(image_path)
+        canvas = Image.new("RGB", (160, 284), color)
+        draw = ImageDraw.Draw(canvas)
+        contrast = tuple(255 - channel for channel in color)
+        for offset in range(0, 180, 20):
+            draw.line((offset, 0, 160 - offset // 2, 284), fill=contrast, width=5)
+        draw.ellipse((18 + index * 9, 70, 100 + index * 7, 165), outline=(255, 240, 80), width=9)
+        draw.rectangle((8, 8, 151, 275), outline=(245, 245, 245), width=5)
+        draw.text((16, 18), f"SCENE {index}", fill=(255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0))
+        canvas.save(image_path)
         image_paths.append(image_path)
 
     voice_path = tmp_path / "voice.wav"
@@ -300,7 +308,7 @@ def test_storyboard_motion_filter_repeats_camera_move_for_each_scene():
     assert zoom_in is not None
     assert "mod(on,96)" in zoom_in
     assert "sin(" in zoom_in and "cos(" in zoom_in
-    assert "0.12" in zoom_in
+    assert "1+0.160" in zoom_in
     assert "0.22" in zoom_in and "0.12" in zoom_in
 
 
@@ -310,7 +318,30 @@ def test_storyboard_zoom_out_reverses_zoom_direction_and_none_disables_motion():
     )
     assert zoom_out is not None
     assert "mod(on,150)" in zoom_out
-    assert "1.12-0.12" in zoom_out
+    assert "1.160-0.160" in zoom_out
     assert video_renderer._storyboard_motion_filter(
         "none", width=720, height=1280, fps=24, seconds_per_scene=4
     ) is None
+
+
+def test_long_storyboard_rejects_static_no_motion_mode(monkeypatch):
+    monkeypatch.setattr(video_renderer.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+    with pytest.raises(ValueError, match="static slideshow disabled"):
+        video_renderer.render_storyboard(
+            "No slideshow", ["Opening", "Middle", "Closing"],
+            seconds_per_scene=3, image_paths=[], motion="none",
+        )
+
+
+def test_publish_verifier_rejects_long_frozen_mp4(tmp_path):
+    ffmpeg, _ = _ffmpeg_tools()
+    source = tmp_path / "frozen-long.mp4"
+    result = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+         "-f", "lavfi", "-i", "color=c=green:s=720x1280:r=24:d=12",
+         "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(source)],
+        capture_output=True, check=False, timeout=60,
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
+    with pytest.raises(video_renderer.RenderFailed, match="slideshow-like"):
+        video_renderer.verify_publishable_mp4(source)
