@@ -308,7 +308,7 @@ def test_storyboard_motion_filter_repeats_camera_move_for_each_scene():
     assert zoom_in is not None
     assert "mod(on,96)" in zoom_in
     assert "sin(" in zoom_in and "cos(" in zoom_in
-    assert "0.12" in zoom_in
+    assert "1+0.160" in zoom_in
     assert "0.22" in zoom_in and "0.12" in zoom_in
 
 
