@@ -3695,7 +3695,9 @@ async def import_google_flow_clip(request: Request, filename: str = Query(defaul
     declared = request.headers.get("content-length")
     if declared:
         try:
-            if int(declared) <= 0 or int(declared) > max_bytes:
+            if int(declared) <= 0:
+                raise HTTPException(status_code=400, detail="Empty MP4 upload.")
+            if int(declared) > max_bytes:
                 raise HTTPException(status_code=413, detail="MP4 file 512 MB se chhoti honi chahiye.")
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid upload size.") from None
