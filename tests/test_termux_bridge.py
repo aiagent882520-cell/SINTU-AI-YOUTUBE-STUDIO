@@ -83,3 +83,23 @@ def test_bridge_worker_requires_its_own_strong_token(tmp_path, monkeypatch):
     client, api_headers, _ = bridge_client(tmp_path, monkeypatch)
     response = client.get("/api/termux-bridge/jobs/next", headers=api_headers)
     assert response.status_code == 401
+
+
+
+def test_bridge_requeues_jobs_abandoned_by_crashed_worker(tmp_path, monkeypatch):
+    import sqlite3
+    from datetime import datetime, timedelta, timezone
+
+    client, api_headers, worker_headers = bridge_client(tmp_path, monkeypatch)
+    created = client.post("/api/termux-bridge/jobs", headers=api_headers, json={"action": "git_status"})
+    job_id = created.json()["job_id"]
+    claimed = client.get("/api/termux-bridge/jobs/next", headers=worker_headers)
+    assert claimed.status_code == 200
+
+    stale_time = (datetime.now(timezone.utc) - timedelta(minutes=40)).isoformat()
+    with sqlite3.connect(tmp_path / "bridge.sqlite3") as conn:
+        conn.execute("UPDATE bridge_jobs SET started_at=? WHERE id=?", (stale_time, job_id))
+
+    reclaimed = client.get("/api/termux-bridge/jobs/next", headers=worker_headers)
+    assert reclaimed.status_code == 200
+    assert reclaimed.json()["job_id"] == job_id
