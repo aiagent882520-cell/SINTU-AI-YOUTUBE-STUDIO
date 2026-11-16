@@ -314,3 +314,12 @@ def test_storyboard_zoom_out_reverses_zoom_direction_and_none_disables_motion():
     assert video_renderer._storyboard_motion_filter(
         "none", width=720, height=1280, fps=24, seconds_per_scene=4
     ) is None
+
+
+def test_long_storyboard_rejects_static_no_motion_mode(monkeypatch):
+    monkeypatch.setattr(video_renderer.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+    with pytest.raises(ValueError, match="static slideshow disabled"):
+        video_renderer.render_storyboard(
+            "No slideshow", ["Opening", "Middle", "Closing"],
+            seconds_per_scene=3, image_paths=[], motion="none",
+        )
