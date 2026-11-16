@@ -5,13 +5,13 @@ from app.agent_orchestrator import catalog_team
 import app.production_runtime as runtime
 
 
-def test_catalog_contains_all_61_roles_with_distinct_checkers():
+def test_catalog_contains_61_specialists_and_five_senior_managers_with_distinct_checkers():
     team = catalog_team()
     workers = [item for item in team if item["role_type"] == "specialist"]
     checkers = [item for item in team if item["role_type"] == "independent_checker"]
     assert len(AGENTS) == 61
-    assert len(workers) == len(checkers) == 61
-    assert [item["name"] for item in workers] == AGENTS
+    assert len(workers) == len(checkers) == 66
+    assert [item["name"] for item in workers] == AGENTS + list(runtime.SENIOR_MANAGER_NAMES)
     assert all(item["checks"] == worker["name"] for worker, item in zip(workers, checkers))
     assert all(item["name"] != item["checks"] for item in checkers)
     assert all(item["status"] == "Registered role; not a continuously running agent" for item in list_agents())
@@ -25,11 +25,13 @@ def test_full_catalog_run_executes_each_worker_checker_and_final_review(tmp_path
     def fake_generate(prompt, workflow, provider):
         calls.append(prompt)
         is_gate = "independent quality checker" in prompt.lower() or "final video production reviewer" in prompt.lower()
-        output = (
-            json.dumps({"decision": "PASS", "evidence": ["role output checked against its mission"],
-                        "issues": [], "revision_instructions": []})
-            if is_gate else "Role-specific test deliverable."
-        )
+        if "you are the sintu owner agent" in prompt.lower():
+            output = "READY — all specialist, senior management and final review gates passed."
+        elif is_gate:
+            output = json.dumps({"decision": "PASS", "evidence": ["role output checked against its mission"],
+                                 "issues": [], "revision_instructions": []})
+        else:
+            output = "Role-specific test deliverable."
         return {"output": output, "provider": "test", "model": "fixture"}
 
     monkeypatch.setattr(runtime, "generate_text", fake_generate)
@@ -38,13 +40,14 @@ def test_full_catalog_run_executes_each_worker_checker_and_final_review(tmp_path
     result = runtime.get_run(run["id"], "test-owner")
 
     assert result["status"] == "completed"
-    assert len([step for step in result["steps"] if step["step_type"] == "builder"]) == 61
-    assert len([step for step in result["steps"] if step["step_type"] == "checker"]) == 61
+    assert len([step for step in result["steps"] if step["step_type"] == "builder"]) == 66
+    assert len([step for step in result["steps"] if step["step_type"] == "checker"]) == 66
     assert len([step for step in result["steps"] if step["step_type"] == "reviewer"]) == 5
     assert len(result["result"]["deliverables"]) == 61
     assert result["result"]["video_rendered"] is False
     assert result["result"]["published"] is False
-    assert len(calls) == 127
+    assert set(result["result"]["management_reports"]) == set(runtime.SENIOR_MANAGER_NAMES)
+    assert len(calls) == 137
 
 
 def test_full_catalog_run_pauses_on_first_failed_independent_checker(tmp_path, monkeypatch):
