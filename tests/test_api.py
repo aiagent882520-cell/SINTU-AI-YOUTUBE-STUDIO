@@ -1753,6 +1753,7 @@ def test_youtube_publish_resumes_persisted_session_after_process_restart(tmp_pat
 
 def test_youtube_access_token_can_force_refresh_after_upload_401(tmp_path, monkeypatch):
     import json
+    import urllib.parse
     import time
     from datetime import datetime, timezone
     from cryptography.fernet import Fernet
