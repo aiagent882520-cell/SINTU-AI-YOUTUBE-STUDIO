@@ -14,6 +14,11 @@ process_state() {
     rm -f "$file"
     return 1
   fi
+  proc_state="$(sed -E 's/^.*\\) //' "/proc/$pid/stat" 2>/dev/null | cut -d ' ' -f 1 || true)"
+  if [ "$proc_state" = "Z" ]; then
+    rm -f "$file"
+    return 1
+  fi
   cmd="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
   if [[ "$cmd" == *"$marker"* ]]; then return 0; fi
   printf '[WATCHDOG] Refusing to signal unrelated PID %s for %s\n' "$pid" "$name" >&2
