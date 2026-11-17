@@ -2,6 +2,7 @@ import importlib.util
 from pathlib import Path
 
 import pytest
+from datetime import datetime, timedelta, timezone
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,3 +53,40 @@ def test_relay_rejects_extra_payload_fields():
 def test_relay_repository_and_actor_are_scoped_to_project_owner():
     assert relay.REPOSITORY == "aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO"
     assert relay.ALLOWED_ACTOR == "aiagent882520-cell"
+
+
+
+def test_relay_requeues_stale_claim_after_worker_crash():
+    class FakeGitHub(relay.GitHub):
+        def __init__(self):
+            self.updates = []
+            self.comments = []
+
+        def request(self, method, path, payload=None):
+            if method == "GET" and "labels=sintu-command-running" in path:
+                stale = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+                return [{
+                    "number": 42,
+                    "title": "SINTU-CMD: full_self_test",
+                    "updated_at": stale,
+                    "user": {"login": relay.ALLOWED_ACTOR},
+                }]
+            if method == "GET" and "labels=sintu-command-queued" in path:
+                return [{
+                    "number": 42,
+                    "title": "SINTU-CMD: full_self_test",
+                    "user": {"login": relay.ALLOWED_ACTOR},
+                }]
+            raise AssertionError(f"Unexpected GitHub API request: {method} {path}")
+
+        def update_issue(self, number, **fields):
+            self.updates.append((number, fields))
+
+        def comment(self, number, body):
+            self.comments.append((number, body))
+
+    github = FakeGitHub()
+    pending = github.pending()
+    assert [issue["number"] for issue in pending] == [42]
+    assert github.updates == [(42, {"labels": [relay.QUEUED_LABEL]})]
+    assert "Recovered stale claim" in github.comments[0][1]
