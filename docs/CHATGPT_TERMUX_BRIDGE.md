@@ -85,3 +85,56 @@ Jobs and bounded output are persisted in `sintu_termux_bridge.sqlite3`.
 3. The Termux worker executes only allowlisted local checks/build tasks on the Android device and posts bounded logs/status back to SINTU.
 
 The installer starts the local worker automatically, but does not create a public tunnel. For cloud ChatGPT Action access, a secured HTTPS tunnel plus Action configuration are still required. Normal ChatGPT conversations do not gain direct access to Android shell just because this API exists. GitHub work can still be performed through an authorized GitHub connector; local device execution remains unavailable to cloud ChatGPT until the worker is reachable through the secured endpoint.
+
+
+## GitHub relay mode (no public tunnel)
+
+For normal ChatGPT conversations using the connected GitHub app, the repository
+also supports a GitHub Issues mailbox. ChatGPT creates a labeled command issue;
+the Android Termux relay polls GitHub, validates the JSON body and trusted
+author, executes only the fixed allowlist, then comments the result and closes
+the issue. This avoids exposing the phone or SINTU API to the public internet.
+
+### One-time Android authorization
+
+The installer installs GitHub CLI when available. Sign in once from Termux:
+
+```bash
+gh auth login
+```
+
+Choose GitHub.com, HTTPS, and browser/device login. Grant the CLI access to
+read/write repository issues. Do not paste the device code, token, or private
+`.env` into ChatGPT. Then rerun the safe installer; it starts
+`scripts/github_termux_relay.py` automatically and installs labels. Keep the
+relay process alive; Termux:Boot starts it after reboot when the add-on is
+installed/enabled.
+
+### Queue a device job from ChatGPT
+
+Create a GitHub issue in this repository with label
+`sintu-command-queued`, a title beginning `SINTU-CMD:`, and a JSON-only body.
+The issue must be authored by the configured owner account
+(`SINTU_GITHUB_ALLOWED_ACTOR`, default `aiagent882520-cell`).
+
+Example:
+
+```json
+{"action":"full_self_test","topic":"भारत की ऐतिहासिक विरासत"}
+```
+
+Allowed actions: `git_status`, `git_pull_ff_only`, `run_tests`,
+`compile_check`, `health_audit`, `operational_readiness`,
+`live_preflight`, `offline_video_e2e`, and `full_self_test`.
+Optional `test_path` is accepted only for `run_tests` and must be an
+existing Python test file directly inside `tests/`. No shell commands,
+arbitrary paths, executable names, or environment changes are accepted.
+
+The worker changes the label to running, adds a claim comment, executes the
+job, posts a bounded result, labels it done/failed, and closes the issue.
+ChatGPT can then read the result using the GitHub app. Do not put secrets in
+issue titles or bodies.
+
+The original authenticated localhost bridge remains available for a dedicated
+HTTPS Action client. GitHub relay mode is the preferred route when using the
+ordinary ChatGPT app with a connected GitHub account.
