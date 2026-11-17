@@ -155,7 +155,7 @@ def create_job(payload: CreateJobInput, authorization: str | None = Header(defau
                 raise HTTPException(status_code=400, detail="topic must contain 1 to 300 characters.")
             data["topic"] = topic
     elif payload.topic is not None:
-        raise HTTPException(status_code=400, detail="topic is only valid for offline_video_e2e or full_self_test.")
+        raise HTTPException(status_code=400, detail="topic is only valid for offline_video_e2e, full_self_test or full_studio_e2e.")
     job_id = secrets.token_hex(16)
     with _connect() as conn:
         conn.execute(
