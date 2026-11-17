@@ -120,6 +120,7 @@ async function refresh() {
     if (providers.local.configured) available.push("Free local Ollama");
     if (providers.paid_upgrades_allowed && providers.openai.configured) available.push("OpenAI (optional)");
     if (providers.paid_upgrades_allowed && providers.gemini.configured) available.push("Gemini (optional)");
+    if (providers.paid_upgrades_allowed && providers.deepseek?.configured) available.push("DeepSeek (optional)");
     $("providerStatus").textContent = available.length
       ? "Available: " + available.join(" + ") + " · selected: " + providers.selected
       : "Free local AI setup needed: install/start Ollama and pull the configured model. Paid providers locked until revenue + approval.";
