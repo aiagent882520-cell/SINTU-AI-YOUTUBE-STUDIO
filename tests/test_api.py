@@ -1532,6 +1532,33 @@ def test_youtube_publish_requires_approved_calendar_item_and_rendered_file(tmp_p
     assert missing.status_code == 404
 
 
+
+def test_public_youtube_publish_is_rejected_before_any_upload(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    client = client_for_test(tmp_path, monkeypatch)
+    scheduled = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    created = client.post("/api/calendar", json={
+        "title": "Public must stay disabled", "platform": "youtube",
+        "prompt": "Test public safety", "scheduled_at": scheduled,
+    })
+    assert created.status_code == 200
+    calendar_id = created.json()["id"]
+    with main.db() as conn:
+        conn.execute("UPDATE content_calendar SET status='Approved' WHERE id=?", (calendar_id,))
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Public request must be rejected before token access or network upload.")
+
+    monkeypatch.setattr(main, "_youtube_access_token", forbidden)
+    monkeypatch.setattr(main, "_youtube_request", forbidden)
+    response = client.post(
+        f"/api/admin/youtube/publish/{calendar_id}?video_id={'c' * 32}&title=Public%20test&privacy_status=public"
+    )
+    assert response.status_code == 403
+    assert "public youtube publishing is disabled" in response.json()["detail"].lower()
+
+
 def test_youtube_oauth_callback_encrypts_tokens_and_connects_channel(tmp_path, monkeypatch):
     import hashlib
     import time

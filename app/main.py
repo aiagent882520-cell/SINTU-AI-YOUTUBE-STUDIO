@@ -1928,6 +1928,10 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
                     title: str = Query(..., min_length=1, max_length=100),
                     description: str = Query(default="", max_length=5000),
                     privacy_status: str = Query(default="private", pattern=r"^(private|unlisted|public)$")):
+    # Public distribution is fail-closed until a durable, one-time owner approval
+    # workflow is implemented and verified across every publishing entry point.
+    if privacy_status == "public":
+        raise HTTPException(status_code=403, detail="Public YouTube publishing is disabled; private uploads only.")
     if not re.fullmatch(r"[a-f0-9]{32}", video_id):
         raise HTTPException(status_code=400, detail="Invalid rendered video ID.")
     with db() as conn:
