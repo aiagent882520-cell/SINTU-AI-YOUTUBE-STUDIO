@@ -46,6 +46,8 @@ def probe(path: Path, ffprobe: str) -> dict:
 
 def _backup_atomically(source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        raise FileExistsError("Refusing to overwrite an existing media backup.")
     temporary = destination.with_name(destination.name + ".part")
     try:
         shutil.copy2(source, temporary)
@@ -149,7 +151,7 @@ def main() -> int:
     if not ffmpeg or not ffprobe:
         print(json.dumps({"status": "FAIL", "error": "FFmpeg and FFprobe are required"}))
         return 2
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     backup_dir = (args.backup_dir.expanduser().resolve() if args.backup_dir
                   else DATA_DIR / "media_backups" / stamp)
     results = []
