@@ -236,12 +236,12 @@ def inspect_video(path: Path) -> dict:
 
     backups = find_backups(path)
     creation_epoch = parse_creation_time(info.get("container_creation_time"))
-    if backups:
+    if creation_epoch is not None:
+        reference_epoch = creation_epoch
+        reference_source = "container-creation-time-preserved-by-map-metadata"
+    elif backups:
         reference_epoch = parse_creation_time(backups[0]["pre_repair_mtime_utc"])
         reference_source = "pre-repair-backup-mtime"
-    elif creation_epoch is not None:
-        reference_epoch = creation_epoch
-        reference_source = "container-creation-time"
     else:
         reference_epoch = stat.st_mtime
         reference_source = "current-file-mtime-may-reflect-audio-repair"
