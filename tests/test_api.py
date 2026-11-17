@@ -1794,6 +1794,161 @@ def test_youtube_access_token_can_force_refresh_after_upload_401(tmp_path, monke
     assert calls == ["https://oauth2.googleapis.com/token"]
 
 
+def test_public_visibility_requires_one_time_bound_owner_approval(tmp_path, monkeypatch):
+    import json
+    from datetime import datetime, timedelta, timezone
+
+    from cryptography.fernet import Fernet
+
+    client = client_for_test(tmp_path, monkeypatch)
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    created = client.post("/api/calendar", json={
+        "title": "Explicit public approval test", "platform": "youtube",
+        "prompt": "Mock public visibility test", "scheduled_at": future,
+    })
+    calendar_id = created.json()["id"]
+    assert client.post(f"/api/calendar/{calendar_id}/approve").status_code == 200
+    video_id = "f" * 32
+    output_dir = tmp_path / "public-renders"
+    output_dir.mkdir()
+    video_bytes = b"public-approval-test-video"
+    (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
+    monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(main, "verify_publishable_mp4", lambda _: {"verified": True})
+    monkeypatch.setattr(main, "_youtube_connection", lambda: {
+        "channel_id": "UC-public-test", "channel_title": "Public Test Channel"
+    })
+    monkeypatch.setattr(main, "_youtube_access_token", lambda *args, **kwargs: "mock-public-access-token")
+    key = Fernet.generate_key().decode()
+    monkeypatch.setenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", key)
+
+    approval_response = client.post("/api/admin/youtube/public-approvals", json={
+        "calendar_id": calendar_id, "video_id": video_id,
+        "title": "Exact public title", "channel_id": "UC-public-test",
+        "confirmation": "I CONFIRM PUBLIC VISIBILITY",
+    })
+    assert approval_response.status_code == 200, approval_response.text
+    approval = approval_response.json()
+    token = approval["approval_token"]
+    assert approval["privacy_status"] == "public"
+    assert approval["title"] == "Exact public title"
+    assert approval["channel_id"] == "UC-public-test"
+
+    session_uri = "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=private-first"
+    google_calls = []
+    def fake_google(url, data=None, headers=None, method="GET"):
+        google_calls.append((url, method, data))
+        if method == "POST":
+            metadata = json.loads(data.decode())
+            assert metadata["status"]["privacyStatus"] == "private"
+            return 200, {"Location": session_uri}, b""
+        if method == "PUT":
+            body = json.loads(data.decode())
+            assert body["status"]["privacyStatus"] == "public"
+            return 200, {}, json.dumps({"id": "yt-public-video", "status": {"privacyStatus": "public"}}).encode()
+        pytest.fail("Unexpected YouTube network operation in public approval test.")
+
+    monkeypatch.setattr(main, "_youtube_request", fake_google)
+    def fake_transfer(path, uri, token_value, *, request, on_progress, probe_first=False):
+        on_progress(path.stat().st_size, "UPLOADING")
+        on_progress(path.stat().st_size, "VERIFYING")
+        return {"id": "yt-public-video"}
+    monkeypatch.setattr(main, "transfer_resumable_upload", fake_transfer)
+
+    verification = {"count": 0}
+    def fake_verify(youtube_id, access_token):
+        verification["count"] += 1
+        return {
+            "upload_status": "uploaded", "processing_status": "processing",
+            "privacy_status": "private" if verification["count"] == 1 else "public",
+            "channel_id": "UC-public-test",
+        }
+    monkeypatch.setattr(main, "_youtube_verify_uploaded_video", fake_verify)
+
+    published = client.post(
+        f"/api/admin/youtube/publish/{calendar_id}",
+        params={"video_id": video_id, "title": "Exact public title", "privacy_status": "public"},
+        headers={"X-SINTU-Public-Approval": token},
+    )
+    assert published.status_code == 200, published.text
+    assert published.json()["privacy_status"] == "public"
+    assert verification["count"] == 2
+    assert [call[1] for call in google_calls] == ["POST", "PUT"]
+
+    digest = main._public_approval_digest(token)
+    with main.db() as conn:
+        approval_row = conn.execute(
+            "SELECT consumed_at,revoked_at,applied_at FROM youtube_public_approvals WHERE approval_hash=?",
+            (digest,),
+        ).fetchone()
+        upload_row = conn.execute(
+            "SELECT status,public_approval_hash FROM youtube_uploads WHERE calendar_id=?",
+            (calendar_id,),
+        ).fetchone()
+    assert approval_row["consumed_at"] is not None
+    assert approval_row["revoked_at"] is None
+    assert approval_row["applied_at"] is not None
+    assert upload_row["status"] == "COMPLETED"
+    assert upload_row["public_approval_hash"] == digest
+    assert token not in str(dict(approval_row))
+
+    status = client.get(f"/api/admin/youtube/uploads/{calendar_id}")
+    assert status.status_code == 200
+    assert status.json()["status"] == "COMPLETED"
+    assert status.json()["progress_percent"] == 100.0
+    assert "encrypted_session_uri" not in status.json()
+    assert "public_approval_hash" not in status.json()
+
+    duplicate = client.post(
+        f"/api/admin/youtube/publish/{calendar_id}",
+        params={"video_id": video_id, "title": "Exact public title", "privacy_status": "public"},
+        headers={"X-SINTU-Public-Approval": token},
+    )
+    assert duplicate.status_code == 200
+    assert duplicate.json()["duplicate_prevented"] is True
+    assert len(google_calls) == 2
+
+
+def test_public_approval_revocation_and_expiry_block_upload_before_oauth(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    client = client_for_test(tmp_path, monkeypatch)
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    created = client.post("/api/calendar", json={
+        "title": "Revoke public approval", "platform": "youtube",
+        "prompt": "Test", "scheduled_at": future,
+    })
+    calendar_id = created.json()["id"]
+    assert client.post(f"/api/calendar/{calendar_id}/approve").status_code == 200
+    video_id = "9" * 32
+    output_dir = tmp_path / "approval-revoke-renders"
+    output_dir.mkdir()
+    (output_dir / (video_id + ".mp4")).write_bytes(b"approval-revoke-test")
+    monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(main, "verify_publishable_mp4", lambda _: {"verified": True})
+    monkeypatch.setattr(main, "_youtube_connection", lambda: {
+        "channel_id": "UC-revoke-test", "channel_title": "Revoke Test"
+    })
+    approval_response = client.post("/api/admin/youtube/public-approvals", json={
+        "calendar_id": calendar_id, "video_id": video_id,
+        "title": "Revoke title", "channel_id": "UC-revoke-test",
+        "confirmation": "I CONFIRM PUBLIC VISIBILITY",
+    })
+    assert approval_response.status_code == 200
+    token = approval_response.json()["approval_token"]
+    revoked = client.post("/api/admin/youtube/public-approvals/revoke",
+                          json={"approval_token": token})
+    assert revoked.status_code == 200
+    monkeypatch.setattr(main, "_youtube_access_token", lambda *args, **kwargs: pytest.fail("Revoked approval must block before OAuth."))
+    monkeypatch.setattr(main, "_youtube_request", lambda *args, **kwargs: pytest.fail("Revoked approval must block before Google network."))
+    blocked = client.post(
+        f"/api/admin/youtube/publish/{calendar_id}",
+        params={"video_id": video_id, "title": "Revoke title", "privacy_status": "public"},
+        headers={"X-SINTU-Public-Approval": token},
+    )
+    assert blocked.status_code == 403
+
+
 def test_youtube_upload_cancel_is_terminal_and_cannot_cancel_completed(tmp_path, monkeypatch):
     from datetime import datetime, timezone
     client = client_for_test(tmp_path, monkeypatch)
