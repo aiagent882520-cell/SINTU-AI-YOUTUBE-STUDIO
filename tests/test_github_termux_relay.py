@@ -24,6 +24,9 @@ def test_relay_accepts_only_allowlisted_fixed_commands():
     assert relay.command_for("full_studio_e2e", {"topic": "भारत"})[-3:] == [
         "--topic", "भारत"
     ]
+    assert relay.command_for("full_studio_e2e", {"topic": "भारत"})[-3:] == [
+        "--topic", "भारत"
+    ]
     assert relay.command_for("full_studio_e2e", {})[-2:] == [
         "--topic", "भारत के प्राचीन किले में सुबह का सिनेमाई दृश्य"
     ]
@@ -49,6 +52,8 @@ def test_relay_rejects_unbounded_or_invalid_topics():
         relay.command_for("offline_video_e2e", {"topic": "x" * 301})
     with pytest.raises(ValueError, match="topic"):
         relay.command_for("full_self_test", {"topic": "   "})
+    with pytest.raises(ValueError, match="topic"):
+        relay.command_for("full_studio_e2e", {"topic": "x" * 301})
     with pytest.raises(ValueError, match="topic"):
         relay.command_for("full_studio_e2e", {"topic": "x" * 301})
 
