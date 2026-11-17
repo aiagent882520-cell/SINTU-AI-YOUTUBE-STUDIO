@@ -8,6 +8,7 @@ bearing the queue label are accepted.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 from datetime import datetime, timedelta, timezone
 import os
@@ -38,7 +39,7 @@ if not Path(PYTHON).exists():
 AUTOMATION_ONLY = os.getenv("SINTU_AUTOMATION_ONLY", "true").strip().lower() in {"1", "true", "yes", "on"}
 PRODUCTION_ACTIONS = {"offline_video_e2e", "full_self_test", "full_studio_e2e"}
 ACTIONS = {
-    "git_status", "git_pull_ff_only", "run_tests", "compile_check",
+    "git_status", "git_pull_ff_only", "run_tests", "compile_check", "automation_self_test",
     "health_audit", "operational_readiness", "live_preflight", "engine_probe",
     "offline_video_e2e", "full_self_test", "full_studio_e2e",
 }
@@ -154,6 +155,8 @@ def command_for(action: str, payload: dict) -> list[str]:
         return ["git", "status", "--short", "--branch"]
     if action == "git_pull_ff_only":
         return ["git", "pull", "--ff-only", "origin", "main"]
+    if action == "automation_self_test":
+        return [PYTHON, "scripts/automation_self_test.py", "--json"]
     if action == "compile_check":
         return [PYTHON, "-m", "compileall", "-q", "app", "scripts"]
     if action == "health_audit":
@@ -236,10 +239,19 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--interval", type=float, default=15.0)
+    parser.add_argument("--lock-file", default=str(Path.home() / ".sintu" / "github-relay.lock"))
     args = parser.parse_args()
     if not 5 <= args.interval <= 300:
         print("--interval must be between 5 and 300 seconds.", file=sys.stderr)
         return 2
+    lock_path = Path(args.lock_file).expanduser()
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_handle = lock_path.open("w")
+    try:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("Another SINTU GitHub relay already holds the process lock.", file=sys.stderr)
+        return 0
     try:
         github = GitHub(github_token())
         github.ensure_labels()
