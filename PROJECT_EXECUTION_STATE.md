@@ -117,3 +117,16 @@ Last updated: 2026-11-17 15:52 UTC
 - Latest main-branch CI run `44119942062` for commit `71bd579176e8b7eff1aeac2b6ea3fb808fd24d1b` passed. This is repository CI, not Android live verification.
 - Android resource probe: ~1.03 GiB RAM available at probe time; do not auto-install large local AI models/ComfyUI. No model or ComfyUI workflow is configured.
 - Current classifications: core automation has prior device evidence; media integrity has 5 failing clips; full Android health audit remains failed/incomplete; resumable YouTube recovery is unimplemented; public publishing is blocked by the new PR mitigation but full approval workflow is incomplete; real OAuth/channel/upload and full reboot recovery remain unverified.
+
+
+## Finalization addendum (2026-11-17 16:55 UTC)
+
+- Issue #90 is conclusively **FAILED**, not complete: the Termux report contains 10 media PASS and 5 full-duration black-frame FAIL. The exact five filenames and black intervals are recorded above. The relay's 20,000-character output truncation removed the beginning of the audit output, so the pytest summary and other early checks cannot be reliably recovered from the existing comment.
+- Issue #95 opened to investigate those five black MP4 assets. No media was deleted, overwritten, or regenerated automatically. The final MP4 quality gate continues to block full-black content.
+- PR #94 merged as `cfcff99828a1bcf171fd9d0aa163e9219821b49a`; all 7 CI checks passed. It rejects public YouTube visibility at the API route before token/network access. Termux relay Issue #97 successfully fast-forwarded the Android repository from `f79fdd4` to `cfcff99`.
+- Post-update Android automation self-test Issue #98: **7/7 passed**. Verified repository/origin, Python 3.14.10, GitHub CLI authentication, SINTU API health, bridge worker online, automation-only mode, and GitHub relay singleton lock.
+- PR #96 merged as `b97b4fe1f840bd30da1937335c576ed4ac460e73`; all 7 CI checks passed. It adds `SINTU_AUDIT_SUMMARY=` as the final compact JSON footer, preserving audit PASS/WARN/FAIL counts and pytest summary within the relay's bounded log tail. A Termux fast-forward for this PR is queued as Issue #99; device deployment is not yet verified at this timestamp.
+- Issue #92 remains open and unimplemented: current YouTube uploader still has no durable encrypted session URI/acknowledged byte offset, chunk recovery, restart resume, or interruption tests. OAuth credentials and channel connection are absent; no real upload has been performed.
+- Issue #93 remains open for the full owner-approval workflow. Immediate mitigation (public endpoint hard-block) is merged and device repository update verified, but durable one-time approval, expiry/revocation, exact title/channel/video fingerprint binding, and worker/pipeline controls are not implemented. Public publishing remains disabled.
+- Full Android reboot/Termux:Boot recovery remains unverified. Current device automation self-test confirms running services but not a full reboot.
+- Next safe execution point: apply PR #96 to Termux via Issue #99; then run a fresh full health audit with the compact summary footer. Expect the five black clips to continue failing until Issue #95 remediation; do not call the health audit successful merely because Python tests pass.
