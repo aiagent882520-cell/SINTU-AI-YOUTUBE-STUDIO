@@ -44,3 +44,37 @@ The installer places a boot entrypoint at `~/.termux/boot/10-sintu.sh` and a ser
 cd ~/SINTU-AI-YOUTUBE-STUDIO
 bash scripts/start_services.sh
 ```
+
+
+## Automatic ChatGPT ↔ GitHub ↔ Termux execution
+
+A second worker, `scripts/github_termux_relay.py`, uses GitHub Issues as a
+private mailbox. This is the route for the ordinary ChatGPT app with its
+connected GitHub integration: ChatGPT creates a queued command issue, the
+Android worker executes a fixed allowlisted task, and the result is written
+back as an issue comment for ChatGPT to read. No public HTTPS tunnel is needed.
+
+One-time prerequisite: install/login to GitHub CLI on this Android device.
+The installer attempts to install `gh`; then run `gh auth login` once and
+grant repository issue read/write access. Do not share the device code or
+token. Rerun `bash scripts/termux_one_command.sh`; it starts the relay and
+creates the queue/result labels. The relay also starts through Termux:Boot
+after reboot when the add-on is enabled.
+
+Worker log and PID:
+
+```bash
+tail -f ~/.sintu/github-relay.log
+cat ~/.sintu/github-relay.pid
+```
+
+ChatGPT queues only issues titled `SINTU-CMD: <action>`, labeled
+`sintu-command-queued`, authored by the configured owner account, and
+containing strict JSON such as:
+
+```json
+{"action":"full_self_test","topic":"भारत की ऐतिहासिक विरासत"}
+```
+
+The worker rejects arbitrary shell commands and unapproved actions. It claims
+the issue, runs the task, posts the bounded result, and closes the issue.

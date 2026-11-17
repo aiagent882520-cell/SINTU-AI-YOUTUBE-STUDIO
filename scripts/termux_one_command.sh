@@ -23,6 +23,10 @@ pkg upgrade -y
 # Speech engines are deliberately optional: package names differ across Termux
 # repository snapshots. Their absence must never block the studio installation.
 pkg install -y git python python-pip python-pillow python-cryptography ffmpeg openssl curl libjpeg-turbo libpng freetype clang make pkg-config
+# GitHub CLI is the private authentication channel for the GitHub issue relay.
+if ! command -v gh >/dev/null 2>&1; then
+  if pkg install -y gh; then say "GitHub CLI installed"; else say "GitHub CLI unavailable on this mirror; GitHub-to-Termux relay remains disabled"; fi
+fi
 
 # Termux packages the eSpeak NG engine under the name "espeak".
 if ! command -v espeak-ng >/dev/null 2>&1 && ! command -v espeak >/dev/null 2>&1; then
@@ -234,6 +238,8 @@ defaults = {
     "LOCAL_OPENAI_MODEL": "auto",
     "LOCAL_OPENAI_API_KEY": "",
     "SINTU_BRIDGE_BASE_URL": "http://127.0.0.1:8000",
+    "SINTU_GITHUB_REPOSITORY": "aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO",
+    "SINTU_GITHUB_ALLOWED_ACTOR": "aiagent882520-cell",
 }
 lines = content.splitlines()
 for key, value in defaults.items():
@@ -310,6 +316,32 @@ else
     say "Bridge worker did not stay running; inspect $WORKER_LOG_FILE"
     tail -n 30 "$WORKER_LOG_FILE" || true
   fi
+fi
+
+# GitHub issue relay: ChatGPT (through the connected GitHub app) queues a
+# labeled issue; this Android worker claims it, runs an allowlisted job, and
+# posts the result back to that issue. No public HTTPS tunnel is required.
+RELAY_PID_FILE="$LOG_DIR/github-relay.pid"
+RELAY_LOG_FILE="$LOG_DIR/github-relay.log"
+if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+  if [ -f "$RELAY_PID_FILE" ] && kill -0 "$(cat "$RELAY_PID_FILE")" 2>/dev/null; then
+    say "GitHub-to-Termux relay is already running"
+  else
+    : > "$RELAY_LOG_FILE"
+    nohup .venv/bin/python scripts/github_termux_relay.py \
+      >>"$RELAY_LOG_FILE" 2>&1 </dev/null &
+    echo $! > "$RELAY_PID_FILE"
+    sleep 2
+    if kill -0 "$(cat "$RELAY_PID_FILE")" 2>/dev/null; then
+      say "GitHub-to-Termux relay started"
+    else
+      say "GitHub relay did not stay running; inspect $RELAY_LOG_FILE"
+      tail -n 30 "$RELAY_LOG_FILE" || true
+    fi
+  fi
+else
+  say "GitHub relay needs one-time GitHub CLI login: gh auth login"
+  say "After login, rerun this installer once; it will start the relay automatically."
 fi
 
 SMOKE_VIDEO_PATH=""
