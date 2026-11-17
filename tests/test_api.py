@@ -1751,6 +1751,46 @@ def test_youtube_publish_resumes_persisted_session_after_process_restart(tmp_pat
     assert (state, offset, youtube_id) == ("COMPLETED", len(video_bytes), "recovered-youtube-id")
 
 
+def test_youtube_access_token_can_force_refresh_after_upload_401(tmp_path, monkeypatch):
+    import json
+    import time
+    from datetime import datetime, timezone
+    from cryptography.fernet import Fernet
+
+    client_for_test(tmp_path, monkeypatch)
+    key = Fernet.generate_key().decode()
+    monkeypatch.setenv("YOUTUBE_CLIENT_ID", "test-client")
+    monkeypatch.setenv("YOUTUBE_CLIENT_SECRET", "test-client-secret")
+    monkeypatch.setenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", key)
+    tokens = {"access_token": "expired-access", "refresh_token": "saved-refresh"}
+    with main.db() as conn:
+        conn.execute("""INSERT INTO youtube_connection(id,channel_id,channel_title,encrypted_tokens,token_expiry,connected_at)
+            VALUES(1,?,?,?,?,?)""",
+            ("UC-refresh-test", "Refresh Test", Fernet(key.encode()).encrypt(json.dumps(tokens).encode()).decode(),
+             int(time.time()) + 3600, datetime.now(timezone.utc).isoformat()))
+
+    calls = []
+    def fake_refresh(url, data=None, headers=None, method=None):
+        calls.append(url)
+        assert url == "https://oauth2.googleapis.com/token"
+        form = urllib.parse.parse_qs(data.decode())
+        assert form["grant_type"] == ["refresh_token"]
+        assert form["refresh_token"] == ["saved-refresh"]
+        return 200, {}, json.dumps({"access_token": "new-access", "expires_in": 3600}).encode()
+
+    monkeypatch.setattr(main, "_youtube_request", fake_refresh)
+    assert main._youtube_access_token(force_refresh=True) == "new-access"
+    with main.db() as conn:
+        encrypted, expiry = conn.execute(
+            "SELECT encrypted_tokens,token_expiry FROM youtube_connection WHERE id=1"
+        ).fetchone()
+    refreshed = json.loads(Fernet(key.encode()).decrypt(encrypted.encode()).decode())
+    assert refreshed["access_token"] == "new-access"
+    assert refreshed["refresh_token"] == "saved-refresh"
+    assert expiry > int(time.time())
+    assert calls == ["https://oauth2.googleapis.com/token"]
+
+
 def test_youtube_upload_cancel_is_terminal_and_cannot_cancel_completed(tmp_path, monkeypatch):
     from datetime import datetime, timezone
     client = client_for_test(tmp_path, monkeypatch)
