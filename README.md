@@ -103,3 +103,30 @@ LOCAL_OPENAI_MODEL=auto
 ```
 
 The server must expose `/v1/models` and `/v1/chat/completions`. SINTU checks the advertised model and never sends prompts to a public endpoint through this setting. On Termux, the one-command installer attempts to install the `llama-cpp` package and download an official Qwen GGUF model only when available-memory and free-storage thresholds are met. Outside that supported bootstrap path, install llama.cpp and choose a quantized model that fits the device. No paid API is selected.
+
+
+## ChatGPT ↔ GitHub ↔ Android Termux automation
+
+The control plane uses GitHub Issues as a mailbox. A command issue must be opened by the configured repository owner, have a title beginning `SINTU-CMD:`, and carry the `sintu-command-queued` label. Its body must be flat JSON, for example:
+
+```json
+{"action":"automation_self_test"}
+```
+
+The Termux relay accepts only fixed allowlisted actions; arbitrary shell commands are never accepted. Results are posted as an issue comment and the issue is closed with a success/failure label. The relay uses a process lock to prevent two local relay instances from consuming the same queue. The authenticated local bridge is a separate queue; it never executes commands itself, and the local worker maps jobs to fixed argument vectors.
+
+For the initial update after this PR is merged, run this single command in Termux:
+
+```bash
+cd ~/SINTU-AI-YOUTUBE-STUDIO && bash scripts/termux_apply_update.sh
+```
+
+It fast-forwards `main`, stops only recorded PIDs whose command lines match the expected SINTU service, starts API/worker/relay, and checks API health. Install Termux:Boot and grant the required battery/background permissions if automatic restart after Android reboot is desired. Android may still suspend background work; use Termux wake-lock and disable battery optimization where supported.
+
+Run a control-plane diagnostic from Termux with:
+
+```bash
+cd ~/SINTU-AI-YOUTUBE-STUDIO && .venv/bin/python scripts/automation_self_test.py --json
+```
+
+The diagnostic checks repository identity, virtualenv, GitHub CLI authentication, API reachability, bridge worker heartbeat, and the relay singleton lock. It does not run video rendering. Production actions remain blocked by default through `SINTU_AUTOMATION_ONLY=true`; keep this enabled until the complete control-plane round trip is verified and production is explicitly resumed.
