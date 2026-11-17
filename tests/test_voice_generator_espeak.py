@@ -5,6 +5,10 @@ from app import voice_generator
 
 
 def test_local_engine_detects_hindi_espeak_when_piper_is_unavailable(monkeypatch):
+    # Ignore device-level .env overrides so this unit test is deterministic.
+    monkeypatch.delenv("ESPEAK_EXECUTABLE", raising=False)
+    monkeypatch.delenv("PIPER_EXECUTABLE", raising=False)
+    monkeypatch.delenv("PIPER_MODEL_PATH", raising=False)
     def which(name):
         return "/usr/bin/espeak" if name == "espeak" else None
 
