@@ -2152,6 +2152,14 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
     title = title.strip()
     description_hash = hashlib.sha256(description.encode("utf-8")).hexdigest()
     supplied_approval_hash = _public_approval_digest(public_approval_token) if public_approval_token else None
+    if privacy_status == "public" and not supplied_approval_hash:
+        with db() as conn:
+            resumable_public_job = conn.execute(
+                "SELECT public_approval_hash,status FROM youtube_uploads WHERE calendar_id=?",
+                (calendar_id,),
+            ).fetchone()
+        if not resumable_public_job or not resumable_public_job["public_approval_hash"]:
+            raise HTTPException(status_code=403, detail="Public YouTube publishing is disabled unless a separate explicit owner approval is provided.")
     now_iso = datetime.now(timezone.utc).isoformat()
     approval_hash = None
 
@@ -2174,8 +2182,13 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
                     conn.execute("UPDATE youtube_uploads SET public_approval_hash=? WHERE calendar_id=?",
                                  (supplied_approval_hash, calendar_id))
                     existing_hash = supplied_approval_hash
+                if saved["status"] == "COMPLETED" and saved["youtube_video_id"]:
+                    youtube_id = saved["youtube_video_id"]
+                    return {"calendar_id": calendar_id, "youtube_video_id": youtube_id, "status": "Published",
+                            "url": "https://www.youtube.com/watch?v=" + youtube_id,
+                            "privacy_status": privacy_status, "resumed": True, "duplicate_prevented": True}
                 if not existing_hash:
-                    raise HTTPException(status_code=403, detail="A separate explicit owner public approval is required.")
+                    raise HTTPException(status_code=403, detail="Public YouTube publishing is disabled unless a separate explicit owner approval is provided.")
                 approval_hash = existing_hash
                 approval = conn.execute("SELECT consumed_at,revoked_at,expires_at FROM youtube_public_approvals WHERE approval_hash=?",
                                         (approval_hash,)).fetchone()
