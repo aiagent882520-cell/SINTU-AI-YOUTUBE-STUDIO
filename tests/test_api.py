@@ -1612,6 +1612,7 @@ def test_youtube_oauth_callback_encrypts_tokens_and_connects_channel(tmp_path, m
 
 
 def test_youtube_publish_completes_resumable_upload_and_records_history(tmp_path, monkeypatch):
+    import time
     from datetime import datetime, timedelta, timezone
     from cryptography.fernet import Fernet
 
