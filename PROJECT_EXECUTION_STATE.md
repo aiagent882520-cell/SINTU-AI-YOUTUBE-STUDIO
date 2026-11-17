@@ -1,64 +1,67 @@
-# SINTU Project Execution State
+# SINTU AI YOUTUBE STUDIO — execution state
 
-Last updated: 2026-11-17 (UTC)
+Last updated: 2026-11-17 15:52 UTC
 
-## Latest verified execution update (2026-11-17 14:50 UTC)
+## Current verified snapshot
 
-- Current main includes PR #83 merge commit `b4c4240af80fa0d6b4d4f97c021a8615d76fed6c`; Android Termux fast-forwarded from `1dffb1d` to `b4c4240`, services started, API health passed.
-- Android firewall safety audit on the updated device: **8/8 checks passed**, zero errors and zero warnings in summary. Audit confirmed loopback-only binding, admin auth, rate limit 300/min, bridge/session secrets configured; no Android firewall or network settings were modified.
-- Issue #69 remains closed with Termux test evidence: **506 passed, 5 warnings, 0 failed** in 171.75 seconds.
-- Watchdog recovery was verified on-device by terminating and observing restart of the bridge worker and API. A real full Android reboot test remains unverified.
-- Latest Android operational readiness (Issue #88): **10 passed, 2 warnings, 0 failed**; core_ready=true, production_ready=false. Only blockers reported: no reachable local AI model endpoint and no reachable ComfyUI endpoint.
-- Five new allowlisted Android relay jobs were queued: #85 engine_probe, #86 media_repair, #87 health_audit, #88 operational_readiness, #89 automation_self_test. At the time of this update, #88 completed successfully; #87 was running; #85, #86 and #89 were queued. Do not treat queued/running tasks as results.
-- Previously measured device resources remain historical only: Android 15, ARM64, 8 CPU cores, ~1.06 GiB available RAM and ~26.8 GiB free storage at the earlier probe. A fresh engine_probe is pending; no model installation is authorized by the probe.
-- Repository code includes a persistent production runtime, local ComfyUI/Piper/FFmpeg rendering routes, media repair and validation, and YouTube OAuth/resumable upload code. Code presence is not runtime verification. YouTube OAuth credentials/channel connection and actual upload status remain unverified; no upload or public publishing has been performed.
+- Repository: `aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO`, default branch `main`.
+- GitHub repository inspection found no currently open issues at snapshot time. Issues #85–#89 are closed; new post-repair verification issues #90 and #91 are queued for Termux.
+- Latest deployed code reported by the device: merge commit `b4c4240af80fa0d6b4d4f97c021a8615d76fed6c` (PR #83). Device fast-forwarded from `1dffb1d`, services started, API health returned healthy.
+- Firewall audit on the actual Android phone: **8/8 checks passed**, zero errors and zero warnings in summary. Loopback-only bind, 300 requests/minute API limit, admin auth, bridge/session secrets configured. Audit did not change Android firewall, VPN, DNS, Wi-Fi, mobile data, or routing.
+- Issue #69: Android test result **506 passed, 5 warnings, 0 failed** in 171.75s; issue closed.
+- Issue #89: latest Android automation self-test **7/7 passed**. Verified repo/origin, Python 3.14.10, GitHub CLI authentication (credentials hidden), API health, bridge worker and relay singleton.
+- Issue #88: operational readiness **10 passed, 2 warnings, 0 failures**; `core_ready=true`, `production_ready=false`. Warnings were missing reachable local AI model endpoint and ComfyUI endpoint.
+- Issue #85: fresh Android resource/engine probe:
+  - Android 15, ARM64/aarch64, 8 CPU cores.
+  - Total RAM 3,762,049,024 bytes; available RAM 1,106,878,464 bytes at probe time.
+  - Home free storage 29,733,658,624 bytes.
+  - `llama-server` binary exists, but no GGUF models and no reachable local inference endpoint.
+  - Stable Diffusion cpp binaries absent; ComfyUI unreachable and workflow not configured.
+  - Probe performed no model download, build, or render. Safe recommendation: no automatic model download or diffusion install under current RAM conditions.
+- Issue #86: backup-first media repair succeeded on actual Termux:
+  - 15 MP4 files examined; 9 repaired; 6 already valid; 0 failed.
+  - Repair backup directory: `media_backups/20261117T145353965118Z`.
+  - All repaired audio streams reported AAC, 48 kHz, stereo. Video streams copied without re-encoding. Originals preserved in backup directory.
+- Issue #87: health audit ran before the media repair had completed. It reported Python compile PASS and **531 pytest passed, 5 warnings**, but its media checks still found the pre-repair 9 audio-format failures. This report is stale for media state and must not be used as current media verification.
+- New Issue #90 (`health_audit`) was created after repair to rerun the full Android health/regression/media audit. New Issue #91 (`live_preflight`) was created to inspect the current production engines and YouTube configuration. Both were queued at last check; results pending.
+- Historical watchdog test verified actual API and bridge-worker process termination/recovery. Full Android device reboot/Termux:Boot recovery is still unverified.
 
+## Current code capabilities (code presence is not runtime proof)
 
-Evidence-backed state only. A script existing is not proof that its runtime behavior has been verified.
+- ChatGPT/GitHub/Termux Issue relay: authenticated actor, fixed allowlist, strict payload fields, no arbitrary shell; task labels and result comments.
+- Android services: FastAPI, bridge worker, GitHub relay, watchdog and Termux boot entrypoint.
+- Production runtime: persistent SQLite runs, specialist/checker/reviewer gates, pause/recovery checkpoints; local media rendering via FFmpeg; optional ComfyUI/Piper engines; eSpeak fallback; subtitle track generation; thumbnail image route.
+- Media validator: MP4 metadata, H.264/yuv420p, AAC 48 kHz stereo, duration, black-frame and sampled-motion checks; publish gate calls `verify_publishable_mp4`.
+- YouTube implementation: OAuth state/session checks, encrypted token storage, refresh-token flow, channel lookup, resumable upload endpoint and approved-calendar-item gate exist in `app/main.py`. Tests cover OAuth callback and approval/file preconditions. Runtime credentials, real channel connection, real upload and quota status are not verified.
+- YouTube publish endpoint defaults `privacy_status=private` and accepts private/unlisted/public. It currently uploads a single streamed payload after creating the resumable session; no on-device evidence yet for a real resumable interruption/resume, scheduled publishing, quota tracking, or upload retry. Public publish must remain disabled unless owner explicitly approves.
+- CI workflow `.github/workflows/tests.yml` covers Python 3.11–3.14, dependency audit, Docker build/health, offline branded video E2E and media motion audit. The offline E2E is not proof of local generative AI availability on Android.
 
-## Completed and verified
+## Warnings and known limitations
 
-- GitHub issue relay has executed allowlisted commands on the actual Android Termux device.
-- Issue #69 completed on Android Termux: **506 passed, 5 warnings, 0 failed** in 171.75 seconds. Issue closed with SUCCESS.
-- Issue #74 fast-forwarded Termux from `4a8a162` to `a04cf48`; stale running label corrected to done and issue closed.
-- Issue #75 fresh Android automation self-test: **7/7 passed** (repository, Git origin, Python 3.14.10, GitHub CLI auth, API health, bridge worker, relay singleton).
-- Issue #76 fresh Android operational readiness: **10 passed, 2 warnings, 0 failed**. Core ready; production not ready.
-- Issue #77 fresh Android health audit: Python compile PASS and pytest **506 passed, 5 warnings**. Media audit found **6/15 MP4 pass and 9/15 fail**: 8 audio streams were not 48 kHz and 1 was mono. No black-frame or motion failures were reported for the checked files.
-- PR #73 merged; it isolated Termux-specific environment overrides in two tests. Android regression after that fix passed.
-- PR #78 merged as `0f38d90`. It adds a 30-second Termux watchdog, command-identity checks, bridge allowlist parity for `safe_optional_install`, and regression tests. CI run #1053 passed all seven jobs: Python 3.11/3.12/3.13/3.14, dependency security audit, production Docker build/health, and offline branded video E2E/motion audit.
-- Android device probe #68: Android 15, ARM64, 8 CPU cores, approximately 1.06 GiB available RAM at probe time, approximately 26.8 GiB free storage. `llama-server` binary exists but no GGUF model is installed. ComfyUI and Stable Diffusion runtime/workflow are absent.
-- FFmpeg, FFprobe, eSpeak, API, GitHub CLI authentication, bridge credentials, worker, PWA and local repository checks passed on Android.
-
-## In progress / pending deployment
-
-- PR #79 contains backup-first MP4 audio repair, allowlisted `restart_services`, `media_repair`, and `watchdog_recovery_test` actions, plus documentation. CI run #1065 passed all seven jobs, including all four Python versions, dependency security audit, production Docker build/health, and offline branded video E2E/motion audit. PR #79 is ready to merge but not yet deployed.
-- After merge, Termux must pull the update, start the watchdog, run the process-kill recovery probe, repair legacy MP4s, and rerun the Android health audit.
-
-## Current blockers / not verified
-
-- The nine legacy MP4 audio-format failures have not yet been repaired. New renderer paths explicitly resample/mix to AAC 48 kHz stereo; legacy outputs still need safe backup and repair.
-- The watchdog is merged but not yet deployed or tested by terminating actual Android service processes.
-- AI production remains paused by `SINTU_AUTOMATION_ONLY=true`.
-- No safe local text model was downloaded because available RAM was below the conservative threshold. Do not force a download.
-- ComfyUI / diffusion image generation is not installed or verified on this Android device.
-- A Termux:Boot entrypoint exists, but a real device reboot recovery test has not been performed.
-- No complete local generative-AI topic-to-final-MP4 production run has been verified. CI offline render is not proof of generative AI image/video generation on the phone.
-- No public upload or publishing has been performed.
+- The 2 readiness warnings are hardware/engine availability warnings, not failed core automation tests: no local text model endpoint and no ComfyUI image/video engine. Do not install large models or ComfyUI automatically with only ~1.03 GiB free RAM.
+- Android pytest warnings in the earlier 531-pass run: Starlette TestClient/httpx deprecation and FastAPI `@app.on_event` startup/shutdown deprecations (5 warnings total). Tests passed; deprecation cleanup is not yet implemented.
+- eSpeak is available as a lightweight synthetic Hindi TTS fallback; pronunciation/voice quality needs human review. It is not a neural Piper voice.
+- A complete real generative-AI topic-to-MP4 run on Android is not verified. CI offline video rendering and procedural image fallback are not represented as generative AI.
+- YouTube OAuth environment values and channel connection have not been verified on-device. No upload or public publishing has been performed.
+- Full device reboot recovery has not been verified.
 
 ## Next execution order
 
-1. Merge PR #79, pull it to Termux, and run `restart_services`.
-2. Run `watchdog_recovery_test` to terminate and verify recovery of the bridge worker and API.
-3. Run backup-first `media_repair`; verify backups and rerun Android health/media audit.
-4. Run full Android regression after deployment.
-5. Re-evaluate local inference using fresh RAM/accelerator evidence; document a compatible alternative if on-device generation is unsafe.
-6. Integrate and verify image and voice workflows.
-7. Run one real local end-to-end video and validate the final MP4.
-8. Verify backup/restore and actual Android reboot recovery when the device owner can test it.
+1. Complete Issues #90 and #91 after Termux relay processes them; ensure health audit runs after Issue #86 repair.
+2. If #90 reports media failures, inspect actual file/report and repair only with backup; do not close as pass without evidence.
+3. Run current Android regression and update counts from #90, not historical #87.
+4. Review production preflight (#91): local text, image, voice, music, FFmpeg, YouTube OAuth config and channel status. Never reveal secret values.
+5. Fix only confirmed code defects; run local/CI tests before merging.
+6. Keep production mode paused until a real device-compatible generation path is available and verified.
+7. Complete YouTube OAuth only after owner configures Google Cloud OAuth credentials and consents; private/unlisted upload test only with explicit owner authorization. Never public-publish without explicit approval.
+8. Test actual Android reboot/Termux:Boot with device owner participation.
+9. Re-run final full-studio E2E only when dependencies are genuinely available; distinguish generated MP4 from simulated/offline test artifacts.
 
-## Safety constraints
+## Safety invariants
 
-- Free/open-source tools first; no paid service is required.
-- Never expose credentials or allow arbitrary shell execution.
-- Keep generative production paused until core automation and regression are stable.
-- Do not publish videos without explicit approval.
+- Free/open-source first; no paid APIs required.
+- No model download/build without fresh resource evidence and safe capacity.
+- No arbitrary shell execution through GitHub relay.
+- Preserve originals and create backups before repair.
+- Publishing is separate from rendering; no automatic public publishing.
+- A queued/running job is not a completed job. A script existing is not runtime verification.
