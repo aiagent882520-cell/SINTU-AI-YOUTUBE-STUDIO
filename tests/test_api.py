@@ -1660,7 +1660,8 @@ def test_youtube_publish_completes_resumable_upload_and_records_history(tmp_path
     monkeypatch.setattr(main, "_youtube_request", fake_google)
     monkeypatch.setattr(main, "transfer_resumable_upload", fake_transfer)
     monkeypatch.setattr(main, "_youtube_verify_uploaded_video", lambda youtube_id, token: {
-        "upload_status": "uploaded", "processing_status": "processing"
+        "upload_status": "uploaded", "processing_status": "processing",
+        "privacy_status": "private", "channel_id": "UC-test-channel"
     })
     query = f"/api/admin/youtube/publish/{calendar_id}?video_id={video_id}&title=Test%20upload&privacy_status=private"
     response = client.post(query)
@@ -1736,7 +1737,8 @@ def test_youtube_publish_resumes_persisted_session_after_process_restart(tmp_pat
     monkeypatch.setattr(main, "transfer_resumable_upload", fake_transfer)
     monkeypatch.setattr(main, "_youtube_request", lambda *args, **kwargs: pytest.fail("A persisted session must resume without creating a new session."))
     monkeypatch.setattr(main, "_youtube_verify_uploaded_video", lambda youtube_id, token: {
-        "upload_status": "uploaded", "processing_status": "processing"
+        "upload_status": "uploaded", "processing_status": "processing",
+        "privacy_status": "private", "channel_id": "UC-resume"
     })
     response = client.post(
         f"/api/admin/youtube/publish/{calendar_id}?video_id={video_id}&title=Resume%20after%20restart"
@@ -3482,7 +3484,8 @@ def test_youtube_publish_requires_approved_calendar_and_records_success(tmp_path
     monkeypatch.setattr(main, "_youtube_request", fake_upload)
     monkeypatch.setattr(main, "transfer_resumable_upload", fake_transfer)
     monkeypatch.setattr(main, "_youtube_verify_uploaded_video", lambda youtube_id, token: {
-        "upload_status": "uploaded", "processing_status": "processing"
+        "upload_status": "uploaded", "processing_status": "processing",
+        "privacy_status": "private", "channel_id": "UC-test-channel"
     })
     blocked = client.post(
         f"/api/admin/youtube/publish/{calendar_id}",
