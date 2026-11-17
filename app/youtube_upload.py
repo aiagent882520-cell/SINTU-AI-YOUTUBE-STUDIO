@@ -185,3 +185,23 @@ def transfer_resumable_upload(
             sleep(min(2 ** (attempt - 1), 30))
 
     raise UploadProtocolError("Upload ended without a YouTube completion response.")
+
+UPLOAD_STATES = {
+    "QUEUED": {"INITIALIZING", "CANCELLED"},
+    "INITIALIZING": {"UPLOADING", "PAUSED", "ERROR", "EXPIRED"},
+    "UPLOADING": {"PAUSED", "RESUMING", "VERIFYING", "ERROR", "EXPIRED", "CANCELLED"},
+    "PAUSED": {"RESUMING", "EXPIRED", "ERROR", "CANCELLED"},
+    "RESUMING": {"UPLOADING", "VERIFYING", "PAUSED", "ERROR", "EXPIRED", "CANCELLED"},
+    "VERIFYING": {"COMPLETED", "PAUSED", "ERROR"},
+    "ERROR": {"INITIALIZING", "RESUMING", "CANCELLED"},
+    "EXPIRED": {"INITIALIZING", "CANCELLED"},
+    "COMPLETED": set(),
+    "CANCELLED": set(),
+}
+
+
+def validate_state_transition(previous: str, next_state: str) -> None:
+    if next_state == previous:
+        return
+    if next_state not in UPLOAD_STATES.get(previous, set()):
+        raise UploadProtocolError(f"Invalid upload state transition: {previous} -> {next_state}.")
