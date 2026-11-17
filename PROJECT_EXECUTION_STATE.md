@@ -65,3 +65,9 @@ Last updated: 2026-11-17 15:52 UTC
 - Preserve originals and create backups before repair.
 - Publishing is separate from rendering; no automatic public publishing.
 - A queued/running job is not a completed job. A script existing is not runtime verification.
+
+## Follow-up verification (2026-11-17 16:05 UTC)
+
+- GitHub Actions run `44118835738` for execution-state documentation commit `f79fdd4bd87112b5e32710b6288d1a30982d9849` completed successfully: Python 3.11, 3.12, 3.13, 3.14, dependency security audit, production Docker build, and offline branded-video E2E/motion audit all passed (7/7 jobs).
+- Issue #91 post-repair production preflight completed successfully as a diagnostic command, but confirms production is not ready: Ollama/local AI service stopped and model `qwen2.5:3b` absent; ComfyUI image/video workflows not configured and server unreachable; Piper model not configured (eSpeak NG Hindi fallback is selected); procedural composer and FFmpeg/FFprobe available; YouTube OAuth credentials and token-encryption configuration absent; no connected channel verified. No upload was performed.
+- Issue #90 fresh post-repair health audit has been claimed by the Termux relay and remains running at last check. Do not report it as complete until its final result comment is available.
