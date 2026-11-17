@@ -37,7 +37,7 @@ if not Path(PYTHON).exists():
     PYTHON = sys.executable
 ACTIONS = {
     "git_status", "git_pull_ff_only", "run_tests", "compile_check",
-    "health_audit", "operational_readiness", "live_preflight",
+    "health_audit", "operational_readiness", "live_preflight", "engine_probe",
     "offline_video_e2e", "full_self_test", "full_studio_e2e",
 }
 
@@ -158,6 +158,8 @@ def command_for(action: str, payload: dict) -> list[str]:
         return [PYTHON, "scripts/operational_readiness.py", "--json"]
     if action == "live_preflight":
         return [PYTHON, "scripts/live_e2e.py"]
+    if action == "engine_probe":
+        return [PYTHON, "scripts/engine_probe.py"]
     if action in {"offline_video_e2e", "full_self_test", "full_studio_e2e"}:
         topic = payload.get("topic")
         if topic is not None and (
