@@ -87,3 +87,30 @@ def test_motion_audit_rejects_still_slideshow_with_only_scene_cuts():
                       [10, 10, 10, 10, 80, 80, 80, 80, 150, 150, 150, 150])
     with pytest.raises(ValueError, match="frozen or slideshow-like"):
         validate_sampled_motion(frames, frame_bytes=frame_bytes)
+
+
+def test_audit_summary_counts_failures_and_preserves_pytest_tail():
+    from scripts.project_health_audit import summarize_audit
+
+    result = summarize_audit([
+        {"check": "python-compile", "status": "PASS"},
+        {"check": "pytest", "status": "PASS", "output": "tests passed\n531 passed, 5 warnings in 10.2s"},
+        {"check": "media:broken.mp4", "status": "FAIL"},
+        {"check": "media-tools", "status": "WARN"},
+    ])
+    assert result["status"] == "FAIL"
+    assert result["pass"] == 2
+    assert result["warnings"] == 1
+    assert result["failures"] == 1
+    assert result["failed_checks"] == ["media:broken.mp4"]
+    assert result["pytest_summary"] == "531 passed, 5 warnings in 10.2s"
+
+
+def test_audit_summary_passes_when_no_failures_or_warnings():
+    from scripts.project_health_audit import summarize_audit
+
+    result = summarize_audit([{"check": "python-compile", "status": "PASS"}])
+    assert result["status"] == "PASS"
+    assert result["pass"] == 1
+    assert result["warnings"] == 0
+    assert result["failures"] == 0
