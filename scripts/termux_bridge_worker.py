@@ -119,7 +119,8 @@ def execute(job: dict) -> tuple[int, str]:
     completed = subprocess.run(
         command, cwd=ROOT, text=True, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, timeout=1800, check=False,
-        env={**os.environ, "PYTHONUNBUFFERED": "1", "SINTU_QUEUE_EXECUTOR": "termux_bridge_worker"},
+        env={**os.environ, "PYTHONUNBUFFERED": "1",
+             **({"SINTU_QUEUE_EXECUTOR": "termux_bridge_worker"} if job.get("action") == "restart_services" else {})},
     )
     return completed.returncode, completed.stdout[-20000:]
 
