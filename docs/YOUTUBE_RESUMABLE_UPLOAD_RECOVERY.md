@@ -44,3 +44,6 @@ python -m pytest tests/test_youtube_upload_recovery.py tests/test_api.py -q
 Protocol tests cover partial acknowledgements, status probes after disconnect, restart recovery, already-completed sessions, expired sessions, malformed ranges, zero-byte files, changed files, bounded no-progress responses, state-transition safety, encrypted persistence, idempotent duplicate requests, private-first public approval, approval expiry/revocation, and worker allowlist isolation.
 
 Live YouTube verification remains pending until owner-managed OAuth credentials, encryption key, and channel connection are configured. No live upload is authorized by this documentation.
+
+- Upload progress/status is available from `GET /api/admin/youtube/uploads/{calendar_id}`. It returns the state, acknowledged bytes, file size, progress percentage, video ID and processing status; it deliberately omits the encrypted session URI and approval digest.
+- An incomplete upload can be cancelled through `POST /api/admin/youtube/uploads/{calendar_id}/cancel`. The local job becomes terminal `CANCELLED`; the abandoned Google session is not reused and may remain server-side until it expires.
