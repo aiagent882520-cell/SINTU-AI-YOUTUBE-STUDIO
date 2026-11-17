@@ -27,6 +27,8 @@ def _proc_identity(pid: int) -> tuple[int, str] | None:
     try:
         raw = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
         tail = raw.rsplit(")", 1)[1].strip().split()
+        if tail[0] == "Z":
+            return None
         start_ticks = tail[19]
         return pid, start_ticks
     except (OSError, IndexError):
