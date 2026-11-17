@@ -36,3 +36,21 @@ def test_forensics_measures_nearby_source_image_brightness(tmp_path, monkeypatch
     assert black_stats["near_black"] is True
     assert visible_stats["near_black"] is False
     assert black_stats["mean_luma"] < visible_stats["mean_luma"]
+
+def test_forensics_prefers_pre_repair_backup_mtime_for_asset_correlation(tmp_path, monkeypatch):
+    import os
+    from datetime import datetime, timezone
+
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    original = tmp_path / "generated_videos" / "clip.mp4"
+    backup = tmp_path / "media_backups" / "repair-1" / "clip.mp4"
+    original.parent.mkdir()
+    backup.parent.mkdir(parents=True)
+    original.write_bytes(b"repaired")
+    backup.write_bytes(b"original")
+    original_time = 1_700_000_000
+    os.utime(backup, (original_time, original_time))
+    result = media_forensics.find_backups(original)
+    assert len(result) == 1
+    assert result[0]["sha256"] == media_forensics.sha256_file(backup)
+    assert datetime.fromisoformat(result[0]["pre_repair_mtime_utc"]).timestamp() == original_time
