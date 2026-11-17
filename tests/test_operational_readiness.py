@@ -35,6 +35,8 @@ def _valid_core_tree(tmp_path):
 
 def test_report_never_exposes_secret_values_and_separates_core_from_production(tmp_path, monkeypatch):
     _valid_core_tree(tmp_path)
+    # Do not let a real device worker PID affect this isolated fixture.
+    monkeypatch.setattr(doctor.Path, "home", lambda: tmp_path)
     monkeypatch.setattr(doctor.shutil, "which", lambda name: "/usr/bin/" + name)
     report = doctor.build_report(tmp_path, env={}, check_network=False)
     rendered = __import__("json").dumps(report)
