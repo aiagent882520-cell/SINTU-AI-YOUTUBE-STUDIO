@@ -137,3 +137,24 @@ Last updated: 2026-11-17 15:52 UTC
 - PR #96 merge commit `b97b4fe1f840bd30da1937335c576ed4ac460e73` was fast-forwarded to the Android Termux repository successfully by relay Issue #99 (`cfcff99..fbe5ded`).
 - A new post-update full Android health audit was queued as Issue #100. At the latest check it was claimed/running and had not yet posted a final report. Do not treat it as passed, do not create a duplicate while its running lease is active, and wait for its final result or stale-claim recovery.
 - Issue #98 post-update automation self-test remains verified 7/7 PASS. Issue #97 and #99 update commands both completed successfully.
+
+
+## Latest verified Android audit and CI state (2026-11-17 17:02 UTC)
+
+- PR #96 was merged as `b97b4fe1f840bd30da1937335c576ed4ac460e73`; the Termux relay fast-forwarded Android from `cfcff99` to `fbe5ded` via Issue #99. The audit script now emits a compact final `SINTU_AUDIT_SUMMARY=` JSON footer so the relay's bounded output retains the actual test summary and failure counts.
+- Post-update Android full health audit Issue #100 completed with exit code **1 / FAILED**. Its final summary is: **13 PASS, 0 WARN, 5 FAIL**; pytest **534 passed, 5 warnings in 190.42 seconds**. The five failures are exactly the five full-duration black MP4 assets already listed under Issue #95. Audio metadata remains AAC 48 kHz stereo and video metadata H.264/yuv420p; these are visual-content failures, not audio-format failures.
+- The five black assets remain untouched. Do not delete, overwrite, or automatically regenerate them. Preserve backup-first handling and human review. The publish quality gate must continue to block them.
+- Issue #98 confirms Android automation self-test **7/7 PASS** after the update: repository/origin, Python 3.14.10, authenticated GitHub CLI, API healthy, bridge worker online, automation-only mode, relay singleton lock.
+- Latest main-branch CI run `44131560610` for commit `66e447fb32485ece7b523302a1654b2f70e4f5c3` completed successfully. This is repository CI evidence; it does not override Android media audit failures or prove live AI/YouTube production.
+- YouTube uploader source review reconfirms a single streamed PUT to the Google resumable session. It is memory-bounded but does not persist upload session/offset, probe server acknowledged ranges, or resume after disconnect/restart. Issue #92 remains open and unimplemented.
+- Public publishing remains API-blocked with HTTP 403 before token/network access (PR #94, commit `cfcff99`). Issue #93 remains open for the full exact-video/channel-bound, one-time, expiring owner approval workflow and worker/pipeline enforcement.
+- Production remains paused/automation-only. Local AI model and ComfyUI are not configured/reachable; OAuth credentials, encryption config, and connected YouTube channel were absent in preflight. No real upload or public publishing was performed. Full Android reboot/Termux:Boot recovery is still unverified.
+
+## Next safe work order
+
+1. Investigate renderer/source provenance for the five black MP4s under Issue #95; implement a non-destructive report/quarantine flow with explicit human review. Keep the publish gate fail-closed.
+2. Implement and thoroughly test Issue #92's durable chunked resumable YouTube upload (encrypted session state, server Range probing, retries, immutable file fingerprint, duplicate protection, restart recovery); no live upload in tests.
+3. Complete Issue #93's one-time explicit public-visibility approval design, but retain the global public-upload hard block until every API/worker/scheduler path is tested. No public upload.
+4. Re-run Android health/media audit only after a verified, backup-first resolution of the black assets; do not queue duplicate audits without a specific code/media change.
+5. Keep AI/model installation blocked until a fresh resource probe shows safe memory headroom; do not install large models automatically.
+6. Verify full Android reboot/Termux:Boot with owner participation; a process watchdog test is not a full reboot test.
