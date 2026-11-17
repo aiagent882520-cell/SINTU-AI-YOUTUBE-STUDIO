@@ -1933,15 +1933,43 @@ def youtube_disconnect():
     return {"connected": False, "message": "YouTube channel disconnected; encrypted tokens deleted."}
 
 
+def _youtube_resumable_http_request(method: str, url: str, data: bytes, headers: dict):
+    request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return response.status, response.headers, response.read(1024 * 1024 + 1)
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.headers, exc.read(1024 * 1024 + 1)
+    except (urllib.error.URLError, TimeoutError, OSError):
+        raise ConnectionError("YouTube resumable upload connection interrupted.") from None
+
+
+def _youtube_verify_uploaded_video(youtube_video_id: str, access_token: str) -> dict:
+    url = "https://www.googleapis.com/youtube/v3/videos?" + urllib.parse.urlencode({
+        "part": "status,processingDetails", "id": youtube_video_id
+    })
+    _, _, body = _youtube_request(url, headers={"Authorization": "Bearer " + access_token})
+    try:
+        items = json.loads(body.decode("utf-8")).get("items", [])
+    except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+        raise HTTPException(status_code=502, detail="YouTube verification response invalid hai.") from None
+    if not items or items[0].get("id") != youtube_video_id:
+        raise HTTPException(status_code=502, detail="YouTube video ID upload ke baad verify nahi hua.")
+    status = items[0].get("status", {})
+    if status.get("uploadStatus") in {"failed", "rejected", "deleted"}:
+        raise HTTPException(status_code=502, detail="YouTube ne uploaded video reject/fail kar diya.")
+    processing = items[0].get("processingDetails", {}).get("processingStatus", "unknown")
+    return {"upload_status": status.get("uploadStatus", "unknown"), "processing_status": processing}
+
+
 @app.post("/api/admin/youtube/publish/{calendar_id}")
 def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, max_length=32),
                     title: str = Query(..., min_length=1, max_length=100),
                     description: str = Query(default="", max_length=5000),
                     privacy_status: str = Query(default="private", pattern=r"^(private|unlisted|public)$")):
-    # Public distribution is fail-closed until a durable, one-time owner approval
-    # workflow is implemented and verified across every publishing entry point.
+    # Public visibility remains globally disabled; generic calendar approval is not owner approval.
     if privacy_status == "public":
-        raise HTTPException(status_code=403, detail="Public YouTube publishing is disabled; private uploads only.")
+        raise HTTPException(status_code=403, detail="Public YouTube publishing is disabled; private/unlisted uploads only.")
     if not re.fullmatch(r"[a-f0-9]{32}", video_id):
         raise HTTPException(status_code=400, detail="Invalid rendered video ID.")
     with db() as conn:
@@ -1957,35 +1985,162 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
     if size <= 0 or size > 512 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="MP4 size 1 byte se 512 MB ke beech honi chahiye.")
     try:
-        verification = verify_publishable_mp4(path)
+        verify_publishable_mp4(path)
+        file_hash = youtube_sha256_file(path)
     except RendererUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
     except RenderFailed:
         raise HTTPException(status_code=409, detail="Final MP4 quality verification failed. Video ko dobara render karein; upload blocked.") from None
+    except OSError:
+        raise HTTPException(status_code=409, detail="Rendered MP4 could not be fingerprinted safely.") from None
+
+    connection = _youtube_connection()
+    if not connection:
+        raise HTTPException(status_code=409, detail="Pehle YouTube channel connect karein.")
+    channel_id = connection["channel_id"]
+    title = title.strip()
+    description_hash = hashlib.sha256(description.encode("utf-8")).hexdigest()
+    now = datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        saved_row = conn.execute("SELECT * FROM youtube_uploads WHERE calendar_id=?", (calendar_id,)).fetchone()
+        if saved_row:
+            saved = dict(saved_row)
+            if (saved["video_id"] != video_id or saved["channel_id"] != channel_id
+                    or saved["title"] != title or saved["description_sha256"] != description_hash
+                    or saved["privacy_status"] != privacy_status or saved["file_size"] != size
+                    or saved["file_sha256"] != file_hash):
+                raise HTTPException(status_code=409, detail="Existing upload job is bound to different content/channel/metadata; duplicate upload blocked.")
+            if saved["status"] == "COMPLETED" and saved["youtube_video_id"]:
+                youtube_id = saved["youtube_video_id"]
+                return {"calendar_id": calendar_id, "youtube_video_id": youtube_id, "status": "Published",
+                        "url": "https://www.youtube.com/watch?v=" + youtube_id,
+                        "privacy_status": privacy_status, "resumed": True, "duplicate_prevented": True}
+            if saved["status"] == "CANCELLED":
+                raise HTTPException(status_code=409, detail="Upload job was cancelled.")
+        else:
+            conn.execute("""INSERT INTO youtube_uploads(calendar_id,video_id,channel_id,title,description_sha256,
+                privacy_status,file_size,file_sha256,status,created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                (calendar_id, video_id, channel_id, title, description_hash, privacy_status,
+                 size, file_hash, "QUEUED", now, now))
+            saved = dict(conn.execute("SELECT * FROM youtube_uploads WHERE calendar_id=?", (calendar_id,)).fetchone())
+
+    def set_state(next_state: str, offset: int | None = None, encrypted_uri: str | None = None,
+                  youtube_id: str | None = None, processing: str | None = None):
+        with db() as conn:
+            current = conn.execute("SELECT status FROM youtube_uploads WHERE calendar_id=?", (calendar_id,)).fetchone()
+            if not current:
+                raise HTTPException(status_code=409, detail="Persistent upload job disappeared.")
+            try:
+                validate_state_transition(current["status"], next_state)
+            except UploadProtocolError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from None
+            fields = ["status=?", "updated_at=?"]
+            values = [next_state, datetime.now(timezone.utc).isoformat()]
+            if offset is not None:
+                fields.append("acknowledged_offset=?")
+                values.append(offset)
+            if encrypted_uri is not None:
+                fields.append("encrypted_session_uri=?")
+                values.append(encrypted_uri)
+            if youtube_id is not None:
+                fields.append("youtube_video_id=?")
+                values.append(youtube_id)
+            if processing is not None:
+                fields.append("processing_status=?")
+                values.append(processing)
+            values.append(calendar_id)
+            conn.execute("UPDATE youtube_uploads SET " + ",".join(fields) + " WHERE calendar_id=?", values)
+
     access_token = _youtube_access_token()
-    metadata = json.dumps({"snippet": {"title": title.strip(), "description": description,
-        "categoryId": "22"}, "status": {"privacyStatus": privacy_status}}).encode()
-    _, headers, _ = _youtube_request("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
-        metadata, {"Authorization": "Bearer " + access_token, "Content-Type": "application/json; charset=UTF-8",
-                   "X-Upload-Content-Type": "video/mp4", "X-Upload-Content-Length": str(size)}, "POST")
-    upload_url = headers.get("Location")
-    if not upload_url:
-        raise HTTPException(status_code=502, detail="Google resumable upload URL missing hai.")
-    result_body = _youtube_upload_file(upload_url, path, size, access_token)
+    encrypted_uri = saved.get("encrypted_session_uri")
+    if saved.get("youtube_video_id") and saved["status"] == "VERIFYING":
+        verified = _youtube_verify_uploaded_video(saved["youtube_video_id"], access_token)
+        youtube_id = saved["youtube_video_id"]
+        set_state("COMPLETED", size, youtube_id=youtube_id, processing=verified["processing_status"])
+        with db() as conn:
+            conn.execute("UPDATE content_calendar SET status='Published' WHERE id=?", (calendar_id,))
+        post_url = "https://www.youtube.com/watch?v=" + youtube_id
+        _record_publish_event(calendar_id, item["platform"], "Published", youtube_id,
+                              "Upload verified after process recovery", post_url)
+        return {"calendar_id": calendar_id, "youtube_video_id": youtube_id, "status": "Published",
+                "url": post_url, "privacy_status": privacy_status, "resumed": True,
+                "processing_status": verified["processing_status"]}
+
+    if saved["status"] == "EXPIRED":
+        set_state("INITIALIZING", 0)
+        encrypted_uri = None
+    elif not encrypted_uri:
+        if saved["status"] in {"QUEUED", "ERROR"}:
+            set_state("INITIALIZING", 0)
+        elif saved["status"] != "INITIALIZING":
+            raise HTTPException(status_code=409, detail="Upload state cannot safely create a new session.")
+    elif saved["status"] in {"UPLOADING", "PAUSED", "ERROR"}:
+        set_state("RESUMING")
+    elif saved["status"] not in {"INITIALIZING", "RESUMING"}:
+        raise HTTPException(status_code=409, detail="Upload state is not resumable.")
+
+    if not encrypted_uri:
+        metadata = json.dumps({"snippet": {"title": title, "description": description, "categoryId": "22"},
+                               "status": {"privacyStatus": privacy_status}}).encode()
+        try:
+            _, headers, _ = _youtube_request(
+                "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+                metadata, {"Authorization": "Bearer " + access_token,
+                           "Content-Type": "application/json; charset=UTF-8",
+                           "X-Upload-Content-Type": "video/mp4", "X-Upload-Content-Length": str(size)}, "POST")
+            session_uri = validate_session_uri(headers.get("Location", ""))
+            encrypted_uri = _youtube_cipher().encrypt(session_uri.encode()).decode()
+            set_state("UPLOADING", 0, encrypted_uri=encrypted_uri)
+        except (HTTPException, UploadProtocolError):
+            set_state("ERROR")
+            raise
+
     try:
-        uploaded = json.loads(result_body.decode())
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        raise HTTPException(status_code=502, detail="YouTube upload response invalid hai.") from None
+        session_uri = _youtube_cipher().decrypt(encrypted_uri.encode()).decode()
+        validate_session_uri(session_uri)
+    except (InvalidToken, ValueError, UploadProtocolError):
+        set_state("ERROR")
+        raise HTTPException(status_code=503, detail="Stored YouTube upload session cannot be decrypted safely; session reset required.") from None
+
+    def persist_progress(offset: int, state: str):
+        set_state(state, offset)
+
+    try:
+        try:
+            uploaded = transfer_resumable_upload(
+                path, session_uri, access_token, request=_youtube_resumable_http_request,
+                on_progress=persist_progress, probe_first=bool(saved.get("encrypted_session_uri")))
+        except UploadProtocolError as exc:
+            if exc.status == 401:
+                access_token = _youtube_access_token(force_refresh=True)
+                set_state("RESUMING")
+                uploaded = transfer_resumable_upload(
+                    path, session_uri, access_token, request=_youtube_resumable_http_request,
+                    on_progress=persist_progress, probe_first=True)
+            else:
+                set_state(exc.state)
+                raise HTTPException(status_code=503 if exc.state == "PAUSED" else 409, detail=str(exc)) from None
+    except UploadProtocolError as exc:
+        set_state(exc.state)
+        raise HTTPException(status_code=503 if exc.state == "PAUSED" else 409, detail=str(exc)) from None
+
     youtube_id = uploaded.get("id")
     if not youtube_id:
+        set_state("ERROR")
         raise HTTPException(status_code=502, detail="YouTube ne video ID return nahi ki.")
-    post_url = "https://www.youtube.com/watch?v=" + youtube_id
+    set_state("VERIFYING", size, youtube_id=youtube_id)
+    verified = _youtube_verify_uploaded_video(youtube_id, access_token)
+    set_state("COMPLETED", size, youtube_id=youtube_id, processing=verified["processing_status"])
     with db() as conn:
         conn.execute("UPDATE content_calendar SET status='Published' WHERE id=?", (calendar_id,))
-    _record_publish_event(calendar_id, item["platform"], "Published", youtube_id, "YouTube video uploaded", post_url)
+    post_url = "https://www.youtube.com/watch?v=" + youtube_id
+    _record_publish_event(calendar_id, item["platform"], "Published", youtube_id,
+                          "YouTube resumable upload completed and video ID verified", post_url)
     return {"calendar_id": calendar_id, "youtube_video_id": youtube_id, "status": "Published",
-            "url": post_url, "privacy_status": privacy_status}
-
+            "url": post_url, "privacy_status": privacy_status,
+            "resumed": bool(saved.get("encrypted_session_uri")),
+            "processing_status": verified["processing_status"]}
 
 
 def _meta_config():
