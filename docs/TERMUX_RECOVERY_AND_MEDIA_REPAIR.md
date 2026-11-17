@@ -67,3 +67,5 @@ The GitHub relay and bridge worker are long-running processes. A plain `git pull
 ## Read-only black-video forensics
 
 Run `python scripts/media_forensics.py --json` on Android after the relay/worker has loaded the latest allowlist. It inspects only the five named legacy MP4 files and reports SHA-256/size/mtime, FFprobe container and stream metadata, black intervals, FFmpeg decoder errors, decoded first/middle/last frame timestamps, nearby source-asset timestamps, image luminance/variance, and matching production log/SQLite provenance. It redacts OAuth/session material and does not alter, move, delete, regenerate, or upload any media. A candidate image being nearby in time is not proof it was the source; confirm with production records before regeneration.
+
+The forensic report correlates candidate assets against the preserved pre-repair backup mtime when available. The audio repair uses `shutil.copy2` before replacing a repaired MP4, so the current MP4 filesystem mtime may reflect the audio-repair run rather than original video creation. A nearby asset based only on current mtime is not accepted as provenance.
