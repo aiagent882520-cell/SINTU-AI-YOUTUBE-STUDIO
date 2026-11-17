@@ -1613,6 +1613,7 @@ def test_youtube_oauth_callback_encrypts_tokens_and_connects_channel(tmp_path, m
 
 def test_youtube_publish_completes_resumable_upload_and_records_history(tmp_path, monkeypatch):
     from datetime import datetime, timedelta, timezone
+    from cryptography.fernet import Fernet
 
     client = client_for_test(tmp_path, monkeypatch)
     scheduled = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
@@ -1631,40 +1632,59 @@ def test_youtube_publish_completes_resumable_upload_and_records_history(tmp_path
     (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(main, "verify_publishable_mp4", lambda path: {"verified": True})
-    monkeypatch.setattr(main, "_youtube_access_token", lambda: "mock-youtube-access-token")
-    requests = []
-    streamed_uploads = []
+    monkeypatch.setattr(main, "_youtube_access_token", lambda *args, **kwargs: "mock-youtube-access-token")
+    key = Fernet.generate_key().decode()
+    monkeypatch.setenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", key)
+    session_uri = "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=mock"
+    with main.db() as conn:
+        conn.execute("""INSERT INTO youtube_connection(id,channel_id,channel_title,encrypted_tokens,token_expiry,connected_at)
+            VALUES(1,?,?,?,?,?)""",
+            ("UC-test-channel", "Test Channel", Fernet(key.encode()).encrypt(b'{"access_token":"x"}').decode(),
+             int(time.time()) + 3600, datetime.now(timezone.utc).isoformat()))
 
-    def fake_upload(url, data=None, headers=None, method="GET"):
+    requests = []
+    def fake_google(url, data=None, headers=None, method="GET"):
         requests.append((url, method, data))
         if method == "POST":
-            return 200, {"Location": "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=mock"}, b""
-        pytest.fail("The video bytes must use the bounded streaming upload connection, not _youtube_request.")
+            return 200, {"Location": session_uri}, b""
+        pytest.fail("Video verification is mocked separately; unexpected Google request.")
 
-    def fake_streaming_upload(upload_url, video_path, size, access_token):
-        with open(video_path, "rb") as stream:
-            uploaded_bytes = stream.read()
-        streamed_uploads.append((upload_url, uploaded_bytes, size, access_token))
-        return b'{"id":"published-video-123"}'
+    transfer_calls = []
+    def fake_transfer(path, uri, token, *, request, on_progress, probe_first=False):
+        transfer_calls.append((uri, token, probe_first))
+        on_progress(len(video_bytes), "UPLOADING")
+        on_progress(len(video_bytes), "VERIFYING")
+        return {"id": "published-video-123"}
 
-    monkeypatch.setattr(main, "_youtube_request", fake_upload)
-    monkeypatch.setattr(main, "_youtube_upload_file", fake_streaming_upload)
-    response = client.post(
-        f"/api/admin/youtube/publish/{calendar_id}?video_id={video_id}&title=Test%20upload&privacy_status=private"
-    )
+    monkeypatch.setattr(main, "_youtube_request", fake_google)
+    monkeypatch.setattr(main, "transfer_resumable_upload", fake_transfer)
+    monkeypatch.setattr(main, "_youtube_verify_uploaded_video", lambda youtube_id, token: {
+        "upload_status": "uploaded", "processing_status": "processing"
+    })
+    query = f"/api/admin/youtube/publish/{calendar_id}?video_id={video_id}&title=Test%20upload&privacy_status=private"
+    response = client.post(query)
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "Published"
     assert response.json()["url"] == "https://www.youtube.com/watch?v=published-video-123"
     assert [item[1] for item in requests] == ["POST"]
-    assert streamed_uploads == [(
-        "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=mock",
-        video_bytes, len(video_bytes), "mock-youtube-access-token",
-    )]
+    assert transfer_calls == [(session_uri, "mock-youtube-access-token", False)]
+
     with main.db() as conn:
         status = conn.execute("SELECT status FROM content_calendar WHERE id=?", (calendar_id,)).fetchone()[0]
         event = conn.execute("SELECT external_id,status FROM publishing_history WHERE calendar_id=?", (calendar_id,)).fetchone()
+        upload = conn.execute("SELECT status,acknowledged_offset,encrypted_session_uri,youtube_video_id FROM youtube_uploads WHERE calendar_id=?",
+                              (calendar_id,)).fetchone()
     assert status == "Published"
     assert tuple(event) == ("published-video-123", "Published")
+    assert upload["status"] == "COMPLETED"
+    assert upload["acknowledged_offset"] == len(video_bytes)
+    assert session_uri not in upload["encrypted_session_uri"]
+    assert upload["youtube_video_id"] == "published-video-123"
+
+    duplicate = client.post(query)
+    assert duplicate.status_code == 200
+    assert duplicate.json()["duplicate_prevented"] is True
+    assert len(transfer_calls) == 1
 
 
 
