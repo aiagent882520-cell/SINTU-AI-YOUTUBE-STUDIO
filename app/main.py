@@ -344,6 +344,16 @@ def init_db():
             created_at TEXT NOT NULL, updated_at TEXT NOT NULL
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_youtube_uploads_status ON youtube_uploads(status,updated_at)")
+        upload_columns = {row["name"] for row in conn.execute("PRAGMA table_info(youtube_uploads)")}
+        if "public_approval_hash" not in upload_columns:
+            conn.execute("ALTER TABLE youtube_uploads ADD COLUMN public_approval_hash TEXT")
+        conn.execute("""CREATE TABLE IF NOT EXISTS youtube_public_approvals (
+            approval_hash TEXT PRIMARY KEY, calendar_id INTEGER NOT NULL, video_id TEXT NOT NULL,
+            channel_id TEXT NOT NULL, title TEXT NOT NULL, file_sha256 TEXT NOT NULL,
+            expires_at INTEGER NOT NULL, created_at TEXT NOT NULL, approved_by TEXT NOT NULL,
+            consumed_at INTEGER, revoked_at INTEGER, applied_at INTEGER
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_youtube_public_approvals_expiry ON youtube_public_approvals(expires_at,revoked_at)")
         conn.execute("""CREATE TABLE IF NOT EXISTS meta_oauth_states (
             state TEXT PRIMARY KEY, admin_user_id INTEGER NOT NULL, session_hash TEXT NOT NULL, expires_at INTEGER NOT NULL
         )""")
