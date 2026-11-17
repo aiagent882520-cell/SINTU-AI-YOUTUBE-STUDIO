@@ -2153,6 +2153,27 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
             "processing_status": verified["processing_status"]}
 
 
+@app.post("/api/admin/youtube/uploads/{calendar_id}/cancel")
+def youtube_upload_cancel(calendar_id: int):
+    with db() as conn:
+        row = conn.execute("SELECT status FROM youtube_uploads WHERE calendar_id=?", (calendar_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="YouTube upload job not found.")
+        current = row["status"]
+        if current in {"VERIFYING", "COMPLETED", "CANCELLED"}:
+            raise HTTPException(status_code=409, detail="Upload is already verifying/completed or cancelled; it cannot be safely cancelled.")
+        try:
+            validate_state_transition(current, "CANCELLED")
+        except UploadProtocolError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+        conn.execute("UPDATE youtube_uploads SET status='CANCELLED',updated_at=? WHERE calendar_id=?",
+                     (datetime.now(timezone.utc).isoformat(), calendar_id))
+    _record_publish_event(calendar_id, "youtube", "Cancelled", None,
+                          "Local resumable upload cancelled; Google session may expire server-side.")
+    return {"calendar_id": calendar_id, "status": "CANCELLED",
+            "note": "Local resume is disabled. Google may retain the abandoned session until it expires."}
+
+
 def _meta_config():
     return {"app_id": os.getenv("META_APP_ID", "").strip(),
             "app_secret": os.getenv("META_APP_SECRET", "").strip(),
