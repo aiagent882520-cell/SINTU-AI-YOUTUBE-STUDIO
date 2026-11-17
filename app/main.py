@@ -2026,6 +2026,8 @@ def youtube_public_approval_create(payload: YouTubePublicApprovalInput, request:
         raise HTTPException(status_code=403, detail="Only the authenticated owner/admin can approve public visibility.")
     if payload.confirmation != "I CONFIRM PUBLIC VISIBILITY":
         raise HTTPException(status_code=403, detail="Exact public visibility confirmation is required.")
+    if not payload.title.strip():
+        raise HTTPException(status_code=422, detail="Public approval title cannot be blank.")
     with db() as conn:
         item = conn.execute("SELECT id,status,platform FROM content_calendar WHERE id=?",
                             (payload.calendar_id,)).fetchone()
