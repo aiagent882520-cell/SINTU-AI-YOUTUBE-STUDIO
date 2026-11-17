@@ -24,9 +24,6 @@ def test_relay_accepts_only_allowlisted_fixed_commands():
     assert relay.command_for("full_studio_e2e", {"topic": "भारत"})[-2:] == [
         "--topic", "भारत"
     ]
-    assert relay.command_for("full_studio_e2e", {"topic": "भारत"})[-3:] == [
-        "--topic", "भारत"
-    ]
     assert relay.command_for("full_studio_e2e", {})[-2:] == [
         "--topic", "भारत के प्राचीन किले में सुबह का सिनेमाई दृश्य"
     ]
