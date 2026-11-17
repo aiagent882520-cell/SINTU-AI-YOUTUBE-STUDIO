@@ -57,7 +57,7 @@ jobs:
       - name: Compile Python
         run: python -m compileall -q app tests scripts
       - name: Validate Termux launcher syntax
-        run: bash -n START_SINTU_TERMUX.sh scripts/termux_one_command.sh scripts/start_services.sh scripts/termux_boot.sh
+        run: bash -n START_SINTU_TERMUX.sh scripts/termux_one_command.sh scripts/start_services.sh scripts/restart_termux_workers.sh scripts/termux_boot.sh
       - name: Check browser JavaScript syntax
         run: |
           node --check app/static/app.js
