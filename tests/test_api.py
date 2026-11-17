@@ -1834,6 +1834,13 @@ def test_public_visibility_requires_one_time_bound_owner_approval(tmp_path, monk
     assert approval["title"] == "Exact public title"
     assert approval["channel_id"] == "UC-public-test"
 
+    wrong_binding = client.post(
+        f"/api/admin/youtube/publish/{calendar_id}",
+        params={"video_id": video_id, "title": "Different title", "privacy_status": "public"},
+        headers={"X-SINTU-Public-Approval": token},
+    )
+    assert wrong_binding.status_code == 403
+
     session_uri = "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=private-first"
     google_calls = []
     def fake_google(url, data=None, headers=None, method="GET"):
