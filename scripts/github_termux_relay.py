@@ -227,7 +227,7 @@ def process_issue(github: GitHub, issue: dict) -> None:
         completed = subprocess.run(
             command, cwd=ROOT, text=True, stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT, timeout=1800, check=False,
-            env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            env={**os.environ, "PYTHONUNBUFFERED": "1", "SINTU_QUEUE_EXECUTOR": "github_termux_relay"},
         )
         success = completed.returncode == 0
         output = (completed.stdout or "")[-8000:] or "(no command output)"
