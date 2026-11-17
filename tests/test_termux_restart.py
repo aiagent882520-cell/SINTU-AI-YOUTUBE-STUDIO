@@ -12,6 +12,9 @@ def test_queued_restart_uses_trusted_executor_environment_marker():
     assert "SINTU_QUEUE_EXECUTOR" in launcher
     assert "github_termux_relay" in launcher
     assert "termux_bridge_worker" in launcher
+    assert 'github-relay.pid' in launcher
+    assert 'bridge-worker.pid' in launcher
+    assert "IS_QUEUED_PARENT" in launcher
     assert "SINTU_QUEUE_EXECUTOR" in relay
     assert '"github_termux_relay"' in relay
     assert 'if action == "restart_services"' in relay
