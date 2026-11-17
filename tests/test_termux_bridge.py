@@ -226,3 +226,24 @@ def test_worker_blocks_production_jobs_while_automation_only(monkeypatch):
     for action in ("offline_video_e2e", "full_self_test", "full_studio_e2e"):
         with pytest.raises(ValueError, match="paused"):
             worker.command_for({"action": action, "payload": {}})
+
+
+def test_bridge_queues_safe_optional_install_and_worker_maps_it(tmp_path, monkeypatch):
+    client, api_headers, worker_headers = bridge_client(tmp_path, monkeypatch)
+    created = client.post(
+        "/api/termux-bridge/jobs", headers=api_headers,
+        json={"action": "safe_optional_install"},
+    )
+    assert created.status_code == 202
+    job = client.get("/api/termux-bridge/jobs/next", headers=worker_headers)
+    assert job.status_code == 200
+    assert job.json()["action"] == "safe_optional_install"
+
+
+def test_worker_maps_safe_optional_install_to_fixed_script(monkeypatch):
+    from scripts import termux_bridge_worker as worker
+
+    monkeypatch.setattr(worker, "AUTOMATION_ONLY", True)
+    assert worker.command_for({"action": "safe_optional_install", "payload": {}}) == [
+        "bash", "scripts/termux_safe_optional_install.sh"
+    ]

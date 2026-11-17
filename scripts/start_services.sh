@@ -57,4 +57,17 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
   fi
 fi
 
+# Keep a lightweight watchdog alive so dead local processes are restarted.
+WATCHDOG_PID_FILE="$LOG_DIR/watchdog.pid"
+if [ -f "$WATCHDOG_PID_FILE" ] && kill -0 "$(cat "$WATCHDOG_PID_FILE")" 2>/dev/null; then
+  WATCHDOG_CMD="$(tr '\0' ' ' < "/proc/$(cat "$WATCHDOG_PID_FILE")/cmdline" 2>/dev/null || true)"
+else
+  WATCHDOG_CMD=""
+fi
+if [[ "$WATCHDOG_CMD" != *"scripts/termux_watchdog.sh"* ]]; then
+  rm -f "$WATCHDOG_PID_FILE"
+  nohup bash scripts/termux_watchdog.sh >>"$LOG_DIR/watchdog.log" 2>&1 </dev/null &
+  echo $! > "$WATCHDOG_PID_FILE"
+fi
+
 echo "SINTU API and Termux workers are running."
