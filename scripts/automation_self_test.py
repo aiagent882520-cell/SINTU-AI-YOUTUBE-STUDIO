@@ -49,10 +49,15 @@ def main():
         return "authenticated; credentials hidden"
     results.append(run_check("github_cli_auth", github_auth))
     def api_health():
-        with urllib.request.urlopen("http://127.0.0.1:8000/openapi.json", timeout=5) as response:
+        # /openapi.json is intentionally behind the admin-session firewall.
+        # Use the dedicated public liveness endpoint for an unauthenticated probe.
+        with urllib.request.urlopen("http://127.0.0.1:8000/api/health", timeout=5) as response:
             if response.status != 200:
                 raise RuntimeError("Studio API did not return HTTP 200")
-        return "Studio API reachable"
+            data = json.load(response)
+        if data.get("status") != "ok" or data.get("app") != "SINTU AI YOUTUBE STUDIO":
+            raise RuntimeError("Studio API health payload is invalid")
+        return {"status": data["status"], "version": data.get("version")}
     results.append(run_check("studio_api", api_health))
     def bridge_worker():
         token = os.getenv("SINTU_BRIDGE_TOKEN", "").strip()
