@@ -2129,6 +2129,14 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
             raise HTTPException(status_code=409, detail="Published calendar item has no verified resumable-upload record; duplicate upload blocked.")
     elif item["status"] != "Approved":
         raise HTTPException(status_code=409, detail="YouTube calendar item approved hona chahiye.")
+    if privacy_status == "public" and not public_approval_token:
+        with db() as conn:
+            resumable_public_job = conn.execute(
+                "SELECT public_approval_hash FROM youtube_uploads WHERE calendar_id=?",
+                (calendar_id,),
+            ).fetchone()
+        if not resumable_public_job or not resumable_public_job["public_approval_hash"]:
+            raise HTTPException(status_code=403, detail="Public YouTube publishing is disabled unless a separate explicit owner approval is provided.")
     path = OUTPUT_DIR / (video_id + ".mp4")
     if path.is_symlink() or not path.is_file():
         raise HTTPException(status_code=404, detail="Rendered MP4 file nahi mili ya unsafe path hai.")
@@ -2147,14 +2155,6 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
 
     title = title.strip()
     supplied_approval_hash = _public_approval_digest(public_approval_token) if public_approval_token else None
-    if privacy_status == "public" and not supplied_approval_hash:
-        with db() as conn:
-            resumable_public_job = conn.execute(
-                "SELECT public_approval_hash,status FROM youtube_uploads WHERE calendar_id=?",
-                (calendar_id,),
-            ).fetchone()
-        if not resumable_public_job or not resumable_public_job["public_approval_hash"]:
-            raise HTTPException(status_code=403, detail="Public YouTube publishing is disabled unless a separate explicit owner approval is provided.")
     connection = _youtube_connection()
     if not connection:
         raise HTTPException(status_code=409, detail="Pehle YouTube channel connect karein.")
