@@ -90,3 +90,13 @@ def test_relay_requeues_stale_claim_after_worker_crash():
     assert [issue["number"] for issue in pending] == [42]
     assert github.updates == [(42, {"labels": [relay.QUEUED_LABEL]})]
     assert "Recovered stale claim" in github.comments[0][1]
+
+
+
+def test_relay_rejects_payload_fields_for_wrong_action():
+    with pytest.raises(ValueError, match="Payload fields"):
+        relay.command_for("git_status", {"topic": "ignored"})
+    with pytest.raises(ValueError, match="Payload fields"):
+        relay.command_for("run_tests", {"topic": "wrong-field"})
+    with pytest.raises(ValueError, match="Payload fields"):
+        relay.command_for("offline_video_e2e", {"test_path": "tests/test_ai_brain.py"})
