@@ -1910,6 +1910,7 @@ def test_public_visibility_requires_one_time_bound_owner_approval(tmp_path, monk
 
 
 def test_public_approval_revocation_and_expiry_block_upload_before_oauth(tmp_path, monkeypatch):
+    import time
     from datetime import datetime, timedelta, timezone
 
     client = client_for_test(tmp_path, monkeypatch)
@@ -1947,6 +1948,23 @@ def test_public_approval_revocation_and_expiry_block_upload_before_oauth(tmp_pat
         headers={"X-SINTU-Public-Approval": token},
     )
     assert blocked.status_code == 403
+
+    expired_response = client.post("/api/admin/youtube/public-approvals", json={
+        "calendar_id": calendar_id, "video_id": video_id,
+        "title": "Revoke title", "channel_id": "UC-revoke-test",
+        "confirmation": "I CONFIRM PUBLIC VISIBILITY",
+    })
+    assert expired_response.status_code == 200
+    expired_token = expired_response.json()["approval_token"]
+    with main.db() as conn:
+        conn.execute("UPDATE youtube_public_approvals SET expires_at=? WHERE approval_hash=?",
+                     (int(time.time()) - 1, main._public_approval_digest(expired_token)))
+    expired = client.post(
+        f"/api/admin/youtube/publish/{calendar_id}",
+        params={"video_id": video_id, "title": "Revoke title", "privacy_status": "public"},
+        headers={"X-SINTU-Public-Approval": expired_token},
+    )
+    assert expired.status_code == 403
 
 
 def test_youtube_upload_cancel_is_terminal_and_cannot_cancel_completed(tmp_path, monkeypatch):
