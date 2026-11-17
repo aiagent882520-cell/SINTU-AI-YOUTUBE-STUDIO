@@ -93,6 +93,7 @@ def transfer_resumable_upload(
     chunk_size: int = CHUNK_SIZE,
     max_attempts: int = MAX_ATTEMPTS,
     sleep: Callable[[float], None] = time.sleep,
+    probe_first: bool = False,
 ) -> dict:
     """Upload chunks, probing Google after ambiguous failures before resuming."""
     path = Path(path)
@@ -121,6 +122,27 @@ def transfer_resumable_upload(
         if len(body) > MAX_RESPONSE_BYTES:
             raise UploadProtocolError("YouTube upload response exceeded safety limit.")
         return status, response_headers, body
+
+    if probe_first:
+        try:
+            probe_status, probe_headers, probe_body = call(b"", f"bytes */{size}")
+        except (ConnectionError, TimeoutError, OSError):
+            probe_status, probe_headers, probe_body = 0, {}, b""
+        if probe_status in (200, 201):
+            result = _decode_completion(probe_body)
+            if on_progress:
+                on_progress(size, "VERIFYING")
+            return result
+        if probe_status in (404, 410):
+            raise UploadProtocolError("Google resumable session expired before resume.", state="EXPIRED", status=probe_status)
+        if probe_status == 308:
+            offset = parse_acknowledged_offset(probe_headers, size)
+            if on_progress:
+                on_progress(offset, "RESUMING")
+        elif probe_status and probe_status not in RETRYABLE_STATUS:
+            raise UploadProtocolError(f"Google session probe rejected (HTTP {probe_status}).", status=probe_status)
+        else:
+            raise UploadProtocolError("Could not verify the server upload offset; retry safely.", state="PAUSED", status=probe_status or None)
 
     with path.open("rb") as source:
         while offset < size:
