@@ -35,6 +35,8 @@ FAILED_LABEL = "sintu-command-failed"
 PYTHON = str(ROOT / ".venv" / "bin" / "python")
 if not Path(PYTHON).exists():
     PYTHON = sys.executable
+AUTOMATION_ONLY = os.getenv("SINTU_AUTOMATION_ONLY", "true").strip().lower() in {"1", "true", "yes", "on"}
+PRODUCTION_ACTIONS = {"offline_video_e2e", "full_self_test", "full_studio_e2e"}
 ACTIONS = {
     "git_status", "git_pull_ff_only", "run_tests", "compile_check",
     "health_audit", "operational_readiness", "live_preflight", "engine_probe",
@@ -139,6 +141,8 @@ class GitHub:
 def command_for(action: str, payload: dict) -> list[str]:
     if action not in ACTIONS:
         raise ValueError("Action is not on the SINTU allowlist.")
+    if AUTOMATION_ONLY and action in PRODUCTION_ACTIONS:
+        raise ValueError("Production actions are paused in SINTU automation-only mode.")
     allowed_fields = (
         {"test_path"} if action == "run_tests"
         else {"topic"} if action in {"offline_video_e2e", "full_self_test", "full_studio_e2e"}
