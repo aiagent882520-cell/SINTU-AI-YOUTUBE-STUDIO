@@ -30,6 +30,7 @@ ALLOWED_ACTIONS = {
     "live_preflight",
     "offline_video_e2e",
     "full_self_test",
+    "full_studio_e2e",
 }
 MAX_OUTPUT_CHARS = 20000
 
@@ -97,7 +98,7 @@ def _authorize(authorization: str | None, *, worker: bool = False) -> None:
 
 
 class CreateJobInput(BaseModel):
-    action: Literal["git_status", "git_pull_ff_only", "run_tests", "compile_check", "health_audit", "operational_readiness", "live_preflight", "offline_video_e2e", "full_self_test"]
+    action: Literal["git_status", "git_pull_ff_only", "run_tests", "compile_check", "health_audit", "operational_readiness", "live_preflight", "offline_video_e2e", "full_self_test", "full_studio_e2e"]
     test_path: str | None = Field(default=None, max_length=160)
     topic: str | None = Field(default=None, max_length=300)
 
@@ -147,14 +148,14 @@ def create_job(payload: CreateJobInput, authorization: str | None = Header(defau
         data["test_path"] = payload.test_path
     elif payload.test_path:
         raise HTTPException(status_code=400, detail="test_path is only valid for run_tests.")
-    if payload.action in {"offline_video_e2e", "full_self_test"}:
+    if payload.action in {"offline_video_e2e", "full_self_test", "full_studio_e2e"}:
         if payload.topic is not None:
             topic = payload.topic.strip()
             if not topic or len(topic) > 300:
                 raise HTTPException(status_code=400, detail="topic must contain 1 to 300 characters.")
             data["topic"] = topic
     elif payload.topic is not None:
-        raise HTTPException(status_code=400, detail="topic is only valid for offline_video_e2e or full_self_test.")
+        raise HTTPException(status_code=400, detail="topic is only valid for offline_video_e2e, full_self_test or full_studio_e2e.")
     job_id = secrets.token_hex(16)
     with _connect() as conn:
         conn.execute(

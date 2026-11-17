@@ -38,7 +38,7 @@ if not Path(PYTHON).exists():
 ACTIONS = {
     "git_status", "git_pull_ff_only", "run_tests", "compile_check",
     "health_audit", "operational_readiness", "live_preflight",
-    "offline_video_e2e", "full_self_test",
+    "offline_video_e2e", "full_self_test", "full_studio_e2e",
 }
 
 
@@ -141,7 +141,7 @@ def command_for(action: str, payload: dict) -> list[str]:
         raise ValueError("Action is not on the SINTU allowlist.")
     allowed_fields = (
         {"test_path"} if action == "run_tests"
-        else {"topic"} if action in {"offline_video_e2e", "full_self_test"}
+        else {"topic"} if action in {"offline_video_e2e", "full_self_test", "full_studio_e2e"}
         else set()
     )
     if set(payload) - allowed_fields:
@@ -158,7 +158,7 @@ def command_for(action: str, payload: dict) -> list[str]:
         return [PYTHON, "scripts/operational_readiness.py", "--json"]
     if action == "live_preflight":
         return [PYTHON, "scripts/live_e2e.py"]
-    if action in {"offline_video_e2e", "full_self_test"}:
+    if action in {"offline_video_e2e", "full_self_test", "full_studio_e2e"}:
         topic = payload.get("topic")
         if topic is not None and (
             not isinstance(topic, str) or not topic.strip() or len(topic.strip()) > 300
@@ -167,6 +167,9 @@ def command_for(action: str, payload: dict) -> list[str]:
         if action == "offline_video_e2e":
             topic = topic or "भारत के प्राचीन किले में सुबह का सिनेमाई दृश्य"
             return [PYTHON, "scripts/live_e2e.py", "--offline-video", "--topic", topic.strip()]
+        if action == "full_studio_e2e":
+            topic = topic or "भारत के प्राचीन किले में सुबह का सिनेमाई दृश्य"
+            return [PYTHON, "scripts/live_e2e.py", "--full-studio-e2e", "--topic", topic.strip()]
         command = [PYTHON, "scripts/sintu_self_test.py"]
         if topic:
             command += ["--topic", topic.strip()]

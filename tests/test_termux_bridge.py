@@ -128,14 +128,18 @@ def test_bridge_queues_safe_local_readiness_and_video_e2e_actions(tmp_path, monk
     assert preflight.status_code == 202
     video = client.post("/api/termux-bridge/jobs", headers=api_headers,
                         json={"action": "offline_video_e2e", "topic": "भारत के किले"})
+    full_studio = client.post("/api/termux-bridge/jobs", headers=api_headers,
+                              json={"action": "full_studio_e2e", "topic": "भारत के किले"})
     assert video.status_code == 202
 
+    assert full_studio.status_code == 202
     jobs = [client.get("/api/termux-bridge/jobs/next", headers=worker_headers).json()
-            for _ in range(3)]
+            for _ in range(4)]
     assert [job["action"] for job in jobs] == [
-        "operational_readiness", "live_preflight", "offline_video_e2e"
+        "operational_readiness", "live_preflight", "offline_video_e2e", "full_studio_e2e"
     ]
     assert jobs[2]["payload"] == {"topic": "भारत के किले"}
+    assert jobs[3]["payload"] == {"topic": "भारत के किले"}
 
 
 def test_bridge_restricts_topics_to_offline_video_e2e(tmp_path, monkeypatch):
@@ -158,6 +162,9 @@ def test_worker_maps_e2e_actions_to_fixed_argument_arrays(monkeypatch):
     ]
     assert worker.command_for({"action": "offline_video_e2e", "payload": {"topic": "भारत के किले"}}) == [
         "/sintu/.venv/bin/python", "scripts/live_e2e.py", "--offline-video", "--topic", "भारत के किले"
+    ]
+    assert worker.command_for({"action": "full_studio_e2e", "payload": {"topic": "भारत के किले"}}) == [
+        "/sintu/.venv/bin/python", "scripts/live_e2e.py", "--full-studio-e2e", "--topic", "भारत के किले"
     ]
     with pytest.raises(ValueError, match="Rejected offline video topic"):
         worker.command_for({"action": "offline_video_e2e", "payload": {"topic": "x" * 301}})
@@ -187,3 +194,24 @@ def test_worker_maps_full_self_test_to_fixed_local_script(monkeypatch):
     ]
     with pytest.raises(ValueError, match="Rejected full self-test topic"):
         worker.command_for({"action": "full_self_test", "payload": {"topic": "x" * 301}})
+
+
+
+def test_bridge_queues_full_studio_e2e(tmp_path, monkeypatch):
+    client, api_headers, worker_headers = bridge_client(tmp_path, monkeypatch)
+    created = client.post("/api/termux-bridge/jobs", headers=api_headers,
+                          json={"action": "full_studio_e2e", "topic": "भारत के किले"})
+    assert created.status_code == 202
+    job = client.get("/api/termux-bridge/jobs/next", headers=worker_headers).json()
+    assert job["action"] == "full_studio_e2e"
+    assert job["payload"] == {"topic": "भारत के किले"}
+
+
+def test_worker_maps_full_studio_e2e_to_full_production_pipeline(monkeypatch):
+    from scripts import termux_bridge_worker as worker
+    monkeypatch.setattr(worker, "PYTHON", "/sintu/.venv/bin/python")
+    assert worker.command_for({"action": "full_studio_e2e", "payload": {"topic": "भारत"}}) == [
+        "/sintu/.venv/bin/python", "scripts/live_e2e.py", "--full-studio-e2e", "--topic", "भारत"
+    ]
+    with pytest.raises(ValueError, match="Rejected full studio topic"):
+        worker.command_for({"action": "full_studio_e2e", "payload": {"topic": "x" * 301}})
