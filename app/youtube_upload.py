@@ -106,6 +106,8 @@ def transfer_resumable_upload(
     if chunk_size < 256 * 1024 or chunk_size % (256 * 1024):
         raise ValueError("chunk_size must be a multiple of 256 KiB.")
     expected_hash = sha256_file(path)
+    initial_stat = path.stat()
+    file_identity = (initial_stat.st_size, initial_stat.st_mtime_ns, getattr(initial_stat, "st_ino", 0))
     offset = 0
     attempt = 0
     if on_progress:
@@ -146,7 +148,9 @@ def transfer_resumable_upload(
 
     with path.open("rb") as source:
         while offset < size:
-            if sha256_file(path) != expected_hash:
+            current_stat = path.stat()
+            current_identity = (current_stat.st_size, current_stat.st_mtime_ns, getattr(current_stat, "st_ino", 0))
+            if current_identity != file_identity:
                 raise UploadProtocolError("Rendered MP4 changed during upload; session paused.", state="PAUSED")
             source.seek(offset)
             payload = source.read(min(chunk_size, size - offset))
@@ -160,6 +164,9 @@ def transfer_resumable_upload(
 
             if status in (200, 201):
                 result = _decode_completion(body)
+                final_stat = path.stat()
+                if (final_stat.st_size, final_stat.st_mtime_ns, getattr(final_stat, "st_ino", 0)) != file_identity or sha256_file(path) != expected_hash:
+                    raise UploadProtocolError("Rendered MP4 changed during upload; session paused.", state="PAUSED")
                 if on_progress:
                     on_progress(size, "VERIFYING")
                 return result
@@ -169,6 +176,12 @@ def transfer_resumable_upload(
                     raise UploadProtocolError("Google acknowledged bytes beyond the sent chunk.")
                 if acknowledged < offset:
                     raise UploadProtocolError("Google upload offset moved backwards; refusing unsafe resume.")
+                if acknowledged == offset:
+                    attempt += 1
+                    if attempt >= max_attempts:
+                        raise UploadProtocolError("Google acknowledged no new bytes; retry limit reached.", state="PAUSED", status=308)
+                    sleep(min(2 ** (attempt - 1), 30))
+                    continue
                 offset = acknowledged
                 attempt = 0
                 if on_progress:
