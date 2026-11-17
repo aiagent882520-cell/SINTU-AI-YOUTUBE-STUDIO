@@ -159,6 +159,36 @@ def nearby_assets(timestamp: float) -> list[dict]:
     return found
 
 
+def find_backups(path: Path) -> list[dict]:
+    base = DATA_DIR / "media_backups"
+    found = []
+    if not base.is_dir():
+        return found
+    for candidate in base.glob("*/" + path.name):
+        if not candidate.is_file() or candidate.is_symlink():
+            continue
+        try:
+            stat = candidate.stat()
+            found.append({
+                "path": str(candidate.relative_to(DATA_DIR)),
+                "size_bytes": stat.st_size,
+                "sha256": sha256_file(candidate),
+                "pre_repair_mtime_utc": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+            })
+        except OSError:
+            continue
+    return sorted(found, key=lambda item: item["pre_repair_mtime_utc"], reverse=True)
+
+
+def parse_creation_time(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
 def inspect_video(path: Path) -> dict:
     if path.is_symlink() or not path.is_file():
         return {"file": path.name, "exists": False, "safe_regular_file": False}
@@ -172,6 +202,7 @@ def inspect_video(path: Path) -> dict:
             fmt = raw.get("format", {})
             info["format"] = fmt.get("format_name")
             info["duration_seconds"] = float(fmt.get("duration") or 0)
+            info["container_creation_time"] = (fmt.get("tags") or {}).get("creation_time")
             for stream in raw.get("streams", []):
                 info["streams"].append({
                     "type": stream.get("codec_type"), "codec": stream.get("codec_name"),
@@ -203,10 +234,24 @@ def inspect_video(path: Path) -> dict:
             samples.append({"sample": label, "timestamp": parts[0] if parts else "",
                             "picture_type": parts[1] if len(parts) > 1 else ""})
 
+    backups = find_backups(path)
+    creation_epoch = parse_creation_time(info.get("container_creation_time"))
+    if backups:
+        reference_epoch = parse_creation_time(backups[0]["pre_repair_mtime_utc"])
+        reference_source = "pre-repair-backup-mtime"
+    elif creation_epoch is not None:
+        reference_epoch = creation_epoch
+        reference_source = "container-creation-time"
+    else:
+        reference_epoch = stat.st_mtime
+        reference_source = "current-file-mtime-may-reflect-audio-repair"
     return {
         "file": path.name, "exists": True, "size_bytes": stat.st_size,
         "sha256": sha256_file(path),
         "modified_utc": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+        "pre_repair_backups": backups,
+        "asset_reference_time_utc": datetime.fromtimestamp(reference_epoch, timezone.utc).isoformat() if reference_epoch else None,
+        "asset_reference_time_source": reference_source,
         "ffprobe_exit": probe["returncode"], "metadata": info,
         "blackdetect_exit": black["returncode"], "black_intervals": intervals,
         "full_duration_black": full_black, "decode_exit": decode["returncode"],
@@ -224,7 +269,8 @@ def main() -> int:
     assets = {}
     for video in videos:
         if video.get("exists"):
-            for asset in nearby_assets(datetime.fromisoformat(video["modified_utc"]).timestamp()):
+            reference_time = video.get("asset_reference_time_utc") or video["modified_utc"]
+            for asset in nearby_assets(datetime.fromisoformat(reference_time).timestamp()):
                 assets[asset["path"]] = asset
     needles = tuple(value for name in TARGETS for value in (name, Path(name).stem))
     report = {
@@ -235,7 +281,7 @@ def main() -> int:
         "production_database_matches": scan_database_records(needles),
         "safety": {"files_modified": False, "files_deleted": False, "files_moved": False,
                    "uploads_performed": False, "public_publishing_performed": False},
-        "note": "Technical evidence only; no repair, quarantine, deletion, regeneration, or upload was performed.",
+        "note": "The audio repair used copy2 backups before replacing MP4s; backup mtimes are preferred for source correlation because current MP4 mtimes may reflect audio repair. Technical evidence only; no repair, quarantine, deletion, regeneration, or upload was performed.",
     }
     print(json.dumps(report, ensure_ascii=False, separators=(",", ":")))
     return 0 if all(item.get("exists") for item in videos) else 1
