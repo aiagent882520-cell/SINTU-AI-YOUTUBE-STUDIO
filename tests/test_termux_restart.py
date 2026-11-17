@@ -14,8 +14,10 @@ def test_queued_restart_uses_trusted_executor_environment_marker():
     assert "termux_bridge_worker" in launcher
     assert "SINTU_QUEUE_EXECUTOR" in relay
     assert '"github_termux_relay"' in relay
+    assert 'if action == "restart_services"' in relay
     assert "SINTU_QUEUE_EXECUTOR" in worker
     assert '"termux_bridge_worker"' in worker
+    assert 'if job.get("action") == "restart_services"' in worker
     assert "scripts/restart_termux_workers.sh" in launcher
     assert "restart scheduled after the current queue result is acknowledged" in launcher
 
