@@ -344,6 +344,16 @@ def init_db():
             created_at TEXT NOT NULL, updated_at TEXT NOT NULL
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_youtube_uploads_status ON youtube_uploads(status,updated_at)")
+        upload_columns = {row["name"] for row in conn.execute("PRAGMA table_info(youtube_uploads)")}
+        if "public_approval_hash" not in upload_columns:
+            conn.execute("ALTER TABLE youtube_uploads ADD COLUMN public_approval_hash TEXT")
+        conn.execute("""CREATE TABLE IF NOT EXISTS youtube_public_approvals (
+            approval_hash TEXT PRIMARY KEY, calendar_id INTEGER NOT NULL, video_id TEXT NOT NULL,
+            channel_id TEXT NOT NULL, title TEXT NOT NULL, file_sha256 TEXT NOT NULL,
+            expires_at INTEGER NOT NULL, created_at TEXT NOT NULL, approved_by TEXT NOT NULL,
+            consumed_at INTEGER, revoked_at INTEGER, applied_at INTEGER
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_youtube_public_approvals_expiry ON youtube_public_approvals(expires_at,revoked_at)")
         conn.execute("""CREATE TABLE IF NOT EXISTS meta_oauth_states (
             state TEXT PRIMARY KEY, admin_user_id INTEGER NOT NULL, session_hash TEXT NOT NULL, expires_at INTEGER NOT NULL
         )""")
@@ -445,6 +455,18 @@ class CalendarItemInput(BaseModel):
     platform: str = Field(pattern=r"^(youtube|youtube_shorts|instagram|facebook|tiktok|website)$")
     prompt: str = Field(min_length=1, max_length=10000)
     scheduled_at: str = Field(min_length=20, max_length=40)
+
+class YouTubePublicApprovalInput(BaseModel):
+    calendar_id: int = Field(ge=1)
+    video_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    title: str = Field(min_length=1, max_length=100)
+    channel_id: str = Field(min_length=5, max_length=64)
+    confirmation: str = Field(pattern=r"^I CONFIRM PUBLIC VISIBILITY$")
+
+
+class YouTubePublicApprovalRevokeInput(BaseModel):
+    approval_token: str = Field(min_length=32, max_length=128)
+
 
 class TimelineItemInput(BaseModel):
     kind: str = Field(pattern=r"^(image|video)$")
@@ -1907,7 +1929,7 @@ def _youtube_resumable_http_request(method: str, url: str, data: bytes, headers:
 
 def _youtube_verify_uploaded_video(youtube_video_id: str, access_token: str) -> dict:
     url = "https://www.googleapis.com/youtube/v3/videos?" + urllib.parse.urlencode({
-        "part": "status,processingDetails", "id": youtube_video_id
+        "part": "status,processingDetails,snippet", "id": youtube_video_id
     })
     _, _, body = _youtube_request(url, headers={"Authorization": "Bearer " + access_token})
     try:
@@ -1920,17 +1942,180 @@ def _youtube_verify_uploaded_video(youtube_video_id: str, access_token: str) -> 
     if status.get("uploadStatus") in {"failed", "rejected", "deleted"}:
         raise HTTPException(status_code=502, detail="YouTube ne uploaded video reject/fail kar diya.")
     processing = items[0].get("processingDetails", {}).get("processingStatus", "unknown")
-    return {"upload_status": status.get("uploadStatus", "unknown"), "processing_status": processing}
+    if processing in {"failed", "terminated"}:
+        raise HTTPException(status_code=502, detail="YouTube video processing failed or was terminated.")
+    return {
+        "upload_status": status.get("uploadStatus", "unknown"),
+        "processing_status": processing,
+        "privacy_status": status.get("privacyStatus", "unknown"),
+        "channel_id": items[0].get("snippet", {}).get("channelId", ""),
+    }
+
+
+def _public_approval_digest(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _consume_public_approval(conn, approval_hash: str, calendar_id: int, video_id: str,
+                             channel_id: str, title: str, file_hash: str) -> None:
+    now = int(time.time())
+    row = conn.execute("SELECT * FROM youtube_public_approvals WHERE approval_hash=?",
+                       (approval_hash,)).fetchone()
+    if (not row or row["calendar_id"] != calendar_id or row["video_id"] != video_id
+            or row["channel_id"] != channel_id or row["title"] != title
+            or row["file_sha256"] != file_hash or row["expires_at"] <= now
+            or row["revoked_at"] is not None or row["consumed_at"] is not None):
+        raise HTTPException(status_code=403, detail="Separate owner public approval missing, expired, revoked, used, or bound to different content.")
+    updated = conn.execute(
+        "UPDATE youtube_public_approvals SET consumed_at=? WHERE approval_hash=? "
+        "AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at>?",
+        (now, approval_hash, now),
+    )
+    if updated.rowcount != 1:
+        raise HTTPException(status_code=403, detail="Public approval was already consumed or revoked.")
+
+
+def _ensure_public_approval_active(approval_hash: str, calendar_id: int, video_id: str,
+                                  channel_id: str, title: str, file_hash: str) -> None:
+    with db() as conn:
+        row = conn.execute("SELECT * FROM youtube_public_approvals WHERE approval_hash=?",
+                           (approval_hash,)).fetchone()
+    now = int(time.time())
+    if (not row or row["calendar_id"] != calendar_id or row["video_id"] != video_id
+            or row["channel_id"] != channel_id or row["title"] != title
+            or row["file_sha256"] != file_hash or row["consumed_at"] is None
+            or row["revoked_at"] is not None or row["expires_at"] <= now):
+        raise HTTPException(status_code=403, detail="Public approval expired or revoked; public visibility action paused.")
+
+
+def _youtube_apply_public_approval(approval_hash: str, calendar_id: int, video_id: str,
+                                   channel_id: str, title: str, file_hash: str,
+                                   youtube_video_id: str, access_token: str) -> None:
+    # Serialize revoke vs. visibility update: revoke waits for this short API
+    # transaction, so it cannot race past the approval check.
+    with db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT * FROM youtube_public_approvals WHERE approval_hash=?",
+                           (approval_hash,)).fetchone()
+        now = int(time.time())
+        if (not row or row["calendar_id"] != calendar_id or row["video_id"] != video_id
+                or row["channel_id"] != channel_id or row["title"] != title
+                or row["file_sha256"] != file_hash or row["consumed_at"] is None
+                or row["revoked_at"] is not None or row["expires_at"] <= now):
+            raise HTTPException(status_code=403, detail="Public approval expired or revoked before visibility update.")
+        payload = json.dumps({"id": youtube_video_id, "status": {"privacyStatus": "public"}}).encode()
+        _, _, body = _youtube_request(
+            "https://www.googleapis.com/youtube/v3/videos?part=status",
+            payload, {"Authorization": "Bearer " + access_token,
+                      "Content-Type": "application/json; charset=UTF-8"}, "PUT")
+        try:
+            result = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            raise HTTPException(status_code=502, detail="YouTube visibility update response invalid hai.") from None
+        result_status = result.get("status", {})
+        if result.get("id") != youtube_video_id or result_status.get("privacyStatus") != "public":
+            raise HTTPException(status_code=502, detail="YouTube public visibility update could not be verified.")
+        conn.execute("UPDATE youtube_public_approvals SET applied_at=? WHERE approval_hash=?",
+                     (now, approval_hash))
+
+
+@app.post("/api/admin/youtube/public-approvals")
+def youtube_public_approval_create(payload: YouTubePublicApprovalInput, request: Request):
+    actor = getattr(request.state, "user", {}) or {}
+    if actor.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Only the authenticated owner/admin can approve public visibility.")
+    if payload.confirmation != "I CONFIRM PUBLIC VISIBILITY":
+        raise HTTPException(status_code=403, detail="Exact public visibility confirmation is required.")
+    if not payload.title.strip():
+        raise HTTPException(status_code=422, detail="Public approval title cannot be blank.")
+    with db() as conn:
+        item = conn.execute("SELECT id,status,platform FROM content_calendar WHERE id=?",
+                            (payload.calendar_id,)).fetchone()
+    if not item or item["status"] != "Approved" or item["platform"] not in {"youtube", "youtube_shorts"}:
+        raise HTTPException(status_code=409, detail="An approved YouTube calendar item is required.")
+    connection = _youtube_connection()
+    if not connection or connection["channel_id"] != payload.channel_id:
+        raise HTTPException(status_code=409, detail="Approval channel does not match the currently connected YouTube channel.")
+    path = OUTPUT_DIR / (payload.video_id + ".mp4")
+    if path.is_symlink() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Rendered MP4 missing or unsafe.")
+    size = path.stat().st_size
+    if size <= 0 or size > 512 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Rendered MP4 must be between 1 byte and 512 MiB.")
+    try:
+        verify_publishable_mp4(path)
+        file_hash = youtube_sha256_file(path)
+    except RendererUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    except RenderFailed:
+        raise HTTPException(status_code=409, detail="Final MP4 quality verification failed; public approval blocked.") from None
+    token = secrets.token_urlsafe(32)
+    approval_hash = _public_approval_digest(token)
+    now = int(time.time())
+    expires = now + 600
+    with db() as conn:
+        conn.execute("""INSERT INTO youtube_public_approvals(approval_hash,calendar_id,video_id,channel_id,
+            title,file_sha256,expires_at,created_at,approved_by)
+            VALUES(?,?,?,?,?,?,?,?,?)""",
+            (approval_hash, payload.calendar_id, payload.video_id, payload.channel_id,
+             payload.title.strip(), file_hash, expires, datetime.now(timezone.utc).isoformat(),
+             str(actor.get("username", "admin"))[:120]))
+    _record_publish_event(payload.calendar_id, "youtube", "PublicApprovalIssued", None,
+                          "Owner explicitly approved public visibility for exact video/channel/title; expires in 10 minutes.")
+    return {
+        "approval_token": token,
+        "expires_at": datetime.fromtimestamp(expires, timezone.utc).isoformat(),
+        "expires_in_seconds": 600,
+        "calendar_id": payload.calendar_id,
+        "video_id": payload.video_id,
+        "title": payload.title.strip(),
+        "channel_id": payload.channel_id,
+        "privacy_status": "public",
+        "note": "One-time owner approval. Keep the token private; it is returned only once and is never logged or stored in plaintext.",
+    }
+
+
+@app.post("/api/admin/youtube/public-approvals/revoke")
+def youtube_public_approval_revoke(payload: YouTubePublicApprovalRevokeInput, request: Request):
+    actor = getattr(request.state, "user", {}) or {}
+    if actor.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Only the authenticated owner/admin can revoke public approval.")
+    digest = _public_approval_digest(payload.approval_token)
+    now = int(time.time())
+    with db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT calendar_id,applied_at FROM youtube_public_approvals WHERE approval_hash=?",
+                           (digest,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Public approval token not found.")
+        conn.execute("UPDATE youtube_public_approvals SET revoked_at=? WHERE approval_hash=? AND revoked_at IS NULL",
+                     (now, digest))
+    _record_publish_event(row["calendar_id"], "youtube", "PublicApprovalRevoked", None,
+                          "Owner revoked the one-time public approval.")
+    return {"revoked": True, "public_visibility_already_applied": row["applied_at"] is not None,
+            "note": "Revocation blocks any pending or resumed public visibility action. An already-applied public video is not automatically changed."}
+
+
+@app.get("/api/admin/youtube/uploads/{calendar_id}")
+def youtube_upload_status(calendar_id: int):
+    with db() as conn:
+        row = conn.execute("""SELECT calendar_id,video_id,channel_id,title,privacy_status,file_size,
+            acknowledged_offset,status,youtube_video_id,processing_status,created_at,updated_at
+            FROM youtube_uploads WHERE calendar_id=?""", (calendar_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="YouTube upload job not found.")
+    result = dict(row)
+    size = result["file_size"]
+    result["progress_percent"] = round(min(100.0, result["acknowledged_offset"] / size * 100), 2) if size else 0.0
+    return result
 
 
 @app.post("/api/admin/youtube/publish/{calendar_id}")
 def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, max_length=32),
                     title: str = Query(..., min_length=1, max_length=100),
                     description: str = Query(default="", max_length=5000),
-                    privacy_status: str = Query(default="private", pattern=r"^(private|unlisted|public)$")):
-    # Public visibility remains globally disabled; generic calendar approval is not owner approval.
-    if privacy_status == "public":
-        raise HTTPException(status_code=403, detail="Public YouTube publishing is disabled; private/unlisted uploads only.")
+                    privacy_status: str = Query(default="private", pattern=r"^(private|unlisted|public)$"),
+                    public_approval_token: str | None = Header(default=None, alias="X-SINTU-Public-Approval")):
     if not re.fullmatch(r"[a-f0-9]{32}", video_id):
         raise HTTPException(status_code=400, detail="Invalid rendered video ID.")
     with db() as conn:
@@ -1948,6 +2133,14 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
             raise HTTPException(status_code=409, detail="Published calendar item has no verified resumable-upload record; duplicate upload blocked.")
     elif item["status"] != "Approved":
         raise HTTPException(status_code=409, detail="YouTube calendar item approved hona chahiye.")
+    if privacy_status == "public" and not public_approval_token:
+        with db() as conn:
+            resumable_public_job = conn.execute(
+                "SELECT public_approval_hash FROM youtube_uploads WHERE calendar_id=?",
+                (calendar_id,),
+            ).fetchone()
+        if not resumable_public_job or not resumable_public_job["public_approval_hash"]:
+            raise HTTPException(status_code=403, detail="Public YouTube publishing is disabled unless a separate explicit owner approval is provided.")
     path = OUTPUT_DIR / (video_id + ".mp4")
     if path.is_symlink() or not path.is_file():
         raise HTTPException(status_code=404, detail="Rendered MP4 file nahi mili ya unsafe path hai.")
@@ -1964,13 +2157,16 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
     except OSError:
         raise HTTPException(status_code=409, detail="Rendered MP4 could not be fingerprinted safely.") from None
 
+    title = title.strip()
+    supplied_approval_hash = _public_approval_digest(public_approval_token) if public_approval_token else None
     connection = _youtube_connection()
     if not connection:
         raise HTTPException(status_code=409, detail="Pehle YouTube channel connect karein.")
     channel_id = connection["channel_id"]
-    title = title.strip()
     description_hash = hashlib.sha256(description.encode("utf-8")).hexdigest()
-    now = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    approval_hash = None
+
     with db() as conn:
         saved_row = conn.execute("SELECT * FROM youtube_uploads WHERE calendar_id=?", (calendar_id,)).fetchone()
         if saved_row:
@@ -1980,6 +2176,29 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
                     or saved["privacy_status"] != privacy_status or saved["file_size"] != size
                     or saved["file_sha256"] != file_hash):
                 raise HTTPException(status_code=409, detail="Existing upload job is bound to different content/channel/metadata; duplicate upload blocked.")
+            if privacy_status == "public":
+                existing_hash = saved.get("public_approval_hash")
+                if saved["status"] == "COMPLETED" and saved["youtube_video_id"]:
+                    youtube_id = saved["youtube_video_id"]
+                    return {"calendar_id": calendar_id, "youtube_video_id": youtube_id, "status": "Published",
+                            "url": "https://www.youtube.com/watch?v=" + youtube_id,
+                            "privacy_status": privacy_status, "resumed": True, "duplicate_prevented": True}
+                if supplied_approval_hash and supplied_approval_hash != existing_hash:
+                    # A fresh approval may replace an expired/revoked approval
+                    # for the same exact content, but can never alter the binding.
+                    _consume_public_approval(conn, supplied_approval_hash, calendar_id,
+                                             video_id, channel_id, title, file_hash)
+                    conn.execute("UPDATE youtube_uploads SET public_approval_hash=? WHERE calendar_id=?",
+                                 (supplied_approval_hash, calendar_id))
+                    existing_hash = supplied_approval_hash
+                if not existing_hash:
+                    raise HTTPException(status_code=403, detail="Public YouTube publishing is disabled unless a separate explicit owner approval is provided.")
+                approval_hash = existing_hash
+                approval = conn.execute("SELECT consumed_at,revoked_at,expires_at FROM youtube_public_approvals WHERE approval_hash=?",
+                                        (approval_hash,)).fetchone()
+                if (not approval or approval["consumed_at"] is None or approval["revoked_at"] is not None
+                        or approval["expires_at"] <= int(time.time())):
+                    raise HTTPException(status_code=403, detail="Public approval expired or revoked; issue a new owner approval to resume.")
             if saved["status"] == "COMPLETED" and saved["youtube_video_id"]:
                 youtube_id = saved["youtube_video_id"]
                 return {"calendar_id": calendar_id, "youtube_video_id": youtube_id, "status": "Published",
@@ -1988,12 +2207,22 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
             if saved["status"] == "CANCELLED":
                 raise HTTPException(status_code=409, detail="Upload job was cancelled.")
         else:
+            if privacy_status == "public":
+                if not supplied_approval_hash:
+                    raise HTTPException(status_code=403, detail="A separate explicit owner public approval is required.")
+                _consume_public_approval(conn, supplied_approval_hash, calendar_id,
+                                         video_id, channel_id, title, file_hash)
+                approval_hash = supplied_approval_hash
             conn.execute("""INSERT INTO youtube_uploads(calendar_id,video_id,channel_id,title,description_sha256,
-                privacy_status,file_size,file_sha256,status,created_at,updated_at)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                privacy_status,file_size,file_sha256,status,created_at,updated_at,public_approval_hash)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (calendar_id, video_id, channel_id, title, description_hash, privacy_status,
-                 size, file_hash, "QUEUED", now, now))
+                 size, file_hash, "QUEUED", now_iso, now_iso, approval_hash))
             saved = dict(conn.execute("SELECT * FROM youtube_uploads WHERE calendar_id=?", (calendar_id,)).fetchone())
+
+    if privacy_status == "public":
+        approval_hash = approval_hash or saved.get("public_approval_hash")
+        _ensure_public_approval_active(approval_hash, calendar_id, video_id, channel_id, title, file_hash)
 
     def set_state(next_state: str, offset: int | None = None, encrypted_uri: str | None = None,
                   youtube_id: str | None = None, processing: str | None = None):
@@ -2022,10 +2251,25 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
             values.append(calendar_id)
             conn.execute("UPDATE youtube_uploads SET " + ",".join(fields) + " WHERE calendar_id=?", values)
 
+    def verify_and_apply_visibility(youtube_id: str, access_token: str) -> dict:
+        verified = _youtube_verify_uploaded_video(youtube_id, access_token)
+        if verified["channel_id"] != channel_id:
+            raise HTTPException(status_code=409, detail="Uploaded YouTube video channel could not be verified as the connected channel.")
+        if privacy_status == "public" and verified["privacy_status"] != "public":
+            _ensure_public_approval_active(approval_hash, calendar_id, video_id, channel_id, title, file_hash)
+            _youtube_apply_public_approval(approval_hash, calendar_id, video_id, channel_id,
+                                           title, file_hash, youtube_id, access_token)
+            verified = _youtube_verify_uploaded_video(youtube_id, access_token)
+            if verified["privacy_status"] != "public":
+                raise HTTPException(status_code=502, detail="YouTube public visibility could not be verified.")
+        elif privacy_status != "public" and verified["privacy_status"] not in {privacy_status, "unknown"}:
+            raise HTTPException(status_code=502, detail="YouTube privacy status does not match the requested visibility.")
+        return verified
+
     access_token = _youtube_access_token()
     encrypted_uri = saved.get("encrypted_session_uri")
     if saved.get("youtube_video_id") and saved["status"] == "VERIFYING":
-        verified = _youtube_verify_uploaded_video(saved["youtube_video_id"], access_token)
+        verified = verify_and_apply_visibility(saved["youtube_video_id"], access_token)
         youtube_id = saved["youtube_video_id"]
         set_state("COMPLETED", size, youtube_id=youtube_id, processing=verified["processing_status"])
         with db() as conn:
@@ -2052,8 +2296,9 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
         raise HTTPException(status_code=409, detail="Upload state is not resumable.")
 
     if not encrypted_uri:
+        upload_privacy = "private" if privacy_status == "public" else privacy_status
         metadata = json.dumps({"snippet": {"title": title, "description": description, "categoryId": "22"},
-                               "status": {"privacyStatus": privacy_status}}).encode()
+                               "status": {"privacyStatus": upload_privacy}}).encode()
         try:
             _, headers, _ = _youtube_request(
                 "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
@@ -2075,6 +2320,12 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
         raise HTTPException(status_code=503, detail="Stored YouTube upload session cannot be decrypted safely; session reset required.") from None
 
     def persist_progress(offset: int, state: str):
+        if privacy_status == "public":
+            try:
+                _ensure_public_approval_active(approval_hash, calendar_id, video_id, channel_id, title, file_hash)
+            except HTTPException:
+                set_state("PAUSED", offset)
+                raise
         set_state(state, offset)
 
     try:
@@ -2101,13 +2352,14 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
         set_state("ERROR")
         raise HTTPException(status_code=502, detail="YouTube ne video ID return nahi ki.")
     set_state("VERIFYING", size, youtube_id=youtube_id)
-    verified = _youtube_verify_uploaded_video(youtube_id, access_token)
+    verified = verify_and_apply_visibility(youtube_id, access_token)
     set_state("COMPLETED", size, youtube_id=youtube_id, processing=verified["processing_status"])
     with db() as conn:
         conn.execute("UPDATE content_calendar SET status='Published' WHERE id=?", (calendar_id,))
     post_url = "https://www.youtube.com/watch?v=" + youtube_id
-    _record_publish_event(calendar_id, item["platform"], "Published", youtube_id,
-                          "YouTube resumable upload completed and video ID verified", post_url)
+    detail = ("YouTube upload completed; separate owner approval applied and public visibility verified"
+              if privacy_status == "public" else "YouTube resumable upload completed and video ID verified")
+    _record_publish_event(calendar_id, item["platform"], "Published", youtube_id, detail, post_url)
     return {"calendar_id": calendar_id, "youtube_video_id": youtube_id, "status": "Published",
             "url": post_url, "privacy_status": privacy_status,
             "resumed": bool(saved.get("encrypted_session_uri")),
