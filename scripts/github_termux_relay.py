@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import datetime, timedelta, timezone
 import os
 import subprocess
 import sys
@@ -90,6 +91,27 @@ class GitHub:
                     raise
 
     def pending(self):
+        # Recover a job whose Android process died after claiming it. The
+        # longest allowed command is 30 minutes; a 40-minute lease is safe.
+        running_query = urllib.parse.urlencode({
+            "state": "open", "labels": RUNNING_LABEL, "per_page": "50"
+        })
+        running = self.request("GET", "/issues?" + running_query) or []
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=40)
+        for issue in running:
+            if (
+                "pull_request" in issue
+                or issue.get("user", {}).get("login", "").lower() != ALLOWED_ACTOR
+                or not issue.get("title", "").startswith("SINTU-CMD:")
+            ):
+                continue
+            try:
+                updated = datetime.fromisoformat(issue["updated_at"].replace("Z", "+00:00"))
+            except (KeyError, ValueError):
+                continue
+            if updated < cutoff:
+                self.update_issue(int(issue["number"]), labels=[QUEUED_LABEL])
+                self.comment(int(issue["number"]), "♻️ Recovered stale claim after the previous Termux worker stopped responding.")
         query = urllib.parse.urlencode({
             "state": "open", "labels": QUEUED_LABEL, "per_page": "50"
         })
