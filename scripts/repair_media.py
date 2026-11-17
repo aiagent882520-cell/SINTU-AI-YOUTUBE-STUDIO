@@ -49,7 +49,7 @@ def _backup_atomically(source: Path, destination: Path) -> None:
     temporary = destination.with_name(destination.name + ".part")
     try:
         shutil.copy2(source, temporary)
-        with temporary.open("rb") as stream:
+        with temporary.open("rb+") as stream:
             os.fsync(stream.fileno())
         os.replace(temporary, destination)
     except Exception:
@@ -137,8 +137,12 @@ def main() -> int:
                         help="Apply repairs only after verifying a temporary output; originals are backed up first.")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
-    media_dir = args.media_dir.expanduser().resolve()
-    if media_dir.is_symlink() or not media_dir.is_dir():
+    requested_media_dir = args.media_dir.expanduser()
+    if requested_media_dir.is_symlink():
+        print(json.dumps({"status": "FAIL", "error": "media directory must not be a symlink"}))
+        return 2
+    media_dir = requested_media_dir.resolve()
+    if not media_dir.is_dir():
         print(json.dumps({"status": "FAIL", "error": "media directory missing or unsafe"}))
         return 2
     ffmpeg, ffprobe = shutil.which("ffmpeg"), shutil.which("ffprobe")
