@@ -1689,6 +1689,27 @@ def test_youtube_publish_completes_resumable_upload_and_records_history(tmp_path
 
 
 
+def test_youtube_upload_cancel_is_terminal_and_cannot_cancel_completed(tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+    client = client_for_test(tmp_path, monkeypatch)
+    now = datetime.now(timezone.utc).isoformat()
+    with main.db() as conn:
+        conn.execute("""INSERT INTO youtube_uploads(calendar_id,video_id,channel_id,title,description_sha256,
+            privacy_status,file_size,file_sha256,status,created_at,updated_at)
+            VALUES(1,?,?,?,?,?,?,?,?,?,?)""",
+            ("d" * 32, "UC-test", "Test title", "0" * 64, "private", 100, "1" * 64,
+             "PAUSED", now, now))
+    cancelled = client.post("/api/admin/youtube/uploads/1/cancel")
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "CANCELLED"
+    with main.db() as conn:
+        state = conn.execute("SELECT status FROM youtube_uploads WHERE calendar_id=1").fetchone()[0]
+        conn.execute("UPDATE youtube_uploads SET status='COMPLETED' WHERE calendar_id=1")
+    assert state == "CANCELLED"
+    rejected = client.post("/api/admin/youtube/uploads/1/cancel")
+    assert rejected.status_code == 409
+
+
 def test_youtube_status_never_exposes_credentials(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("YOUTUBE_CLIENT_ID", "client-id-secret")
