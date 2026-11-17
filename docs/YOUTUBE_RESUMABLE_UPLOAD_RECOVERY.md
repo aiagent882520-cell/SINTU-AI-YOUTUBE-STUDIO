@@ -57,3 +57,5 @@ Live YouTube verification remains pending until owner-managed OAuth credentials,
 5. Upload progress can be inspected with `GET /api/admin/youtube/uploads/{calendar_id}`; session URI and approval digest are omitted.
 
 The public approval API creates no approval automatically and no approval is created by scheduled/background workers.
+
+Duplicate protection is channel-wide for an exact MP4 SHA-256, not just per calendar item. A second calendar item cannot upload the same file to the same channel unless the prior local job was explicitly cancelled; the duplicate check runs before OAuth or Google network access.
