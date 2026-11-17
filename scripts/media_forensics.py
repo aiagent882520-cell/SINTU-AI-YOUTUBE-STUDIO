@@ -53,9 +53,9 @@ def parse_black_intervals(stderr: str) -> list[list[float]]:
 
 
 def redact_secrets(value: str) -> str:
-    value = re.sub(r"(?i)(Bearer\\s+)[^\\s,\\\"]+", r"\\1[REDACTED]", value)
-    value = re.sub(r"(?i)(access_token|refresh_token|client_secret|api_key|upload_id)([=:][^&\\s,\\\"]+)", r"\\1=[REDACTED]", value)
-    value = re.sub(r"https://www\\.googleapis\\.com/upload/youtube/[^\\s\\\"]+", "[REDACTED_GOOGLE_UPLOAD_SESSION]", value)
+    value = re.sub(r"(?i)(Bearer\s+)[^\s,"]+", r"\1[REDACTED]", value)
+    value = re.sub(r"(?i)(access_token|refresh_token|client_secret|api_key|upload_id)([=:][^&\s,"]+)", r"\1=[REDACTED]", value)
+    value = re.sub(r"https://www\.googleapis\.com/upload/youtube/[^\s"]+", "[REDACTED_GOOGLE_UPLOAD_SESSION]", value)
     return value[:500]
 
 
