@@ -58,6 +58,7 @@ from .security import RequestRateLimiter, client_address_allowed, same_origin_re
 from .backup_restore import verify_backup, BackupValidationError, snapshot_database
 from .flow_auto_import import start_flow_auto_import, stop_flow_auto_import, flow_auto_import_status
 from .termux_bridge import router as termux_bridge_router
+from .youtube_upload import transfer_resumable_upload, sha256_file as youtube_sha256_file, validate_session_uri, validate_state_transition, UploadProtocolError
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT.parent))).expanduser().resolve()
@@ -334,6 +335,15 @@ def init_db():
             id INTEGER PRIMARY KEY CHECK(id=1), channel_id TEXT NOT NULL, channel_title TEXT NOT NULL,
             encrypted_tokens TEXT NOT NULL, token_expiry INTEGER NOT NULL, connected_at TEXT NOT NULL
         )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS youtube_uploads (
+            calendar_id INTEGER PRIMARY KEY, video_id TEXT NOT NULL, channel_id TEXT NOT NULL,
+            title TEXT NOT NULL, description_sha256 TEXT NOT NULL, privacy_status TEXT NOT NULL DEFAULT 'private',
+            file_size INTEGER NOT NULL, file_sha256 TEXT NOT NULL, encrypted_session_uri TEXT,
+            acknowledged_offset INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL,
+            youtube_video_id TEXT, processing_status TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_youtube_uploads_status ON youtube_uploads(status,updated_at)")
         conn.execute("""CREATE TABLE IF NOT EXISTS meta_oauth_states (
             state TEXT PRIMARY KEY, admin_user_id INTEGER NOT NULL, session_hash TEXT NOT NULL, expires_at INTEGER NOT NULL
         )""")
@@ -1794,7 +1804,7 @@ def _youtube_connection():
     return dict(row) if row else None
 
 
-def _youtube_access_token():
+def _youtube_access_token(force_refresh: bool = False):
     config = _youtube_config()
     if not config["client_id"] or not config["client_secret"]:
         raise HTTPException(status_code=503, detail="YouTube OAuth client ID/secret server environment mein configure nahi hain.")
@@ -1806,7 +1816,7 @@ def _youtube_access_token():
         tokens = json.loads(_youtube_cipher().decrypt(row["encrypted_tokens"].encode()).decode())
     except (InvalidToken, ValueError, json.JSONDecodeError):
         raise HTTPException(status_code=503, detail="Stored YouTube credentials decrypt nahi ho rahe; reconnect karein.") from None
-    if int(row["token_expiry"]) <= int(time.time()) + 90:
+    if force_refresh or int(row["token_expiry"]) <= int(time.time()) + 90:
         if not tokens.get("refresh_token"):
             raise HTTPException(status_code=401, detail="YouTube session expire ho gayi; channel reconnect karein.")
         payload = urllib.parse.urlencode({
