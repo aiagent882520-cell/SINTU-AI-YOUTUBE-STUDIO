@@ -20,6 +20,12 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+try:
+    from dotenv import load_dotenv
+    load_dotenv(ROOT / ".env")
+except ImportError:
+    pass
+
 REPOSITORY = os.getenv("SINTU_GITHUB_REPOSITORY", "aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO")
 ALLOWED_ACTOR = os.getenv("SINTU_GITHUB_ALLOWED_ACTOR", REPOSITORY.split("/", 1)[0]).lower()
 QUEUED_LABEL = "sintu-command-queued"
