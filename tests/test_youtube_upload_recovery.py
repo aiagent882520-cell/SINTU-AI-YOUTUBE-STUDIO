@@ -99,3 +99,51 @@ def test_changed_source_is_paused_not_resumed(tmp_path):
         transfer_resumable_upload(path, SESSION, "token", request=request,
                                   on_progress=progress, chunk_size=256 * 1024)
     assert error.value.state == "PAUSED"
+
+def test_process_restart_probes_server_and_uses_acknowledged_offset(tmp_path):
+    path = tmp_path / "clip.mp4"
+    path.write_bytes(b"r" * (256 * 1024 + 8))
+    calls = []
+
+    def request(method, url, data, headers):
+        calls.append(headers["Content-Range"])
+        if len(calls) == 1:
+            return response(308, {"Range": "bytes=0-262143"})
+        return response(201, {}, b'{"id":"restart-safe"}')
+
+    result = transfer_resumable_upload(path, SESSION, "token", request=request,
+                                       chunk_size=256 * 1024, probe_first=True, sleep=lambda _: None)
+    assert result["id"] == "restart-safe"
+    assert calls == ["bytes */262152", "bytes 262144-262151/262152"]
+
+
+def test_process_restart_recovers_completion_from_status_probe(tmp_path):
+    path = tmp_path / "clip.mp4"
+    path.write_bytes(b"abc")
+    calls = []
+
+    def request(method, url, data, headers):
+        calls.append(headers["Content-Range"])
+        return response(200, {}, b'{"id":"already-finished"}')
+
+    result = transfer_resumable_upload(path, SESSION, "token", request=request, probe_first=True)
+    assert result["id"] == "already-finished"
+    assert calls == ["bytes */3"]
+
+
+def test_state_machine_rejects_unsafe_transitions():
+    from app.youtube_upload import validate_state_transition
+
+    validate_state_transition("PAUSED", "RESUMING")
+    validate_state_transition("VERIFYING", "COMPLETED")
+    with pytest.raises(UploadProtocolError, match="Invalid upload state transition"):
+        validate_state_transition("COMPLETED", "UPLOADING")
+    with pytest.raises(UploadProtocolError):
+        validate_state_transition("QUEUED", "COMPLETED")
+
+
+def test_session_uri_rejects_non_google_hosts():
+    from app.youtube_upload import validate_session_uri
+
+    with pytest.raises(UploadProtocolError):
+        validate_session_uri("https://attacker.example/upload/youtube/session")
