@@ -21,8 +21,13 @@ Failure paths use `ERROR` and `EXPIRED`; `CANCELLED` is terminal. Invalid state 
 
 ## Safety and limitations
 
-- Default visibility is `private`; `unlisted` is allowed only through the existing approved calendar flow.
-- `public` is always rejected with HTTP 403 before token access or any Google network request. No public approval endpoint is enabled. This is intentional and remains in force unless the owner gives a separate explicit authorization in a future instruction.
+- Default visibility is `private`; `unlisted` is allowed only through the approved calendar flow.
+- Public visibility requires a separate authenticated admin/owner approval action with the exact confirmation phrase `I CONFIRM PUBLIC VISIBILITY`. The approval is bound to the calendar item, video ID, connected channel ID, exact title and MP4 SHA-256; it expires after 10 minutes, is consumed once, and can be revoked.
+- The one-time approval token is returned once, stored only as a SHA-256 digest, and supplied in the `X-SINTU-Public-Approval` header. It is not placed in the URL, stored in plaintext, or included in logs/status responses.
+- Public-intended uploads are first created and uploaded as `private`. Only after the MP4 has uploaded and the video ID/channel have been verified does the API re-check the active approval and issue a separate YouTube `videos.update` visibility change to `public`. It then verifies the public status.
+- Resume/retry checks the same approval binding and expiry/revocation state. If approval expires or is revoked while uploading, the job pauses and the video remains private. A fresh owner approval can replace an expired/revoked approval for the same exact content.
+- A revocation blocks any pending/resumed public visibility action. Revoking after the public change has already been applied is recorded but does not automatically make an already-public video private.
+- No public approval is issued and no public upload is performed by automated tests or this implementation work. The owner must separately invoke the approval endpoint for a specific video before any public visibility change can occur.
 - No automated test performs a real Google/YouTube request or upload.
 - Session persistence requires a valid Fernet encryption key and a connected YouTube OAuth channel. Without them, local protocol tests still run but live upload remains unavailable.
 - The server process must use the same persistent SINTU SQLite database and encryption key after restart. Restoring the database without the matching key makes saved session URLs undecryptable; the system fails closed.
@@ -36,6 +41,6 @@ Run:
 python -m pytest tests/test_youtube_upload_recovery.py tests/test_api.py -q
 ```
 
-Protocol tests cover partial acknowledgements, status probes after disconnect, restart recovery, already-completed sessions, expired sessions, malformed ranges, zero-byte files, changed files, bounded no-progress responses, state-transition safety, encrypted persistence, idempotent duplicate requests, and public-upload rejection.
+Protocol tests cover partial acknowledgements, status probes after disconnect, restart recovery, already-completed sessions, expired sessions, malformed ranges, zero-byte files, changed files, bounded no-progress responses, state-transition safety, encrypted persistence, idempotent duplicate requests, private-first public approval, approval expiry/revocation, and worker allowlist isolation.
 
 Live YouTube verification remains pending until owner-managed OAuth credentials, encryption key, and channel connection are configured. No live upload is authorized by this documentation.
