@@ -6,10 +6,21 @@ LOG_DIR="$HOME/.sintu"
 mkdir -p "$LOG_DIR"
 cd "$APP_DIR"
 
-# Queued executors set a trusted marker in the child environment. This avoids
-# relying on /proc parent command lines, which can be hidden on Android.
+# Queued executors set a trusted marker. For the first rollout, also accept
+# exact PPID equality with the fixed relay/worker PID files so an older
+# already-running executor can bootstrap its own reload without /proc access.
+PARENT_PID="$PPID"
+RELAY_PID="$(cat "$LOG_DIR/github-relay.pid" 2>/dev/null || true)"
+WORKER_PID="$(cat "$LOG_DIR/bridge-worker.pid" 2>/dev/null || true)"
+IS_QUEUED_PARENT=0
+if [[ "$PARENT_PID" =~ ^[0-9]+$ ]] &&
+   { [[ "$PARENT_PID" == "$RELAY_PID" ]] || [[ "$PARENT_PID" == "$WORKER_PID" ]]; }; then
+  IS_QUEUED_PARENT=1
+fi
 if [[ "${SINTU_SKIP_DELAYED_RESTART:-0}" != "1" ]] &&
-   [[ "${SINTU_QUEUE_EXECUTOR:-}" == "github_termux_relay" || "${SINTU_QUEUE_EXECUTOR:-}" == "termux_bridge_worker" ]]; then
+   { [[ "${SINTU_QUEUE_EXECUTOR:-}" == "github_termux_relay" ]] ||
+     [[ "${SINTU_QUEUE_EXECUTOR:-}" == "termux_bridge_worker" ]] ||
+     [[ "$IS_QUEUED_PARENT" == "1" ]]; }; then
   nohup bash scripts/restart_termux_workers.sh >>"$LOG_DIR/restart.log" 2>&1 </dev/null &
   echo "SINTU service restart scheduled after the current queue result is acknowledged."
   exit 0
