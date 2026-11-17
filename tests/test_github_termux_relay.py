@@ -121,3 +121,17 @@ def test_relay_pauses_video_production_in_automation_only_mode(monkeypatch):
     for action in ("offline_video_e2e", "full_self_test", "full_studio_e2e"):
         with pytest.raises(ValueError, match="paused"):
             relay.command_for(action, {})
+
+
+def test_relay_maps_device_maintenance_actions_to_fixed_commands(monkeypatch):
+    monkeypatch.setattr(relay, "AUTOMATION_ONLY", True)
+    assert relay.command_for("restart_services", {}) == ["bash", "scripts/start_services.sh"]
+    assert relay.command_for("media_repair", {}) == [
+        relay.PYTHON, "scripts/repair_media.py", "--apply", "--json"
+    ]
+
+
+def test_relay_maps_watchdog_recovery_test_to_fixed_script():
+    assert relay.command_for("watchdog_recovery_test", {}) == [
+        relay.PYTHON, "scripts/watchdog_recovery_test.py", "--json"
+    ]

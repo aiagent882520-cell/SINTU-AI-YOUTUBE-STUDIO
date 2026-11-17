@@ -247,3 +247,57 @@ def test_worker_maps_safe_optional_install_to_fixed_script(monkeypatch):
     assert worker.command_for({"action": "safe_optional_install", "payload": {}}) == [
         "bash", "scripts/termux_safe_optional_install.sh"
     ]
+
+
+def test_bridge_queues_restart_and_media_repair_actions(tmp_path, monkeypatch):
+    client, api_headers, worker_headers = bridge_client(tmp_path, monkeypatch)
+    for action in ("restart_services", "media_repair"):
+        created = client.post(
+            "/api/termux-bridge/jobs", headers=api_headers,
+            json={"action": action},
+        )
+        assert created.status_code == 202
+        job = client.get("/api/termux-bridge/jobs/next", headers=worker_headers)
+        assert job.status_code == 200
+        assert job.json()["action"] == action
+        completed = client.post(
+            f"/api/termux-bridge/jobs/{job.json()['job_id']}/complete",
+            headers=worker_headers,
+            json={"status": "succeeded", "exit_code": 0, "output": "ok"},
+        )
+        assert completed.status_code == 200
+
+
+def test_worker_maps_device_maintenance_actions_to_fixed_commands(monkeypatch):
+    from scripts import termux_bridge_worker as worker
+
+    monkeypatch.setattr(worker, "AUTOMATION_ONLY", True)
+    monkeypatch.setattr(worker, "PYTHON", "/sintu/.venv/bin/python")
+    assert worker.command_for({"action": "restart_services", "payload": {}}) == [
+        "bash", "scripts/start_services.sh"
+    ]
+    assert worker.command_for({"action": "media_repair", "payload": {}}) == [
+        "/sintu/.venv/bin/python", "scripts/repair_media.py", "--apply", "--json"
+    ]
+
+
+def test_bridge_queues_watchdog_recovery_test_and_worker_maps_it(tmp_path, monkeypatch):
+    client, api_headers, worker_headers = bridge_client(tmp_path, monkeypatch)
+    created = client.post(
+        "/api/termux-bridge/jobs", headers=api_headers,
+        json={"action": "watchdog_recovery_test"},
+    )
+    assert created.status_code == 202
+    job = client.get("/api/termux-bridge/jobs/next", headers=worker_headers)
+    assert job.status_code == 200
+    assert job.json()["action"] == "watchdog_recovery_test"
+
+
+def test_worker_maps_watchdog_recovery_test_to_fixed_script(monkeypatch):
+    from scripts import termux_bridge_worker as worker
+
+    monkeypatch.setattr(worker, "AUTOMATION_ONLY", True)
+    monkeypatch.setattr(worker, "PYTHON", "/sintu/.venv/bin/python")
+    assert worker.command_for({"action": "watchdog_recovery_test", "payload": {}}) == [
+        "/sintu/.venv/bin/python", "scripts/watchdog_recovery_test.py", "--json"
+    ]
