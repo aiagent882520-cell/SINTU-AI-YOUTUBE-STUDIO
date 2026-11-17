@@ -58,6 +58,8 @@ def command_for(job: dict) -> list[str]:
         return ["git", "status", "--short", "--branch"]
     if action == "git_pull_ff_only":
         return ["git", "pull", "--ff-only", "origin", "main"]
+    if action == "automation_self_test":
+        return [PYTHON, "scripts/automation_self_test.py", "--json"]
     if action == "compile_check":
         return [PYTHON, "-m", "compileall", "-q", "app", "scripts"]
     if action == "health_audit":
