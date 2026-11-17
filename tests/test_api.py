@@ -1974,6 +1974,49 @@ def test_public_approval_revocation_and_expiry_block_upload_before_oauth(tmp_pat
     assert expired.status_code == 403
 
 
+def test_youtube_publish_blocks_same_file_across_different_calendar_items(tmp_path, monkeypatch):
+    import hashlib
+    from datetime import datetime, timedelta, timezone
+
+    client = client_for_test(tmp_path, monkeypatch)
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    created = client.post("/api/calendar", json={
+        "title": "Second calendar item", "platform": "youtube",
+        "prompt": "Duplicate prevention", "scheduled_at": future,
+    })
+    calendar_id = created.json()["id"]
+    assert client.post(f"/api/calendar/{calendar_id}/approve").status_code == 200
+
+    video_id = "b" * 32
+    output_dir = tmp_path / "duplicate-renders"
+    output_dir.mkdir()
+    video_bytes = b"same-content-across-calendar-items"
+    (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
+    monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(main, "verify_publishable_mp4", lambda _: {"verified": True})
+    monkeypatch.setattr(main, "_youtube_connection", lambda: {
+        "channel_id": "UC-duplicate-channel", "channel_title": "Duplicate Channel"
+    })
+    monkeypatch.setattr(main, "_youtube_access_token", lambda *args, **kwargs: pytest.fail("Duplicate must block before OAuth."))
+    monkeypatch.setattr(main, "_youtube_request", lambda *args, **kwargs: pytest.fail("Duplicate must block before Google network."))
+
+    now = datetime.now(timezone.utc).isoformat()
+    with main.db() as conn:
+        conn.execute("""INSERT INTO youtube_uploads(calendar_id,video_id,channel_id,title,description_sha256,
+            privacy_status,file_size,file_sha256,status,created_at,updated_at)
+            VALUES(999,?,?,?,?,?,?,?,?,?,?)""",
+            ("a" * 32, "UC-duplicate-channel", "Original title", hashlib.sha256(b"").hexdigest(),
+             "private", len(video_bytes), hashlib.sha256(video_bytes).hexdigest(),
+             "COMPLETED", now, now))
+
+    response = client.post(
+        f"/api/admin/youtube/publish/{calendar_id}",
+        params={"video_id": video_id, "title": "Second calendar item", "privacy_status": "private"},
+    )
+    assert response.status_code == 409
+    assert "duplicate upload blocked" in response.text
+
+
 def test_youtube_upload_cancel_is_terminal_and_cannot_cancel_completed(tmp_path, monkeypatch):
     from datetime import datetime, timezone
     client = client_for_test(tmp_path, monkeypatch)
