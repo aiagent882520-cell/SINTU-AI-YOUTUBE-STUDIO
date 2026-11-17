@@ -81,14 +81,17 @@ def build_report(root: Path = ROOT, env: dict[str, str] | None = None,
                         "Worker process detected" if worker_alive else
                         "Worker not detected; run scripts/start_services.sh", required=False))
     api_url = file_env.get("SINTU_BRIDGE_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+    engine_results = {"local_ai_model": False, "comfyui": False}
     if check_network:
         api_ok, api_detail = probe(api_url + "/api/health")
         checks.append(check("api_health", api_ok, api_detail + " at /api/health", required=False))
         local_ai = file_env.get("LOCAL_OPENAI_BASE_URL", "http://127.0.0.1:8080/v1").rstrip("/")
         ai_ok, ai_detail = probe(local_ai + "/models")
+        engine_results["local_ai_model"] = ai_ok
         checks.append(check("local_ai_model", ai_ok, ai_detail + " at /v1/models", required=False))
         comfy = file_env.get("COMFYUI_BASE_URL", "http://127.0.0.1:8188").rstrip("/")
         comfy_ok, comfy_detail = probe(comfy + "/system_stats")
+        engine_results["comfyui"] = comfy_ok
         checks.append(check("comfyui", comfy_ok, comfy_detail + " at /system_stats", required=False))
     else:
         checks.extend([
@@ -98,31 +101,65 @@ def build_report(root: Path = ROOT, env: dict[str, str] | None = None,
         ])
     pwa = (root / "app/static/index.html").is_file() and (root / "app/static/manifest.json").is_file()
     checks.append(check("mobile_pwa", pwa, "PWA entrypoint and manifest found"))
+
     failed = [item["name"] for item in checks if item["status"] == "fail"]
     warnings = [item["name"] for item in checks if item["status"] == "warn"]
-    return {"project": "SINTU AI YOUTUBE STUDIO", "ready": not failed,
-            "summary": {"passed": sum(x["status"] == "pass" for x in checks),
-                        "warnings": len(warnings), "failed": len(failed)},
-            "failed_checks": failed, "warnings": warnings, "checks": checks,
-            "next_action": ("Core local requirements are ready." if not failed else
-                            "Fix failed required checks, then rerun this doctor.")}
+    # "ready" remains the backward-compatible core-app readiness signal.
+    # Production readiness is deliberately stricter: a procedural-art fallback,
+    # FFmpeg alone, or a healthy API is not proof that AI production can run.
+    production_requirements = {
+        "local_ai_model": engine_results["local_ai_model"],
+        "comfyui": engine_results["comfyui"],
+        "ffmpeg": bool(ffmpeg),
+        "ffprobe": bool(ffprobe),
+        "bridge_credentials": bridge_ok,
+        "termux_bridge_worker": worker_alive,
+    }
+    production_blockers = [name for name, ok in production_requirements.items() if not ok]
+    production_ready = not production_blockers and not failed
+    return {
+        "project": "SINTU AI YOUTUBE STUDIO",
+        "ready": not failed,
+        "core_ready": not failed,
+        "production_ready": production_ready,
+        "production_blockers": production_blockers,
+        "production_readiness_note": (
+            "Engine endpoints and local execution prerequisites are reachable. "
+            "Configured ComfyUI workflows and a real end-to-end render still require a production E2E test."
+            if production_ready else
+            "AI production is NOT ready. Procedural fallback and FFmpeg rendering do not count as generative AI."
+        ),
+        "summary": {"passed": sum(x["status"] == "pass" for x in checks),
+                    "warnings": len(warnings), "failed": len(failed)},
+        "failed_checks": failed, "warnings": warnings, "checks": checks,
+        "next_action": ("Core local requirements are ready." if not failed else
+                        "Fix failed required checks, then rerun this doctor."),
+    }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Check SINTU's real local operational readiness.")
     parser.add_argument("--no-network", action="store_true", help="Skip API/model/ComfyUI HTTP probes.")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    parser.add_argument("--strict-production", action="store_true",
+                        help="Return failure unless local AI, ComfyUI, FFmpeg, bridge credentials and worker are ready.")
     args = parser.parse_args()
     report = build_report(check_network=not args.no_network)
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
-        print(f"SINTU readiness: {'READY' if report['ready'] else 'NOT READY'}")
+        print(f"SINTU core readiness: {'READY' if report['core_ready'] else 'NOT READY'}")
+        print(f"SINTU AI production readiness: {'READY' if report['production_ready'] else 'NOT READY'}")
         for item in report["checks"]:
             print(f"[{item['status'].upper():4}] {item['name']}: {item['detail']}")
+        if report["production_blockers"]:
+            print("Production blockers: " + ", ".join(report["production_blockers"]))
         print(f"Summary: {report['summary']}")
+        print(report["production_readiness_note"])
         print(report["next_action"])
-    return 0 if report["ready"] else 1
+    if args.strict_production:
+        return 0 if report["production_ready"] else 1
+    return 0 if report["core_ready"] else 1
 
 
 if __name__ == "__main__":
