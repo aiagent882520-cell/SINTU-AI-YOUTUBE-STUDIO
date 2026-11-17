@@ -14,7 +14,7 @@ process_state() {
     rm -f "$file"
     return 1
   fi
-  proc_state="$(sed -E 's/^.*\\) //' "/proc/$pid/stat" 2>/dev/null | cut -d ' ' -f 1 || true)"
+  proc_state="$(sed 's/.*) //' "/proc/$pid/stat" 2>/dev/null | cut -d ' ' -f 1 || true)"
   if [ "$proc_state" = "Z" ]; then
     rm -f "$file"
     return 1
