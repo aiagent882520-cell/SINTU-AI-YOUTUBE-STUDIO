@@ -41,6 +41,7 @@ PRODUCTION_ACTIONS = {"offline_video_e2e", "full_self_test", "full_studio_e2e"}
 ACTIONS = {
     "git_status", "git_pull_ff_only", "run_tests", "compile_check", "automation_self_test",
     "health_audit", "operational_readiness", "live_preflight", "engine_probe",
+    "safe_optional_install",
     "offline_video_e2e", "full_self_test", "full_studio_e2e",
 }
 
@@ -167,6 +168,8 @@ def command_for(action: str, payload: dict) -> list[str]:
         return [PYTHON, "scripts/live_e2e.py"]
     if action == "engine_probe":
         return [PYTHON, "scripts/engine_probe.py"]
+    if action == "safe_optional_install":
+        return ["bash", "scripts/termux_safe_optional_install.sh"]
     if action in {"offline_video_e2e", "full_self_test", "full_studio_e2e"}:
         topic = payload.get("topic")
         if topic is not None and (

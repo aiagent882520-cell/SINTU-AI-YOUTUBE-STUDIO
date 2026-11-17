@@ -17,6 +17,7 @@ def test_relay_accepts_only_allowlisted_fixed_commands(monkeypatch):
     monkeypatch.setattr(relay, "AUTOMATION_ONLY", False)
     assert relay.command_for("git_status", []) == ["git", "status", "--short", "--branch"]
     assert relay.command_for("engine_probe", {})[-1:] == ["scripts/engine_probe.py"]
+    assert relay.command_for("safe_optional_install", {}) == ["bash", "scripts/termux_safe_optional_install.sh"]
     assert relay.command_for("operational_readiness", {})[-2:] == [
         "scripts/operational_readiness.py", "--json"
     ]
