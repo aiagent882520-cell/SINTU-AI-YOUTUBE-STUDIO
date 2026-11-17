@@ -147,3 +147,16 @@ def test_session_uri_rejects_non_google_hosts():
 
     with pytest.raises(UploadProtocolError):
         validate_session_uri("https://attacker.example/upload/youtube/session")
+
+def test_no_progress_308_response_has_bounded_retries(tmp_path):
+    path = tmp_path / "clip.mp4"
+    path.write_bytes(b"no-progress")
+    calls = []
+    with pytest.raises(UploadProtocolError) as error:
+        transfer_resumable_upload(
+            path, SESSION, "token",
+            request=lambda *args: (calls.append(args[3]["Content-Range"]) or response(308)),
+            max_attempts=3, sleep=lambda _: None,
+        )
+    assert error.value.state == "PAUSED"
+    assert len(calls) == 3
