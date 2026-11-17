@@ -46,4 +46,15 @@ else
   echo $! > "$LOG_DIR/bridge-worker.pid"
 fi
 
-echo "SINTU API and Termux bridge worker are running."
+# Restore the ChatGPT/GitHub-to-Termux issue relay after Android reboot.
+if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+  if [ -f "$LOG_DIR/github-relay.pid" ] && kill -0 "$(cat "$LOG_DIR/github-relay.pid")" 2>/dev/null; then
+    :
+  else
+    : > "$LOG_DIR/github-relay.log"
+    nohup .venv/bin/python scripts/github_termux_relay.py >>"$LOG_DIR/github-relay.log" 2>&1 </dev/null &
+    echo $! > "$LOG_DIR/github-relay.pid"
+  fi
+fi
+
+echo "SINTU API and Termux workers are running."
