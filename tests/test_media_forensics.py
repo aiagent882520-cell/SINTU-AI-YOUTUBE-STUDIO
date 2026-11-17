@@ -11,7 +11,7 @@ def test_black_interval_parser_preserves_time_ranges():
 def test_forensic_output_redacts_bearer_tokens_and_session_urls():
     value = (
         "Authorization: Bearer abc.def.secret "
-        "access_token=private-value "
+        "access_token=private-value session_uri=https://example.test/private-session "
         "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=private-session"
     )
     redacted = redact_secrets(value)
