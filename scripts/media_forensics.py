@@ -27,7 +27,7 @@ TARGETS = (
 LOG_DIRS = ("logs", "data", ".sintu", "production_runs", "runs")
 ASSET_DIRS = ("generated_images", "generated_audio", "generated_assets", "assets")
 TEXT_SUFFIXES = {".log", ".txt", ".json", ".jsonl"}
-SECRET_TERMS = ("token", "secret", "password", "credential", "authorization", "api_key", "oauth")
+SECRET_TERMS = ("token", "secret", "password", "credential", "authorization", "api_key", "oauth", "session_uri")
 
 
 def run(command: list[str], timeout: int = 120) -> dict:
@@ -50,7 +50,7 @@ def sha256_file(path: Path) -> str:
 
 def redact_secrets(value: str) -> str:
     value = re.sub(r'(?i)(Bearer\s+)[^\s,"]+', r'\1[REDACTED]', value)
-    value = re.sub(r'(?i)(access_token|refresh_token|client_secret|api_key|upload_id)([=:][^&\s,"]+)', r'\1=[REDACTED]', value)
+    value = re.sub(r'(?i)(access_token|refresh_token|client_secret|api_key|upload_id|session_uri|session_url)([=:][^&\s,"]+)', r'\1=[REDACTED]', value)
     value = re.sub(r'https://www\.googleapis\.com/upload/youtube/[^\s"]+', "[REDACTED_GOOGLE_UPLOAD_SESSION]", value)
     return value[:350]
 
@@ -70,7 +70,7 @@ def scan_text_logs(needles: tuple[str, ...]) -> list[dict]:
         for path in base.rglob("*"):
             if len(matches) >= 20:
                 return matches
-            if (not path.is_file() or path.suffix.lower() not in TEXT_SUFFIXES
+            if (not path.is_file() or path.is_symlink() or path.suffix.lower() not in TEXT_SUFFIXES
                     or any(term in path.name.lower() for term in SECRET_TERMS)):
                 continue
             try:
