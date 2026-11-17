@@ -456,6 +456,18 @@ class CalendarItemInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=10000)
     scheduled_at: str = Field(min_length=20, max_length=40)
 
+class YouTubePublicApprovalInput(BaseModel):
+    calendar_id: int = Field(ge=1)
+    video_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    title: str = Field(min_length=1, max_length=100)
+    channel_id: str = Field(min_length=5, max_length=64)
+    confirmation: str = Field(pattern=r"^I CONFIRM PUBLIC VISIBILITY$")
+
+
+class YouTubePublicApprovalRevokeInput(BaseModel):
+    approval_token: str = Field(min_length=32, max_length=128)
+
+
 class TimelineItemInput(BaseModel):
     kind: str = Field(pattern=r"^(image|video)$")
     asset_id: str = Field(pattern=r"^[a-f0-9]{32}$")
