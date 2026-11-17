@@ -2069,6 +2069,7 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
 
     if saved["status"] == "EXPIRED":
         set_state("INITIALIZING", 0)
+        saved["status"] = "INITIALIZING"
         encrypted_uri = None
     elif not encrypted_uri:
         if saved["status"] in {"QUEUED", "ERROR"}:
