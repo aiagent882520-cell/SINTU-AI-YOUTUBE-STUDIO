@@ -28,4 +28,4 @@ def test_delayed_restart_uses_fixed_pid_files_and_command_identity():
     assert 'tr \'\\0\' ' in helper
     assert 'kill -TERM "$pid"' in helper
     assert "kill -KILL" not in helper
-    assert "SINTU_SKIP_DELAYED_RESTART=1 bash scripts/start_services.sh" in helper
+    assert "env -u SINTU_QUEUE_EXECUTOR -u SINTU_SKIP_DELAYED_RESTART bash scripts/start_services.sh" in helper
