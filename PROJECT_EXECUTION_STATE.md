@@ -82,3 +82,38 @@ Last updated: 2026-11-17 15:52 UTC
 - Issue #92 tracks durable chunked YouTube resumable upload recovery. These are source-review findings and open implementation work, not completed features.
 - Latest execution-state documentation commit: `5431535d488d39bb26075efba78bdb5685432425`; its GitHub CI run `44119709751` was still in progress at the latest check. Previous commit CI `44118835738` passed 7/7.
 - Android health audit Issue #90 was still actively claimed by Termux at the latest check; no final result had been posted yet. Do not mark it passed or start a duplicate while its worker lease is active.
+
+
+## Follow-up execution evidence (2026-11-17 16:50 UTC)
+
+### Issue #90 — final Termux health audit result
+
+- The Termux relay completed the claimed job and closed Issue #90 with label `sintu-command-failed`; process exit code **1**. It is not a successful audit and must not be marked complete.
+- The returned media validator output contains **10 PASS and 5 FAIL** among 15 MP4 files. All five failing files have valid H.264/yuv420p video metadata and AAC 48 kHz stereo audio, but the black-frame detector reports a black interval covering essentially the entire clip:
+  - `3f4c2151e8e640109f464b2c2e9b7569.mp4` — 9.04 s, black 0–9.0 s.
+  - `59430f1fb7fd4bdf80cf8b7d9f456098.mp4` — 9.04 s, black 0–9.0 s.
+  - `8cfe9da88d5c43d184f3572e371ff4a6.mp4` — 6.08 s, black 0–6.041667 s.
+  - `adf9268e5d5543a587defdde5d4c4edd.mp4` — 4.08 s, black 0–4.041667 s.
+  - `afa4c87e3c1e42a197b7092e0e24040d.mp4` — 6.08 s, black 0–6.041667 s.
+- This is a content/visual-integrity failure, not the earlier AAC format issue. The backup-first audio repair fixed audio format but cannot repair black video frames. Preserve these files and their backups; do not silently delete or auto-publish them. The existing quality gate should continue blocking them.
+- The Issue #90 comment contains a truncated tail of the health-audit stdout (the relay retains only the last 20,000 characters); therefore the complete Python regression count and detailed service/permission/network/boot sub-results are not fully evidenced by this comment. Do not invent a new PASS count. Worker/relay logs beyond the GitHub claim/result comments were not accessible from the GitHub connector. Full Android reboot/Termux:Boot remains unverified.
+- Recovery required: inspect/regenerate or quarantine these five black clips with owner review, then run a fresh audit after the remediation. No second health audit was queued while diagnosing the five files.
+
+### Issue #93 — immediate fail-closed mitigation
+
+- PR #94 (`security/issue-93-public-publish-closed`) adds an API-level hard rejection of `privacy_status=public` with HTTP 403 before token retrieval or any Google network call; it preserves the existing private default and private/unlisted path.
+- Added a negative test asserting that even a normally approved calendar item cannot start a public upload and that neither token nor network helper is called.
+- PR #94 is a mitigation only, not full Issue #93 completion: durable one-time owner approval bound to exact title/channel/video fingerprint, expiry/revocation, and worker/pipeline enforcement still require implementation. Public publishing remains completely disabled. PR CI run: `44130178546`; dependency audit passed, Python test matrix was still running at this update.
+
+### Issue #92 — status
+
+- No resumable recovery implementation has been merged. The current uploader still sends the whole file in one streamed PUT; no persisted session URI/acknowledged offset or restart-safe resume has been verified. Existing OAuth refresh-token storage is encrypted, but that does not implement upload-session recovery.
+- OAuth credentials, token-encryption configuration and a connected YouTube channel were absent in Issue #91 preflight. No real YouTube upload has been performed.
+- Required implementation remains: encrypted durable session state, server Range probing, chunk retry/backoff, session expiry handling, immutable file fingerprint, atomic duplicate guard, process-restart recovery, secret-safe logs, and mock interruption/308/401/404/410/5xx tests.
+
+### Cross-project verified state and remaining blockers
+
+- Android verified previously: automation self-test 7/7; operational readiness 10 passed, 2 warnings, 0 failures; firewall audit 8/8; media repair 15 examined / 9 repaired / 6 already valid / 0 repair failures; watchdog API and bridge-worker process recovery test passed. These historical passes do not override the failed #90 visual media audit.
+- Latest main-branch CI run `44119942062` for commit `71bd579176e8b7eff1aeac2b6ea3fb808fd24d1b` passed. This is repository CI, not Android live verification.
+- Android resource probe: ~1.03 GiB RAM available at probe time; do not auto-install large local AI models/ComfyUI. No model or ComfyUI workflow is configured.
+- Current classifications: core automation has prior device evidence; media integrity has 5 failing clips; full Android health audit remains failed/incomplete; resumable YouTube recovery is unimplemented; public publishing is blocked by the new PR mitigation but full approval workflow is incomplete; real OAuth/channel/upload and full reboot recovery remain unverified.
