@@ -25,6 +25,7 @@ ALLOWED_ACTIONS = {
     "git_pull_ff_only",
     "run_tests",
     "compile_check",
+    "automation_self_test",
     "health_audit",
     "operational_readiness",
     "live_preflight",
@@ -101,7 +102,7 @@ def _authorize(authorization: str | None, *, worker: bool = False) -> None:
 
 
 class CreateJobInput(BaseModel):
-    action: Literal["git_status", "git_pull_ff_only", "run_tests", "compile_check", "health_audit", "operational_readiness", "live_preflight", "engine_probe", "offline_video_e2e", "full_self_test", "full_studio_e2e"]
+    action: Literal["git_status", "git_pull_ff_only", "run_tests", "compile_check", "automation_self_test", "health_audit", "operational_readiness", "live_preflight", "engine_probe", "offline_video_e2e", "full_self_test", "full_studio_e2e"]
     test_path: str | None = Field(default=None, max_length=160)
     topic: str | None = Field(default=None, max_length=300)
 
