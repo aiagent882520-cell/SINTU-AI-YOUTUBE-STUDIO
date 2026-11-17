@@ -1689,6 +1689,68 @@ def test_youtube_publish_completes_resumable_upload_and_records_history(tmp_path
 
 
 
+def test_youtube_publish_resumes_persisted_session_after_process_restart(tmp_path, monkeypatch):
+    import hashlib
+    import time
+    from datetime import datetime, timedelta, timezone
+    from cryptography.fernet import Fernet
+
+    client = client_for_test(tmp_path, monkeypatch)
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    created = client.post("/api/calendar", json={
+        "title": "Resume after restart", "platform": "youtube", "prompt": "Recovery test",
+        "scheduled_at": future,
+    })
+    calendar_id = created.json()["id"]
+    assert client.post(f"/api/calendar/{calendar_id}/approve").status_code == 200
+    video_id = "e" * 32
+    output_dir = tmp_path / "resume-renders"
+    output_dir.mkdir()
+    video_bytes = b"restart-resume-test-bytes"
+    path = output_dir / (video_id + ".mp4")
+    path.write_bytes(video_bytes)
+    monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(main, "verify_publishable_mp4", lambda _: {"verified": True})
+    monkeypatch.setattr(main, "_youtube_access_token", lambda *args, **kwargs: "refreshed-access-token")
+    monkeypatch.setattr(main, "_youtube_connection", lambda: {"channel_id": "UC-resume", "channel_title": "Resume"})
+    key = Fernet.generate_key().decode()
+    monkeypatch.setenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", key)
+    session_uri = "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=resume-session"
+    now = datetime.now(timezone.utc).isoformat()
+    with main.db() as conn:
+        conn.execute("""INSERT INTO youtube_uploads(calendar_id,video_id,channel_id,title,description_sha256,
+            privacy_status,file_size,file_sha256,encrypted_session_uri,acknowledged_offset,status,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (calendar_id, video_id, "UC-resume", "Resume after restart",
+             hashlib.sha256(b"").hexdigest(), "private", len(video_bytes),
+             hashlib.sha256(video_bytes).hexdigest(),
+             Fernet(key.encode()).encrypt(session_uri.encode()).decode(), 5, "PAUSED", now, now))
+
+    calls = []
+    def fake_transfer(source, uri, token, *, request, on_progress, probe_first=False):
+        calls.append((uri, token, probe_first))
+        on_progress(len(video_bytes), "UPLOADING")
+        on_progress(len(video_bytes), "VERIFYING")
+        return {"id": "recovered-youtube-id"}
+
+    monkeypatch.setattr(main, "transfer_resumable_upload", fake_transfer)
+    monkeypatch.setattr(main, "_youtube_request", lambda *args, **kwargs: pytest.fail("A persisted session must resume without creating a new session."))
+    monkeypatch.setattr(main, "_youtube_verify_uploaded_video", lambda youtube_id, token: {
+        "upload_status": "uploaded", "processing_status": "processing"
+    })
+    response = client.post(
+        f"/api/admin/youtube/publish/{calendar_id}?video_id={video_id}&title=Resume%20after%20restart"
+    )
+    assert response.status_code == 200, response.text
+    assert calls == [(session_uri, "refreshed-access-token", True)]
+    with main.db() as conn:
+        state, offset, youtube_id = conn.execute(
+            "SELECT status,acknowledged_offset,youtube_video_id FROM youtube_uploads WHERE calendar_id=?",
+            (calendar_id,),
+        ).fetchone()
+    assert (state, offset, youtube_id) == ("COMPLETED", len(video_bytes), "recovered-youtube-id")
+
+
 def test_youtube_upload_cancel_is_terminal_and_cannot_cancel_completed(tmp_path, monkeypatch):
     from datetime import datetime, timezone
     client = client_for_test(tmp_path, monkeypatch)
