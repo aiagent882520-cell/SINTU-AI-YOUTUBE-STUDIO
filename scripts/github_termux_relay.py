@@ -139,6 +139,13 @@ class GitHub:
 def command_for(action: str, payload: dict) -> list[str]:
     if action not in ACTIONS:
         raise ValueError("Action is not on the SINTU allowlist.")
+    allowed_fields = (
+        {"test_path"} if action == "run_tests"
+        else {"topic"} if action in {"offline_video_e2e", "full_self_test"}
+        else set()
+    )
+    if set(payload) - allowed_fields:
+        raise ValueError("Payload fields are not valid for this action.")
     if action == "git_status":
         return ["git", "status", "--short", "--branch"]
     if action == "git_pull_ff_only":
