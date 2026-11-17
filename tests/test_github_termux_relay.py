@@ -46,7 +46,8 @@ def test_relay_rejects_unapproved_test_paths(test_path):
         relay.command_for("run_tests", {"test_path": test_path})
 
 
-def test_relay_rejects_unbounded_or_invalid_topics():
+def test_relay_rejects_unbounded_or_invalid_topics(monkeypatch):
+    monkeypatch.setattr(relay, "AUTOMATION_ONLY", False)
     with pytest.raises(ValueError, match="topic"):
         relay.command_for("offline_video_e2e", {"topic": "x" * 301})
     with pytest.raises(ValueError, match="topic"):
@@ -104,7 +105,8 @@ def test_relay_requeues_stale_claim_after_worker_crash():
 
 
 
-def test_relay_rejects_payload_fields_for_wrong_action():
+def test_relay_rejects_payload_fields_for_wrong_action(monkeypatch):
+    monkeypatch.setattr(relay, "AUTOMATION_ONLY", False)
     with pytest.raises(ValueError, match="Payload fields"):
         relay.command_for("git_status", {"topic": "ignored"})
     with pytest.raises(ValueError, match="Payload fields"):
