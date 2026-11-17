@@ -2,6 +2,18 @@
 
 Last updated: 2026-11-17 (UTC)
 
+## Latest verified execution update (2026-11-17 14:50 UTC)
+
+- Current main includes PR #83 merge commit `b4c4240af80fa0d6b4d4f97c021a8615d76fed6c`; Android Termux fast-forwarded from `1dffb1d` to `b4c4240`, services started, API health passed.
+- Android firewall safety audit on the updated device: **8/8 checks passed**, zero errors and zero warnings in summary. Audit confirmed loopback-only binding, admin auth, rate limit 300/min, bridge/session secrets configured; no Android firewall or network settings were modified.
+- Issue #69 remains closed with Termux test evidence: **506 passed, 5 warnings, 0 failed** in 171.75 seconds.
+- Watchdog recovery was verified on-device by terminating and observing restart of the bridge worker and API. A real full Android reboot test remains unverified.
+- Latest Android operational readiness (Issue #88): **10 passed, 2 warnings, 0 failed**; core_ready=true, production_ready=false. Only blockers reported: no reachable local AI model endpoint and no reachable ComfyUI endpoint.
+- Five new allowlisted Android relay jobs were queued: #85 engine_probe, #86 media_repair, #87 health_audit, #88 operational_readiness, #89 automation_self_test. At the time of this update, #88 completed successfully; #87 was running; #85, #86 and #89 were queued. Do not treat queued/running tasks as results.
+- Previously measured device resources remain historical only: Android 15, ARM64, 8 CPU cores, ~1.06 GiB available RAM and ~26.8 GiB free storage at the earlier probe. A fresh engine_probe is pending; no model installation is authorized by the probe.
+- Repository code includes a persistent production runtime, local ComfyUI/Piper/FFmpeg rendering routes, media repair and validation, and YouTube OAuth/resumable upload code. Code presence is not runtime verification. YouTube OAuth credentials/channel connection and actual upload status remain unverified; no upload or public publishing has been performed.
+
+
 Evidence-backed state only. A script existing is not proof that its runtime behavior has been verified.
 
 ## Completed and verified
