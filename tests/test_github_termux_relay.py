@@ -131,6 +131,12 @@ def test_relay_maps_device_maintenance_actions_to_fixed_commands(monkeypatch):
     ]
 
 
+def test_relay_does_not_expose_public_youtube_publish_as_a_worker_action():
+    import pytest
+    with pytest.raises(ValueError, match="allowlist"):
+        relay.command_for("youtube_publish", {})
+
+
 def test_relay_maps_read_only_media_forensics_to_fixed_script():
     assert relay.command_for("media_forensics", {}) == [
         relay.PYTHON, "scripts/media_forensics.py", "--json"
