@@ -1976,7 +1976,16 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
         item = conn.execute("SELECT id,title,status,platform FROM content_calendar WHERE id=?", (calendar_id,)).fetchone()
     if not item:
         raise HTTPException(status_code=404, detail="Calendar item not found.")
-    if item["status"] not in {"Approved", "Published"} or item["platform"] not in {"youtube", "youtube_shorts"}:
+    if item["platform"] not in {"youtube", "youtube_shorts"}:
+        raise HTTPException(status_code=409, detail="YouTube calendar item approved hona chahiye.")
+    if item["status"] == "Published":
+        with db() as conn:
+            completed_job = conn.execute(
+                "SELECT status FROM youtube_uploads WHERE calendar_id=?", (calendar_id,)
+            ).fetchone()
+        if not completed_job or completed_job["status"] != "COMPLETED":
+            raise HTTPException(status_code=409, detail="Published calendar item has no verified resumable-upload record; duplicate upload blocked.")
+    elif item["status"] != "Approved":
         raise HTTPException(status_code=409, detail="YouTube calendar item approved hona chahiye.")
     path = OUTPUT_DIR / (video_id + ".mp4")
     if path.is_symlink() or not path.is_file():
