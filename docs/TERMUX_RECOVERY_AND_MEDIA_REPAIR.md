@@ -59,3 +59,7 @@ They do not accept arbitrary shell commands or user-supplied paths. The media-re
 ## Android boot recovery
 
 `scripts/termux_boot.sh` is the Termux boot entrypoint. Android boot recovery requires the Termux:Boot add-on, battery/background execution permissions, and a real reboot test on the device. Do not mark reboot recovery verified based only on the script being present.
+
+## Queued service restart after code updates
+
+The GitHub relay and bridge worker are long-running processes. A plain `git pull` changes files on disk but does not reload Python code already held in memory. For a queued `restart_services` action, `start_services.sh` now detects only its fixed SINTU relay/worker parent process and schedules a delayed restart. The current job first returns its success result; after a short delay, `restart_termux_workers.sh` checks the fixed PID files and exact command-line identities before sending TERM to the API, bridge worker, and GitHub relay. It then starts the services from the updated checkout. A PID mismatch is never signalled. Manual and watchdog calls do not trigger this delayed self-restart path.
