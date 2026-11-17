@@ -20,20 +20,35 @@ stop_expected() {
   kill -0 "$pid" 2>/dev/null || { rm -f "$pid_file"; return 0; }
   local cmdline
   cmdline="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
-  if [[ "$cmdline" == *"$marker"* ]]; then
-    kill -TERM "$pid" 2>/dev/null || true
-    for _ in $(seq 1 20); do
-      kill -0 "$pid" 2>/dev/null || break
-      sleep 0.25
-    done
+  if [[ -z "$cmdline" ]]; then
+    cmdline="$(ps -o args= -p "$pid" 2>/dev/null || true)"
   fi
+  if [[ -z "$cmdline" ]]; then
+    echo "Cannot verify process identity for PID $pid; aborting safe restart." >&2
+    return 1
+  fi
+  if [[ "$cmdline" != *"$marker"* ]]; then
+    echo "PID file identity mismatch for $pid; not signalling unrelated process." >&2
+    rm -f "$pid_file"
+    return 0
+  fi
+  kill -TERM "$pid" 2>/dev/null || true
+  for _ in $(seq 1 20); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.25
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "Expected process $pid did not stop after TERM; aborting without SIGKILL." >&2
+    return 1
+  fi
+  rm -f "$pid_file"
 }
 
 # Only these fixed SINTU services are eligible; PID identity is checked before
 # signalling. Never kill a PID based only on a stale PID file.
-stop_expected "$LOG_DIR/server.pid" "uvicorn app.main:app"
-stop_expected "$LOG_DIR/bridge-worker.pid" "scripts/termux_bridge_worker.py"
-stop_expected "$LOG_DIR/github-relay.pid" "scripts/github_termux_relay.py"
+stop_expected "$LOG_DIR/server.pid" "uvicorn app.main:app" || exit 1
+stop_expected "$LOG_DIR/bridge-worker.pid" "scripts/termux_bridge_worker.py" || exit 1
+stop_expected "$LOG_DIR/github-relay.pid" "scripts/github_termux_relay.py" || exit 1
 
 sleep 2
 env -u SINTU_QUEUE_EXECUTOR -u SINTU_SKIP_DELAYED_RESTART bash scripts/start_services.sh
