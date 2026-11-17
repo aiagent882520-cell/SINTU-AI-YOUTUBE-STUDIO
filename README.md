@@ -130,3 +130,8 @@ cd ~/SINTU-AI-YOUTUBE-STUDIO && .venv/bin/python scripts/automation_self_test.py
 ```
 
 The diagnostic checks repository identity, virtualenv, GitHub CLI authentication, API reachability, bridge worker heartbeat, and the relay singleton lock. It does not run video rendering. Production actions remain blocked by default through `SINTU_AUTOMATION_ONLY=true`; keep this enabled until the complete control-plane round trip is verified and production is explicitly resumed.
+
+
+## Advanced firewall and Android phone safety
+
+SINTU includes an application-layer firewall: loopback-only service binding, admin authentication, dedicated bridge tokens, fixed command allowlists, API rate limiting, same-origin checks, security headers and audit logging. The read-only Android-safe configuration audit is documented in [Advanced Firewall & Android Safety](docs/ADVANCED_FIREWALL_ANDROID_SAFETY.md) (Hindi: [फ़ोन सुरक्षा](docs/README_HI_FIREWALL.md)). Run ` .venv/bin/python scripts/firewall_safety_audit.py --json` in Termux to inspect settings. It never changes Android firewall, VPN, DNS, Wi-Fi, mobile data or routing, so it cannot deliberately interrupt other phone apps. It reports unsafe settings rather than silently rewriting configuration.
