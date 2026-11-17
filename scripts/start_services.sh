@@ -6,16 +6,13 @@ LOG_DIR="$HOME/.sintu"
 mkdir -p "$LOG_DIR"
 cd "$APP_DIR"
 
-# When a queued GitHub/bridge command requests service restart, return success
-# first, then reload the current worker processes after their result is posted.
-if [[ "${SINTU_SKIP_DELAYED_RESTART:-0}" != "1" ]]; then
-  PARENT_PID="$PPID"
-  PARENT_CMD="$(tr '\0' ' ' < "/proc/$PARENT_PID/cmdline" 2>/dev/null || true)"
-  if [[ "$PARENT_CMD" == *"scripts/github_termux_relay.py"* || "$PARENT_CMD" == *"scripts/termux_bridge_worker.py"* ]]; then
-    nohup bash scripts/restart_termux_workers.sh >>"$LOG_DIR/restart.log" 2>&1 </dev/null &
-    echo "SINTU service restart scheduled after the current queue result is acknowledged."
-    exit 0
-  fi
+# Queued executors set a trusted marker in the child environment. This avoids
+# relying on /proc parent command lines, which can be hidden on Android.
+if [[ "${SINTU_SKIP_DELAYED_RESTART:-0}" != "1" ]] &&
+   [[ "${SINTU_QUEUE_EXECUTOR:-}" == "github_termux_relay" || "${SINTU_QUEUE_EXECUTOR:-}" == "termux_bridge_worker" ]]; then
+  nohup bash scripts/restart_termux_workers.sh >>"$LOG_DIR/restart.log" 2>&1 </dev/null &
+  echo "SINTU service restart scheduled after the current queue result is acknowledged."
+  exit 0
 fi
 [ -x .venv/bin/python ] || { echo "SINTU virtualenv missing; run scripts/termux_one_command.sh first." >&2; exit 1; }
 [ -f .env ] || { echo "SINTU .env missing; run scripts/termux_one_command.sh first." >&2; exit 1; }
