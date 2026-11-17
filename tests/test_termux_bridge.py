@@ -279,3 +279,25 @@ def test_worker_maps_device_maintenance_actions_to_fixed_commands(monkeypatch):
     assert worker.command_for({"action": "media_repair", "payload": {}}) == [
         "/sintu/.venv/bin/python", "scripts/repair_media.py", "--apply", "--json"
     ]
+
+
+def test_bridge_queues_watchdog_recovery_test_and_worker_maps_it(tmp_path, monkeypatch):
+    client, api_headers, worker_headers = bridge_client(tmp_path, monkeypatch)
+    created = client.post(
+        "/api/termux-bridge/jobs", headers=api_headers,
+        json={"action": "watchdog_recovery_test"},
+    )
+    assert created.status_code == 202
+    job = client.get("/api/termux-bridge/jobs/next", headers=worker_headers)
+    assert job.status_code == 200
+    assert job.json()["action"] == "watchdog_recovery_test"
+
+
+def test_worker_maps_watchdog_recovery_test_to_fixed_script(monkeypatch):
+    from scripts import termux_bridge_worker as worker
+
+    monkeypatch.setattr(worker, "AUTOMATION_ONLY", True)
+    monkeypatch.setattr(worker, "PYTHON", "/sintu/.venv/bin/python")
+    assert worker.command_for({"action": "watchdog_recovery_test", "payload": {}}) == [
+        "/sintu/.venv/bin/python", "scripts/watchdog_recovery_test.py", "--json"
+    ]
