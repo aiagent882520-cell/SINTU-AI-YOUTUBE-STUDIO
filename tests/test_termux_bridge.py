@@ -125,6 +125,9 @@ def test_bridge_queues_safe_local_readiness_and_video_e2e_actions(tmp_path, monk
     assert readiness.status_code == 202
     preflight = client.post("/api/termux-bridge/jobs", headers=api_headers,
                             json={"action": "live_preflight"})
+    probe = client.post("/api/termux-bridge/jobs", headers=api_headers,
+                        json={"action": "engine_probe"})
+    assert probe.status_code == 202
     assert preflight.status_code == 202
     video = client.post("/api/termux-bridge/jobs", headers=api_headers,
                         json={"action": "offline_video_e2e", "topic": "भारत के किले"})
@@ -134,12 +137,12 @@ def test_bridge_queues_safe_local_readiness_and_video_e2e_actions(tmp_path, monk
 
     assert full_studio.status_code == 202
     jobs = [client.get("/api/termux-bridge/jobs/next", headers=worker_headers).json()
-            for _ in range(4)]
+            for _ in range(5)]
     assert [job["action"] for job in jobs] == [
-        "operational_readiness", "live_preflight", "offline_video_e2e", "full_studio_e2e"
+        "operational_readiness", "live_preflight", "engine_probe", "offline_video_e2e", "full_studio_e2e"
     ]
-    assert jobs[2]["payload"] == {"topic": "भारत के किले"}
     assert jobs[3]["payload"] == {"topic": "भारत के किले"}
+    assert jobs[4]["payload"] == {"topic": "भारत के किले"}
 
 
 def test_bridge_restricts_topics_to_offline_video_e2e(tmp_path, monkeypatch):
@@ -156,6 +159,9 @@ def test_worker_maps_e2e_actions_to_fixed_argument_arrays(monkeypatch):
     monkeypatch.setattr(worker, "PYTHON", "/sintu/.venv/bin/python")
     assert worker.command_for({"action": "operational_readiness", "payload": {}}) == [
         "/sintu/.venv/bin/python", "scripts/operational_readiness.py", "--json"
+    ]
+    assert worker.command_for({"action": "engine_probe", "payload": {}}) == [
+        "/sintu/.venv/bin/python", "scripts/engine_probe.py"
     ]
     assert worker.command_for({"action": "live_preflight", "payload": {}}) == [
         "/sintu/.venv/bin/python", "scripts/live_e2e.py"

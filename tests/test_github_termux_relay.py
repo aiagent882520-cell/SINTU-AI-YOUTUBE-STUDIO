@@ -15,6 +15,7 @@ SPEC.loader.exec_module(relay)
 
 def test_relay_accepts_only_allowlisted_fixed_commands():
     assert relay.command_for("git_status", []) == ["git", "status", "--short", "--branch"]
+    assert relay.command_for("engine_probe", {})[-1:] == ["scripts/engine_probe.py"]
     assert relay.command_for("operational_readiness", {})[-2:] == [
         "scripts/operational_readiness.py", "--json"
     ]
