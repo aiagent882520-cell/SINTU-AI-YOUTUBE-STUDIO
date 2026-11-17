@@ -31,6 +31,9 @@ def test_delayed_restart_uses_fixed_pid_files_and_command_identity():
     assert 'stop_expected "$LOG_DIR/bridge-worker.pid" "scripts/termux_bridge_worker.py"' in helper
     assert 'stop_expected "$LOG_DIR/github-relay.pid" "scripts/github_termux_relay.py"' in helper
     assert 'tr \'\\0\' ' in helper
+    assert 'ps -o args= -p "$pid"' in helper
+    assert 'Cannot verify process identity' in helper
+    assert 'did not stop after TERM' in helper
     assert 'kill -TERM "$pid"' in helper
     assert "kill -KILL" not in helper
     assert "env -u SINTU_QUEUE_EXECUTOR -u SINTU_SKIP_DELAYED_RESTART bash scripts/start_services.sh" in helper
