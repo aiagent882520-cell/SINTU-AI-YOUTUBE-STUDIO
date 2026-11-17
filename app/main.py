@@ -344,6 +344,7 @@ def init_db():
             created_at TEXT NOT NULL, updated_at TEXT NOT NULL
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_youtube_uploads_status ON youtube_uploads(status,updated_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_youtube_uploads_channel_hash ON youtube_uploads(channel_id,file_sha256)")
         upload_columns = {row["name"] for row in conn.execute("PRAGMA table_info(youtube_uploads)")}
         if "public_approval_hash" not in upload_columns:
             conn.execute("ALTER TABLE youtube_uploads ADD COLUMN public_approval_hash TEXT")
@@ -2168,6 +2169,8 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
     approval_hash = None
 
     with db() as conn:
+        # Serialize duplicate check + upload-row insert across concurrent API requests.
+        conn.execute("BEGIN IMMEDIATE")
         saved_row = conn.execute("SELECT * FROM youtube_uploads WHERE calendar_id=?", (calendar_id,)).fetchone()
         if saved_row:
             saved = dict(saved_row)
@@ -2207,6 +2210,16 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
             if saved["status"] == "CANCELLED":
                 raise HTTPException(status_code=409, detail="Upload job was cancelled.")
         else:
+            duplicate = conn.execute(
+                "SELECT calendar_id,status,youtube_video_id FROM youtube_uploads "
+                "WHERE channel_id=? AND file_sha256=? AND calendar_id<>? AND status<>'CANCELLED' LIMIT 1",
+                (channel_id, file_hash, calendar_id),
+            ).fetchone()
+            if duplicate:
+                raise HTTPException(
+                    status_code=409,
+                    detail="This exact MP4 fingerprint already has a YouTube upload job on this channel; duplicate upload blocked.",
+                )
             if privacy_status == "public":
                 if not supplied_approval_hash:
                     raise HTTPException(status_code=403, detail="A separate explicit owner public approval is required.")
