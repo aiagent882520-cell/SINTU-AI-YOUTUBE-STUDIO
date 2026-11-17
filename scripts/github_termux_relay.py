@@ -42,7 +42,7 @@ ACTIONS = {
     "git_status", "git_pull_ff_only", "run_tests", "compile_check", "automation_self_test",
     "health_audit", "operational_readiness", "live_preflight", "engine_probe",
     "safe_optional_install",
-    "restart_services", "media_repair", "watchdog_recovery_test",
+    "restart_services", "media_repair", "media_forensics", "watchdog_recovery_test",
     "offline_video_e2e", "full_self_test", "full_studio_e2e",
 }
 
@@ -175,6 +175,8 @@ def command_for(action: str, payload: dict) -> list[str]:
         return ["bash", "scripts/start_services.sh"]
     if action == "media_repair":
         return [PYTHON, "scripts/repair_media.py", "--apply", "--json"]
+    if action == "media_forensics":
+        return [PYTHON, "scripts/media_forensics.py", "--json"]
     if action == "watchdog_recovery_test":
         return [PYTHON, "scripts/watchdog_recovery_test.py", "--json"]
     if action in {"offline_video_e2e", "full_self_test", "full_studio_e2e"}:

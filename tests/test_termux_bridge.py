@@ -249,6 +249,16 @@ def test_worker_maps_safe_optional_install_to_fixed_script(monkeypatch):
     ]
 
 
+def test_bridge_queues_read_only_media_forensics_action(tmp_path, monkeypatch):
+    client, api_headers, worker_headers = bridge_client(tmp_path, monkeypatch)
+    created = client.post("/api/termux-bridge/jobs", headers=api_headers,
+                          json={"action": "media_forensics"})
+    assert created.status_code == 202
+    job = client.get("/api/termux-bridge/jobs/next", headers=worker_headers)
+    assert job.status_code == 200
+    assert job.json()["action"] == "media_forensics"
+
+
 def test_bridge_queues_restart_and_media_repair_actions(tmp_path, monkeypatch):
     client, api_headers, worker_headers = bridge_client(tmp_path, monkeypatch)
     for action in ("restart_services", "media_repair"):
@@ -266,6 +276,14 @@ def test_bridge_queues_restart_and_media_repair_actions(tmp_path, monkeypatch):
             json={"status": "succeeded", "exit_code": 0, "output": "ok"},
         )
         assert completed.status_code == 200
+
+
+def test_worker_maps_read_only_media_forensics_to_fixed_script(monkeypatch):
+    from scripts import termux_bridge_worker as worker
+    monkeypatch.setattr(worker, "PYTHON", "/sintu/.venv/bin/python")
+    assert worker.command_for({"action": "media_forensics", "payload": {}}) == [
+        "/sintu/.venv/bin/python", "scripts/media_forensics.py", "--json"
+    ]
 
 
 def test_worker_maps_device_maintenance_actions_to_fixed_commands(monkeypatch):

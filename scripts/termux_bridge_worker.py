@@ -76,6 +76,8 @@ def command_for(job: dict) -> list[str]:
         return ["bash", "scripts/start_services.sh"]
     if action == "media_repair":
         return [PYTHON, "scripts/repair_media.py", "--apply", "--json"]
+    if action == "media_forensics":
+        return [PYTHON, "scripts/media_forensics.py", "--json"]
     if action == "watchdog_recovery_test":
         return [PYTHON, "scripts/watchdog_recovery_test.py", "--json"]
     if action == "offline_video_e2e":

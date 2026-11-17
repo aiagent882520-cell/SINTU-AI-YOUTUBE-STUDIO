@@ -131,6 +131,12 @@ def test_relay_maps_device_maintenance_actions_to_fixed_commands(monkeypatch):
     ]
 
 
+def test_relay_maps_read_only_media_forensics_to_fixed_script():
+    assert relay.command_for("media_forensics", {}) == [
+        relay.PYTHON, "scripts/media_forensics.py", "--json"
+    ]
+
+
 def test_relay_maps_watchdog_recovery_test_to_fixed_script():
     assert relay.command_for("watchdog_recovery_test", {}) == [
         relay.PYTHON, "scripts/watchdog_recovery_test.py", "--json"
