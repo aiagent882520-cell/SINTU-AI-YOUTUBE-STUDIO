@@ -34,6 +34,8 @@ ALLOWED_ACTIONS = {
     "full_studio_e2e",
 }
 MAX_OUTPUT_CHARS = 20000
+AUTOMATION_ONLY = os.getenv("SINTU_AUTOMATION_ONLY", "true").strip().lower() in {"1", "true", "yes", "on"}
+PRODUCTION_ACTIONS = {"offline_video_e2e", "full_self_test", "full_studio_e2e"}
 
 
 def _now() -> str:
@@ -133,12 +135,16 @@ def bridge_status(authorization: str | None = Header(default=None)):
         "jobs": {key: counts.get(key, 0) for key in ("queued", "running", "succeeded", "failed")},
         "allowed_actions": sorted(ALLOWED_ACTIONS),
         "arbitrary_shell": False,
+        "automation_only": AUTOMATION_ONLY,
+        "paused_actions": sorted(PRODUCTION_ACTIONS) if AUTOMATION_ONLY else [],
     }
 
 
 @router.post("/jobs", status_code=202)
 def create_job(payload: CreateJobInput, authorization: str | None = Header(default=None)):
     _authorize(authorization)
+    if AUTOMATION_ONLY and payload.action in PRODUCTION_ACTIONS:
+        raise HTTPException(status_code=423, detail="Production actions are paused while ChatGPT-GitHub-Termux automation is being completed.")
     data = {}
     if payload.action == "run_tests" and payload.test_path:
         candidate = Path(payload.test_path)

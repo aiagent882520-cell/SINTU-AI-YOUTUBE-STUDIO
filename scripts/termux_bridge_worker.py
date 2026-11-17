@@ -23,6 +23,8 @@ except ImportError:
 
 BASE_URL = os.getenv("SINTU_BRIDGE_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 TOKEN = os.getenv("SINTU_BRIDGE_WORKER_TOKEN", "").strip()
+AUTOMATION_ONLY = os.getenv("SINTU_AUTOMATION_ONLY", "true").strip().lower() in {"1", "true", "yes", "on"}
+PRODUCTION_ACTIONS = {"offline_video_e2e", "full_self_test", "full_studio_e2e"}
 PYTHON = str(ROOT / ".venv" / "bin" / "python")
 if not Path(PYTHON).exists():
     PYTHON = sys.executable
@@ -50,6 +52,8 @@ def request_json(path: str, method: str = "GET", payload: dict | None = None):
 def command_for(job: dict) -> list[str]:
     action = job.get("action")
     payload = job.get("payload") or {}
+    if AUTOMATION_ONLY and action in PRODUCTION_ACTIONS:
+        raise ValueError("Production actions are paused in SINTU automation-only mode.")
     if action == "git_status":
         return ["git", "status", "--short", "--branch"]
     if action == "git_pull_ff_only":

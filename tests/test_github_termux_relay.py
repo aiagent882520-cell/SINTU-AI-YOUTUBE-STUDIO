@@ -13,7 +13,8 @@ relay = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(relay)
 
 
-def test_relay_accepts_only_allowlisted_fixed_commands():
+def test_relay_accepts_only_allowlisted_fixed_commands(monkeypatch):
+    monkeypatch.setattr(relay, "AUTOMATION_ONLY", False)
     assert relay.command_for("git_status", []) == ["git", "status", "--short", "--branch"]
     assert relay.command_for("engine_probe", {})[-1:] == ["scripts/engine_probe.py"]
     assert relay.command_for("operational_readiness", {})[-2:] == [
@@ -45,7 +46,8 @@ def test_relay_rejects_unapproved_test_paths(test_path):
         relay.command_for("run_tests", {"test_path": test_path})
 
 
-def test_relay_rejects_unbounded_or_invalid_topics():
+def test_relay_rejects_unbounded_or_invalid_topics(monkeypatch):
+    monkeypatch.setattr(relay, "AUTOMATION_ONLY", False)
     with pytest.raises(ValueError, match="topic"):
         relay.command_for("offline_video_e2e", {"topic": "x" * 301})
     with pytest.raises(ValueError, match="topic"):
@@ -103,10 +105,18 @@ def test_relay_requeues_stale_claim_after_worker_crash():
 
 
 
-def test_relay_rejects_payload_fields_for_wrong_action():
+def test_relay_rejects_payload_fields_for_wrong_action(monkeypatch):
+    monkeypatch.setattr(relay, "AUTOMATION_ONLY", False)
     with pytest.raises(ValueError, match="Payload fields"):
         relay.command_for("git_status", {"topic": "ignored"})
     with pytest.raises(ValueError, match="Payload fields"):
         relay.command_for("run_tests", {"topic": "wrong-field"})
     with pytest.raises(ValueError, match="Payload fields"):
         relay.command_for("offline_video_e2e", {"test_path": "tests/test_ai_brain.py"})
+
+
+def test_relay_pauses_video_production_in_automation_only_mode(monkeypatch):
+    monkeypatch.setattr(relay, "AUTOMATION_ONLY", True)
+    for action in ("offline_video_e2e", "full_self_test", "full_studio_e2e"):
+        with pytest.raises(ValueError, match="paused"):
+            relay.command_for(action, {})
