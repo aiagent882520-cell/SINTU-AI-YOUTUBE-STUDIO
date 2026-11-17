@@ -2169,6 +2169,8 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
     approval_hash = None
 
     with db() as conn:
+        # Serialize duplicate check + upload-row insert across concurrent API requests.
+        conn.execute("BEGIN IMMEDIATE")
         saved_row = conn.execute("SELECT * FROM youtube_uploads WHERE calendar_id=?", (calendar_id,)).fetchone()
         if saved_row:
             saved = dict(saved_row)
