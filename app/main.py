@@ -2145,12 +2145,7 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
     except OSError:
         raise HTTPException(status_code=409, detail="Rendered MP4 could not be fingerprinted safely.") from None
 
-    connection = _youtube_connection()
-    if not connection:
-        raise HTTPException(status_code=409, detail="Pehle YouTube channel connect karein.")
-    channel_id = connection["channel_id"]
     title = title.strip()
-    description_hash = hashlib.sha256(description.encode("utf-8")).hexdigest()
     supplied_approval_hash = _public_approval_digest(public_approval_token) if public_approval_token else None
     if privacy_status == "public" and not supplied_approval_hash:
         with db() as conn:
@@ -2160,6 +2155,11 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
             ).fetchone()
         if not resumable_public_job or not resumable_public_job["public_approval_hash"]:
             raise HTTPException(status_code=403, detail="Public YouTube publishing is disabled unless a separate explicit owner approval is provided.")
+    connection = _youtube_connection()
+    if not connection:
+        raise HTTPException(status_code=409, detail="Pehle YouTube channel connect karein.")
+    channel_id = connection["channel_id"]
+    description_hash = hashlib.sha256(description.encode("utf-8")).hexdigest()
     now_iso = datetime.now(timezone.utc).isoformat()
     approval_hash = None
 
