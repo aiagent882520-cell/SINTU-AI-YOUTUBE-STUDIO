@@ -3314,7 +3314,9 @@ def test_youtube_oauth_callback_rejects_invalid_state_without_google_request(tmp
 
 
 def test_youtube_publish_requires_approved_calendar_and_records_success(tmp_path, monkeypatch):
+    import time
     from datetime import datetime, timedelta, timezone
+    from cryptography.fernet import Fernet
 
     client = client_for_test(tmp_path, monkeypatch)
     output_dir = tmp_path / "generated_videos"
@@ -3331,23 +3333,33 @@ def test_youtube_publish_requires_approved_calendar_and_records_success(tmp_path
     })
     assert created.status_code == 200
     calendar_id = created.json()["id"]
-    monkeypatch.setattr(main, "_youtube_access_token", lambda: "test-access-token")
-
+    monkeypatch.setattr(main, "_youtube_access_token", lambda *args, **kwargs: "test-access-token")
+    monkeypatch.setattr(main, "_youtube_connection", lambda: {
+        "channel_id": "UC-test-channel", "channel_title": "Test Channel"
+    })
+    key = Fernet.generate_key().decode()
+    monkeypatch.setenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", key)
     uploads = []
     streamed_uploads = []
+    session_uri = "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=test"
 
     def fake_upload(url, data=None, headers=None, method=None):
         uploads.append((url, data, headers, method))
         if method == "POST":
-            return 200, {"Location": "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=test"}, b""
-        raise AssertionError("The video bytes must use the bounded streaming upload connection.")
+            return 200, {"Location": session_uri}, b""
+        raise AssertionError("Chunk data must use the resumable transfer helper.")
 
-    def fake_streaming_upload(upload_url, video_path, size, access_token):
-        streamed_uploads.append((upload_url, str(video_path), size, access_token))
-        return json.dumps({"id": "youtube-video-123"}).encode()
+    def fake_transfer(path, uri, token, *, request, on_progress, probe_first=False):
+        streamed_uploads.append((uri, str(path), path.stat().st_size, token, probe_first))
+        on_progress(path.stat().st_size, "UPLOADING")
+        on_progress(path.stat().st_size, "VERIFYING")
+        return {"id": "youtube-video-123"}
 
     monkeypatch.setattr(main, "_youtube_request", fake_upload)
-    monkeypatch.setattr(main, "_youtube_upload_file", fake_streaming_upload)
+    monkeypatch.setattr(main, "transfer_resumable_upload", fake_transfer)
+    monkeypatch.setattr(main, "_youtube_verify_uploaded_video", lambda youtube_id, token: {
+        "upload_status": "uploaded", "processing_status": "processing"
+    })
     blocked = client.post(
         f"/api/admin/youtube/publish/{calendar_id}",
         params={"video_id": video_id, "title": "Test upload"},
@@ -3370,8 +3382,8 @@ def test_youtube_publish_requires_approved_calendar_and_records_success(tmp_path
     assert metadata["status"]["privacyStatus"] == "private"
     assert uploads[0][0].startswith("https://www.googleapis.com/upload/youtube/")
     assert streamed_uploads == [(
-        "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=test",
-        str(output_dir / (video_id + ".mp4")), len(video_bytes), "test-access-token",
+        session_uri, str(output_dir / (video_id + ".mp4")), len(video_bytes),
+        "test-access-token", False,
     )]
     assert client.get("/api/calendar").json()["items"][0]["status"] == "Published"
     history = client.get("/api/admin/publishing/history")
@@ -3382,7 +3394,8 @@ def test_youtube_publish_requires_approved_calendar_and_records_success(tmp_path
         f"/api/admin/youtube/publish/{calendar_id}",
         params={"video_id": video_id, "title": "Test upload"},
     )
-    assert duplicate.status_code == 409
+    assert duplicate.status_code == 200
+    assert duplicate.json()["duplicate_prevented"] is True
     assert len(uploads) == 1
     assert len(streamed_uploads) == 1
 
