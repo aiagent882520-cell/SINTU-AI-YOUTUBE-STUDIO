@@ -28,9 +28,8 @@ stop_expected() {
     return 1
   fi
   if [[ "$cmdline" != *"$marker"* ]]; then
-    echo "PID file identity mismatch for $pid; not signalling unrelated process." >&2
-    rm -f "$pid_file"
-    return 0
+    echo "PID file identity mismatch for $pid; not signalling unrelated process; aborting restart." >&2
+    return 1
   fi
   kill -TERM "$pid" 2>/dev/null || true
   for _ in $(seq 1 20); do
