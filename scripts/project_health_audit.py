@@ -174,6 +174,31 @@ def audit_media(path: Path, results: list[dict]) -> bool:
     return ok
 
 
+
+def summarize_audit(results: list[dict]) -> dict:
+    """Return a compact, machine-readable footer that survives relay log truncation."""
+    counts = {"PASS": 0, "WARN": 0, "FAIL": 0, "INFO": 0}
+    for item in results:
+        status = str(item.get("status", "")).upper()
+        if status in counts:
+            counts[status] += 1
+    pytest_result = next((item for item in results if item.get("check") == "pytest"), None)
+    pytest_output = str((pytest_result or {}).get("output", "")).strip()
+    pytest_lines = [line.strip() for line in pytest_output.splitlines() if line.strip()]
+    pytest_summary = pytest_lines[-1] if pytest_lines else None
+    failed = [str(item.get("check", "unknown")) for item in results
+              if str(item.get("status", "")).upper() == "FAIL"]
+    return {
+        "status": "FAIL" if counts["FAIL"] else ("WARN" if counts["WARN"] else "PASS"),
+        "pass": counts["PASS"],
+        "warnings": counts["WARN"],
+        "failures": counts["FAIL"],
+        "info": counts["INFO"],
+        "failed_checks": failed[:100],
+        "pytest_summary": pytest_summary,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-tests", action="store_true",
@@ -186,10 +211,15 @@ def main() -> int:
     if not args.skip_tests:
         ok = run_check("pytest", [sys.executable, "-m", "pytest", "-q"], results) and ok
     ok = audit_media(args.media_dir, results) and ok
+    audit_summary = summarize_audit(results)
     summary = {"project": "SINTU AI YOUTUBE STUDIO", "status": "PASS" if ok else "FAIL",
-               "checks": results, "paid_services_used": False, "publishing_performed": False}
+               "summary": audit_summary, "checks": results,
+               "paid_services_used": False, "publishing_performed": False}
     rendered = json.dumps(summary, ensure_ascii=False, indent=2)
     print(rendered)
+    # GitHub/Termux relays retain only a bounded output tail. Always end with a
+    # compact summary so PASS/WARN/FAIL totals and failed media names survive.
+    print("SINTU_AUDIT_SUMMARY=" + json.dumps(audit_summary, ensure_ascii=False, separators=(",", ":")))
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(rendered + "\n", encoding="utf-8")
