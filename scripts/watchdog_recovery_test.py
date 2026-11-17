@@ -114,6 +114,22 @@ def _wait_for_api(timeout: int = 150) -> None:
     raise TimeoutError(f"SINTU API did not recover within {timeout} seconds")
 
 
+def _wait_for_worker_heartbeat(timeout: int = 45) -> None:
+    """Allow the restarted worker time to make its first authenticated poll."""
+    deadline = time.monotonic() + timeout
+    last_error = "worker heartbeat is not healthy yet"
+    while time.monotonic() < deadline:
+        try:
+            if _request("/api/termux-bridge/status").get("worker_online"):
+                return
+        except (OSError, urllib.error.URLError, TimeoutError) as exc:
+            last_error = str(exc)[:300]
+        time.sleep(2)
+    raise TimeoutError(
+        f"Bridge worker heartbeat was not healthy within {timeout} seconds: {last_error}"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true")
@@ -133,16 +149,7 @@ def main() -> int:
         worker_result = _wait_for_new_process(
             "bridge-worker", "scripts/termux_bridge_worker.py", worker_identity
         )
-        deadline = time.monotonic() + 45
-        while time.monotonic() < deadline:
-            try:
-                if _request("/api/termux-bridge/status").get("worker_online"):
-                    break
-            except (OSError, urllib.error.URLError, TimeoutError):
-                pass
-            time.sleep(2)
-        else:
-            raise TimeoutError("Recovered bridge worker did not restore its heartbeat")
+        _wait_for_worker_heartbeat(timeout=45)
         results.append({"process": "bridge-worker", "status": "recovered",
                         "old_pid": worker_pid, "new_pid": worker_result["pid"]})
 
@@ -152,8 +159,9 @@ def main() -> int:
             "server", "uvicorn app.main:app", server_identity
         )
         _wait_for_api(timeout=30)
-        if not _request("/api/termux-bridge/status").get("worker_online"):
-            raise RuntimeError("Bridge worker heartbeat was not healthy after API recovery")
+        # API health can return before the worker's next poll. Wait for the
+        # heartbeat to refresh instead of failing on this normal startup race.
+        _wait_for_worker_heartbeat(timeout=45)
         results.append({"process": "server", "status": "recovered",
                         "old_pid": server_pid, "new_pid": server_result["pid"]})
         _read_pid("watchdog", "scripts/termux_watchdog.sh")
