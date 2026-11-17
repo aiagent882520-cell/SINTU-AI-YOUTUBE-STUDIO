@@ -47,3 +47,13 @@ Live YouTube verification remains pending until owner-managed OAuth credentials,
 
 - Upload progress/status is available from `GET /api/admin/youtube/uploads/{calendar_id}`. It returns the state, acknowledged bytes, file size, progress percentage, video ID and processing status; it deliberately omits the encrypted session URI and approval digest.
 - An incomplete upload can be cancelled through `POST /api/admin/youtube/uploads/{calendar_id}/cancel`. The local job becomes terminal `CANCELLED`; the abandoned Google session is not reused and may remain server-side until it expires.
+
+### Owner approval API flow
+
+1. An authenticated admin posts `calendar_id`, `video_id`, `title`, the connected `channel_id`, and the exact confirmation phrase to `POST /api/admin/youtube/public-approvals`.
+2. The response displays the exact title/channel/video and returns a one-time `approval_token`. Store it privately; it is not retrievable later.
+3. The admin calls the existing publish endpoint with `privacy_status=public` and sends the token in `X-SINTU-Public-Approval`. The token is never placed in the URL.
+4. To revoke before the public visibility change, post the token in the JSON body to `POST /api/admin/youtube/public-approvals/revoke`.
+5. Upload progress can be inspected with `GET /api/admin/youtube/uploads/{calendar_id}`; session URI and approval digest are omitted.
+
+The public approval API creates no approval automatically and no approval is created by scheduled/background workers.
