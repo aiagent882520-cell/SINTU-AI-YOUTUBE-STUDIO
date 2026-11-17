@@ -39,3 +39,9 @@ def test_self_test_and_update_script_exist_and_compile():
     import py_compile
     py_compile.compile(str(ROOT / "scripts/automation_self_test.py"), doraise=True)
     assert (ROOT / "scripts/termux_apply_update.sh").is_file()
+
+
+def test_automation_self_test_uses_public_health_endpoint():
+    source = (ROOT / "scripts/automation_self_test.py").read_text()
+    assert 'http://127.0.0.1:8000/api/health' in source
+    assert 'http://127.0.0.1:8000/openapi.json' not in source
