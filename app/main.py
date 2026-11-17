@@ -2174,6 +2174,11 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
                 raise HTTPException(status_code=409, detail="Existing upload job is bound to different content/channel/metadata; duplicate upload blocked.")
             if privacy_status == "public":
                 existing_hash = saved.get("public_approval_hash")
+                if saved["status"] == "COMPLETED" and saved["youtube_video_id"]:
+                    youtube_id = saved["youtube_video_id"]
+                    return {"calendar_id": calendar_id, "youtube_video_id": youtube_id, "status": "Published",
+                            "url": "https://www.youtube.com/watch?v=" + youtube_id,
+                            "privacy_status": privacy_status, "resumed": True, "duplicate_prevented": True}
                 if supplied_approval_hash and supplied_approval_hash != existing_hash:
                     # A fresh approval may replace an expired/revoked approval
                     # for the same exact content, but can never alter the binding.
@@ -2182,11 +2187,6 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
                     conn.execute("UPDATE youtube_uploads SET public_approval_hash=? WHERE calendar_id=?",
                                  (supplied_approval_hash, calendar_id))
                     existing_hash = supplied_approval_hash
-                if saved["status"] == "COMPLETED" and saved["youtube_video_id"]:
-                    youtube_id = saved["youtube_video_id"]
-                    return {"calendar_id": calendar_id, "youtube_video_id": youtube_id, "status": "Published",
-                            "url": "https://www.youtube.com/watch?v=" + youtube_id,
-                            "privacy_status": privacy_status, "resumed": True, "duplicate_prevented": True}
                 if not existing_hash:
                     raise HTTPException(status_code=403, detail="Public YouTube publishing is disabled unless a separate explicit owner approval is provided.")
                 approval_hash = existing_hash
