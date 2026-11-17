@@ -76,6 +76,8 @@ def command_for(job: dict) -> list[str]:
         return ["bash", "scripts/start_services.sh"]
     if action == "media_repair":
         return [PYTHON, "scripts/repair_media.py", "--apply", "--json"]
+    if action == "watchdog_recovery_test":
+        return [PYTHON, "scripts/watchdog_recovery_test.py", "--json"]
     if action == "offline_video_e2e":
         topic = payload.get("topic", "भारत के प्राचीन किले में सुबह का सिनेमाई दृश्य")
         if not isinstance(topic, str) or not topic.strip() or len(topic.strip()) > 300:
