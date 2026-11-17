@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only forensic report for the five known black MP4s. Never edits media."""
+"""Compact, read-only forensic report for the five known black MP4s."""
 from __future__ import annotations
 
 import argparse
@@ -11,6 +11,8 @@ import sqlite3
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+
+from PIL import Image, ImageStat
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT))).expanduser().resolve()
@@ -32,10 +34,10 @@ def run(command: list[str], timeout: int = 120) -> dict:
     try:
         result = subprocess.run(command, cwd=DATA_DIR, text=True, capture_output=True,
                                 timeout=timeout, check=False)
-        return {"returncode": result.returncode, "stdout": result.stdout[-12000:],
-                "stderr": result.stderr[-12000:]}
+        return {"returncode": result.returncode, "stdout": result.stdout[-16000:],
+                "stderr": result.stderr[-6000:]}
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return {"returncode": None, "stdout": "", "stderr": str(exc)[:500]}
+        return {"returncode": None, "stdout": "", "stderr": str(exc)[:300]}
 
 
 def sha256_file(path: Path) -> str:
@@ -46,27 +48,27 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def redact_secrets(value: str) -> str:
+    value = re.sub(r'(?i)(Bearer\s+)[^\s,"]+', r'\1[REDACTED]', value)
+    value = re.sub(r'(?i)(access_token|refresh_token|client_secret|api_key|upload_id)([=:][^&\s,"]+)', r'\1=[REDACTED]', value)
+    value = re.sub(r'https://www\.googleapis\.com/upload/youtube/[^\s"]+', "[REDACTED_GOOGLE_UPLOAD_SESSION]", value)
+    return value[:350]
+
+
 def parse_black_intervals(stderr: str) -> list[list[float]]:
     return [[float(a), float(b)] for a, b in re.findall(
         r"black_start:([0-9.]+)\s+black_end:([0-9.]+)", stderr
     )]
 
 
-def redact_secrets(value: str) -> str:
-    value = re.sub(r'(?i)(Bearer\s+)[^\s,"]+', r'\1[REDACTED]', value)
-    value = re.sub(r'(?i)(access_token|refresh_token|client_secret|api_key|upload_id)([=:][^&\s,"]+)', r'\1=[REDACTED]', value)
-    value = re.sub(r'https://www\.googleapis\.com/upload/youtube/[^\s"]+', "[REDACTED_GOOGLE_UPLOAD_SESSION]", value)
-    return value[:500]
-
-
 def scan_text_logs(needles: tuple[str, ...]) -> list[dict]:
     matches = []
-    roots = [DATA_DIR / item for item in LOG_DIRS]
-    for base in roots:
-        if not base.exists() or not base.is_dir():
+    for dirname in LOG_DIRS:
+        base = DATA_DIR / dirname
+        if not base.is_dir():
             continue
         for path in base.rglob("*"):
-            if len(matches) >= 80:
+            if len(matches) >= 20:
                 return matches
             if (not path.is_file() or path.suffix.lower() not in TEXT_SUFFIXES
                     or any(term in path.name.lower() for term in SECRET_TERMS)):
@@ -81,7 +83,7 @@ def scan_text_logs(needles: tuple[str, ...]) -> list[dict]:
                 if any(needle in line for needle in needles):
                     matches.append({"path": str(path.relative_to(DATA_DIR)),
                                     "line": number, "excerpt": redact_secrets(line)})
-                    if len(matches) >= 80:
+                    if len(matches) >= 20:
                         return matches
     return matches
 
@@ -92,29 +94,25 @@ def scan_database_records(needles: tuple[str, ...]) -> list[dict]:
         if not path.is_file() or path.is_symlink():
             continue
         try:
-            uri = "file:" + str(path) + "?mode=ro"
-            conn = sqlite3.connect(uri, uri=True, timeout=3)
+            conn = sqlite3.connect("file:" + str(path) + "?mode=ro", uri=True, timeout=3)
             conn.row_factory = sqlite3.Row
-            tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-            for table_row in tables:
+            for table_row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'"):
                 table = table_row["name"]
                 if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table):
                     continue
-                columns = conn.execute(f'PRAGMA table_info("{table}")').fetchall()
-                for column in columns:
+                for column in conn.execute(f'PRAGMA table_info("{table}")'):
                     name = column["name"]
-                    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
-                        continue
-                    if any(term in name.lower() for term in SECRET_TERMS):
+                    if (not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name)
+                            or any(term in name.lower() for term in SECRET_TERMS)):
                         continue
                     for needle in needles:
-                        query = f'SELECT * FROM "{table}" WHERE CAST("{name}" AS TEXT) LIKE ? LIMIT 3'
-                        for row in conn.execute(query, ("%" + needle + "%",)).fetchall():
+                        query = f'SELECT * FROM "{table}" WHERE CAST("{name}" AS TEXT) LIKE ? LIMIT 2'
+                        for row in conn.execute(query, ("%" + needle + "%",)):
                             safe = {key: redact_secrets(str(row[key])) for key in row.keys()
                                     if not any(term in key.lower() for term in SECRET_TERMS)}
-                            results.append({"database": path.name, "table": table,
-                                            "matched_column": name, "record": safe})
-                            if len(results) >= 80:
+                            results.append({"db": path.name, "table": table,
+                                            "column": name, "record": safe})
+                            if len(results) >= 20:
                                 conn.close()
                                 return results
             conn.close()
@@ -123,25 +121,41 @@ def scan_database_records(needles: tuple[str, ...]) -> list[dict]:
     return results
 
 
+def inspect_asset(path: Path) -> dict:
+    stat = path.stat()
+    item = {"path": str(path.relative_to(DATA_DIR)), "size_bytes": stat.st_size,
+            "modified_utc": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat()}
+    if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
+        try:
+            with Image.open(path) as image:
+                gray = image.convert("L").resize((32, 32))
+                stats = ImageStat.Stat(gray)
+                item.update({"image_size": list(image.size), "mean_luma": round(stats.mean[0], 2),
+                             "luma_stddev": round(stats.stddev[0], 2),
+                             "near_black": stats.mean[0] < 12 and stats.stddev[0] < 8})
+        except (OSError, ValueError):
+            item["image_error"] = "unreadable"
+    return item
+
+
 def nearby_assets(timestamp: float) -> list[dict]:
     found = []
     allowed = {".png", ".jpg", ".jpeg", ".webp", ".wav", ".mp3", ".m4a", ".aac", ".ogg", ".mp4"}
     for dirname in ASSET_DIRS:
         base = DATA_DIR / dirname
-        if not base.exists() or not base.is_dir():
+        if not base.is_dir():
             continue
         for path in base.rglob("*"):
             if not path.is_file() or path.is_symlink() or path.suffix.lower() not in allowed:
                 continue
             try:
                 stat = path.stat()
+                if abs(stat.st_mtime - timestamp) <= 900:
+                    found.append(inspect_asset(path))
             except OSError:
                 continue
-            if abs(stat.st_mtime - timestamp) <= 900:
-                found.append({"path": str(path.relative_to(DATA_DIR)), "size_bytes": stat.st_size,
-                              "modified_utc": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat()})
-                if len(found) >= 60:
-                    return found
+            if len(found) >= 20:
+                return found
     return found
 
 
@@ -151,67 +165,80 @@ def inspect_video(path: Path) -> dict:
     stat = path.stat()
     probe = run(["ffprobe", "-v", "error", "-count_frames", "-show_streams",
                  "-show_format", "-of", "json", str(path)])
-    metadata = {}
+    info = {"format": None, "duration_seconds": None, "streams": []}
     if probe["returncode"] == 0:
         try:
             raw = json.loads(probe["stdout"])
-            metadata = {"format": raw.get("format", {}),
-                        "streams": [{k: s.get(k) for k in (
-                            "index", "codec_type", "codec_name", "profile", "width", "height",
-                            "pix_fmt", "r_frame_rate", "avg_frame_rate", "time_base",
-                            "start_time", "duration", "nb_read_frames", "sample_rate", "channels"
-                        )} for s in raw.get("streams", [])]}
-        except json.JSONDecodeError:
-            metadata = {"parse_error": "ffprobe JSON invalid"}
+            fmt = raw.get("format", {})
+            info["format"] = fmt.get("format_name")
+            info["duration_seconds"] = float(fmt.get("duration") or 0)
+            for stream in raw.get("streams", []):
+                info["streams"].append({
+                    "type": stream.get("codec_type"), "codec": stream.get("codec_name"),
+                    "profile": stream.get("profile"), "resolution": (
+                        f'{stream.get("width")}x{stream.get("height")}' if stream.get("width") else None),
+                    "pixel_format": stream.get("pix_fmt"), "frame_rate": stream.get("avg_frame_rate"),
+                    "frame_count": stream.get("nb_read_frames"), "sample_rate": stream.get("sample_rate"),
+                    "channels": stream.get("channels"), "duration": stream.get("duration"),
+                    "start_time": stream.get("start_time"),
+                })
+        except (ValueError, TypeError, json.JSONDecodeError):
+            info["parse_error"] = "invalid ffprobe JSON"
+
     black = run(["ffmpeg", "-hide_banner", "-i", str(path), "-vf",
                  "blackdetect=d=0.10:pix_th=0.10", "-an", "-f", "null", "-"])
     decode = run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "null", "-"])
-    duration = 0.0
-    try:
-        duration = float(metadata.get("format", {}).get("duration") or 0)
-    except (TypeError, ValueError):
-        pass
     intervals = parse_black_intervals(black["stderr"])
-    full_black = bool(duration and any(start <= 0.1 and end >= duration * 0.95
-                                       for start, end in intervals))
-    frames = []
-    for label, seek in (("start", 0), ("middle", max(0, duration / 2)), ("end", max(0, duration - 0.2))):
-        sample = run(["ffprobe", "-v", "error", "-select_streams", "v:0",
-                      "-show_entries", "frame=best_effort_timestamp_time,pict_type",
-                      "-read_intervals", f"{seek}%+#2", "-of", "csv=p=0", str(path)], timeout=30)
-        frames.append({"sample": label, "seek_seconds": round(seek, 3),
-                       "timestamps": sample["stdout"].strip().splitlines()[:2],
-                       "error": sample["stderr"][:300] if sample["returncode"] else ""})
-    needles = (path.name, path.stem)
+    duration = info["duration_seconds"] or 0
+    full_black = bool(duration and any(a <= 0.1 and b >= duration * 0.95 for a, b in intervals))
+
+    frames_result = run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                         "-show_frames", "-show_entries", "frame=best_effort_timestamp_time,pict_type",
+                         "-of", "csv=p=0", str(path)], timeout=45)
+    frame_lines = frames_result["stdout"].splitlines()
+    samples = []
+    if frame_lines:
+        for label, index in (("first", 0), ("middle", len(frame_lines) // 2), ("last", len(frame_lines) - 1)):
+            parts = frame_lines[index].split(",")
+            samples.append({"sample": label, "timestamp": parts[0] if parts else "",
+                            "picture_type": parts[1] if len(parts) > 1 else ""})
+
     return {
-        "file": path.name, "exists": True, "safe_regular_file": True,
-        "size_bytes": stat.st_size, "sha256": sha256_file(path),
+        "file": path.name, "exists": True, "size_bytes": stat.st_size,
+        "sha256": sha256_file(path),
         "modified_utc": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
-        "ffprobe_returncode": probe["returncode"], "metadata": metadata,
-        "blackdetect_returncode": black["returncode"], "black_intervals": intervals,
-        "full_duration_black": full_black, "decode_returncode": decode["returncode"],
-        "decode_errors": decode["stderr"][:4000], "frame_timestamp_samples": frames,
-        "nearby_source_assets": nearby_assets(stat.st_mtime),
-        "production_log_matches": scan_text_logs(needles),
-        "production_database_matches": scan_database_records(needles),
+        "ffprobe_exit": probe["returncode"], "metadata": info,
+        "blackdetect_exit": black["returncode"], "black_intervals": intervals,
+        "full_duration_black": full_black, "decode_exit": decode["returncode"],
+        "decode_errors": redact_secrets(decode["stderr"]) if decode["stderr"] else "",
+        "decoded_frame_samples": samples, "frame_probe_exit": frames_result["returncode"],
+        "frame_probe_error": frames_result["stderr"][:250] if frames_result["returncode"] else "",
     }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true")
-    args = parser.parse_args()
+    parser.parse_args()
+    videos = [inspect_video(MEDIA_DIR / name) for name in TARGETS]
+    assets = {}
+    for video in videos:
+        if video.get("exists"):
+            for asset in nearby_assets(datetime.fromisoformat(video["modified_utc"]).timestamp()):
+                assets[asset["path"]] = asset
+    needles = tuple(value for name in TARGETS for value in (name, Path(name).stem))
     report = {
         "status": "READ_ONLY_FORENSICS",
-        "data_dir": str(DATA_DIR),
-        "media_dir": str(MEDIA_DIR),
-        "targets": [inspect_video(MEDIA_DIR / name) for name in TARGETS],
+        "targets": videos,
+        "candidate_source_assets": list(assets.values()),
+        "production_log_matches": scan_text_logs(needles),
+        "production_database_matches": scan_database_records(needles),
         "safety": {"files_modified": False, "files_deleted": False, "files_moved": False,
                    "uploads_performed": False, "public_publishing_performed": False},
-        "note": "This report identifies technical symptoms and matching local provenance. It does not repair or quarantine media.",
+        "note": "Technical evidence only; no repair, quarantine, deletion, regeneration, or upload was performed.",
     }
-    print(json.dumps(report, ensure_ascii=False, indent=2))
-    return 0 if all(item.get("exists") for item in report["targets"]) else 1
+    print(json.dumps(report, ensure_ascii=False, separators=(",", ":")))
+    return 0 if all(item.get("exists") for item in videos) else 1
 
 
 if __name__ == "__main__":
