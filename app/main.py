@@ -1759,45 +1759,6 @@ def _youtube_request(url, data=None, headers=None, method=None):
 
 
 
-def _youtube_upload_file(upload_url: str, video_path: str | Path, size: int, access_token: str) -> bytes:
-    """Stream an approved MP4 to Google's resumable endpoint without loading it into RAM."""
-    parsed = urllib.parse.urlsplit(upload_url)
-    if (parsed.scheme != "https" or parsed.hostname != "www.googleapis.com"
-            or parsed.port not in (None, 443) or parsed.username or parsed.password
-            or not parsed.path.startswith("/upload/youtube/") or parsed.fragment):
-        raise HTTPException(status_code=502, detail="Google resumable upload URL invalid hai.")
-    connection = http.client.HTTPSConnection("www.googleapis.com", timeout=120)
-    try:
-        connection.putrequest("PUT", parsed.path + (("?" + parsed.query) if parsed.query else ""))
-        connection.putheader("Authorization", "Bearer " + access_token)
-        connection.putheader("Content-Type", "video/mp4")
-        connection.putheader("Content-Length", str(size))
-        connection.endheaders()
-        sent = 0
-        with Path(video_path).open("rb") as video_file:
-            while True:
-                chunk = video_file.read(1024 * 1024)
-                if not chunk:
-                    break
-                connection.send(chunk)
-                sent += len(chunk)
-        if sent != size:
-            raise HTTPException(status_code=409, detail="Rendered MP4 changed during upload; retry karein.")
-        response = connection.getresponse()
-        body = response.read(1024 * 1024 + 1)
-        if len(body) > 1024 * 1024:
-            raise HTTPException(status_code=502, detail="YouTube upload response exceeded safety limit.")
-        if response.status < 200 or response.status >= 300:
-            raise HTTPException(status_code=502, detail="Google video upload failed (" + str(response.status) + ").")
-        return body
-    except HTTPException:
-        raise
-    except (OSError, http.client.HTTPException, TimeoutError):
-        raise HTTPException(status_code=502, detail="YouTube video upload connection failed; retry karein.") from None
-    finally:
-        connection.close()
-
-
 def _youtube_connection():
     with db() as conn:
         row = conn.execute("SELECT channel_id,channel_title,token_expiry,connected_at FROM youtube_connection WHERE id=1").fetchone()
