@@ -52,6 +52,13 @@ def parse_black_intervals(stderr: str) -> list[list[float]]:
     )]
 
 
+def redact_secrets(value: str) -> str:
+    value = re.sub(r"(?i)(Bearer\\s+)[^\\s,\\\"]+", r"\\1[REDACTED]", value)
+    value = re.sub(r"(?i)(access_token|refresh_token|client_secret|api_key|upload_id)([=:][^&\\s,\\\"]+)", r"\\1=[REDACTED]", value)
+    value = re.sub(r"https://www\\.googleapis\\.com/upload/youtube/[^\\s\\\"]+", "[REDACTED_GOOGLE_UPLOAD_SESSION]", value)
+    return value[:500]
+
+
 def scan_text_logs(needles: tuple[str, ...]) -> list[dict]:
     matches = []
     roots = [DATA_DIR / item for item in LOG_DIRS]
@@ -73,7 +80,7 @@ def scan_text_logs(needles: tuple[str, ...]) -> list[dict]:
             for number, line in enumerate(lines, 1):
                 if any(needle in line for needle in needles):
                     matches.append({"path": str(path.relative_to(DATA_DIR)),
-                                    "line": number, "excerpt": line[:500]})
+                                    "line": number, "excerpt": redact_secrets(line)})
                     if len(matches) >= 80:
                         return matches
     return matches
@@ -103,7 +110,7 @@ def scan_database_records(needles: tuple[str, ...]) -> list[dict]:
                     for needle in needles:
                         query = f'SELECT * FROM "{table}" WHERE CAST("{name}" AS TEXT) LIKE ? LIMIT 3'
                         for row in conn.execute(query, ("%" + needle + "%",)).fetchall():
-                            safe = {key: str(row[key])[:500] for key in row.keys()
+                            safe = {key: redact_secrets(str(row[key])) for key in row.keys()
                                     if not any(term in key.lower() for term in SECRET_TERMS)}
                             results.append({"database": path.name, "table": table,
                                             "matched_column": name, "record": safe})
