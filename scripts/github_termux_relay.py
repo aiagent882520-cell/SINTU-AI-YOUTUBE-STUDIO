@@ -38,7 +38,7 @@ if not Path(PYTHON).exists():
 ACTIONS = {
     "git_status", "git_pull_ff_only", "run_tests", "compile_check",
     "health_audit", "operational_readiness", "live_preflight",
-    "offline_video_e2e", "full_self_test", "full_studio_e2e", "full_studio_e2e",
+    "offline_video_e2e", "full_self_test", "full_studio_e2e",
 }
 
 
@@ -167,9 +167,6 @@ def command_for(action: str, payload: dict) -> list[str]:
         if action == "offline_video_e2e":
             topic = topic or "भारत के प्राचीन किले में सुबह का सिनेमाई दृश्य"
             return [PYTHON, "scripts/live_e2e.py", "--offline-video", "--topic", topic.strip()]
-        if action == "full_studio_e2e":
-            topic = topic or "भारत के प्राचीन किले में सुबह का सिनेमाई दृश्य"
-            return [PYTHON, "scripts/live_e2e.py", "--full-studio-e2e", "--topic", topic.strip()]
         if action == "full_studio_e2e":
             topic = topic or "भारत के प्राचीन किले में सुबह का सिनेमाई दृश्य"
             return [PYTHON, "scripts/live_e2e.py", "--full-studio-e2e", "--topic", topic.strip()]
