@@ -62,6 +62,8 @@ def command_for(job: dict) -> list[str]:
         return [PYTHON, "scripts/operational_readiness.py", "--json"]
     if action == "live_preflight":
         return [PYTHON, "scripts/live_e2e.py"]
+    if action == "engine_probe":
+        return [PYTHON, "scripts/engine_probe.py"]
     if action == "offline_video_e2e":
         topic = payload.get("topic", "भारत के प्राचीन किले में सुबह का सिनेमाई दृश्य")
         if not isinstance(topic, str) or not topic.strip() or len(topic.strip()) > 300:
