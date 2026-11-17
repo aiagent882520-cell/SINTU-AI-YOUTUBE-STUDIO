@@ -36,5 +36,5 @@ stop_expected "$LOG_DIR/bridge-worker.pid" "scripts/termux_bridge_worker.py"
 stop_expected "$LOG_DIR/github-relay.pid" "scripts/github_termux_relay.py"
 
 sleep 2
-SINTU_SKIP_DELAYED_RESTART=1 bash scripts/start_services.sh
+env -u SINTU_QUEUE_EXECUTOR -u SINTU_SKIP_DELAYED_RESTART bash scripts/start_services.sh
 echo "SINTU API, bridge worker and GitHub relay reloaded with current repository code."
