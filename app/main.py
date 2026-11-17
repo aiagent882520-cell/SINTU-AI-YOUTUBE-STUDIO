@@ -1942,6 +1942,8 @@ def _youtube_verify_uploaded_video(youtube_video_id: str, access_token: str) -> 
     if status.get("uploadStatus") in {"failed", "rejected", "deleted"}:
         raise HTTPException(status_code=502, detail="YouTube ne uploaded video reject/fail kar diya.")
     processing = items[0].get("processingDetails", {}).get("processingStatus", "unknown")
+    if processing in {"failed", "terminated"}:
+        raise HTTPException(status_code=502, detail="YouTube video processing failed or was terminated.")
     return {
         "upload_status": status.get("uploadStatus", "unknown"),
         "processing_status": processing,
@@ -2249,8 +2251,8 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
 
     def verify_and_apply_visibility(youtube_id: str, access_token: str) -> dict:
         verified = _youtube_verify_uploaded_video(youtube_id, access_token)
-        if verified["channel_id"] and verified["channel_id"] != channel_id:
-            raise HTTPException(status_code=409, detail="Uploaded YouTube video belongs to a different channel.")
+        if verified["channel_id"] != channel_id:
+            raise HTTPException(status_code=409, detail="Uploaded YouTube video channel could not be verified as the connected channel.")
         if privacy_status == "public" and verified["privacy_status"] != "public":
             _ensure_public_approval_active(approval_hash, calendar_id, video_id, channel_id, title, file_hash)
             _youtube_apply_public_approval(approval_hash, calendar_id, video_id, channel_id,
