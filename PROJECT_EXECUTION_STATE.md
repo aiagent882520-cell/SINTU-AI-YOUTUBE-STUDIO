@@ -409,3 +409,21 @@ Last updated: 2026-11-17 15:52 UTC
 - Reviewed the repository tree (154 tracked files) and scanned the application Python modules, Termux/automation scripts, core renderer/health/production/upload modules, and primary frontend JS/CSS/HTML assets for `TODO`, `FIXME`, `XXX`, and `NotImplementedError`.
 - No such markers were found in the scanned runtime/source files. This is a source-marker scan, not proof that every feature/integration is complete; live Android and external-provider checks remain necessary.
 - GitHub's code-search index is unavailable for this repository, so no server-side repository-wide code-search result is claimed.
+
+
+### Required historical issue/module audit — 2026-11-18
+
+- #85 engine probe: Android SUCCESS. Device was Android 15/aarch64, 8 CPU cores, about 3.0 GB free home storage; llama-server binary exists but server unreachable and no model files; stable-diffusion.cpp binaries absent; ComfyUI unreachable/unconfigured. Probe performed no model downloads or rendering. Engine readiness is therefore NOT complete.
+- #86 media repair: Android SUCCESS, 15 files scanned, 9 audio streams repaired, 6 already valid, 0 repair failures. Each repaired video stream was copied without re-encoding and originals were backed up. This only repaired audio compatibility; it did not repair black visual content.
+- #87 health audit: Android FAILED exit 1, but it predates #86 and its audio failures are stale after the repair. Pytest in that audit passed (531 tests, 5 deprecation warnings).
+- #89 automation self-test: Android SUCCESS, seven checks passed; authenticated GitHub CLI, API, bridge/worker and relay lock confirmed.
+- #90 post-repair health audit: Android FAILED because the five known black MP4s remained full-duration black. Later #100 reported 534 pytest passed (5 warnings), 13 health checks PASS, 0 WARN, 5 FAIL; all five failures were those black videos.
+- #92 resumable YouTube upload and #93 public-visibility safety: implementation PRs merged and GitHub CI/unit tests passed. Live Google OAuth/channel and real upload/visibility verification remain blocked by unconfigured owner credentials/channel. No upload or public visibility change has occurred.
+- #95 remains OPEN: five black MP4s require source/render provenance and verified repair; original media and backups remain protected.
+- #119 Android API test: SUCCESS, 187 passed, 5 warnings, exit 0.
+- #126 restart command: SUCCESS; output says restart scheduled after queue result acknowledgement, but no independent post-restart health check is present.
+- #127 full run_tests and #129 health_audit: still only claimed, no completion comment, exit code, log or artifact. Await built-in 40-minute stale-claim recovery; do not duplicate.
+- #128 automation self-test: SUCCESS, seven checks passed.
+- #125 initial forensic: FAILED exit 1 due inaccurate FFprobe timestamp seeking; sampler defect is confirmed and fixed in merged PR #136.
+- #138 post-merge forensic attempt: FAILED exit 1 because it was claimed before #137 finished deploying the merge, so it ran old code. #139 then passed the merged forensic regression suite (20 passed, exit 0).
+- #140 post-merge forensic attempt: FAILED exit 1. Five-point frame sampling/sequential fallback worked for the targets visible in the output, but the relay's 8k cap removed the compact footer and obscured the full per-file/tool-failure summary. A new run is required after the relay output-cap fix is merged and deployed.
