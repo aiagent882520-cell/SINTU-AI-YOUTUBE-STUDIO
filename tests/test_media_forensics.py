@@ -141,3 +141,14 @@ def test_inspect_video_builds_report_from_three_frame_probes(tmp_path, monkeypat
     assert [item["timestamp"] for item in report["decoded_frame_samples"]] == [
         "0.000000", "5.000000", "9.958333"
     ]
+
+
+def test_frame_sample_rejects_only_preceding_keyframe_results(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_forensics, "run", lambda *args, **kwargs: {
+        "returncode": 0,
+        "stdout": '{"frames":[{"best_effort_timestamp_time":"4.000000","pict_type":"I"}]}',
+        "stderr": "",
+    })
+    sample = media_forensics.sample_decoded_frame(tmp_path / "clip.mp4", 5.0, "middle")
+    assert sample["timestamp"] is None
+    assert sample["error"] == "no decoded frame at or after the requested timestamp"
