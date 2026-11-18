@@ -343,8 +343,8 @@ def test_compact_forensic_summary_preserves_five_targets_under_relay_tail_cap():
     footer = media_forensics.compact_forensic_summary(report)
     assert len(footer["targets"]) == 5
     assert all(len(target["samples"]) == 5 for target in footer["targets"])
-    assert all(target["backups"][0]["sha256"] == "b" * 64 for target in footer["targets"])
-    assert all(len(target["black_frame_metrics"]["pblack_values"]) == 30 for target in footer["targets"])
+    assert all(target["backups"][0][2] == "b" * 64 for target in footer["targets"])
+    assert all(len(target["black_frames"]["pblack"]) == 30 for target in footer["targets"])
     import json as json_module
     assert len(json_module.dumps(footer, separators=(",", ":"))) < 7000
 
