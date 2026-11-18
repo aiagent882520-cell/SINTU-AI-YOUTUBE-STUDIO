@@ -142,10 +142,10 @@ def test_inspect_video_builds_report_from_three_frame_probes(tmp_path, monkeypat
     assert media_forensics.has_forensic_tool_failure(report) is False
     assert report["frame_probe_exit"] == 0
     assert [item["sample"] for item in report["decoded_frame_samples"]] == [
-        "first", "middle", "last"
+        "first", "quarter", "middle", "three_quarter", "last"
     ]
     assert [item["timestamp"] for item in report["decoded_frame_samples"]] == [
-        "0.000000", "5.000000", "9.958333"
+        "0.000000", "2.500000", "5.000000", "7.500000", "9.958333"
     ]
 
 
@@ -169,7 +169,9 @@ def test_forensic_tool_failure_is_not_hidden_by_existing_video_file():
                      "streams": [{"type": "video"}]},
         "decoded_frame_samples": [
             {"sample": "first", "timestamp": "0.0", "error": ""},
+            {"sample": "quarter", "timestamp": "1.0", "error": ""},
             {"sample": "middle", "timestamp": "2.0", "error": ""},
+            {"sample": "three_quarter", "timestamp": "3.0", "error": ""},
             {"sample": "last", "timestamp": "3.9", "error": ""},
         ],
         "full_duration_black": True,
