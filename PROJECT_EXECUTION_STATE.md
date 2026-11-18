@@ -472,3 +472,12 @@ Last updated: 2026-11-17 15:52 UTC
 - Issue #147 `restart_services` was closed with state_reason `not_planned`, label still `sintu-command-queued`, and **no worker claim or result comment**. Do not count this as a successful restart; the in-memory relay reload remains UNVERIFIED.
 - Issue #127 `run_tests` was recovered from its stale claim and reclaimed at 10:10:02 UTC. It is currently running; no final exit code or report yet.
 - PR #149 adds a real two-scene fade-render integration regression and missing-scene-image rejection test. It also adds forensic environment diagnostics for exact FFmpeg/FFprobe executable paths, versions, required filter availability, Python/platform/Termux version, file read permissions, and temporary-storage write/free-space checks. CI run #1248: Python 3.11–3.14 and security audit PASS; Docker PASS; offline E2E/motion audit still running at this checkpoint.
+
+
+### Android post-PR143 queue and PR149 forensic diagnostics — 2026-11-18 10:10 UTC
+
+- #145 automation_self_test: SUCCESS at 10:09:57 UTC; 7 checks passed (Python 3.14.10, authenticated gh CLI, API healthy, bridge worker online, automation-only active, relay singleton lock held).
+- #146 git_pull_ff_only: SUCCESS at 10:09:43 UTC; Termux fast-forwarded from `3335107` to `dc3ec28`, including PR #143 FIFO queue and 20k output-retention code.
+- #147 restart_services was closed/reopened without any worker claim or result comment. No restart success evidence exists; relay in-memory reload remains UNVERIFIED.
+- #127 run_tests was recovered from stale claim and reclaimed at 10:10:02 UTC; still running with no final exit code at this checkpoint.
+- PR #149 adds renderer fade integration coverage and forensic toolchain diagnostics (FFmpeg/FFprobe paths, versions, filter availability, Python/platform/Termux version, target permissions, temp directory write/free-space). Its initial CI run #1248 passed all seven jobs; latest diagnostic changes require a fresh CI run before merge.
