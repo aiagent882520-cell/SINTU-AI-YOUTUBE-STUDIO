@@ -25,3 +25,13 @@ def test_service_launcher_explains_when_github_issue_relay_cannot_start():
     assert "GitHub command issues will remain queued" in launcher
     assert "GitHub issue relay: $GITHUB_RELAY_STATUS." in launcher
     assert "gh auth status >/dev/null 2>&1" in launcher
+
+
+def test_watchdog_clears_reused_pid_reference_without_signalling_unrelated_process():
+    script = (ROOT / "scripts" / "termux_watchdog.sh").read_text(encoding="utf-8")
+    assert "Cannot verify PID" in script
+    assert "Stale PID reference" in script
+    assert 'rm -f "$file"' in script
+    assert "not signalling unrelated process" in script
+    assert "return 1" in script
+    assert 'if [ "$restart" -eq 1 ] && [ "$unsafe" -eq 0 ]; then' in script
