@@ -307,6 +307,22 @@ def inspect_video(path: Path) -> dict:
     }
 
 
+def has_forensic_tool_failure(item: dict) -> bool:
+    """Distinguish a completed black-video finding from failed forensic tooling."""
+    if not item.get("exists") or not item.get("safe_regular_file"):
+        return True
+    for key in ("ffprobe_exit", "blackdetect_exit", "decode_exit", "frame_probe_exit"):
+        if item.get(key) != 0:
+            return True
+    metadata = item.get("metadata") or {}
+    if metadata.get("parse_error") or not metadata.get("format") or not metadata.get("duration_seconds"):
+        return True
+    if not any(stream.get("type") == "video" for stream in metadata.get("streams", [])):
+        return True
+    samples = item.get("decoded_frame_samples") or []
+    return len(samples) != 3 or any(sample.get("error") or not sample.get("timestamp") for sample in samples)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true")
@@ -319,8 +335,15 @@ def main() -> int:
             for asset in nearby_assets(datetime.fromisoformat(reference_time).timestamp()):
                 assets[asset["path"]] = asset
     needles = tuple(value for name in TARGETS for value in (name, Path(name).stem))
+    tool_failures = sum(1 for item in videos if has_forensic_tool_failure(item))
     report = {
         "status": "READ_ONLY_FORENSICS",
+        "summary": {
+            "target_count": len(videos),
+            "inspected_count": sum(1 for item in videos if item.get("exists")),
+            "full_duration_black_count": sum(1 for item in videos if item.get("full_duration_black")),
+            "forensic_tool_failure_count": tool_failures,
+        },
         "targets": videos,
         "candidate_source_assets": list(assets.values()),
         "production_log_matches": scan_text_logs(needles),
@@ -330,7 +353,7 @@ def main() -> int:
         "note": "The audio repair used copy2 backups before replacing MP4s; backup mtimes are preferred for source correlation because current MP4 mtimes may reflect audio repair. Technical evidence only; no repair, quarantine, deletion, regeneration, or upload was performed.",
     }
     print(json.dumps(report, ensure_ascii=False, separators=(",", ":")))
-    return 0 if all(item.get("exists") for item in videos) else 1
+    return 1 if tool_failures else 0
 
 
 if __name__ == "__main__":
