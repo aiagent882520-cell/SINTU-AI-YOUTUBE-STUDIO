@@ -33,6 +33,7 @@ QUEUED_LABEL = "sintu-command-queued"
 RUNNING_LABEL = "sintu-command-running"
 DONE_LABEL = "sintu-command-done"
 FAILED_LABEL = "sintu-command-failed"
+MAX_ISSUE_OUTPUT_CHARS = 20_000
 PYTHON = str(ROOT / ".venv" / "bin" / "python")
 if not Path(PYTHON).exists():
     PYTHON = sys.executable
@@ -237,7 +238,7 @@ def process_issue(github: GitHub, issue: dict) -> bool:
                  **({"SINTU_QUEUE_EXECUTOR": "github_termux_relay"} if action == "restart_services" else {})},
         )
         success = completed.returncode == 0
-        output = (completed.stdout or "")[-8000:] or "(no command output)"
+        output = (completed.stdout or "")[-MAX_ISSUE_OUTPUT_CHARS:] or "(no command output)"
         status = "SUCCESS" if success else f"FAILED (exit {completed.returncode})"
         label = DONE_LABEL if success else FAILED_LABEL
     except subprocess.TimeoutExpired:
