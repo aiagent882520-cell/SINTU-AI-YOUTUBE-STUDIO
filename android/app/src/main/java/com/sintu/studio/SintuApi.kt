@@ -59,6 +59,24 @@ data class TaskDto(
     val model: String? = null
 )
 data class ProjectGenerateResponse(val project: ProjectDto, val task: TaskDto)
+data class ProductionRunCreateRequest(val format_id: String, val topic: String)
+data class ProductionRunCreateResponse(
+    val run_id: String,
+    val status: String = "queued",
+    val detail: String = ""
+)
+data class ProductionMediaRequest(
+    val scene_prompts: List<String> = emptyList(),
+    val narration: String? = null,
+    val subtitles: List<String> = emptyList(),
+    val burn_subtitles: Boolean = true,
+    val sound_effects_enabled: Boolean = true,
+    val sound_effects_volume: Double = 0.18,
+    val seconds_per_scene: Int = 4,
+    val resolution: String? = null,
+    val fps: Int = 30,
+    val quality: String = "high"
+)
 
 internal fun sessionCookieOrigin(url: HttpUrl): String = "${url.scheme}://${url.host}:${url.port}"
 
@@ -123,6 +141,18 @@ private interface SintuService {
 
     @POST("api/projects/{id}/generate")
     suspend fun generateProject(@Path("id") id: String, @Body body: ProjectGenerateRequest): Response<ProjectGenerateResponse>
+
+    @POST("api/production/runs")
+    suspend fun startProductionRun(@Body body: ProductionRunCreateRequest): Response<ProductionRunCreateResponse>
+
+    @GET("api/production/runs/{runId}")
+    suspend fun productionRunStatus(@Path("runId") runId: String): Response<Map<String, Any?>>
+
+    @POST("api/production/runs/{runId}/produce-media")
+    suspend fun produceApprovedMedia(
+        @Path("runId") runId: String,
+        @Body body: ProductionMediaRequest
+    ): Response<Map<String, Any?>>
 }
 
 class SintuApi(context: Context, baseUrl: String) {
@@ -166,6 +196,12 @@ class SintuApi(context: Context, baseUrl: String) {
         service.createProject(body).bodyOrThrow()
     suspend fun generateProject(id: String): ProjectGenerateResponse =
         service.generateProject(id, ProjectGenerateRequest()).bodyOrThrow()
+    suspend fun startProductionRun(formatId: String, topic: String): ProductionRunCreateResponse =
+        service.startProductionRun(ProductionRunCreateRequest(formatId, topic)).bodyOrThrow()
+    suspend fun productionRunStatus(runId: String): Map<String, Any?> =
+        service.productionRunStatus(runId).bodyOrThrow()
+    suspend fun produceApprovedMedia(runId: String): Map<String, Any?> =
+        service.produceApprovedMedia(runId, ProductionMediaRequest()).bodyOrThrow()
 
     companion object {
         fun normalizeBaseUrl(raw: String): String {
