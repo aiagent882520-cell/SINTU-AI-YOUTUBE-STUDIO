@@ -60,21 +60,25 @@ data class TaskDto(
 )
 data class ProjectGenerateResponse(val project: ProjectDto, val task: TaskDto)
 
+internal fun sessionCookieOrigin(url: HttpUrl): String = "${url.scheme}://${url.host}:${url.port}"
+
 private class PersistentSessionCookieJar(private val store: SecureSessionStore) : CookieJar {
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-        cookies.firstOrNull { it.name == SESSION_COOKIE }?.let { cookie ->
+        cookies.firstOrNull { it.name == SESSION_COOKIE && it.matches(url) }?.let { cookie ->
             if (cookie.expiresAt <= System.currentTimeMillis()) store.clear()
-            else store.save(cookie.toString())
+            else store.save(cookie.toString(), sessionCookieOrigin(url))
         }
     }
 
     override fun loadForRequest(url: HttpUrl): List<Cookie> {
-        val raw = store.read() ?: return emptyList()
+        // Never re-parse a stored cookie against an arbitrary newly configured host:
+        // doing so would silently rebind the old session to that host.
+        val raw = store.read(sessionCookieOrigin(url)) ?: return emptyList()
         val cookie = Cookie.parse(url, raw) ?: run {
             store.clear()
             return emptyList()
         }
-        if (cookie.expiresAt <= System.currentTimeMillis()) {
+        if (cookie.expiresAt <= System.currentTimeMillis() || !cookie.matches(url)) {
             store.clear()
             return emptyList()
         }
