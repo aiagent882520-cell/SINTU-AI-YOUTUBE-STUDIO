@@ -49,7 +49,7 @@ jobs:
           if ! fc-match -f '%{family}' 'Noto Sans' | grep -qi 'Noto Sans'; then
             packages+=(fonts-noto-core)
           fi
-          if (("${#packages[@]}" > 0)); then
+          if [[ ${#packages[@]} -gt 0 ]]; then
             sudo apt-get install -y --no-install-recommends "${packages[@]}"
           fi
           ffmpeg -version
