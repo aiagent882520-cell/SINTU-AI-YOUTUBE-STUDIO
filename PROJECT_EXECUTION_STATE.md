@@ -580,3 +580,38 @@ Last updated: 2026-11-17 15:52 UTC
 - Actual worker crash-recovery test terminated and watchdog-recovered both processes: bridge-worker old PID 10629 -> new PID 23191; API server old PID 10605 -> new PID 23614.
 - This verifies process termination/restart in the current Termux session. A full Android device reboot was not tested.
 - Issue #160 is now RUNNING to pull latest main (including PR #158 and #165); #161 media forensic, #162 regression tests, #163 self-test and #164 health audit remain queued behind it.
+
+
+### Master execution checkpoint — Android forensic #161 and current gates — 2026-11-18
+
+#### Deployment and forensic execution
+- Issue #160 deployed the then-current main update to Android Termux successfully (fast-forward bb0b84a..d93e376; changed PROJECT_EXECUTION_STATE.md, scripts/media_forensics.py, and tests/test_media_forensics.py).
+- Issue #161 forensic command completed SUCCESS / exit 0 on Android 15 aarch64, Termux 0.118.3, Python 3.14.10, FFmpeg/FFprobe 9.0.2. FFmpeg filters blackdetect, blackframe, fps and scale were available; temp directory writable with about 29.18 GB free. Five targets, zero forensic tool failures.
+- All five originals were readable MP4 containers with H.264/yuv420p 720x1280 video and AAC 48 kHz stereo; decoding and five distributed timestamp samples succeeded. No files were modified, deleted, moved, uploaded or published.
+
+#### Five-file independent decoded-pixel evidence
+| File | Duration | Size | SHA-256 | Pixel samples |
+|---|---:|---:|---|---|
+| 3f4c2151e8e640109f464b2c2e9b7569.mp4 | 9.041667s | 196438 | 4b5c125e81261ebedef0968d215f87d69364f896752c72b9d9a0b6e669fd0396 | 5/5 mean luma 0; 100% pixels <=16; near-black |
+| 59430f1fb7fd4bdf80cf8b7d9f456098.mp4 | 9.041667s | 196438 | 4b5c125e81261ebedef0968d215f87d69364f896752c72b9d9a0b6e669fd0396 | 5/5 mean luma 0; 100% pixels <=16; near-black |
+| 8cfe9da88d5c43d184f3572e371ff4a6.mp4 | 6.083333s | 98194 | fd1023d304e38153e15f7876a422d223cce28381f79c4505c07ba86a32127e1c | 5/5 mean luma 0; 100% pixels <=16; near-black |
+| adf9268e5d5543a587defdde5d4c4edd.mp4 | 4.083333s | 60792 | f46f03498f43b84b4989b6986218796b6973378fd302b698be96b415af25b6cf | 5/5 mean luma 22.11; stddev 1.571; 0.122% pixels <=16; not strict near-black |
+| afa4c87e3c1e42a197b7092e0e24040d.mp4 | 6.083333s | 139741 | dc3d29df1a6d941b0b1dc54261b47f2a9b2a2a0d578b1300970ed976600e72ea | 5/5 mean luma 22.11; stddev 1.571; 0.122% pixels <=16; not strict near-black |
+
+- The first three are independently confirmed fully black in all five decoded pixel samples and blackframe reports 30/30 (100%).
+- The last two remain detector-disagreement cases: blackdetect reports full-duration black, while blackframe reports 0/30 and decoded pixels are consistently low-luma gray (mean 22.11), not strict near-black under the pixel verifier. Their actual visual acceptability is NOT proven by these numeric thumbnails; retain FAIL/REVIEW and do not call them repaired or publishable. Investigate blackdetect threshold semantics and obtain human-visible frame review before disposition.
+- Prior backup hashes remain recorded in the earlier #155 evidence section. No repair or regeneration is authorized until source provenance is proven. Exact production log/database matches remain absent. Candidate source images do not establish per-file provenance.
+
+#### Current execution queue and CI
+- Issue #145 Android automation self-test returned SUCCESS / exit 0, JSON ok=true, 7/7 checks (repository/origin, Python 3.14.10, GitHub CLI auth, Studio API, bridge-worker heartbeat under automation-only gate, relay singleton lock). This is not complete lifecycle acceptance by itself.
+- Issue #159 Android watchdog test returned SUCCESS / exit 0; bridge-worker and API process were terminated and restarted by watchdog. Full Android device reboot was not tested.
+- Issue #127 prior Android run returned 593 passed, 5 warnings / exit 0, but it preceded latest forensic changes. Issue #162 is currently claimed/running to rerun the suite on the updated checkout; no final result/exit code yet.
+- Issue #163 (automation_self_test) and #164 (health_audit) exist with sintu-command-queued; no result comments yet. Wait for relay completion and capture actual exit codes.
+- Latest main ref at this checkpoint: 30f3fcbb893e1551112f721bdda0ebc77f6fa4a3. Main CI run #1276 for this SHA is queued. Previous exact-head PR #165 CI run #1272 passed Python 3.11/3.12/3.13/3.14, security, offline video E2E/motion and Docker build/health. Runs #1273–#1275 on intervening main heads were cancelled; do not treat them as failures or as validation. Await #1276.
+
+#### Gate and safety disposition
+- Issue #129 remains a failed health audit: historical result 13 PASS / 5 FAIL; five media failures unresolved.
+- Issue #145 is a successful 7/7 automation self-test but full worker lifecycle gates remain incomplete pending #162/#163 and detailed queue/retry/shutdown checks.
+- Issue #127 requires the updated Android regression rerun #162 before it can be considered current.
+- All five MP4s remain UNRESOLVED pending independent visual review and proven source provenance; first three confirmed black, last two ambiguous low-luma detector disagreements. No original or backup has been changed.
+- Video production remains PAUSED; public YouTube publishing remains DISABLED; no upload/publication or paid service was used.
