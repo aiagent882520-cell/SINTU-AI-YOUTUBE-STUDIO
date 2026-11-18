@@ -668,3 +668,12 @@ Last updated: 2026-11-17 15:52 UTC
 - Blackdetect now uses `pix_th=0.08`; blackframe luma threshold17 captures limited-range Y=16; Pillow black-pixel threshold remains16. A target is full-duration black only when blackdetect spans the duration, >=29/30 blackframe samples are black, and all five decoded pixel samples are near-black.
 - PR #168 remains open for additional stale/reused PID safety in Termux startup/watchdog. Its initial code was reviewed; the optional automatic llama-server startup was removed to avoid unexpected RAM use. Latest branch head `131214568a929434cf729ddd42890c7e99d851f0`; CI run #1288 pending/queued at checkpoint. PR #167 was closed as superseded by PR #168.
 - New post-PR #166 Android queue: #170 pull latest main; #171 forensic rerun; #172 health audit; #173 regression suite; #174 automation self-test. These results are required before changing production gates.
+
+
+
+### PR #168 merged — Termux stale PID identity and watchdog safety — 2026-11-18 12:17 UTC
+- PR #168 exact-head CI run #1288 passed Python 3.11–3.14, dependency security audit, production Docker build and offline branded-video E2E/motion audit.
+- PR #168 merged to main as `200344b6b39d8c3230432c879b4a437e4f048836`.
+- Startup now verifies process command identity for API, bridge worker, relay and watchdog PID files. If a readable PID belongs to another process, it clears only the stale PID-file reference and never signals that unrelated process. If identity cannot be read, it fails closed. A healthy API is not duplicated. Watchdog clears verified stale references and restarts normally.
+- Removed automatic llama-server startup from core service recovery; optional model startup must be explicitly chosen to avoid surprise RAM consumption.
+- Android has not yet pulled PR #168; current Termux tree is at PR #166 commit `b93538d`. Queue a fresh pull and watchdog recovery test after current #172–#174 health/test/self-test jobs finish.
