@@ -294,3 +294,10 @@ Last updated: 2026-11-17 15:52 UTC
 - TODO/FIXME repository-wide scan is not certified complete: GitHub code-search API returned zero results with `incomplete_results=true`; a complete repo-wide grep still requires an actual checked-out repo execution. No claim of zero TODO/FIXME markers is made.
 - OAuth code review: authorization start requires client ID/secret/redirect URI and Fernet encryption key; requested scopes include YouTube upload/read-only and Analytics read-only/monetary read-only. Callback validates one-time session-bound state, exchanges code, queries `channels.list?mine=true`, and encrypts persisted tokens. Refresh uses refresh_token. These are code/test findings, not live Google verification.
 - Main workflow run `44258897879` for this checkpoint: security audit, Python 3.11–3.14 all PASS; Docker build and offline video E2E were still running at the last poll. Recheck before calling the documentation commit fully green.
+
+
+### Single Android relay bootstrap required
+- Cloud-side inspection cannot start a Termux process or read the device filesystem. The relay's queued commands have no claim/completion comments. To bootstrap the existing local relay once, run this single command in the Termux session on the Android device:
+  `cd ~/SINTU-AI-YOUTUBE-STUDIO && bash scripts/termux_apply_update.sh`
+- This script performs `git pull --ff-only origin main`, safely stops only PID-tracked SINTU processes whose command lines match, starts the API, bridge worker, GitHub issue relay and watchdog, and verifies the local API health endpoint. It does not enable production or publish videos.
+- After the command, the existing queued issues #118–#133 should be claimed sequentially by the Termux relay; each must return its own exit code and logs. Do not mark any device job passed until those comments arrive.
