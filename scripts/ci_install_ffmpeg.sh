@@ -8,19 +8,27 @@ has_ffmpeg() {
 }
 
 if ! has_ffmpeg; then
-  installed=0
-  for attempt in 1 2 3; do
-    echo "Installing distro FFmpeg (attempt ${attempt}/3)"
-    if timeout 300 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq &&
-       timeout 600 sudo apt-get install -y --no-install-recommends ffmpeg; then
-      installed=1
-      break
-    fi
-    if [[ "${attempt}" -lt 3 ]]; then sleep "$((attempt * 5))"; fi
-  done
-  if [[ "${installed}" -ne 1 ]]; then
-    echo "FFmpeg installation failed after three bounded attempts." >&2
-    exit 1
+  echo "Installing distro FFmpeg with a strict total time bound."
+
+  # Try the runner's existing apt package indexes first. GitHub-hosted
+  # Ubuntu images commonly have fresh indexes, so avoid a slow apt update
+  # when the package can be installed immediately.
+  if ! timeout 120 sudo apt-get \
+      -o Acquire::Retries=1 \
+      -o Acquire::http::Timeout=20 \
+      -o Acquire::https::Timeout=20 \
+      install -y --no-install-recommends ffmpeg; then
+    echo "Cached package indexes unavailable; refreshing once."
+    timeout 180 sudo apt-get \
+      -o Acquire::Retries=1 \
+      -o Acquire::http::Timeout=20 \
+      -o Acquire::https::Timeout=20 \
+      update -qq
+    timeout 300 sudo apt-get \
+      -o Acquire::Retries=1 \
+      -o Acquire::http::Timeout=20 \
+      -o Acquire::https::Timeout=20 \
+      install -y --no-install-recommends ffmpeg
   fi
 fi
 
