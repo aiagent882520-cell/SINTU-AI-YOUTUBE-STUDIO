@@ -175,3 +175,13 @@ Last updated: 2026-11-17 15:52 UTC
 - Public publishing remains disabled in operation. No approval token was issued and no public upload occurred. Video production remains PAUSED / automation-only.
 - Last resource evidence remains historical: ~1.03 GiB available RAM, ~27.69 GiB free home storage, no local GGUF model and no configured/reachable ComfyUI workflow. No heavy model installation is authorized without a fresh compatibility/resource check.
 - Full Android reboot/Termux:Boot recovery and a controlled Android test-video production run remain unverified.
+
+
+### Continuation update — CI retry and renderer review (2026-11-18)
+
+- CI workflow installs were adjusted to refresh apt package indexes only when FFmpeg/FFprobe or offline media dependencies are missing. The stale runs `44227162141` and `44227174258` were cancelled after the workflow correction.
+- Current PR validation runs: PR #122 run `44228282539`; PR #121 run `44228289142`. At checkpoint, PR #122 Python 3.13/3.14 plus dependency audit passed; Python 3.11/3.12 were still installing FFmpeg. PR #121 Python 3.11/3.12 plus dependency audit passed; Python 3.13/3.14 were still installing FFmpeg. No merge until all required checks, including offline video E2E and Docker build, are green.
+- Renderer source review found a concrete quality-gate gap: `verify_publishable_mp4` only performed sampled motion checks when duration exceeded 8 seconds. The five known black files include clips shorter than 8 seconds, so they could evade the old motion-only branch if otherwise valid. PR #122 now runs blackdetect and visible-pixel sampling for short and long MP4s, while retaining motion checks for longer clips.
+- Renderer source already rejects near-black input images and the storyboard path requires a real image for each scene. This does not prove which source image produced the five failed device files; their source provenance remains unverified pending a complete fresh Termux forensic report.
+- The independent frame-sample fix in PR #121 uses separate FFprobe `-read_intervals` calls for first/middle/last points; tests verify independent seeks, closest timestamp selection, missing-frame diagnostics, and compact report integration.
+- Prior state entries above that say resumable upload/public approval are unimplemented are historical snapshots and are superseded by the later entries: PR #101/#108/#111 are merged and deployed through Termux commit `f9500f0`. Actual Android regression remains pending.
