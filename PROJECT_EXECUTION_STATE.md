@@ -336,5 +336,5 @@ Last updated: 2026-11-17 15:52 UTC
 ### Relay-safe forensic evidence footer — 2026-11-18
 
 - The failed #125 comment retained only the final 8,000 characters, cutting off the first part of the one-line JSON and preventing a complete per-file audit from the GitHub result.
-- PR #136 now adds a compact `SINTU_FORENSICS_SUMMARY=` footer after the full JSON. It preserves all five targets' hashes, sizes, duration/streams, black intervals, decode/sample exit data, sample errors/methods, backup hashes, source-candidate image metrics, provenance match counts and safety flags within the relay's output tail.
+- PR #136 now adds a compact `SINTU_FORENSICS_SUMMARY=` footer after the full JSON. It preserves all five targets' hashes, sizes, duration/streams, black intervals, decode/sample exit data, sample errors/methods, backup hashes, source-candidate image metrics, bounded redacted production-log excerpts, database provenance excerpts and safety flags within the relay's output tail.
 - A regression test asserts the compact footer retains per-file evidence and remains under the 8,000-character relay cap for the fixture.
