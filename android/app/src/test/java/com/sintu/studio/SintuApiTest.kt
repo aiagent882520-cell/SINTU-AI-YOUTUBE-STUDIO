@@ -155,3 +155,13 @@ class SintuApiTest {
     }
 
 }
+
+
+    @Test
+    fun offlineMediaDefaultsUsePhoneSafeRenderProfile() {
+        val request = ProductionMediaRequest()
+        assertEquals("720x1280", request.resolution)
+        assertEquals(24, request.fps)
+        assertEquals("standard", request.quality)
+        assertEquals(true, request.burn_subtitles)
+    }
