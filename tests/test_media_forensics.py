@@ -110,7 +110,7 @@ def test_frame_sample_selects_frame_closest_to_requested_timestamp(tmp_path, mon
     assert sample["picture_type"] == "P"
 
 
-def test_inspect_video_builds_report_from_three_frame_probes(tmp_path, monkeypatch):
+def test_inspect_video_builds_report_from_five_frame_probes(tmp_path, monkeypatch):
     import json
 
     monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
@@ -135,7 +135,7 @@ def test_inspect_video_builds_report_from_three_frame_probes(tmp_path, monkeypat
         if command[0] == "ffmpeg" and "blackdetect=d=0.10:pix_th=0.10" in command:
             return {"returncode": 0, "stdout": "", "stderr": ""}
         if command[0] == "ffmpeg" and any("blackframe=" in part for part in command):
-            return {"returncode": 0, "stdout": "", "stderr": "pblack:0\npblack:0\npblack:0"}
+            return {"returncode": 0, "stdout": "", "stderr": "pblack:0\n" * 30}
         return {"returncode": 0, "stdout": "", "stderr": ""}
 
     monkeypatch.setattr(media_forensics, "run", fake_run)
