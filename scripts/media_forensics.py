@@ -676,7 +676,7 @@ def compact_forensic_summary(report: dict) -> dict:
             "exit": [
                 item.get("ffprobe_exit"), item.get("blackdetect_exit"),
                 item.get("blackframe_exit"), item.get("decode_exit"),
-                item.get("frame_probe_exit"),
+                item.get("frame_probe_exit"), item.get("pixel_probe_exit"),
             ],
             "black_frames": {
                 "count": metrics.get("sampled_frame_count"),
