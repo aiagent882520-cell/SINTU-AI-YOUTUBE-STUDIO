@@ -145,6 +145,8 @@ def render_text(report: dict) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, default=DATA_DIR / "diagnostics")
+    parser.add_argument("--run-automation-self-test", action="store_true",
+                        help="also run the read-only GitHub/Termux control-plane self-test")
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     report = build_report(run_automation=args.run_automation_self_test)
