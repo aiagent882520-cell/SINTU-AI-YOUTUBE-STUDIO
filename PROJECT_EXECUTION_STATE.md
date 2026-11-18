@@ -322,3 +322,12 @@ Last updated: 2026-11-17 15:52 UTC
 - Issue #119 completion is confirmed at 09:26:46 UTC: 187 passed, 5 warnings, 140.16 seconds, exit 0. Exact worker-comment timestamp is not exposed by the GitHub connector.
 - FFmpeg official FFprobe documentation explicitly warns that `-read_intervals` seeking is not accurate and that a relative interval end is calculated from the actual seek point, not the requested timestamp. This confirms the sampler's incorrect assumption as a code-level root cause; the exact seek offset for each MP4 is unavailable because the Termux relay truncated the report's leading JSON. Reference: https://ffmpeg.org/ffprobe.html
 - PR #136 CI run 44276456647: dependency audit PASS; Python 3.11/3.12/3.13/3.14 test jobs are running. Setup, FFmpeg/FFprobe verification, compile, Termux shell syntax and browser JS syntax steps have passed in the matrix so far. Offline E2E and Docker jobs are pending matrix completion. Do not merge yet.
+
+
+### FFprobe sampler root-cause reproduction — 2026-11-18
+
+- Reproduced the exact failure mechanism in a disposable synthetic MP4 (6 seconds, 30 fps, MPEG-4 GOP/keyframe interval 150; no user media touched). Command equivalent: `ffprobe -read_intervals '2.000000%+1' -show_frames ...`.
+- Observed fast-seek output ended at timestamp **0.966667s**, despite the requested target being 2.000000s. The sequential-from-zero interval `0%+3.000000` returned frames through **2.966667s**. This directly reproduces the middle/last sample failure: FFprobe seeks to an earlier keyframe, then computes the relative +1s end from the actual seek point, not from the requested timestamp.
+- FFprobe's official documentation explicitly warns both that interval seeking is not accurate and that the relative interval end is computed from the seek point actually found. Therefore the **forensic sampler code defect is CONFIRMED**. Exact per-file seek offsets on the five Termux MP4s remain unavailable because the result comment was tail-truncated.
+- PR #136 now includes both a mocked regression test and a real FFmpeg/FFprobe long-GOP integration regression. The fallback remains bounded to 120 seconds and reports failure if no qualifying frame is decoded; it never masks missing tools or decode errors.
+- This finding does not identify why the five encoded video streams contain black pixels. Renderer/source-asset root cause remains UNKNOWN pending full source/render provenance and a new device forensic report.
