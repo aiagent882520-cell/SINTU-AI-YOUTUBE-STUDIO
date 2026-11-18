@@ -225,5 +225,5 @@ def test_publish_gate_rejects_long_black_segment_even_when_most_frames_are_visib
         "-pix_fmt", "yuv420p", "-t", "12", "-movflags", "+faststart", str(candidate),
     ], capture_output=True, timeout=60, check=False)
     assert created.returncode == 0, created.stderr.decode("utf-8", "replace")
-    with pytest.raises(RenderFailed, match="long black segment"):
+    with pytest.raises(RenderFailed, match="lamba black segment"):
         verify_publishable_mp4(candidate)
