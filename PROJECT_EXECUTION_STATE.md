@@ -927,3 +927,33 @@ Evidence: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/commit/c
 - Important boundary: E2E used procedural images, eSpeak NG Hindi and procedural music. It does not prove ComfyUI/generative-AI image generation. The previously probed Android phone had ~1.1 GiB available RAM; no ComfyUI install, PyTorch build, model download, service change, media render or network change was performed.
 - PR #194 is OPEN and Ready for Review; not merged.
 
+
+
+## Execution update — 2026-11-18 — Android-first offline pipeline and black-MP4 provenance
+
+### PR #195 — Android-first offline media fallback
+- Branch `fix/android-offline-image-fallback`; exact head `6d03c4b67114e44208028c1196c9b37efe1b05df`; CI run `44346410053` completed SUCCESS (7/7): Python 3.11–3.14, dependency security audit, production Docker build/health check, and offline branded-video E2E/motion audit all PASS.
+- Corrected image engine selection: a missing `comfyui_available` field no longer defaults to assuming ComfyUI is reachable. Regression tests exercise the actual Pillow procedural fallback at portrait and landscape dimensions and verify its metadata explicitly says it is **not generative AI**.
+- Termux Hindi TTS discovery now prefers `espeak-ng`, then `espeak`, while respecting an explicitly configured `ESPEAK_EXECUTABLE`. Initial CI exposed a malformed newline fixture in the new test; the fixture was corrected and exact-head CI passed.
+- Added `docs/ANDROID_FIRST_OFFLINE_MEDIA.md` documenting procedural images, local TTS, procedural music and FFmpeg, with explicit capability/resource boundaries.
+- PR #195 remains OPEN + DRAFT; not merged. No model download, ComfyUI install, paid API, or media file changes.
+
+### PR #190 — native Android final-MP4 integration
+- Branch `feature/native-android-client`; latest head `cfb05ae3be9bf6db1763afd653810234cb237f83`.
+- Added Retrofit methods for `/api/production/runs`, run status, and `/produce-media`. Android Video screen now starts a format-specific run, refreshes status, and enables final MP4 rendering only when the backend reports `completed` (all configured builder/checker/reviewer gates have passed).
+- Added a bounded (500 MB) authenticated MP4 download to Android MediaStore `Movies/SINTU`; this requires Android 10+ and removes a partial file if download fails.
+- At checkpoint time, exact-head Android build and backend CI for `cfb05ae3...` were still running (runs `44346795787` and `44346795859`). Earlier head `e52db8ec...` passed Android build, but it predates the download addition; do not treat that earlier pass as validation of the latest code.
+- PR #190 remains OPEN + DRAFT; not merged. No physical-device install, download or thermal/storage test has been performed. The Android production-run workflow still requires a configured local text model/provider for specialist generation; the offline image/TTS/music fallback alone does not supply an LLM.
+
+### PR #193 — provenance-aware black-MP4 forensics
+- Branch `feature/production-media-provenance`; latest head `ece496d1e5b8b7207d314be5eaa204fdbf04d1f1`.
+- Extended the read-only forensic scanner to match a video or pre-repair backup SHA-256 against private render manifests, then verify recorded source-asset hashes. The compact report now carries matching run/format/engine/input-hash evidence.
+- Added regression coverage for current-file matching, pre-repair-backup matching, source hash verification and path-traversal rejection. Manifest paths are bounded to `SINTU_DATA_DIR`; malformed, oversized or symlinked manifests are ignored.
+- Exact-head CI run `44346264930`: all four Python test jobs, dependency security audit and production Docker build passed; offline branded-video E2E/motion audit was still running at checkpoint time.
+- This creates future and backup-linked provenance evidence only. It does not retroactively prove the source of the three historical black MP4s, and no original or backup was modified.
+
+### Website / full-pipeline boundary
+- The existing `app/static/production_studio.js` already starts `/api/production/runs`, polls the production run, waits for `completed`, calls `/produce-media`, and exposes the final MP4 link. The current website path therefore has more end-to-end integration than the native Android client; its real phone-hosted operation still depends on a configured text model and installed local TTS/FFmpeg.
+- The 60-format catalog and 15-module registry remain catalogs/scope definitions, not proof of 60 independent successful MP4 workflows. No all-60 format E2E evidence exists.
+- Phone constraints remain authoritative: do not install ComfyUI/PyTorch or download diffusion weights to the low-memory Android phone. Procedural illustrations must not be labelled AI-generated. Keep production and external publishing gates closed until on-device validation and all acceptance gates pass.
+- No PR was merged; no production deploy, YouTube upload, public publish, paid API, or original-media modification was performed.
