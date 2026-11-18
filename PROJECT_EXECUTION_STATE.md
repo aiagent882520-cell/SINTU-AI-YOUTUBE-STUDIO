@@ -481,3 +481,12 @@ Last updated: 2026-11-17 15:52 UTC
 - #147 restart_services was closed/reopened without any worker claim or result comment. No restart success evidence exists; relay in-memory reload remains UNVERIFIED.
 - #127 run_tests was recovered from stale claim and reclaimed at 10:10:02 UTC; still running with no final exit code at this checkpoint.
 - PR #149 adds renderer fade integration coverage and forensic toolchain diagnostics (FFmpeg/FFprobe paths, versions, filter availability, Python/platform/Termux version, target permissions, temp directory write/free-space). Its initial CI run #1248 passed all seven jobs; latest diagnostic changes require a fresh CI run before merge.
+
+
+### Android queue after #129 recovery — 2026-11-18 10:10 UTC
+
+- #145 automation_self_test completed SUCCESS at 10:09:57 UTC: 7 checks passed (Python 3.14.10, authenticated gh CLI, API healthy, bridge worker online, automation-only active, relay singleton lock held).
+- #146 git_pull_ff_only completed SUCCESS at 10:09:43 UTC; Termux fast-forwarded from `3335107` to `dc3ec28`, including PR #143 FIFO queue and 20k output-retention code.
+- #147 restart_services has no worker claim or result comment and was closed/reopened as not_planned; **restart is NOT verified**. The in-memory relay reload remains outstanding.
+- #127 run_tests was recovered and reclaimed at 10:10:02 UTC; it is currently running, with no final exit code or report yet.
+- PR #149 adds renderer fade integration coverage and forensic toolchain diagnostics (FFmpeg/FFprobe paths, versions, filter availability, Python/platform/Termux version, target permissions, temp directory write/free-space). Its initial CI run #1248 passed all seven jobs; later diagnostic commits require a fresh CI run before merge.
