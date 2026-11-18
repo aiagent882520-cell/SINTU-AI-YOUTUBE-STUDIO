@@ -916,3 +916,14 @@ Evidence: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/commit/c
 - The three first targets remain pixel-confirmed full-black files. Their historic per-file generation inputs are not conclusively attributed. The generated music WAV at `2026-11-13T02:42:34.789838Z` and the third MP4 backup at `02:42:36.833838Z` are temporally correlated by 2.044 seconds, but this is not proof that the WAV caused or supplied video frames.
 - The old concat/fade renderer defect was reproduced with bright inputs and the fix is already on main. Exact production request linkage for each historic MP4 remains unknown.
 - Do not alter originals/backups, regenerate or publish any target until source inputs are proven and owner review is completed. Production rendering and external publishing gates remain closed.
+
+### PR #194 — Android-safe ComfyUI resource readiness gate
+- Branch `feat/comfyui-resource-readiness-gate`; exact head `4750fa6277ddff4c6955a22f9846f9eada460ae6`; CI run `44342524162` completed SUCCESS (7/7).
+- Python 3.11/3.12/3.13/3.14: each 623 passed, 5 warnings; dependency security audit PASS; production Docker build + health check PASS; offline branded-video E2E/motion audit PASS.
+- Added a read-only `setup_gate` to `scripts/engine_probe.py`: Android/Termux is blocked; a separate non-Termux host is eligible only for manual review with >=8 GiB currently available RAM and >=20 GiB free disk. Unknown disk capacity is blocked. `auto_install_allowed=false` and `install_performed=false` always.
+- Documented that these are conservative screening thresholds, not performance guarantees; GPU/driver, model license/size, PyTorch and custom-node compatibility still need separate review.
+- Optimized CI Hindi voice/font setup to try cached apt indexes first and bound retries/timeouts. Exact-head CI completed without the previous long apt-index update.
+- Offline artifact `sintu-offline-video-e2e`: 1,880,535 bytes; SHA-256 `8eed6d282570cee58e1fa4df933f84f1a398de68af80d66393dba9f317183d41`. 32.04s, 720×1280 H.264/yuv420p, AAC 48kHz stereo, zero black intervals, 32 sampled frames, motion ratio 0.742, audit 2 PASS / 0 warnings / 0 failures.
+- Important boundary: E2E used procedural images, eSpeak NG Hindi and procedural music. It does not prove ComfyUI/generative-AI image generation. The previously probed Android phone had ~1.1 GiB available RAM; no ComfyUI install, PyTorch build, model download, service change, media render or network change was performed.
+- PR #194 is OPEN and Ready for Review; not merged.
+
