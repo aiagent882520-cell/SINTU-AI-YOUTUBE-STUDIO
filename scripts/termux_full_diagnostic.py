@@ -81,7 +81,7 @@ def media_inventory() -> dict:
     return {"directory": str(MEDIA_DIR), "count": len(files), "files": files}
 
 
-def build_report() -> dict:
+def build_report(run_automation: bool = False) -> dict:
     git_head = run(["git", "rev-parse", "HEAD"])
     git_status = run(["git", "status", "--short", "--branch"])
     pip_check = run([sys.executable, "-m", "pip", "check"], timeout=60)
@@ -96,6 +96,16 @@ def build_report() -> dict:
             engine_json = json.loads(engine.get("stdout", ""))
         except json.JSONDecodeError:
             engine_json = {"parse_error": True}
+    automation_result = {"status": "NOT_RUN"}
+    if run_automation:
+        automation_run = run([sys.executable, "scripts/automation_self_test.py", "--json"], timeout=180)
+        automation_result = {
+            "status": "PASS" if automation_run.get("exit_code") == 0 else "FAIL",
+            "exit_code": automation_run.get("exit_code"),
+            "stdout": automation_run.get("stdout", ""),
+            "stderr": automation_run.get("stderr", ""),
+            "error": automation_run.get("error"),
+        }
     return {
         "project": "SINTU AI YOUTUBE STUDIO",
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -111,8 +121,7 @@ def build_report() -> dict:
         "android": {"apk_files_found": apk_files,
                     "note": "APK presence is not installation or physical-device verification."},
         "media": media_inventory(),
-        "automation_self_test": {"status": "NOT_RUN",
-            "instruction": "Run scripts/automation_self_test.py --json separately; this diagnostic is read-only."},
+        "automation_self_test": automation_result,
         "safety": {"models_downloaded": False, "render_started": False,
                    "services_changed": False, "media_modified": False,
                    "uploads_performed": False, "publishing_performed": False},
@@ -134,7 +143,7 @@ def render_text(report: dict) -> str:
         f"Backend reachable: {report['backend']['reachable']} ({report['backend']['url']})",
         f"Android APK files found: {len(report['android']['apk_files_found'])}",
         f"MP4 inventory: {report['media']['count']} files in {report['media']['directory']}",
-        "Automation self-test: " + str(report["automation_self_test"].get("status")),
+        "Automation self-test: " + str(report.get("automation_self_test", {}).get("status", "NOT_RUN")).replace("NOT_RUN", "NOT RUN"),
         "Safety: read-only; no model download, render, service change, media modification or upload.",
         "",
         "Full evidence is in the matching JSON report.",
