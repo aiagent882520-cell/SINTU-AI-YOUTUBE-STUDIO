@@ -67,13 +67,23 @@ else
 fi
 
 # Restore the ChatGPT/GitHub-to-Termux issue relay after Android reboot.
-if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+# Do not silently report all workers as running when GitHub authentication is
+# unavailable: queued GitHub commands cannot reach this device without it.
+GITHUB_RELAY_STATUS="not started"
+if ! command -v gh >/dev/null 2>&1; then
+  echo "[WARN] GitHub issue relay not started: GitHub CLI (gh) is not installed." >&2
+  echo "[WARN] Install gh, then run 'gh auth login' in Termux." >&2
+elif ! gh auth status >/dev/null 2>&1; then
+  echo "[WARN] GitHub issue relay not started: GitHub CLI is not authenticated." >&2
+  echo "[WARN] Run 'gh auth login' in Termux; credentials are never printed by this launcher." >&2
+else
   if [ -f "$LOG_DIR/github-relay.pid" ] && kill -0 "$(cat "$LOG_DIR/github-relay.pid")" 2>/dev/null; then
-    :
+    GITHUB_RELAY_STATUS="existing relay PID is alive"
   else
     : > "$LOG_DIR/github-relay.log"
     nohup .venv/bin/python scripts/github_termux_relay.py >>"$LOG_DIR/github-relay.log" 2>&1 </dev/null &
     echo $! > "$LOG_DIR/github-relay.pid"
+    GITHUB_RELAY_STATUS="relay start requested"
   fi
 fi
 
@@ -90,4 +100,9 @@ if [[ "$WATCHDOG_CMD" != *"scripts/termux_watchdog.sh"* ]]; then
   echo $! > "$WATCHDOG_PID_FILE"
 fi
 
-echo "SINTU API and Termux workers are running."
+echo "SINTU API and local bridge worker startup complete."
+if [[ "$GITHUB_RELAY_STATUS" == "not started" ]]; then
+  echo "[WARN] GitHub issue relay is offline; GitHub command issues will remain queued until gh is installed and authenticated." >&2
+else
+  echo "GitHub issue relay: $GITHUB_RELAY_STATUS."
+fi
