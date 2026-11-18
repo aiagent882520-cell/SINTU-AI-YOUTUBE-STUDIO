@@ -49,3 +49,5 @@ def test_startup_validates_pid_command_identity_and_clears_only_stale_references
     assert "API health is already OK; cleared stale server PID reference" in launcher
     assert 'pid_is_expected "$LOG_DIR/bridge-worker.pid"' in launcher
     assert 'pid_is_expected "$LOG_DIR/github-relay.pid"' in launcher
+    assert "Local LLM servers are deliberately not auto-started" in launcher
+    assert "llama-server -m" not in launcher
