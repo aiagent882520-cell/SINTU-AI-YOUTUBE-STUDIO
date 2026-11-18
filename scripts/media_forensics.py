@@ -454,7 +454,7 @@ def has_forensic_tool_failure(item: dict) -> bool:
     if not any(stream.get("type") == "video" for stream in metadata.get("streams", [])):
         return True
     black_metrics = item.get("black_frame_metrics") or {}
-    if black_metrics.get("sampled_frame_count", 0) <= 0:
+    if black_metrics.get("sampled_frame_count") != 30:
         return True
     samples = item.get("decoded_frame_samples") or []
     return len(samples) != 5 or any(sample.get("error") or not sample.get("timestamp") for sample in samples)
