@@ -15,7 +15,7 @@ permissions:
 # Keep only the newest validation for a branch/PR; stale commits must not
 # occupy runners while the current head waits in the queue.
 concurrency:
-  group: sintu-ci-${{ github.workflow }}-${{ github.ref }}
+  group: sintu-ci-${{ github.workflow }}-${{ github.ref }}-ffmpeg-action-v1
   cancel-in-progress: true
 
 jobs:
