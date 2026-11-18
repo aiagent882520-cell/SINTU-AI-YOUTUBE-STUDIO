@@ -830,3 +830,21 @@ def test_real_dark_gray_mp4_is_not_misclassified_as_full_black(tmp_path):
                for sample in report["decoded_frame_samples"])
     assert media_forensics.has_forensic_tool_failure(report) is False
 
+
+def test_nearby_assets_includes_generated_music_directory(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    music_dir = tmp_path / "generated_music"
+    music_dir.mkdir()
+    music = music_dir / "nearby.wav"
+    music.write_bytes(b"RIFF" + b"\\x00" * 40)
+    reference_time = 1_700_000_000
+    os.utime(music, (reference_time, reference_time))
+
+    assets = media_forensics.nearby_assets(reference_time)
+
+    assert len(assets) == 1
+    assert assets[0]["path"] == "generated_music/nearby.wav"
+    assert assets[0]["size_bytes"] == music.stat().st_size
+
