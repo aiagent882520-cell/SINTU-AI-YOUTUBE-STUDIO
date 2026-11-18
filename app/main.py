@@ -343,6 +343,27 @@ def init_db():
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(tasks)")}
         if "output" not in columns:
             conn.execute("ALTER TABLE tasks ADD COLUMN output TEXT")
+        conn.execute("""CREATE TABLE IF NOT EXISTS ai_conversations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner_user_id INTEGER NOT NULL,
+            title TEXT NOT NULL DEFAULT 'New conversation',
+            workflow TEXT NOT NULL DEFAULT 'content',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS ai_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id INTEGER NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('user','assistant')),
+            content TEXT NOT NULL,
+            provider TEXT NOT NULL DEFAULT '',
+            model TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'completed',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(conversation_id) REFERENCES ai_conversations(id)
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_conversations_owner_updated ON ai_conversations(owner_user_id,updated_at DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_messages_conversation_id ON ai_messages(conversation_id,id)")
         conn.execute("""CREATE TABLE IF NOT EXISTS admin_users (
             id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','editor','viewer')),
@@ -461,6 +482,16 @@ init_db()
 class TaskInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=10000)
     workflow: str = Field(default="content", max_length=80)
+
+class ConversationCreateInput(BaseModel):
+    title: str = Field(default="", max_length=160)
+    workflow: str = Field(default="content", max_length=80)
+
+class ConversationTitleInput(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+
+class ConversationMessageInput(BaseModel):
+    content: str = Field(min_length=1, max_length=12000)
 
 class YouTubeCommentReviewInput(BaseModel):
     comment_id: str = Field(min_length=1, max_length=200)
@@ -3715,6 +3746,171 @@ def cancel_calendar_item(item_id: int):
             raise HTTPException(status_code=409, detail="This calendar item cannot be cancelled.")
         conn.execute("UPDATE content_calendar SET status='Cancelled' WHERE id=?", (item_id,))
     return {"id": item_id, "status": "Cancelled"}
+
+
+def _conversation_owner_id(request: Request) -> int:
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required.")
+    return int(user.get("id") or 0)
+
+
+def _owned_conversation(conversation_id: int, owner_id: int):
+    with db() as conn:
+        row = conn.execute(
+            "SELECT id,owner_user_id,title,workflow,created_at,updated_at FROM ai_conversations WHERE id=? AND owner_user_id=?",
+            (conversation_id, owner_id),
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return dict(row)
+
+
+@app.get("/api/conversations")
+def list_conversations(request: Request):
+    owner_id = _conversation_owner_id(request)
+    with db() as conn:
+        rows = conn.execute(
+            """SELECT c.id,c.title,c.workflow,c.created_at,c.updated_at,
+                      (SELECT content FROM ai_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_message
+               FROM ai_conversations c WHERE c.owner_user_id=? ORDER BY c.updated_at DESC LIMIT 100""",
+            (owner_id,),
+        ).fetchall()
+    return {"conversations": [dict(row) for row in rows]}
+
+
+@app.post("/api/conversations")
+def create_conversation(payload: ConversationCreateInput, request: Request):
+    if payload.workflow not in WORKFLOW_GUIDES:
+        raise HTTPException(status_code=400, detail="Unknown workflow.")
+    owner_id = _conversation_owner_id(request)
+    now = datetime.now(timezone.utc).isoformat()
+    title = payload.title.strip() or "New conversation"
+    with db() as conn:
+        cur = conn.execute(
+            "INSERT INTO ai_conversations(owner_user_id,title,workflow,created_at,updated_at) VALUES(?,?,?,?,?)",
+            (owner_id, title, payload.workflow, now, now),
+        )
+    return {"id": cur.lastrowid, "title": title, "workflow": payload.workflow, "created_at": now, "updated_at": now}
+
+
+@app.get("/api/conversations/{conversation_id}")
+def get_conversation(conversation_id: int, request: Request):
+    owner_id = _conversation_owner_id(request)
+    conversation = _owned_conversation(conversation_id, owner_id)
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT id,role,content,provider,model,status,created_at FROM ai_messages WHERE conversation_id=? ORDER BY id ASC",
+            (conversation_id,),
+        ).fetchall()
+    return {"conversation": conversation, "messages": [dict(row) for row in rows]}
+
+
+@app.patch("/api/conversations/{conversation_id}")
+def rename_conversation(conversation_id: int, payload: ConversationTitleInput, request: Request):
+    owner_id = _conversation_owner_id(request)
+    _owned_conversation(conversation_id, owner_id)
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Conversation title cannot be empty.")
+    now = datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        conn.execute(
+            "UPDATE ai_conversations SET title=?,updated_at=? WHERE id=? AND owner_user_id=?",
+            (title, now, conversation_id, owner_id),
+        )
+    return {"id": conversation_id, "title": title, "updated_at": now}
+
+
+@app.delete("/api/conversations/{conversation_id}")
+def delete_conversation(conversation_id: int, request: Request):
+    owner_id = _conversation_owner_id(request)
+    _owned_conversation(conversation_id, owner_id)
+    with db() as conn:
+        conn.execute("DELETE FROM ai_messages WHERE conversation_id=?", (conversation_id,))
+        conn.execute("DELETE FROM ai_conversations WHERE id=? AND owner_user_id=?", (conversation_id, owner_id))
+    return {"id": conversation_id, "deleted": True}
+
+
+@app.post("/api/conversations/{conversation_id}/messages")
+def send_conversation_message(conversation_id: int, payload: ConversationMessageInput, request: Request):
+    owner_id = _conversation_owner_id(request)
+    conversation = _owned_conversation(conversation_id, owner_id)
+    user_text = payload.content.strip()
+    if not user_text:
+        raise HTTPException(status_code=400, detail="Message cannot be empty.")
+    now = datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO ai_messages(conversation_id,role,content,status,created_at) VALUES(?,?,?,?,?)",
+            (conversation_id, "user", user_text, "received", now),
+        )
+        history = conn.execute(
+            "SELECT role,content FROM ai_messages WHERE conversation_id=? ORDER BY id DESC LIMIT 10",
+            (conversation_id,),
+        ).fetchall()
+        conn.execute(
+            "UPDATE ai_conversations SET updated_at=? WHERE id=? AND owner_user_id=?",
+            (now, conversation_id, owner_id),
+        )
+    history = list(reversed(history))
+    context_lines = []
+    for item in history:
+        role = "यूज़र" if item["role"] == "user" else "SINTU"
+        context_lines.append(f"{role}: {item['content'][-4000:]}")
+    prompt = (
+        "You are SINTU, a helpful Hindi/English AI assistant. Continue this conversation naturally. "
+        "Use the conversation history only as context; do not claim tools, web research, file access, "
+        "image understanding or media generation unless the relevant capability was actually used. "
+        "If a request needs an unavailable engine or external research, state that limitation clearly.\n\n"
+        "Conversation history (oldest first):\n" + "\n".join(context_lines)
+    )
+    try:
+        selected_provider = _get_app_setting("selected_provider", os.getenv("AI_PROVIDER", "auto").lower())
+        if selected_provider == os.getenv("AI_PROVIDER", "auto").lower():
+            result = generate_text(prompt, conversation["workflow"])
+        else:
+            result = generate_text(prompt, conversation["workflow"], selected_provider)
+    except ProviderNotConfigured as exc:
+        status, message = "blocked", str(exc)
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO ai_messages(conversation_id,role,content,status,created_at) VALUES(?,?,?,?,?)",
+                (conversation_id, "assistant", message, status, datetime.now(timezone.utc).isoformat()),
+            )
+        raise HTTPException(status_code=503, detail=message)
+    except ProviderRequestError as exc:
+        status, message = "failed", str(exc)
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO ai_messages(conversation_id,role,content,status,created_at) VALUES(?,?,?,?,?)",
+                (conversation_id, "assistant", message, status, datetime.now(timezone.utc).isoformat()),
+            )
+        raise HTTPException(status_code=502, detail=message)
+    completed_at = datetime.now(timezone.utc).isoformat()
+    with db() as conn:
+        cur = conn.execute(
+            "INSERT INTO ai_messages(conversation_id,role,content,provider,model,status,created_at) VALUES(?,?,?,?,?,?,?)",
+            (conversation_id, "assistant", result["output"], result["provider"], result["model"], "completed", completed_at),
+        )
+        message_id = cur.lastrowid
+        if conversation["title"] == "New conversation":
+            title = user_text.replace("\n", " ").strip()[:72] or "New conversation"
+            conn.execute(
+                "UPDATE ai_conversations SET title=?,updated_at=? WHERE id=? AND owner_user_id=?",
+                (title, completed_at, conversation_id, owner_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE ai_conversations SET updated_at=? WHERE id=? AND owner_user_id=?",
+                (completed_at, conversation_id, owner_id),
+            )
+    return {
+        "conversation_id": conversation_id,
+        "message": {"id": message_id, "role": "assistant", "content": result["output"],
+                    "provider": result["provider"], "model": result["model"],
+                    "status": "completed", "created_at": completed_at},
+    }
 
 
 @app.get("/api/tasks")
