@@ -11,11 +11,18 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 
+/** Minimal contract makes cookie-origin behavior testable without Android Keystore. */
+internal interface SessionCookieStore {
+    fun save(value: String, origin: String)
+    fun read(origin: String): String?
+    fun clear()
+}
+
 /** Stores the SINTU session cookie encrypted and binds it to the server origin that issued it. */
-class SecureSessionStore(context: Context) {
+class SecureSessionStore(context: Context) : SessionCookieStore {
     private val preferences = context.getSharedPreferences("sintu_secure_session", Context.MODE_PRIVATE)
 
-    fun save(value: String, origin: String) {
+    override fun save(value: String, origin: String) {
         require(origin.isNotBlank()) { "Session cookie origin must not be blank." }
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
@@ -28,7 +35,7 @@ class SecureSessionStore(context: Context) {
             .apply()
     }
 
-    fun read(origin: String): String? {
+    override fun read(origin: String): String? {
         val encoded = preferences.getString(COOKIE_KEY, null) ?: return null
         if (origin.isBlank() || preferences.getString(ORIGIN_KEY, null) != origin) {
             clear()
@@ -50,7 +57,7 @@ class SecureSessionStore(context: Context) {
         }
     }
 
-    fun clear() {
+    override fun clear() {
         preferences.edit().remove(COOKIE_KEY).remove(ORIGIN_KEY).apply()
     }
 
