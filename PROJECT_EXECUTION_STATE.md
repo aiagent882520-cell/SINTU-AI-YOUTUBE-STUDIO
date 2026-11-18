@@ -255,3 +255,30 @@ Last updated: 2026-11-17 15:52 UTC
 - Issue #undefined: `SINTU-CMD: operational_readiness` — queued for execution after the preceding Termux commands.
 - Issue #undefined: `SINTU-CMD: watchdog_recovery_test` — queued for execution after the preceding Termux commands.
 - These are unique follow-on jobs, not duplicates of #118–#120. They verify service restart, full Android pytest suite, automation, health/readiness, and watchdog recovery after the updated main branch is pulled.
+
+
+### One-time complete execution order checkpoint — 2026-11-18
+
+#### PRs / CI
+- PR #121 merged: `c0da836f11deb183ef3e2d83e621b378ae91c331`; all seven required checks passed, including Python 3.11–3.14 (571 passed / 5 warnings per version), dependency audit, Docker build, offline video E2E/motion audit.
+- PR #122 merged: `f2d7bfdbd4914ea17252937ce49332c687b0ddc8`; all seven required checks passed, including Python 3.11–3.14 (566 passed / 5 warnings per version), dependency audit, Docker build, offline video E2E/motion audit.
+- Both PRs were checked for mergeability/conflicts before squash merge. No open PRs found at the audit checkpoint. Branch-protection endpoint returned HTTP 403 Resource not accessible by integration; branch protection/required approvals cannot be independently verified through the connected GitHub permission.
+- Inspected PR #122 private offline Hindi video E2E artifact: 32.04s, 720x1280 H.264/yuv420p, AAC 48kHz stereo, 8 scenes, 32 sampled frames, 0 black intervals, motion ratio 0.742, media health audit 2 PASS / 0 WARN / 0 FAIL. Subtitle burn-in was not part of this CI fixture. No upload.
+
+#### Upload recovery and public approval software
+- Issue #92 closed completed after main-branch implementation/tests verified: durable chunked upload recovery, server-acknowledged offset probing, bounded retries, encrypted session persistence, changed-source protection, restart recovery, expired-session handling, duplicate prevention. `tests/test_youtube_upload_recovery.py` has 11 named tests.
+- Issue #93 closed completed after main-branch implementation/tests verified: private default, one-time owner public approval bound to calendar/video/title/file hash/channel, 10-minute expiry, single-use, revocation, atomic consumption and resume-time revalidation. `tests/test_api.py` includes public rejection, exact binding, expiry/revocation, OAuth and resumable-upload tests; relay tests verify no public-publish worker action.
+- These software tests do not verify real Google OAuth credentials or an actual channel. No live upload/public publishing.
+
+#### Android relay queue — NOT YET EXECUTED
+- #118: run `tests/test_youtube_upload_recovery.py`; #119: run `tests/test_api.py`; #120: automation self-test. All remain queued with no device claim/result/exit code/log.
+- #124: fast-forward pull main; #125: read-only forensic report for five MP4s; #126: restart services; #127: full pytest; #128: automation self-test; #129: health audit; #130: operational readiness; #131: watchdog recovery. All remain queued with no Android execution evidence.
+- #132: fresh Android hardware/AI engine probe; #133: live preflight for local engine/OAuth configuration. Both queued after #131.
+- Termux worker and relay allowlists include the fixed actions, including read-only `media_forensics`; actual device poll/claim is not observable until Android posts completion comments.
+
+#### Remaining external/device blockers
+- Five original black MP4s cannot be freshly inspected or visually verified until #124–#125 execute on Android. Original files remain untouched; no regeneration/repair performed.
+- Android deployment/regression, service restart, watchdog recovery and fresh RAM/CPU/storage report remain pending actual Termux evidence.
+- OAuth client credentials, token encryption key and real connected YouTube channel were absent in the last verified preflight (Issue #91). User must configure locally/securely and complete owner OAuth consent; never share secrets in chat.
+- Historical Android probe: 3.76GB RAM total, ~1.106GB available, ~27.69GB home free; no local GGUF model or reachable llama.cpp/ComfyUI/Piper model. #132 is the fresh probe.
+- Production remains PAUSED; public publishing remains DISABLED. No paid model/cloud resources installed or purchased.
