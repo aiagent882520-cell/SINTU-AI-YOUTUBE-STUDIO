@@ -158,3 +158,20 @@ Last updated: 2026-11-17 15:52 UTC
 4. Re-run Android health/media audit only after a verified, backup-first resolution of the black assets; do not queue duplicate audits without a specific code/media change.
 5. Keep AI/model installation blocked until a fresh resource probe shows safe memory headroom; do not install large models automatically.
 6. Verify full Android reboot/Termux:Boot with owner participation; a process watchdog test is not a full reboot test.
+
+
+## Live continuation checkpoint — 2026-11-18 (latest)
+
+- Main branch remains at `f9500f084008dcacfac68d116dff975f395b02f5`; CI run `44142453479` passed all 7 jobs.
+- Termux deployment: Issue #115 confirmed fast-forward `3efd4b2..f9500f0`; Issue #116 confirmed SINTU API and Termux workers running.
+- Android jobs #118 (upload recovery tests), #119 (API/public-approval tests), and #120 (automation self-test) remain open with `sintu-command-queued`; no worker claim/result comments have arrived. They are not Android PASS.
+- Issue #117 was closed before execution because the deployed forensic sampler was found to select from a truncated full-frame dump. Do not reuse that report as final evidence. Queue a new `media_forensics` job only after PR #121 is merged and deployed.
+- PR #121 (`fix/forensics-independent-frame-samples`) corrects forensic frame sampling using independent timestamp probes and reports explicit per-sample errors. Latest CI run `44227174258` is in progress; no merge/deployment yet.
+- PR #122 (`fix/publish-gate-rejects-black-mp4`) adds full-duration black detection and visible-pixel checks to `verify_publishable_mp4`, with real FFmpeg tests for full-black valid-AAC video and partial-black intro with visible content. Latest CI run `44227162141` is in progress; no merge/deployment yet.
+- The previous PR #122 run `44226776165` completed all four Python test suites, dependency audit, and Docker build successfully; offline branded-video E2E was still in progress. This run used an earlier workflow revision, so the latest run remains authoritative.
+- Issues #85, #86, #89, #98, #115, and #116 are closed with `sintu-command-done`. Issues #87, #90, and #100 are closed with `sintu-command-failed`; #100 reported 13 PASS / 0 WARN / 5 FAIL and pytest 534 passed / 5 warnings. The five media failures are still full-duration black videos.
+- Issues #92 and #93 remain open: implementation PRs #101, #108, and #111 are merged and included in the Termux deployment, but Android regression jobs #118–#119 have not returned. OAuth credentials, token-encryption secret, and connected channel remain unavailable; no live YouTube OAuth/upload has been verified.
+- Issue #95 remains open. All five MP4s remain untouched; no confirmed source provenance, regeneration, quarantine, or repair of their visual content has been completed. Audio repair #86 does not repair black frames.
+- Public publishing remains disabled in operation. No approval token was issued and no public upload occurred. Video production remains PAUSED / automation-only.
+- Last resource evidence remains historical: ~1.03 GiB available RAM, ~27.69 GiB free home storage, no local GGUF model and no configured/reachable ComfyUI workflow. No heavy model installation is authorized without a fresh compatibility/resource check.
+- Full Android reboot/Termux:Boot recovery and a controlled Android test-video production run remain unverified.
