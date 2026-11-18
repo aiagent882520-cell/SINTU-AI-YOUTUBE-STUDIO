@@ -52,6 +52,7 @@ from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable,
 from .image_generator import generate_image, image_status, ImageUnavailable, ImageGenerationFailed, IMAGE_DIR
 from .music_generator import generate_music, music_status, MusicUnavailable, MusicGenerationFailed
 from .video_generator import generate_video, video_status, VideoUnavailable, VideoGenerationFailed, AI_VIDEO_DIR
+from .media_provenance import write_render_manifest
 from .production_runtime import create_run as create_production_run, get_run as get_production_run, list_runs as list_production_runs, execute_run as execute_production_run, attach_render_result, recover_interrupted_runs
 from .earning_system import router as earning_router, sync_youtube_estimate
 from .security import RequestRateLimiter, client_address_allowed, same_origin_request
@@ -4762,6 +4763,29 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 sound_effects_volume=payload.sound_effects_volume,
                 fps=payload.fps, quality=payload.quality,
             )
+        manifest = write_render_manifest(
+            data_dir=DATA_DIR,
+            run_id=run_id,
+            format_id=run["format_id"],
+            topic=run.get("topic", ""),
+            output_path=OUTPUT_DIR / rendered["filename"],
+            asset_paths=[*image_paths, audio_path, music_matches[0]],
+            settings={
+                "resolution": resolution,
+                "fps": payload.fps,
+                "quality": payload.quality,
+                "seconds_per_scene": payload.seconds_per_scene,
+                "scene_count": len(scene_prompts),
+                "subtitles_burned_in": bool(subtitle_lines),
+            },
+            engines={
+                "image": str((image_result.get("provider") if not use_procedural_2d else "SINTU Procedural 2D Animation") or "local"),
+                "voice": str(voice_result.get("provider") or "local"),
+                "music": str(music_result.get("provider") or "local"),
+                "renderer": "FFmpeg",
+            },
+        )
+        rendered["provenance_manifest"] = manifest["manifest_path"]
         updated = attach_render_result(run_id, rendered, owner)
         return {
             "run_id": run_id, "status": updated["status"],
