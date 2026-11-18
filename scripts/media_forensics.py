@@ -300,7 +300,12 @@ def inspect_video(path: Path) -> dict:
             raw = json.loads(probe["stdout"])
             fmt = raw.get("format", {})
             info["format"] = fmt.get("format_name")
-            info["duration_seconds"] = float(fmt.get("duration") or 0)
+            parsed_duration = float(fmt.get("duration") or 0)
+            if math.isfinite(parsed_duration) and parsed_duration > 0:
+                info["duration_seconds"] = parsed_duration
+            else:
+                info["duration_seconds"] = None
+                info["duration_error"] = "duration is not finite and positive"
             info["container_creation_time"] = (fmt.get("tags") or {}).get("creation_time")
             for stream in raw.get("streams", []):
                 info["streams"].append({
