@@ -452,3 +452,13 @@ Last updated: 2026-11-17 15:52 UTC
   `afa4c87e3c1e42a197b7092e0e24040d.mp4`.
 - Other media checks passed. This confirms the remaining failure is visual content, not Python regression or AAC/H.264 profile. No originals changed.
 - #127 was requeued at 10:04:09 UTC and is awaiting execution. #145 automation self-test, #146 git pull and #147 restart remain queued behind the current relay queue. Do not duplicate any of them.
+
+
+### Historical renderer root-cause confirmation — 2026-11-18 10:17 UTC
+
+- Historical pre-2026-11-15 `render_storyboard` at `b0e201846b27b71314427bb9e6097c76dd74aa6f` allowed empty `image_paths` (dark placeholder frames) and chained per-scene timestamped fade-out/fade-in filters after the concat demuxer without an `fps` expansion before the fades. Historical request defaults were `transition="fade"` and `motion="none"`.
+- Reproduced that exact old filter graph locally with FFmpeg 7.1.5 using two bright images: it generated an H.264/yuv420p MP4 of 4.083333s/98 frames at 24 fps; blackdetect reported a full-duration black interval and decoded RGB samples were all zero. A dark-placeholder input also produced all-black output.
+- The output signature exactly matches Android target `adf9268e5d5543a587defdde5d4c4edd.mp4` (4.083333s/98 frames). The other four target frame/duration profiles also align with the old storyboard renderer's 24-fps scene-duration output pattern. The historical renderer fix in commit `5310879ccdc57250ebd3798be1268a6b6bd277bf` requires real scene images, uses one opening/one closing fade, expands stills to CFR before filters, and verifies decoded visible pixels.
+- **Confirmed:** the historical renderer code contains a reproducible full-black output defect; it can blacken even bright input images. **Not confirmed:** exact per-file request/source linkage for all five originals, because no matching production log/database records exist and the Android FFmpeg version at original creation is not recorded. Do not claim each individual file's payload provenance is proven.
+- PR #149 adds a two-scene bright-image integration regression and missing-image rejection test; PR #151 adds raw per-frame blackframe percentages and a five-target compact footer. Both remain under CI/merge review at this checkpoint.
+- #127 Android full test suite remains running after stale-claim recovery; no exit code/result yet. #129 health audit completed FAILED exit 1 with 588 pytest PASS, 5 warnings, 13 health checks PASS and the five black MP4s as the only five failures.
