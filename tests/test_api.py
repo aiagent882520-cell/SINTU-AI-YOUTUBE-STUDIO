@@ -3273,6 +3273,7 @@ def test_production_run_render_requires_approved_matching_format(tmp_path, monke
     monkeypatch.setattr(main, "attach_render_result", lambda value, result, owner=None: {
         "status": "completed", "result": {"video_rendered": True}
     })
+    monkeypatch.setattr(main, "write_render_manifest", lambda **kwargs: {"manifest_path": "production_manifests/test.json"})
     payload = {"title": "Hindi short", "scenes": ["Opening"], "format_id": "youtube-shorts", "image_ids": ["d" * 32]}
     assert client.post(f"/api/production/runs/{run_id}/render", json=payload).status_code == 409
     state["status"] = "completed"
@@ -3480,6 +3481,7 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
     monkeypatch.setattr(main, "IMAGE_DIR", image_dir)
     monkeypatch.setattr(main, "AUDIO_DIR", audio_dir)
     monkeypatch.setattr(main, "MUSIC_DIR", music_dir)
+    monkeypatch.setattr(main, "write_render_manifest", lambda **kwargs: {"manifest_path": "production_manifests/test.json"})
 
     response = client.post(f"/api/production/runs/{run_id}/produce-media", json={
         "scene_prompts": ["पुराने किले का सिनेमाई दृश्य", "रहस्यमयी जंगल का दृश्य"],
@@ -3553,6 +3555,7 @@ def test_production_media_pipeline_uses_approved_storyboard_when_scene_prompts_o
         (image_dir / (str(i).zfill(32) + ".jpg")).write_bytes(b"image")
     (audio_dir / ("b" * 32 + ".wav")).write_bytes(b"audio")
     (music_dir / ("c" * 32 + ".wav")).write_bytes(b"music")
+    monkeypatch.setattr(main, "write_render_manifest", lambda **kwargs: {"manifest_path": "production_manifests/test.json"})
 
     response = client.post(f"/api/production/runs/{run_id}/produce-media", json={})
     assert response.status_code == 200, response.text
