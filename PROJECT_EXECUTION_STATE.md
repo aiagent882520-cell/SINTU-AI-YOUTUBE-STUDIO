@@ -499,3 +499,37 @@ Last updated: 2026-11-17 15:52 UTC
 - Video production remains PAUSED; public YouTube publishing remains DISABLED; no real upload or public publishing occurred; original media/backups were not modified by these inspections or PR #153.
 - Next: verify post-merge CI #1260; deploy main commit `7f6e4b2` to Android Termux; rerun forensic audit and retain all five full per-file reports plus the compact footer; verify backups/checksums and source/log/database mapping before any repair; then run the worker lifecycle and complete regression/health suites on-device and record actual timestamps/exit codes.
 - Do not close #127 or change any of the five MP4s to PASS without the actual result evidence. Keep the production gates closed until every required gate passes.
+
+
+
+### Evidence checkpoint — 2026-11-18 11:43 UTC
+
+#### Issue #155 — fresh Android forensic run after PR #153 deployment
+- Issue #154 deployed main commit `bb0b84a` to Termux successfully (exit 0; fast-forward `184abc8..bb0b84a`).
+- Issue #155 completed FAILED (exit 1). Environment: Android 15 aarch64, Termux 0.118.3, Python 3.14.10, FFmpeg/FFprobe 9.0.2; temp storage writable, 29,173,886,976 bytes free.
+- All five targets are readable, valid MP4 containers with H.264/yuv420p 720x1280 video and AAC 48kHz stereo. FFprobe/decode/blackdetect/blackframe process exits are 0 on all five. Full-duration blackdetect reports 5/5 full-black targets.
+- Two 9.041667s files, `3f4c2151e8e640109f464b2c2e9b7569.mp4` and `59430f1fb7fd4bdf80cf8b7d9f456098.mp4`, have identical size 196438 bytes and identical SHA-256 `4b5c125e81261ebedef0968d215f87d69364f896752c72b9d9a0b6e669fd0396`; their backups also match exactly (114124 bytes; SHA-256 `31ee4f180d8a2125238fd3462d08d33aeaa7ec7488265cc61da74e7166c22c06`). Both have black interval 0–9.0s. First/quarter/middle samples succeeded; three-quarter/last failed with `invalid sequential ffprobe frame-scan JSON`.
+- `8cfe9da88d5c43d184f3572e371ff4a6.mp4`: 98194 bytes, 6.083333s, SHA-256 `fd1023d304e38153e15f7876a422d223cce28381f79c4505c07ba86a32127e1c`; backup 52855 bytes, SHA-256 `2f7da8bfe9234621fdd15a4fa3c10a07331dfcd28fcc3bee3c59b03d739431d3`; black interval 0–6.041667s; all five timestamp samples succeeded; blackframe 30/30 (100%).
+- `adf9268e5d5543a587defdde5d4c4edd.mp4`: 60792 bytes, 4.083333s, SHA-256 `f46f03498f43b84b4989b6986218796b6973378fd302b698be96b415af25b6cf`; backup 36631 bytes, SHA-256 `be4f2c18d6acc1aa0033f28f913845d0f2098319f4190331ffc47ca3c52b9524`; black interval 0–4.041667s; all five samples succeeded; blackframe 0/30 (0%), conflicting with blackdetect.
+- `afa4c87e3c1e42a197b7092e0e24040d.mp4`: 139741 bytes, 6.083333s, SHA-256 `dc3d29df1a6d941b0b1dc54261b47f2a9b2a2a0d578b1300970ed976600e72ea`; backup 83440 bytes, SHA-256 `834b76b8143abc494b843f52e25f7230be5bcf7be857c17c89e7ce656450880a`; black interval 0–6.041667s; all five samples succeeded; blackframe 0/30 (0%), conflicting with blackdetect.
+- Summary: targets 5, full-black 5, forensic tool failures 2. FFmpeg filter capability probe falsely reported blackdetect/blackframe/fps unavailable although per-file filter commands returned exit 0. The root cause was bounded subprocess output: 16,000-character stdout truncation cut the beginning of late-sample FFprobe JSON, and 6,000-character stderr truncation could discard early FFmpeg filter names.
+
+#### PR #158 — permanent forensic output fix and regression coverage
+- PR #158: `fix/forensic-output-capture-and-fallback`, current head `7eb33013e65fff7735bdb625491185a662e01767`. It changes sequential FFprobe fallback to compact CSV, preserves bounded head and tail of tool output, and adds tests for late timestamps, large filter listings, missing/corrupt input, audio-only files, VFR timestamps, temp storage failure, missing FFmpeg/FFprobe, middle/last sampling failure, nonzero forensic exit, full-black, partial-black and valid non-black MP4.
+- CI run #1262 failed because an existing test still expected the old missing-frame error text after the new CSV fallback. That fixture was corrected.
+- CI run #1265 found a new test exposed that temp-storage write failure prevented free-space reporting. The code now checks free space independently from the write probe.
+- Latest CI run #1266 at this checkpoint: dependency audit PASS, Python 3.12 PASS; Python 3.11, 3.13 and 3.14 still running. Docker/E2E jobs have not yet been verified for this final PR head. Do not merge or deploy PR #158 until the exact-head full workflow is green.
+
+#### Worker / health / regression Android jobs
+- Issue #156 post-deployment Android automation self-test completed SUCCESS (exit 0), JSON `ok=true`, 7/7 checks: repository, origin, Python 3.14.10, GitHub CLI auth, Studio API, bridge/worker heartbeat with automation-only gate, and GitHub relay singleton lock. This is a basic health self-test, not full task lifecycle acceptance.
+- Issue #157 Android health audit remains OPEN/RUNNING; no final output or exit code has been posted yet. The previous known health result remains 13 PASS / 5 FAIL with five black MP4 failures.
+- Issue #127 Android full regression `run_tests` remains OPEN/RUNNING with repeated claims/stale-claim recovery comments but no final output or exit code. It is not PASS.
+- Issue #159 `watchdog_recovery_test` is queued to test real Termux worker/API process termination and watchdog restart after preceding queue jobs finish.
+- PR #149 was closed as superseded by merged PR #153; a comment records that the real renderer regression and environment diagnostics are already in main.
+
+#### Full-project readiness and safety
+- Issue #91 live preflight result remains relevant: local Qwen 2.5 3B service/model unavailable; ComfyUI image workflow path not configured and server unreachable; ComfyUI video unavailable; Piper model not configured (eSpeak NG Hindi fallback present); music composer available; FFmpeg/FFprobe available; YouTube OAuth credentials and token encryption not configured. No live tests were performed by that preflight.
+- Issues #92 (durable chunked resumable YouTube upload) and #93 (separate explicit public-visibility approval) are closed; PR #94 is merged. This is code implementation evidence, not OAuth credential or real upload verification.
+- Issue #95 now contains the full #155 per-file hashes, backup hashes, detector disagreement and forensic tooling diagnosis.
+- All five originals and backups remain untouched. No repair, regeneration, quarantine, deletion, upload, or public publishing occurred. Production remains PAUSED and public publishing DISABLED.
+- Next: finish PR #158 exact-head CI; merge only if all required jobs pass; deploy that exact commit to Termux; rerun #155 and verify decoded pixels independently; then complete #157, #127, and #159 with actual Android exit codes before any media remediation.
