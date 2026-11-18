@@ -543,3 +543,13 @@ Last updated: 2026-11-17 15:52 UTC
 - Android Issue #157 health audit and #127 full regression remain open/running with no final output or exit code at checkpoint. Do not mark them PASS. Issue #159 watchdog recovery test remains queued.
 - Queued after the watchdog test: #160 pull latest main; #161 post-PR #158 forensic rerun; #162 post-merge full pytest; #163 automation self-test; #164 health audit. All are read-only except normal service restart/recovery behavior; production remains paused.
 - Keep the five MP4s unresolved until #161 returns all five target records with zero tool failures and independent decoded-pixel evidence. No repair/regeneration is authorized until source provenance and pixel evidence are reconciled.
+
+
+
+### Android Health Audit #157 — final result, 2026-11-18 11:44:55 UTC
+- Issue #157 closed with `sintu-command-failed`, Android Termux exit 1.
+- Integrated pytest: **593 passed, 5 warnings in 282.72s (4m42s)**; pytest subcheck itself PASS / exit 0.
+- Health audit: **13 PASS, 0 WARN, 5 FAIL**. The five failed checks are exactly the five named full-duration-black MP4s; all other 13 checks passed.
+- Audit safety fields: `paid_services_used=false`, `publishing_performed=false`.
+- The audit confirms that the quality gate still blocks these five videos. It does not prove they are repaired; they remain unresolved.
+
