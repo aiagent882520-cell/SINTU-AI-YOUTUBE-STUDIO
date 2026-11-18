@@ -345,3 +345,55 @@ def test_publish_verifier_rejects_long_frozen_mp4(tmp_path):
     assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
     with pytest.raises(video_renderer.RenderFailed, match="slideshow-like"):
         video_renderer.verify_publishable_mp4(source)
+
+
+def test_two_scene_fade_render_preserves_visible_pixels(tmp_path, monkeypatch):
+    """Regression for the old concat + chained per-scene fade graph turning all frames black."""
+    _ffmpeg_tools()
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
+    image_paths = []
+    for index, color in enumerate(((220, 80, 40), (30, 180, 120)), start=1):
+        path = tmp_path / f"fade-scene-{index}.png"
+        canvas = Image.new("RGB", (160, 284), color)
+        draw = ImageDraw.Draw(canvas)
+        draw.rectangle((12, 12, 148, 272), outline=(255, 255, 255), width=6)
+        draw.ellipse((30, 60, 130, 200), fill=(245, 220, 40))
+        canvas.save(path)
+        image_paths.append(path)
+
+    result = video_renderer.render_storyboard(
+        "Two scene fade regression",
+        ["Bright opening", "Bright closing"],
+        seconds_per_scene=2,
+        image_paths=image_paths,
+        transition="fade",
+        motion="none",
+        resolution="720x1280",
+        fps=24,
+        quality="standard",
+    )
+
+    output = tmp_path / result["filename"]
+    assert output.is_file() and output.stat().st_size > 1000
+    verified = video_renderer._verify_rendered_output(
+        output, 720, 1280, expected_duration=4, require_audio=False, expected_fps=24,
+    )
+    assert verified["frame_count"] >= 96
+    assert verified["visible_frame_count"] >= 3
+    assert verified["longest_black_segment_seconds"] < 3.8
+
+
+def test_storyboard_renderer_rejects_missing_scene_images(tmp_path, monkeypatch):
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr(video_renderer.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+
+    def unexpected_ffmpeg(*args, **kwargs):
+        raise AssertionError("FFmpeg must not run when scene images are missing")
+
+    monkeypatch.setattr(video_renderer.subprocess, "run", unexpected_ffmpeg)
+    with pytest.raises(ValueError, match="real scene image required"):
+        video_renderer.render_storyboard(
+            "No blank placeholders", ["Opening", "Closing"],
+            seconds_per_scene=2, image_paths=[], transition="fade", motion="none",
+        )
+    assert list(tmp_path.iterdir()) == []
