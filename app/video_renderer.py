@@ -280,6 +280,10 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
     if require_audio is not None and has_audio != require_audio:
         raise RenderFailed("Final video audio stream expected setting se match nahi karti.")
 
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RendererUnavailable("Visual quality verification ke liye FFmpeg required hai.")
+
     # Reject full-black and long black segments at render time too, not
     # only when a later upload is attempted.
     try:
@@ -307,9 +311,6 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
 
     # Decode real pixels at one frame per second. Metadata-only checks let an
     # all-black H.264 file pass as a successful video; reject that failure mode.
-    ffmpeg = shutil.which("ffmpeg")
-    if not ffmpeg:
-        raise RendererUnavailable("Visual quality verification ke liye FFmpeg required hai.")
     try:
         pixels = subprocess.run(
             [ffmpeg, "-v", "error", "-i", str(path), "-vf", "fps=1,scale=32:32",
