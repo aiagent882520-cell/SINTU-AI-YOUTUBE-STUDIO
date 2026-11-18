@@ -185,3 +185,12 @@ Last updated: 2026-11-17 15:52 UTC
 - Renderer source already rejects near-black input images and the storyboard path requires a real image for each scene. This does not prove which source image produced the five failed device files; their source provenance remains unverified pending a complete fresh Termux forensic report.
 - The independent frame-sample fix in PR #121 uses separate FFprobe `-read_intervals` calls for first/middle/last points; tests verify independent seeks, closest timestamp selection, missing-frame diagnostics, and compact report integration.
 - Prior state entries above that say resumable upload/public approval are unimplemented are historical snapshots and are superseded by the later entries: PR #101/#108/#111 are merged and deployed through Termux commit `f9500f0`. Actual Android regression remains pending.
+
+
+### Latest CI/test checkpoint — 2026-11-18
+
+- PR #122 run `44229086746`: dependency audit PASS; Python 3.11 and 3.13 test suites PASS (564 passed, 5 warnings each); Python 3.12 and 3.14 still in FFmpeg installation at this checkpoint. No Docker/offline-E2E result yet.
+- PR #121 run `44229096492` exposed one failing regression fixture, not a production-code failure: the test returned timestamp 5.0 for all three independent seeks, conflicting with the new correct rejection of frames preceding a requested timestamp. The fixture is corrected to return the actual requested seek timestamp. New CI run `44229362419` is now running for commit `e7085d7e9f0a8b253a9b227125797856b9805a54`.
+- FFmpeg setup action experiments were rejected: pinned third-party action failed (unsupported pinned version / broken release README parsing). Workflow now uses distro FFmpeg with bounded apt update/install timeouts and retries; no third-party FFmpeg setup action remains in the current PR heads.
+- PR #121 now also makes the forensic CLI exit nonzero when any required probe/decode/sample step fails, and adds summary counts for inspected files, black videos, and tool failures.
+- No PR has been merged or deployed since the prior checkpoint. Termux jobs #118–#120 still have no result comments; five black MP4s remain untouched; OAuth/channel verification remains pending; production remains paused and public publishing disabled.
