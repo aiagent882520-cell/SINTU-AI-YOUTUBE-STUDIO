@@ -167,7 +167,7 @@ def test_forensic_tool_failure_is_not_hidden_by_existing_video_file():
         "exists": True, "safe_regular_file": True,
         "ffprobe_exit": 0, "blackdetect_exit": 0, "blackframe_exit": 0,
         "decode_exit": 0, "frame_probe_exit": 0,
-        "black_frame_metrics": {"sampled_frame_count": 5},
+        "black_frame_metrics": {"sampled_frame_count": 30},
         "metadata": {"format": "mov,mp4", "duration_seconds": 4.0,
                      "streams": [{"type": "video"}]},
         "decoded_frame_samples": [
