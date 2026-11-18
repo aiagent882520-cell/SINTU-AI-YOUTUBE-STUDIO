@@ -78,6 +78,7 @@ def summarize_black_frame_percentages(values: list[int]) -> dict:
             "mean_black_pixel_percentage": None,
             "black_pixel_threshold": 32,
             "black_frame_cutoff_percent": 98,
+            "pblack_values": [],
         }
     black_count = sum(value >= 98 for value in values)
     return {
@@ -87,6 +88,7 @@ def summarize_black_frame_percentages(values: list[int]) -> dict:
         "mean_black_pixel_percentage": round(sum(values) / len(values), 2),
         "black_pixel_threshold": 32,
         "black_frame_cutoff_percent": 98,
+        "pblack_values": values[:30],
     }
 
 
@@ -461,71 +463,77 @@ def has_forensic_tool_failure(item: dict) -> bool:
 
 
 def compact_forensic_summary(report: dict) -> dict:
-    """Build a small per-file footer that survives the Termux relay's output-tail limit."""
+    """Build a compact five-target footer for the Termux relay's bounded comment tail."""
     targets = []
     for item in report.get("targets", []):
         metadata = item.get("metadata") or {}
         streams = [
-            {key: stream.get(key) for key in (
-                "type", "codec", "resolution", "pixel_format", "frame_rate",
-                "frame_count", "sample_rate", "channels", "duration", "start_time",
-            )}
+            {
+                "type": stream.get("type"), "codec": stream.get("codec"),
+                "res": stream.get("resolution"), "pix": stream.get("pixel_format"),
+                "frames": stream.get("frame_count"), "rate": stream.get("sample_rate"),
+                "ch": stream.get("channels"),
+            }
             for stream in metadata.get("streams", [])
         ]
+        metrics = item.get("black_frame_metrics") or {}
         targets.append({
             "file": item.get("file"),
-            "exists": item.get("exists"),
-            "size_bytes": item.get("size_bytes"),
+            "bytes": item.get("size_bytes"),
             "sha256": item.get("sha256"),
-            "duration_seconds": metadata.get("duration_seconds"),
+            "duration": metadata.get("duration_seconds"),
             "streams": streams,
-            "full_duration_black": item.get("full_duration_black"),
+            "full_black": item.get("full_duration_black"),
             "black_intervals": item.get("black_intervals", []),
-            "blackframe_exit": item.get("blackframe_exit"),
-            "black_frame_metrics": item.get("black_frame_metrics", {}),
-            "blackframe_error": item.get("blackframe_error"),
-            "decode_exit": item.get("decode_exit"),
-            "frame_probe_exit": item.get("frame_probe_exit"),
+            "exit": [
+                item.get("ffprobe_exit"), item.get("blackdetect_exit"),
+                item.get("blackframe_exit"), item.get("decode_exit"),
+                item.get("frame_probe_exit"),
+            ],
+            "black_frames": {
+                "count": metrics.get("sampled_frame_count"),
+                "black": metrics.get("black_frame_count"),
+                "pct": metrics.get("black_frame_percentage"),
+                "mean": metrics.get("mean_black_pixel_percentage"),
+                "pblack": metrics.get("pblack_values", [])[:30],
+                "err": str(item.get("blackframe_error", ""))[:60],
+            },
             "samples": [
-                {key: sample.get(key) for key in (
-                    "sample", "seek_seconds", "timestamp", "picture_type",
-                    "sampling_method", "error",
-                )}
+                [sample.get("sample"), sample.get("seek_seconds"), sample.get("timestamp"),
+                 sample.get("sampling_method"), str(sample.get("error", ""))[:60]]
                 for sample in item.get("decoded_frame_samples", [])
             ],
             "backups": [
-                {key: backup.get(key) for key in ("path", "size_bytes", "sha256")}
+                [str(backup.get("path", ""))[-100:], backup.get("size_bytes"), backup.get("sha256")]
                 for backup in item.get("pre_repair_backups", [])
             ],
-            "asset_reference_time_utc": item.get("asset_reference_time_utc"),
+            "reference_time": item.get("asset_reference_time_utc"),
         })
     return {
         "status": report.get("status"),
-        "summary": report.get("summary", {}),
+        "summary": {
+            "targets": (report.get("summary") or {}).get("target_count"),
+            "black": (report.get("summary") or {}).get("full_duration_black_count"),
+            "tool_failures": (report.get("summary") or {}).get("forensic_tool_failure_count"),
+        },
         "targets": targets,
-        "candidate_source_assets": [
-            {key: asset.get(key) for key in (
-                "path", "size_bytes", "image_size", "mean_luma",
-                "luma_stddev", "near_black", "modified_utc",
-            )}
-            for asset in report.get("candidate_source_assets", [])[:10]
+        "assets": [
+            [str(asset.get("path", ""))[-80:], asset.get("mean_luma"),
+             asset.get("near_black"), asset.get("modified_utc")]
+            for asset in report.get("candidate_source_assets", [])[:5]
         ],
-        "production_log_matches": [
-            {"path": match.get("path"), "line": match.get("line"),
-             "excerpt": str(match.get("excerpt", ""))[:180]}
-            for match in report.get("production_log_matches", [])[:5]
+        "logs": [
+            [str(match.get("path", ""))[-80:], match.get("line"),
+             str(match.get("excerpt", ""))[:80]]
+            for match in report.get("production_log_matches", [])[:3]
         ],
-        "production_database_matches": [
-            {"db": match.get("db"), "table": match.get("table"),
-             "column": match.get("column"),
-             "record": {key: str(value)[:80] for key, value in list(
-                 (match.get("record") or {}).items()
-             )[:4]}}
-            for match in report.get("production_database_matches", [])[:5]
+        "db": [
+            [str(match.get("db", ""))[-60:], match.get("table"), match.get("column"),
+             str((match.get("record") or {}).get("status", ""))[:40]]
+            for match in report.get("production_database_matches", [])[:3]
         ],
         "safety": report.get("safety", {}),
     }
-
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)

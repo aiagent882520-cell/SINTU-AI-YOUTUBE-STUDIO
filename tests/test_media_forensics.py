@@ -272,48 +272,81 @@ def test_real_ffprobe_inaccurate_seek_recovers_with_sequential_fallback(tmp_path
 
 
 
-def test_compact_forensic_summary_preserves_per_file_evidence_for_relay_tail():
+def test_compact_forensic_summary_preserves_five_targets_under_relay_tail_cap():
+    targets = []
+    for index in range(5):
+        targets.append({
+            "file": f"{index:02d}-" + "clip.mp4",
+            "exists": True,
+            "size_bytes": 123456,
+            "sha256": "a" * 64,
+            "metadata": {
+                "duration_seconds": 9.04,
+                "streams": [
+                    {"type": "video", "codec": "h264", "resolution": "720x1280",
+                     "pixel_format": "yuv420p", "frame_count": "216"},
+                    {"type": "audio", "codec": "aac", "sample_rate": "48000",
+                     "channels": 2, "duration": "9.0"},
+                ],
+            },
+            "full_duration_black": True,
+            "black_intervals": [[0.0, 9.0]],
+            "ffprobe_exit": 0,
+            "blackdetect_exit": 0,
+            "blackframe_exit": 0,
+            "black_frame_metrics": {
+                "sampled_frame_count": 30, "black_frame_count": 30,
+                "black_frame_percentage": 100.0, "mean_black_pixel_percentage": 100.0,
+                "black_pixel_threshold": 32, "black_frame_cutoff_percent": 98,
+                "pblack_values": [100] * 30,
+            },
+            "blackframe_error": "",
+            "decode_exit": 0,
+            "frame_probe_exit": 0,
+            "decoded_frame_samples": [
+                {"sample": label, "seek_seconds": point, "timestamp": str(point),
+                 "sampling_method": "sequential_fallback_from_start", "error": ""}
+                for label, point in (
+                    ("first", 0.0), ("quarter", 2.26), ("middle", 4.52),
+                    ("three_quarter", 6.78), ("last", 9.0)
+                )
+            ],
+            "pre_repair_backups": [{
+                "path": "media_backups/" + ("b" * 64) + ".mp4",
+                "size_bytes": 100000, "sha256": "b" * 64,
+            }],
+            "asset_reference_time_utc": "2026-11-13T00:00:00+00:00",
+        })
     report = {
         "status": "READ_ONLY_FORENSICS",
-        "summary": {"target_count": 1, "forensic_tool_failure_count": 1},
-        "targets": [{
-            "file": "clip.mp4", "exists": True, "size_bytes": 1234,
-            "sha256": "a" * 64, "metadata": {
-                "duration_seconds": 4.0,
-                "streams": [{"type": "video", "codec": "h264", "resolution": "720x1280",
-                             "pixel_format": "yuv420p", "frame_rate": "24/1",
-                             "frame_count": "96"}],
-            },
-            "full_duration_black": True, "black_intervals": [[0.0, 4.0]],
-            "decode_exit": 0, "frame_probe_exit": 1,
-            "decoded_frame_samples": [{
-                "sample": "middle", "seek_seconds": 2.0, "timestamp": None,
-                "picture_type": None, "sampling_method": "independent_seek",
-                "error": "no decoded frame at or after the requested timestamp",
-            }],
-            "pre_repair_backups": [{"path": "media_backups/clip.mp4",
-                                    "size_bytes": 1000, "sha256": "b" * 64}],
-            "asset_reference_time_utc": "2026-11-13T00:00:00+00:00",
-        }],
-        "candidate_source_assets": [{"path": "generated_images/source.jpg",
-                                     "size_bytes": 999, "mean_luma": 100.0}],
-        "production_log_matches": [{"path": "logs/render.log", "line": 12,
-                                     "excerpt": "renderer exit=1"}],
-        "production_database_matches": [{"db": "production_runtime.sqlite3",
-                                         "table": "production_runs", "column": "result_json",
-                                         "record": {"status": "failed"}}],
+        "summary": {"target_count": 5, "full_duration_black_count": 5,
+                    "forensic_tool_failure_count": 0},
+        "targets": targets,
+        "candidate_source_assets": [
+            {"path": f"generated_images/{index}-" + "source.jpg",
+             "mean_luma": 25.0, "near_black": False,
+             "modified_utc": "2026-11-13T00:00:00+00:00"}
+            for index in range(5)
+        ],
+        "production_log_matches": [
+            {"path": "logs/render.log", "line": index,
+             "excerpt": "renderer evidence " + ("x" * 100)}
+            for index in range(5)
+        ],
+        "production_database_matches": [
+            {"db": "production_runtime.sqlite3", "table": "production_runs",
+             "column": "result_json", "record": {"status": "failed", "run_id": index}}
+            for index in range(5)
+        ],
         "safety": {"files_modified": False, "files_deleted": False},
     }
     footer = media_forensics.compact_forensic_summary(report)
-    assert footer["targets"][0]["file"] == "clip.mp4"
-    assert footer["targets"][0]["sha256"] == "a" * 64
-    assert footer["targets"][0]["black_intervals"] == [[0.0, 4.0]]
-    assert footer["targets"][0]["samples"][0]["error"]
-    assert footer["targets"][0]["backups"][0]["sha256"] == "b" * 64
-    assert footer["candidate_source_assets"][0]["path"] == "generated_images/source.jpg"
+    assert len(footer["targets"]) == 5
+    assert all(len(target["samples"]) == 5 for target in footer["targets"])
+    assert all(target["backups"][0][2] == "b" * 64 for target in footer["targets"])
+    assert all(len(target["black_frames"]["pblack"]) == 30 for target in footer["targets"])
     import json as json_module
-    assert len(json_module.dumps(footer, separators=(",", ":"))) < 8000
-
+    assert len(json_module.dumps(footer, separators=(",", ":"))) < 7000
 
 
 def test_inspect_video_fails_closed_on_non_finite_duration(tmp_path, monkeypatch):
@@ -376,6 +409,7 @@ def test_blackframe_parser_and_percentage_summary():
     assert metrics["black_frame_count"] == 2
     assert metrics["black_frame_percentage"] == 50.0
     assert metrics["mean_black_pixel_percentage"] == 55.0
+    assert metrics["pblack_values"] == [100, 100, 0, 20]
 
 
 
