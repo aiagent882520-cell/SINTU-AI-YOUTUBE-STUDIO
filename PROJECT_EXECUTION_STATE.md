@@ -746,3 +746,17 @@ Last updated: 2026-11-17 15:52 UTC
 - Android deployment/verification queued in FIFO order: #184 pull main; #185 restart services; #186 regression tests; #187 health audit; #188 engine probe; #189 operational readiness. Do not treat queued issues as completed.
 - Main-branch CI run #1311 for merge commit is queued at checkpoint time; await its result before claiming post-merge CI success.
 - Safety: no production render, external publishing, upload or modification of the five legacy black MP4s was performed. Three confirmed black assets remain unresolved; production and publishing stay disabled.
+
+
+## Android post-PR183 deployment and production-readiness checkpoint (2026-11-18)
+
+- Issue #184: Android Termux successfully fast-forwarded main from `72162e6` to `d2a7c4f`; the assistant chat and audit document are now on the device.
+- Issue #185: Termux service restart command returned SUCCESS and scheduled restart after the queue acknowledgement. A reboot/Termux:Boot restart test is still not evidenced.
+- Issue #186: post-PR183 Android regression suite **617 passed, 5 warnings** in 213.23s on Python 3.14.
+- Issue #187: post-PR183 Android health audit **15 PASS / 3 FAIL**; pytest **617 passed, 5 warnings** in 280.02s. The two dim-visible files pass. The three fully black files remain failures: `3f4c2151e8e640109f464b2c2e9b7569.mp4` (9.04s), `59430f1fb7fd4bdf80cf8b7d9f456098.mp4` (9.04s), `8cfe9da88d5c43d184f3572e371ff4a6.mp4` (6.08s). Their detected black intervals cover their full durations. No originals modified.
+- Issue #188 fresh Android engine probe: Android 15 ARM64, 8 cores, 3,762,049,024 bytes RAM total, 1,290,792,960 bytes available, 29,098,061,824 bytes free storage. `llama-server` binary exists but is unreachable; no model files. Stable Diffusion C++ binaries absent. ComfyUI unreachable and no workflow configured. Probe performed no model downloads/builds and started no render.
+- Issue #189 operational readiness: `core_ready=true`, 10 passed, 2 warnings, 0 failed; `production_ready=false`, blockers exactly `local_ai_model` and `comfyui`. This is not a production-ready device.
+- Issue #95 updated with the above evidence and remains open until three black files have source provenance and safe repair/replacement or archival disposition. Never overwrite/delete originals.
+- Main CI run #1313 for checkpoint commit `3dc29d9` passed; exact PR #183 run #1310 also passed all 617-test Python matrix, security, offline E2E/motion and Docker checks.
+- Native Android client PR #190 is under development. First tranche includes Kotlin/Compose login, encrypted Android Keystore session-cookie storage, assistant conversation client, topic-to-script/scene project generation, project list, URL validation, unit tests and Android build/artifact workflow. Current CI encountered two environment setup failures; the latest attempt now locates the preinstalled SDK manager and is building. Do not mark Android app build complete until APKs and tests are produced and inspected. Release APK will be unsigned without owner signing key.
+- Production and external publishing remain disabled. No public upload, real generative render, model download or black-video repair was performed.
