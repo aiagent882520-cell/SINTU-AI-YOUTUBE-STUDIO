@@ -219,12 +219,15 @@ private fun AssistantScreen(api: SintuApi, modifier: Modifier = Modifier) {
 @Composable
 private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var formatId by remember { mutableStateOf("youtube-shorts") }
     var topic by remember { mutableStateOf("") }
     var runId by remember { mutableStateOf("") }
     var runStatus by remember { mutableStateOf("") }
     var notice by remember { mutableStateOf("Create a format-specific production run. Final MP4 is enabled only after all production/reviewer gates pass.") }
     var output by remember { mutableStateOf("") }
+    var videoId by remember { mutableStateOf("") }
+    var downloadedUri by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
 
     Column(
@@ -254,6 +257,8 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
                         runId = started.run_id
                         runStatus = started.status
                         output = ""
+                        videoId = ""
+                        downloadedUri = ""
                         notice = started.detail.ifBlank { "Production run queued. Refresh status after worker/checker steps." }
                     } catch (error: Exception) {
                         notice = error.message ?: "Production run could not start."
@@ -300,8 +305,9 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
                             val result = api.produceApprovedMedia(runId)
                             runStatus = result["status"]?.toString() ?: runStatus
                             val render = result["render"] as? Map<*, *>
-                            val videoId = render?.get("video_id")?.toString().orEmpty()
+                            videoId = render?.get("video_id")?.toString().orEmpty()
                             val videoUrl = render?.get("url")?.toString().orEmpty()
+                            downloadedUri = ""
                             output = if (videoUrl.isNotBlank()) api.normalizedBaseUrl + videoUrl.removePrefix("/")
                                 else "MP4 generated; video ID: " + videoId
                             notice = "Final MP4 rendered and attached. Published: " +
@@ -324,6 +330,27 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
                     Text("Final MP4")
                     Text(output, style = MaterialTheme.typography.bodySmall)
                 }
+            }
+        }
+        if (videoId.isNotBlank()) {
+            Button(
+                onClick = {
+                    scope.launch {
+                        busy = true
+                        try {
+                            val uri = api.downloadVideoToGallery(context, videoId)
+                            downloadedUri = uri.toString()
+                            notice = "MP4 phone gallery mein Movies/SINTU folder mein save ho gaya."
+                        } catch (error: Exception) {
+                            notice = error.message ?: "MP4 download failed."
+                        } finally { busy = false }
+                    }
+                },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(if (busy) "Downloading…" else "Download MP4 to phone") }
+            if (downloadedUri.isNotBlank()) {
+                Text("Saved to Movies/SINTU · " + downloadedUri, style = MaterialTheme.typography.bodySmall)
             }
         }
         Text(
