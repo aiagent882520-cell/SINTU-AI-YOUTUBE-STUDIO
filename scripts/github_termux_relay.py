@@ -210,8 +210,9 @@ def command_for(action: str, payload: dict) -> list[str]:
     raise ValueError("Action is not on the SINTU allowlist.")
 
 
-def process_issue(github: GitHub, issue: dict) -> None:
+def process_issue(github: GitHub, issue: dict) -> bool:
     number = int(issue["number"])
+    action = None
     # Claim first by changing the queue label. A single worker is expected per device.
     github.update_issue(number, labels=[RUNNING_LABEL])
     github.comment(number, "🤖 SINTU Termux worker claimed this job. Execution started.")
@@ -246,6 +247,25 @@ def process_issue(github: GitHub, issue: dict) -> None:
         f"\x60\x60\x60text\n{output}\n\x60\x60\x60",
     )
     github.update_issue(number, state="closed", labels=[label])
+    return success and action == "restart_services"
+
+
+def process_pending(github: GitHub, issues: list[dict]) -> bool:
+    """Drain ordinary work before a restart, then let the relay exit cleanly."""
+    restart_issue = None
+    for issue in issues:
+        try:
+            body = json.loads(issue.get("body") or "{}")
+        except (TypeError, json.JSONDecodeError):
+            body = {}
+        if isinstance(body, dict) and body.get("action") == "restart_services":
+            if restart_issue is None:
+                restart_issue = issue
+            continue
+        process_issue(github, issue)
+    if restart_issue is not None:
+        return process_issue(github, restart_issue)
+    return False
 
 
 def main() -> int:
@@ -277,8 +297,11 @@ def main() -> int:
             issues = github.pending()
             if not issues and args.once:
                 return 0
-            for issue in issues:
-                process_issue(github, issue)
+            if process_pending(github, issues):
+                # start_services.sh has scheduled a delayed worker restart.
+                # Exit now so this process cannot claim another issue during
+                # the restart grace period and be killed mid-command.
+                return 0
             if args.once:
                 return 0
             time.sleep(args.interval if not issues else 1)
