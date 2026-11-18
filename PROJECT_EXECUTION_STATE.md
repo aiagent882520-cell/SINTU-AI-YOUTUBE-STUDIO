@@ -282,3 +282,15 @@ Last updated: 2026-11-17 15:52 UTC
 - OAuth client credentials, token encryption key and real connected YouTube channel were absent in the last verified preflight (Issue #91). User must configure locally/securely and complete owner OAuth consent; never share secrets in chat.
 - Historical Android probe: 3.76GB RAM total, ~1.106GB available, ~27.69GB home free; no local GGUF model or reachable llama.cpp/ComfyUI/Piper model. #132 is the fresh probe.
 - Production remains PAUSED; public publishing remains DISABLED. No paid model/cloud resources installed or purchased.
+
+
+#### Historical issue audit and PR #121 artifact
+- #85 engine probe: closed with successful historical Android result; #86 media repair: closed successful, 15 MP4 examined, 9 audio-profile repairs, 6 already valid, 0 repair failures, originals backed up in `media_backups/20261117T145353965118Z`.
+- #87 health audit: closed with 531 pytest passes / 5 warnings; its 9 audio-profile media failures were pre-#86 and are stale.
+- #89 automation self-test: closed successful (7/7).
+- #90 and #100 post-repair media health audits: closed failed because exactly the five named clips remained full-duration black; #100 reports 534 pytest passes / 5 warnings, 13 media PASS / 5 media FAIL. These are the unresolved source-media issue tracked by #95.
+- #104 initial forensic job had an earlier allowlist failure and a subsequent older-format report; PR #121 fixes independent frame sampling and fail-closed forensic tool accounting. A new post-deployment report is still required.
+- PR #121 artifact independently inspected locally: 32.04s MP4 fully decoded without FFmpeg errors; 720x1280 H.264/yuv420p, AAC 48kHz stereo. Contact sheet confirms visible mountain/night-sky scene imagery after a short opening fade. Offline audit: 2 PASS, 0 WARN, 0 FAIL; 32 samples, 23/31 moving transitions, motion ratio 0.742. It is a private CI artifact only.
+- TODO/FIXME repository-wide scan is not certified complete: GitHub code-search API returned zero results with `incomplete_results=true`; a complete repo-wide grep still requires an actual checked-out repo execution. No claim of zero TODO/FIXME markers is made.
+- OAuth code review: authorization start requires client ID/secret/redirect URI and Fernet encryption key; requested scopes include YouTube upload/read-only and Analytics read-only/monetary read-only. Callback validates one-time session-bound state, exchanges code, queries `channels.list?mine=true`, and encrypts persisted tokens. Refresh uses refresh_token. These are code/test findings, not live Google verification.
+- Main workflow run `44258897879` for this checkpoint: security audit, Python 3.11–3.14 all PASS; Docker build and offline video E2E were still running at the last poll. Recheck before calling the documentation commit fully green.
