@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-11-18  
 **Repository:** `aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO`  
-**Audited main commit:** `6c1eb2dda9a59a59ee6248718ea6eb3d67b2fc92`  
+**Audited main commit:** `d2a7c4f4da394c0b00e67d91f97a3a27e5d1c646`  
 **Source of truth:** `app/studio_scope.py`, `app/production_catalog.py`, repository Git tree, README and current GitHub/Termux evidence.
 
 ## Executive finding
@@ -131,7 +131,7 @@ The following rows are extracted from `_FORMAT_ROWS` in the source tree. The lis
 |---|---|---|
 | Responsive website/PWA | IMPLEMENTED BUT UNVERIFIED | Browser UI and service worker exist; no production domain/deployment or cross-device release evidence. |
 | Native Android app/APK | NOT IMPLEMENTED | No Android Gradle/manifest/Kotlin/Java project in repository tree; current Android path is Termux + browser PWA. |
-| General-purpose AI chat with multi-conversation history | PARTIALLY IMPLEMENTED | AI text workflows/task history exist; complete chat product requirements (conversation management, streaming, tool use and context) are not proven. |
+| Persistent text-chat assistant | PARTIALLY IMPLEMENTED | PR #183 adds owner-scoped SQLite conversations, bounded multi-turn context, create/list/read/rename/delete, responsive PWA chat UI and blocked/failed message persistence. CI API/UI tests pass; live LLM availability, streaming, file/image inputs, research citations and tool calling remain unverified/not implemented. |
 | Local LLM | BLOCKED BY EXTERNAL DEPENDENCY on audited Android setup | Ollama integration exists; Android probe found no reachable model endpoint/model at last recorded probe. |
 | Multi-provider text adapters | IMPLEMENTED BUT UNVERIFIED | Local-first gateway and optional provider adapters exist; paid adapters remain locked by policy. |
 | Live web research with source citations | PARTIALLY IMPLEMENTED | Research/fact-check roles and prompt workflow exist; live retrieval/citation pipeline not evidenced. |
@@ -171,7 +171,8 @@ The following rows are extracted from `_FORMAT_ROWS` in the source tree. The lis
 4. Research/citation, document/image understanding, multi-conversation assistant, subscription/tenant isolation and full editor workflows need implementation or stronger evidence.
 5. All 60 format-specific render acceptance tests are outstanding.
 6. Real YouTube OAuth/channel connection/upload and production website deployment are not verified.
-7. Full Android reboot/Termux:Boot recovery is not yet verified.
+7. PR #183 assistant chat is now present in the PWA/API but live local-model inference is still blocked by engine availability; streaming, document/image input, web research/citations and tool calling remain open.
+8. Full Android reboot/Termux:Boot recovery is not yet verified.
 
 ## Execution sequence
 
