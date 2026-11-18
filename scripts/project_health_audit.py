@@ -138,7 +138,7 @@ def audit_media(path: Path, results: list[dict]) -> bool:
             continue
         black = subprocess.run(
             [ffmpeg, "-hide_banner", "-i", str(video), "-vf",
-             "blackdetect=d=0.5:pix_th=0.03", "-an", "-f", "null", "-"],
+             "blackdetect=d=0.5:pix_th=0.08", "-an", "-f", "null", "-"],
             text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
         if black.returncode != 0:
             results.append({"check": f"media:{video.name}", "status": "FAIL",
