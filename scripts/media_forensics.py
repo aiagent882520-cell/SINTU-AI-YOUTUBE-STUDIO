@@ -463,70 +463,73 @@ def has_forensic_tool_failure(item: dict) -> bool:
 
 
 def compact_forensic_summary(report: dict) -> dict:
-    """Build a bounded per-file footer that fits inside the Termux relay's 8k tail."""
+    """Build a compact five-target footer for the Termux relay's bounded comment tail."""
     targets = []
     for item in report.get("targets", []):
         metadata = item.get("metadata") or {}
         streams = [
-            {key: stream.get(key) for key in (
-                "type", "codec", "resolution", "pixel_format", "frame_count",
-                "sample_rate", "channels", "duration",
-            )}
+            {
+                "type": stream.get("type"), "codec": stream.get("codec"),
+                "res": stream.get("resolution"), "pix": stream.get("pixel_format"),
+                "frames": stream.get("frame_count"), "rate": stream.get("sample_rate"),
+                "ch": stream.get("channels"),
+            }
             for stream in metadata.get("streams", [])
         ]
+        metrics = item.get("black_frame_metrics") or {}
         targets.append({
             "file": item.get("file"),
-            "exists": item.get("exists"),
-            "size_bytes": item.get("size_bytes"),
+            "bytes": item.get("size_bytes"),
             "sha256": item.get("sha256"),
-            "duration_seconds": metadata.get("duration_seconds"),
+            "duration": metadata.get("duration_seconds"),
             "streams": streams,
-            "full_duration_black": item.get("full_duration_black"),
+            "full_black": item.get("full_duration_black"),
             "black_intervals": item.get("black_intervals", []),
-            "ffprobe_exit": item.get("ffprobe_exit"),
-            "blackdetect_exit": item.get("blackdetect_exit"),
-            "blackframe_exit": item.get("blackframe_exit"),
-            "black_frame_metrics": item.get("black_frame_metrics", {}),
-            "blackframe_error": str(item.get("blackframe_error", ""))[:100],
-            "decode_exit": item.get("decode_exit"),
-            "frame_probe_exit": item.get("frame_probe_exit"),
+            "exit": [
+                item.get("ffprobe_exit"), item.get("blackdetect_exit"),
+                item.get("blackframe_exit"), item.get("decode_exit"),
+                item.get("frame_probe_exit"),
+            ],
+            "black_frames": {
+                "count": metrics.get("sampled_frame_count"),
+                "black": metrics.get("black_frame_count"),
+                "pct": metrics.get("black_frame_percentage"),
+                "mean": metrics.get("mean_black_pixel_percentage"),
+                "pblack": metrics.get("pblack_values", [])[:30],
+                "err": str(item.get("blackframe_error", ""))[:60],
+            },
             "samples": [
-                {key: (str(sample.get(key, ""))[:100] if key == "error" else sample.get(key))
-                 for key in ("sample", "seek_seconds", "timestamp", "sampling_method", "error")}
+                [sample.get("sample"), sample.get("seek_seconds"), sample.get("timestamp"),
+                 sample.get("sampling_method"), str(sample.get("error", ""))[:60]]
                 for sample in item.get("decoded_frame_samples", [])
             ],
             "backups": [
-                {"path": str(backup.get("path", ""))[:120],
-                 "size_bytes": backup.get("size_bytes"), "sha256": backup.get("sha256")}
+                [str(backup.get("path", ""))[-100:], backup.get("size_bytes"), backup.get("sha256")]
                 for backup in item.get("pre_repair_backups", [])
             ],
-            "asset_reference_time_utc": item.get("asset_reference_time_utc"),
+            "reference_time": item.get("asset_reference_time_utc"),
         })
     return {
         "status": report.get("status"),
         "summary": {
-            key: (report.get("summary") or {}).get(key)
-            for key in ("target_count", "full_duration_black_count", "forensic_tool_failure_count")
+            "targets": (report.get("summary") or {}).get("target_count"),
+            "black": (report.get("summary") or {}).get("full_duration_black_count"),
+            "tool_failures": (report.get("summary") or {}).get("forensic_tool_failure_count"),
         },
         "targets": targets,
-        "candidate_source_assets": [
-            {"path": str(asset.get("path", ""))[:120],
-             "mean_luma": asset.get("mean_luma"),
-             "near_black": asset.get("near_black"),
-             "modified_utc": asset.get("modified_utc")}
+        "assets": [
+            [str(asset.get("path", ""))[-80:], asset.get("mean_luma"),
+             asset.get("near_black"), asset.get("modified_utc")]
             for asset in report.get("candidate_source_assets", [])[:5]
         ],
-        "production_log_matches": [
-            {"path": str(match.get("path", ""))[:100], "line": match.get("line"),
-             "excerpt": str(match.get("excerpt", ""))[:100]}
+        "logs": [
+            [str(match.get("path", ""))[-80:], match.get("line"),
+             str(match.get("excerpt", ""))[:80]]
             for match in report.get("production_log_matches", [])[:3]
         ],
-        "production_database_matches": [
-            {"db": str(match.get("db", ""))[:80], "table": match.get("table"),
-             "column": match.get("column"),
-             "record": {key: str(value)[:60] for key, value in list(
-                 (match.get("record") or {}).items()
-             )[:2]}}
+        "db": [
+            [str(match.get("db", ""))[-60:], match.get("table"), match.get("column"),
+             str((match.get("record") or {}).get("status", ""))[:40]]
             for match in report.get("production_database_matches", [])[:3]
         ],
         "safety": report.get("safety", {}),
