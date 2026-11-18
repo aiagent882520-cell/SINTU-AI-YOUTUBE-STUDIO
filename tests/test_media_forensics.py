@@ -376,3 +376,36 @@ def test_blackframe_parser_and_percentage_summary():
     assert metrics["black_frame_count"] == 2
     assert metrics["black_frame_percentage"] == 50.0
     assert metrics["mean_black_pixel_percentage"] == 55.0
+
+
+
+def test_real_black_mp4_forensics_reports_black_percentage_and_five_samples(tmp_path, monkeypatch):
+    import shutil
+    import subprocess
+
+    ffmpeg = shutil.which("ffmpeg")
+    ffprobe = shutil.which("ffprobe")
+    if not ffmpeg or not ffprobe:
+        import pytest
+        pytest.skip("FFmpeg and FFprobe are required for the real forensic integration")
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    media_dir = tmp_path / "generated_videos"
+    media_dir.mkdir()
+    clip = media_dir / "black.mp4"
+    created = subprocess.run([
+        ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "color=c=black:s=160x120:r=24:d=4",
+        "-an", "-c:v", "mpeg4", "-g", "150", "-bf", "0", str(clip),
+    ], capture_output=True, timeout=60, check=False)
+    if created.returncode != 0:
+        import pytest
+        pytest.skip("FFmpeg build does not provide the MPEG-4 test encoder")
+    report = media_forensics.inspect_video(clip)
+    assert report["full_duration_black"] is True
+    assert report["black_frame_metrics"]["sampled_frame_count"] == 30
+    assert report["black_frame_metrics"]["black_frame_count"] == 30
+    assert report["black_frame_metrics"]["black_frame_percentage"] == 100.0
+    assert [sample["sample"] for sample in report["decoded_frame_samples"]] == [
+        "first", "quarter", "middle", "three_quarter", "last"
+    ]
+    assert media_forensics.has_forensic_tool_failure(report) is False
