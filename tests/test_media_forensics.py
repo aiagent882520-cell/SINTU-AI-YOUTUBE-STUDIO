@@ -177,3 +177,25 @@ def test_forensic_tool_failure_is_not_hidden_by_existing_video_file():
     assert media_forensics.has_forensic_tool_failure(broken_probe) is True
     missing_sample = {**good, "decoded_frame_samples": good["decoded_frame_samples"][:2]}
     assert media_forensics.has_forensic_tool_failure(missing_sample) is True
+
+
+def test_av_sync_reports_start_and_end_offsets():
+    report = media_forensics.analyze_av_sync([
+        {"type": "video", "start_time": "0.000000", "duration": "10.0"},
+        {"type": "audio", "start_time": "0.040000", "duration": "9.96"},
+    ])
+    assert report["status"] == "within_tolerance"
+    assert report["audio_minus_video_start_seconds"] == 0.04
+    assert report["audio_minus_video_end_seconds"] == 0.0
+    assert "not perceptual" in report["method"]
+
+
+def test_av_sync_flags_out_of_tolerance_and_missing_audio():
+    out_of_sync = media_forensics.analyze_av_sync([
+        {"type": "video", "start_time": "0", "duration": "10"},
+        {"type": "audio", "start_time": "0.8", "duration": "10"},
+    ])
+    assert out_of_sync["status"] == "out_of_sync"
+    assert media_forensics.analyze_av_sync([
+        {"type": "video", "start_time": "0", "duration": "10"}
+    ])["status"] == "missing_audio_stream"
