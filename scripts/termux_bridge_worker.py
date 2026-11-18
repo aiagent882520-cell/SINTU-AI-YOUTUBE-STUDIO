@@ -125,10 +125,10 @@ def execute(job: dict) -> tuple[int, str]:
     return completed.returncode, completed.stdout[-20000:]
 
 
-def run_once() -> bool:
+def run_once() -> str:
     job = request_json("/api/termux-bridge/jobs/next")
     if not job:
-        return False
+        return "idle"
     job_id = job["job_id"]
     try:
         code, output = execute(job)
@@ -137,12 +137,22 @@ def run_once() -> bool:
         code, output, status = 124, (exc.stdout or "")[-20000:] if isinstance(exc.stdout, str) else "Command timed out.", "failed"
     except Exception as exc:
         code, output, status = 1, str(exc), "failed"
-    request_json(
-        f"/api/termux-bridge/jobs/{job_id}/complete", "POST",
-        {"status": status, "exit_code": code, "output": output},
-    )
+    restart_requested = job.get("action") == "restart_services" and status == "succeeded"
+    try:
+        request_json(
+            f"/api/termux-bridge/jobs/{job_id}/complete", "POST",
+            {"status": status, "exit_code": code, "output": output},
+        )
+    except Exception:
+        if restart_requested:
+            print(
+                "Restart was scheduled but completion acknowledgement failed; exiting to avoid claiming another job.",
+                file=sys.stderr, flush=True,
+            )
+            return "restart"
+        raise
     print(f"{job_id}: {status} (exit {code})", flush=True)
-    return True
+    return "restart" if restart_requested else "processed"
 
 
 def main() -> int:
@@ -166,7 +176,10 @@ def main() -> int:
     print(f"SINTU Termux Bridge worker connected to {BASE_URL}", flush=True)
     while True:
         try:
-            if not run_once():
+            outcome = run_once()
+            if outcome == "restart":
+                return 0
+            if outcome == "idle":
                 time.sleep(args.interval)
         except KeyboardInterrupt:
             return 0
