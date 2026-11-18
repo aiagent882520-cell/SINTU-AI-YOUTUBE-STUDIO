@@ -860,7 +860,7 @@ def test_forensics_reports_generated_wav_duration_and_format(tmp_path, monkeypat
         audio.setnchannels(1)
         audio.setsampwidth(2)
         audio.setframerate(22050)
-        audio.writeframes(b"\\x00\\x00" * (22050 * 6))
+        audio.writeframes(bytes(22050 * 6 * 2))
 
     report = media_forensics.inspect_asset(music)
 
