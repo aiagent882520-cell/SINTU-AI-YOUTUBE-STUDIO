@@ -219,39 +219,117 @@ private fun AssistantScreen(api: SintuApi, modifier: Modifier = Modifier) {
 @Composable
 private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
-    var title by remember { mutableStateOf("") }
+    var formatId by remember { mutableStateOf("youtube-shorts") }
     var topic by remember { mutableStateOf("") }
-    var duration by remember { mutableStateOf("60") }
+    var runId by remember { mutableStateOf("") }
+    var runStatus by remember { mutableStateOf("") }
+    var notice by remember { mutableStateOf("Create a format-specific production run. Final MP4 is enabled only after all production/reviewer gates pass.") }
     var output by remember { mutableStateOf("") }
-    var notice by remember { mutableStateOf("Generates a script/scene production package, not a final MP4.") }
     var busy by remember { mutableStateOf(false) }
-    Column(modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Topic-to-production package", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), label = { Text("Video title") })
-        OutlinedTextField(topic, { topic = it }, Modifier.fillMaxWidth(), label = { Text("Topic / instructions") }, minLines = 4)
-        OutlinedTextField(duration, { duration = it.filter(Char::isDigit).take(4) }, label = { Text("Duration (seconds)") })
+
+    Column(
+        modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text("Topic-to-final-MP4 pipeline", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        OutlinedTextField(
+            formatId, { formatId = it.trim().take(80) },
+            Modifier.fillMaxWidth(), label = { Text("Video format ID (e.g. youtube-shorts)") },
+            singleLine = true
+        )
+        OutlinedTextField(
+            topic, { topic = it },
+            Modifier.fillMaxWidth(), label = { Text("Topic / instructions") }, minLines = 4
+        )
         Button(
             onClick = {
-                if (topic.isBlank()) { notice = "Enter a topic."; return@Button }
+                if (topic.isBlank() || formatId.isBlank()) {
+                    notice = "Format ID aur topic dono zaroori hain."
+                    return@Button
+                }
                 scope.launch {
                     busy = true
                     try {
-                        val seconds = duration.toIntOrNull()?.coerceIn(5, 7200) ?: 60
-                        val project = api.createProject(
-                            ProjectCreateRequest(title.trim().ifBlank { topic.trim().take(100) }, topic.trim(), duration_seconds = seconds)
-                        ).project
-                        val result = api.generateProject(project.id)
-                        output = result.task.output.orEmpty()
-                        notice = "Project saved · task #" + result.task.id + " · " + result.task.status + ". Final MP4 needs configured media engines and a separate render."
-                    } catch (e: Exception) { notice = e.message ?: "Generation failed." }
-                    finally { busy = false }
+                        val started = api.startProductionRun(formatId, topic.trim())
+                        runId = started.run_id
+                        runStatus = started.status
+                        output = ""
+                        notice = started.detail.ifBlank { "Production run queued. Refresh status after worker/checker steps." }
+                    } catch (error: Exception) {
+                        notice = error.message ?: "Production run could not start."
+                    } finally { busy = false }
                 }
             },
-            enabled = !busy && topic.isNotBlank(),
+            enabled = !busy && topic.isNotBlank() && formatId.isNotBlank(),
             modifier = Modifier.fillMaxWidth()
-        ) { Text(if (busy) "Generating…" else "Generate script & scene plan") }
+        ) { Text(if (busy) "Starting…" else "Start production + reviewer gates") }
+
+        if (runId.isNotBlank()) {
+            Text("Run ID: " + runId, style = MaterialTheme.typography.bodySmall)
+            Text("Status: " + runStatus, fontWeight = FontWeight.Bold)
+            Button(
+                onClick = {
+                    scope.launch {
+                        busy = true
+                        try {
+                            val status = api.productionRunStatus(runId)
+                            runStatus = status["status"]?.toString() ?: "unknown"
+                            val role = status["current_role"]?.toString().orEmpty()
+                            val error = status["error"]?.toString().orEmpty()
+                            val steps = status["steps"] as? List<*>
+                            notice = buildString {
+                                append("Run status refreshed.")
+                                if (role.isNotBlank() && role != "null") append(" Current role: ").append(role)
+                                if (!steps.isNullOrEmpty()) append(" · ").append(steps.size).append(" recorded steps.")
+                                if (error.isNotBlank() && error != "null") append(" · ").append(error)
+                            }
+                        } catch (error: Exception) {
+                            notice = error.message ?: "Could not refresh production status."
+                        } finally { busy = false }
+                    }
+                },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(if (busy) "Checking…" else "Refresh production status") }
+
+            Button(
+                onClick = {
+                    scope.launch {
+                        busy = true
+                        try {
+                            val result = api.produceApprovedMedia(runId)
+                            runStatus = result["status"]?.toString() ?: runStatus
+                            val render = result["render"] as? Map<*, *>
+                            val videoId = render?.get("video_id")?.toString().orEmpty()
+                            val videoUrl = render?.get("url")?.toString().orEmpty()
+                            output = if (videoUrl.isNotBlank()) api.normalizedBaseUrl + videoUrl.removePrefix("/")
+                                else "MP4 generated; video ID: " + videoId
+                            notice = "Final MP4 rendered and attached. Published: " +
+                                result["published"]?.toString().orEmpty() +
+                                ". YouTube publishing remains a separate manual approval."
+                        } catch (error: Exception) {
+                            notice = error.message ?: "Final media generation failed."
+                        } finally { busy = false }
+                    }
+                },
+                enabled = !busy && runStatus == "completed",
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(if (busy) "Rendering…" else "Generate final MP4 (offline engines)") }
+        }
+
         Text(notice, style = MaterialTheme.typography.bodySmall)
-        if (output.isNotBlank()) Card(Modifier.fillMaxWidth()) { Text(output, Modifier.padding(12.dp)) }
+        if (output.isNotBlank()) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Final MP4")
+                    Text(output, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        Text(
+            "Phone-first media path: procedural scene illustrations (not generative AI), local Hindi TTS when installed, procedural music, FFmpeg MP4. ComfyUI/paid APIs are not required for this fallback.",
+            style = MaterialTheme.typography.bodySmall
+        )
     }
 }
 
