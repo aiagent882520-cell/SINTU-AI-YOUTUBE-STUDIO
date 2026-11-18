@@ -143,6 +143,9 @@ def test_inspect_video_builds_report_from_five_frame_probes(tmp_path, monkeypatc
             return {"returncode": 0, "stdout": "", "stderr": ""}
         if command[0] == "ffmpeg" and any("blackframe=" in part for part in command):
             return {"returncode": 0, "stdout": "", "stderr": "pblack:0\n" * 30}
+        if command[0] == "ffmpeg" and any("scale=64:64:flags=area" in part for part in command):
+            media_forensics.Image.new("RGB", (64, 64), "white").save(command[-1])
+            return {"returncode": 0, "stdout": "", "stderr": ""}
         return {"returncode": 0, "stdout": "", "stderr": ""}
 
     monkeypatch.setattr(media_forensics, "run", fake_run)
@@ -150,6 +153,9 @@ def test_inspect_video_builds_report_from_five_frame_probes(tmp_path, monkeypatc
     assert report["safe_regular_file"] is True
     assert media_forensics.has_forensic_tool_failure(report) is False
     assert report["frame_probe_exit"] == 0
+    assert report["pixel_probe_exit"] == 0
+    assert all(sample["pixel_verification"]["status"] == "PASS"
+               for sample in report["decoded_frame_samples"])
     assert [item["sample"] for item in report["decoded_frame_samples"]] == [
         "first", "quarter", "middle", "three_quarter", "last"
     ]
@@ -173,16 +179,16 @@ def test_forensic_tool_failure_is_not_hidden_by_existing_video_file():
     good = {
         "exists": True, "safe_regular_file": True,
         "ffprobe_exit": 0, "blackdetect_exit": 0, "blackframe_exit": 0,
-        "decode_exit": 0, "frame_probe_exit": 0,
+        "decode_exit": 0, "frame_probe_exit": 0, "pixel_probe_exit": 0,
         "black_frame_metrics": {"sampled_frame_count": 30},
         "metadata": {"format": "mov,mp4", "duration_seconds": 4.0,
                      "streams": [{"type": "video"}]},
         "decoded_frame_samples": [
-            {"sample": "first", "timestamp": "0.0", "error": ""},
-            {"sample": "quarter", "timestamp": "1.0", "error": ""},
-            {"sample": "middle", "timestamp": "2.0", "error": ""},
-            {"sample": "three_quarter", "timestamp": "3.0", "error": ""},
-            {"sample": "last", "timestamp": "3.9", "error": ""},
+            {"sample": "first", "timestamp": "0.0", "error": "", "pixel_verification": {"status": "PASS"}},
+            {"sample": "quarter", "timestamp": "1.0", "error": "", "pixel_verification": {"status": "PASS"}},
+            {"sample": "middle", "timestamp": "2.0", "error": "", "pixel_verification": {"status": "PASS"}},
+            {"sample": "three_quarter", "timestamp": "3.0", "error": "", "pixel_verification": {"status": "PASS"}},
+            {"sample": "last", "timestamp": "3.9", "error": "", "pixel_verification": {"status": "PASS"}},
         ],
         "full_duration_black": True,
     }
@@ -344,9 +350,13 @@ def test_compact_forensic_summary_preserves_five_targets_under_relay_tail_cap():
             "blackframe_error": "",
             "decode_exit": 0,
             "frame_probe_exit": 0,
+            "pixel_probe_exit": 0,
             "decoded_frame_samples": [
                 {"sample": label, "seek_seconds": point, "timestamp": str(point),
-                 "sampling_method": "sequential_fallback_from_start", "error": ""}
+                 "sampling_method": "sequential_fallback_from_start", "error": "",
+                 "pixel_verification": {"status": "PASS", "mean_luma": 0.0,
+                                         "luma_stddev": 0.0, "black_pixel_percentage": 100.0,
+                                         "near_black": True}}
                 for label, point in (
                     ("first", 0.0), ("quarter", 2.26), ("middle", 4.52),
                     ("three_quarter", 6.78), ("last", 9.0)
@@ -369,7 +379,7 @@ def test_compact_forensic_summary_preserves_five_targets_under_relay_tail_cap():
                            "blackdetect": True, "blackframe": True, "fps": True, "scale": True}},
             "ffprobe": {"available": True, "path": "/data/data/com.termux/files/usr/bin/ffprobe",
                         "version": "ffprobe version 7.1.5"},
-            "frame_sampling": "FFprobe decoded-frame JSON",
+            "frame_sampling": "Five FFprobe timestamps plus extracted PNG pixel verification",
             "temporary_storage": {"path": "/data/data/com.termux/files/usr/tmp",
                                   "exists": True, "writable": True,
                                   "write_test": True, "free_bytes": 123456789},
@@ -494,6 +504,10 @@ def test_real_black_mp4_forensics_reports_black_percentage_and_five_samples(tmp_
     assert report["black_frame_metrics"]["sampled_frame_count"] == 30
     assert report["black_frame_metrics"]["black_frame_count"] == 30
     assert report["black_frame_metrics"]["black_frame_percentage"] == 100.0
+    assert report["pixel_probe_exit"] == 0
+    assert report["pixel_verification"]["near_black_sample_count"] == 5
+    assert all(sample["pixel_verification"]["near_black"] is True
+               for sample in report["decoded_frame_samples"])
     assert [sample["sample"] for sample in report["decoded_frame_samples"]] == [
         "first", "quarter", "middle", "three_quarter", "last"
     ]
@@ -532,7 +546,7 @@ def test_forensic_environment_reports_tool_paths_versions_filters_and_temp_stora
     assert environment["ffmpeg"]["filters"] == {
         "blackdetect": True, "blackframe": True, "fps": True, "scale": True,
     }
-    assert environment["frame_sampling"].startswith("FFprobe")
+    assert environment["frame_sampling"].startswith("Five FFprobe")
     assert environment["temporary_storage"]["exists"] is True
     assert environment["temporary_storage"]["write_test"] is True
     assert environment["temporary_storage"]["free_bytes"] > 0
@@ -575,12 +589,16 @@ def test_audio_only_container_is_not_accepted_as_visual_video(tmp_path, monkeypa
             return {"returncode": 0, "stdout": '{"frames":[]}' if not interval.startswith("0%+") else "", "stderr": ""}
         if command[0] == "ffmpeg" and any("blackframe=" in part for part in command):
             return {"returncode": 0, "stdout": "", "stderr": "pblack:0\\n" * 30}
+        if command[0] == "ffmpeg" and any("scale=64:64:flags=area" in part for part in command):
+            media_forensics.Image.new("RGB", (64, 64), "white").save(command[-1])
+            return {"returncode": 0, "stdout": "", "stderr": ""}
         return {"returncode": 0, "stdout": "", "stderr": ""}
 
     monkeypatch.setattr(media_forensics, "run", fake_run)
     report = media_forensics.inspect_video(video)
     assert not any(stream["type"] == "video" for stream in report["metadata"]["streams"])
     assert report["frame_probe_exit"] == 1
+    assert report["pixel_probe_exit"] == 1
     assert media_forensics.has_forensic_tool_failure(report) is True
 
 
@@ -657,6 +675,10 @@ def test_real_nonblack_mp4_forensics_passes_with_decoded_samples(tmp_path, monke
     report = media_forensics.inspect_video(clip)
     assert report["full_duration_black"] is False
     assert report["frame_probe_exit"] == 0
+    assert report["pixel_probe_exit"] == 0
+    assert report["pixel_verification"]["near_black_sample_count"] == 0
+    assert any(sample["pixel_verification"]["mean_luma"] > 2.0
+               for sample in report["decoded_frame_samples"])
     assert media_forensics.has_forensic_tool_failure(report) is False
 
 
@@ -683,6 +705,10 @@ def test_real_partial_black_mp4_is_not_misclassified_as_full_duration_black(tmp_
     assert report["black_intervals"]
     assert report["black_intervals"][0][1] < report["metadata"]["duration_seconds"] * 0.95
     assert report["frame_probe_exit"] == 0
+    assert report["pixel_probe_exit"] == 0
+    assert report["decoded_frame_samples"][0]["pixel_verification"]["near_black"] is True
+    assert all(sample["pixel_verification"]["near_black"] is False
+               for sample in report["decoded_frame_samples"][1:])
     assert media_forensics.has_forensic_tool_failure(report) is False
 
 
@@ -725,6 +751,9 @@ def test_inspect_video_marks_middle_and_last_sampling_failures_as_tool_failure(t
             }), "stderr": ""}
         if command[0] == "ffmpeg" and any("blackframe=" in part for part in command):
             return {"returncode": 0, "stdout": "", "stderr": "pblack:0\\n" * 30}
+        if command[0] == "ffmpeg" and any("scale=64:64:flags=area" in part for part in command):
+            media_forensics.Image.new("RGB", (64, 64), "white").save(command[-1])
+            return {"returncode": 0, "stdout": "", "stderr": ""}
         return {"returncode": 0, "stdout": "", "stderr": ""}
 
     monkeypatch.setattr(media_forensics, "run", fake_run)
@@ -733,4 +762,44 @@ def test_inspect_video_marks_middle_and_last_sampling_failures_as_tool_failure(t
         "middle", "three_quarter", "last",
     ]
     assert report["frame_probe_exit"] == 1
+    assert report["pixel_probe_exit"] == 1
     assert media_forensics.has_forensic_tool_failure(report) is True
+
+
+def test_extracted_frame_pixel_verification_distinguishes_black_and_visible_frames(tmp_path, monkeypatch):
+    colors = iter(["black", "white"])
+
+    def fake_run(command, timeout=120):
+        media_forensics.Image.new("RGB", (64, 64), next(colors)).save(command[-1])
+        return {"returncode": 0, "stdout": "", "stderr": ""}
+
+    monkeypatch.setattr(media_forensics, "run", fake_run)
+    black = media_forensics.extract_frame_pixel_verification(tmp_path / "clip.mp4", "0.0", "first")
+    visible = media_forensics.extract_frame_pixel_verification(tmp_path / "clip.mp4", "2.0", "middle")
+    assert black["status"] == "PASS"
+    assert black["near_black"] is True
+    assert black["mean_luma"] == 0.0
+    assert black["black_pixel_percentage"] == 100.0
+    assert visible["status"] == "PASS"
+    assert visible["near_black"] is False
+    assert visible["mean_luma"] == 255.0
+    assert visible["black_pixel_percentage"] == 0.0
+
+
+def test_extracted_frame_pixel_verification_fails_closed_on_timeout_and_temp_storage_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_forensics, "run", lambda *args, **kwargs: {
+        "returncode": None, "stdout": "", "stderr": "ffmpeg frame extraction timed out",
+    })
+    timed_out = media_forensics.extract_frame_pixel_verification(tmp_path / "clip.mp4", "1.0", "middle")
+    assert timed_out["status"] == "FAIL"
+    assert timed_out["extraction_exit"] is None
+    assert "timed out" in timed_out["error"]
+
+    monkeypatch.setattr(
+        media_forensics.tempfile, "TemporaryDirectory",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("temporary storage unavailable")),
+    )
+    no_storage = media_forensics.extract_frame_pixel_verification(tmp_path / "clip.mp4", "1.0", "middle")
+    assert no_storage["status"] == "FAIL"
+    assert no_storage["extraction_exit"] is None
+    assert "temporary storage unavailable" in no_storage["error"]
