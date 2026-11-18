@@ -83,7 +83,19 @@ jobs:
           cache-dependency-path: requirements-dev.txt
       - name: Install free local media tools
         run: |
-          sudo apt-get install -y --no-install-recommends ffmpeg espeak-ng fonts-noto-core
+          packages=()
+          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+            packages+=(ffmpeg)
+          fi
+          if ! command -v espeak-ng >/dev/null 2>&1; then
+            packages+=(espeak-ng)
+          fi
+          if ! command -v fc-match >/dev/null 2>&1 || ! fc-match -f '%{family}' 'Noto Sans' | grep -qi 'Noto Sans'; then
+            packages+=(fonts-noto-core)
+          fi
+          if [[ ${#packages[@]} -gt 0 ]]; then
+            sudo apt-get install -y --no-install-recommends "${packages[@]}"
+          fi
           ffmpeg -version
           ffprobe -version
           espeak-ng --voices=hi
