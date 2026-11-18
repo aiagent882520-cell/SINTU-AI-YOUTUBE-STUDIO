@@ -143,6 +143,9 @@ def test_inspect_video_builds_report_from_five_frame_probes(tmp_path, monkeypatc
             return {"returncode": 0, "stdout": "", "stderr": ""}
         if command[0] == "ffmpeg" and any("blackframe=" in part for part in command):
             return {"returncode": 0, "stdout": "", "stderr": "pblack:0\n" * 30}
+        if command[0] == "ffmpeg" and any("scale=64:64:flags=area" in part for part in command):
+            media_forensics.Image.new("RGB", (64, 64), "white").save(command[-1])
+            return {"returncode": 0, "stdout": "", "stderr": ""}
         return {"returncode": 0, "stdout": "", "stderr": ""}
 
     monkeypatch.setattr(media_forensics, "run", fake_run)
