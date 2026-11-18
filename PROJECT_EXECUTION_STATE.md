@@ -386,7 +386,7 @@ Last updated: 2026-11-17 15:52 UTC
 - Issue #138 was claimed before #137 completed and failed with the old seek-sampling error; it is pre-deployment evidence only and was not treated as validation of the fix.
 - Issue #141 ran after #137 and exercised the updated sampler: its visible target records have all five timestamp samples successfully decoded, using sequential fallback for quarter/middle/three-quarter/last. FFmpeg decode and blackframe exits were 0 for the visible targets.
 - Partial per-file results in #141: `8cfe9da8...` and `afa4c87e...` each show 30/30 blackframe samples (100%); `adf9268e...` reports blackdetect full-duration black but blackframe 0/30 (0%). This disagreement requires investigation; do not label all five black based on one detector. The issue #141 command still exited 1, and the first two target records plus summary were truncated from the relay output.
-- The compact summary in PR #136 did not fit the actual 8,000-character relay tail. New PR #143 caps the footer below 7,000 characters for five worst-case targets and preserves 30 raw pblack values per target to investigate blackdetect/blackframe disagreement.
+- The compact summary in PR #136 did not fit the actual 8,000-character relay tail. New PR #144 caps the footer below 7,000 characters for five worst-case targets and preserves 30 raw pblack values per target to investigate blackdetect/blackframe disagreement.
 - Original MP4s and backups remain untouched; no repair, regeneration, upload or publishing. Production remains PAUSED.
 
 
