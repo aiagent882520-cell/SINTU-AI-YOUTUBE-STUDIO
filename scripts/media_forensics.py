@@ -486,7 +486,7 @@ def inspect_video(path: Path) -> dict:
             info["parse_error"] = "invalid ffprobe JSON"
 
     black = run(["ffmpeg", "-hide_banner", "-i", str(path), "-vf",
-                 "blackdetect=d=0.10:pix_th=0.03", "-an", "-f", "null", "-"])
+                 "blackdetect=d=0.10:pix_th=0.08", "-an", "-f", "null", "-"])
     decode = run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "null", "-"])
     intervals = parse_black_intervals(black["stderr"])
     duration = info["duration_seconds"] or 0
@@ -495,7 +495,7 @@ def inspect_video(path: Path) -> dict:
         sample_fps = 30.0 / duration
         blackframe = run([
             "ffmpeg", "-hide_banner", "-i", str(path), "-vf",
-            f"fps={sample_fps:.8f},blackframe=amount=0:threshold=16",
+            f"fps={sample_fps:.8f},blackframe=amount=0:threshold=17",
             "-an", "-frames:v", "30", "-f", "null", "-",
         ])
         blackframe_values = parse_black_frame_percentages(blackframe["stderr"])
@@ -617,7 +617,8 @@ def inspect_video(path: Path) -> dict:
         "av_sync": analyze_av_sync(info["streams"]),
         "blackdetect_exit": black["returncode"], "black_intervals": intervals,
         "blackframe_exit": blackframe["returncode"],
-        "black_frame_metrics": black_frame_metrics, "blackframe_error": blackframe_error,
+        "black_frame_metrics": black_frame_metrics,
+        "blackframe_luma_threshold": 17, "blackframe_error": blackframe_error,
         "blackdetect_full_duration_black": blackdetect_full_black,
         "full_duration_black": full_black, "decode_exit": decode["returncode"],
         "decode_errors": redact_secrets(decode["stderr"]) if decode["stderr"] else "",
