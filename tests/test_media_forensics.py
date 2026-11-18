@@ -61,9 +61,12 @@ def test_frame_samples_use_independent_timestamp_probes(tmp_path, monkeypatch):
 
     def fake_run(command, timeout=120):
         calls.append(command)
+        seek = command[command.index("-read_intervals") + 1].split("%", 1)[0]
         return {
             "returncode": 0,
-            "stdout": '{"frames":[{"best_effort_timestamp_time":"5.000000","pict_type":"P"}]}',
+            "stdout": json.dumps({"frames": [{
+                "best_effort_timestamp_time": seek, "pict_type": "P"
+            }]}),
             "stderr": "",
         }
 
@@ -76,7 +79,7 @@ def test_frame_samples_use_independent_timestamp_probes(tmp_path, monkeypatch):
     ]
     assert [sample["sample"] for sample in samples] == ["first", "middle", "last"]
     assert [sample["seek_seconds"] for sample in samples] == [0.0, 5.0, 9.9]
-    assert all(sample["timestamp"] == "5.000000" for sample in samples)
+    assert [sample["timestamp"] for sample in samples] == ["0.000000", "5.000000", "9.900000"]
     assert len(calls) == 3
     assert [calls[i][calls[i].index("-read_intervals") + 1] for i in range(3)] == [
         "0.000000%+1", "5.000000%+1", "9.900000%+1"
