@@ -564,3 +564,11 @@ Last updated: 2026-11-17 15:52 UTC
 - Exact-head PR CI #1272 passed all 7 jobs. Main post-merge CI run is pending/in progress at this checkpoint.
 - Android Issue #127 remains OPEN/RUNNING with no final output/exit code. Issue #159 watchdog recovery test and #160 pull latest main, #161 media forensic rerun, #162 full tests, #163 self-test, #164 health audit remain queued. The queue should pull commit `86e5841` before the new forensic run.
 - Five MP4s remain UNRESOLVED. No repair, regeneration, deletion, overwrite, upload, or publishing has occurred. Keep production PAUSED and public publishing DISABLED.
+
+
+
+### Android regression Issue #127 — final result, 2026-11-18 11:55:50 UTC
+- Issue #127 closed with `sintu-command-done`; Android Termux regression command SUCCESS / exit 0.
+- Actual pytest: **593 passed, 5 warnings in 272.16s (4m32s)** on Python 3.14.10. Warnings are Starlette/httpx TestClient deprecation and FastAPI `on_event` lifecycle deprecations; no test failures.
+- This #127 execution began before the queued #160 pull of PR #158/#165 changes, so it validates the previously deployed code, not the latest pixel-verification commit. Issue #162 is queued to rerun the suite after latest main is pulled.
+- The relay recovered two stale claims before #127 completed; the final attempt succeeded. Issue #159 watchdog recovery test is now RUNNING; #160 pull latest main and #161 forensic rerun remain queued behind it.
