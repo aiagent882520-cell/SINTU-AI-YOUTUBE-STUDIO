@@ -222,6 +222,7 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var formatId by remember { mutableStateOf("youtube-shorts") }
     var topic by remember { mutableStateOf("") }
+    var resolution by remember { mutableStateOf("720x1280") }
     var runId by remember { mutableStateOf("") }
     var runStatus by remember { mutableStateOf("") }
     var notice by remember { mutableStateOf("Create a format-specific production run. Final MP4 is enabled only after all production/reviewer gates pass.") }
@@ -243,6 +244,11 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
         OutlinedTextField(
             topic, { topic = it },
             Modifier.fillMaxWidth(), label = { Text("Topic / instructions") }, minLines = 4
+        )
+        OutlinedTextField(
+            resolution, { resolution = it.trim().take(12) },
+            Modifier.fillMaxWidth(), label = { Text("Low-memory output resolution (720x1280 / 1280x720)") },
+            singleLine = true
         )
         Button(
             onClick = {
@@ -311,7 +317,7 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
                     scope.launch {
                         busy = true
                         try {
-                            val result = api.produceApprovedMedia(runId)
+                            val result = api.produceApprovedMedia(runId, resolution)
                             runStatus = result["status"]?.toString() ?: runStatus
                             val render = result["render"] as? Map<*, *>
                             videoId = render?.get("video_id")?.toString().orEmpty()
