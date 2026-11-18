@@ -344,3 +344,6 @@ Last updated: 2026-11-17 15:52 UTC
 
 - PR #136 now rejects non-finite, zero or missing duration before constructing frame-seek timestamps; all five sample slots carry explicit errors and the report exits nonzero.
 - Added regression coverage for invalid duration, missing FFprobe executable and FFprobe timeout. These remain tool failures, never PASS.
+
+
+- Invalid/non-finite duration metadata is normalized to JSON `null` with an explicit duration error, so the forensic report remains strict-JSON serializable while failing closed. Regression test enforces `json.dumps(..., allow_nan=False)`.
