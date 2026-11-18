@@ -3267,8 +3267,8 @@ def test_production_run_render_requires_approved_matching_format(tmp_path, monke
     state = {"status": "paused", "format_id": "youtube-shorts"}
     monkeypatch.setattr(main, "get_production_run", lambda value, owner=None: state if value == run_id and owner == "local" else None)
     monkeypatch.setattr(main, "render_video", lambda payload: {
-        "video_id": "b" * 32, "url": "/api/videos/" + "b" * 32,
-        "format": "MP4 / H.264"
+        "video_id": "b" * 32, "filename": "b" * 32 + ".mp4",
+        "url": "/api/videos/" + "b" * 32, "format": "MP4 / H.264"
     })
     monkeypatch.setattr(main, "attach_render_result", lambda value, result, owner=None: {
         "status": "completed", "result": {"video_rendered": True}
