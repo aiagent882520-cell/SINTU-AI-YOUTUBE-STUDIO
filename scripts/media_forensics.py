@@ -220,7 +220,10 @@ def sample_decoded_frame(path: Path, seek_seconds: float, label: str) -> dict:
             continue
         if timestamp >= seek - 0.001:
             timed.append((abs(timestamp - seek), timestamp, frame))
-    chosen = min(timed, key=lambda item: item[0])[2] if timed else frames[0]
+    if not timed:
+        sample["error"] = "no decoded frame at or after the requested timestamp"
+        return sample
+    chosen = min(timed, key=lambda item: item[0])[2]
     sample["timestamp"] = chosen.get("best_effort_timestamp_time")
     sample["picture_type"] = chosen.get("pict_type")
     return sample
