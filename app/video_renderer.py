@@ -369,6 +369,56 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
     minimum_frames = max(1, math.floor(duration * fps * 0.95))
     if frame_count < minimum_frames or abs(duration - video_duration) > max(0.5, 2 / fps):
         raise RenderFailed("Upload MP4 truncated hai: actual frames aur video duration match nahi karte.")
+
+    # Metadata alone does not prove that the encoded picture contains visible
+    # content. Reject full-duration black exports and sample short clips too;
+    # otherwise a 4–8 second black MP4 could pass the upload gate.
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RendererUnavailable("Upload se pehle visual MP4 verification ke liye FFmpeg required hai.")
+    try:
+        black = subprocess.run(
+            [ffmpeg, "-hide_banner", "-i", str(path), "-vf",
+             "blackdetect=d=0.5:pix_th=0.10", "-an", "-f", "null", "-"],
+            capture_output=True, text=True, timeout=45, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise RenderFailed("Upload MP4 black-frame verification fail ya timeout ho gaya.") from None
+    if black.returncode != 0:
+        raise RenderFailed("Upload MP4 black-frame scan decode nahi ho saka.")
+    black_intervals = [
+        (float(start), float(end)) for start, end in re.findall(
+            r"black_start:([0-9.]+)\\s+black_end:([0-9.]+)", black.stderr
+        )
+    ]
+    if any(start <= 0.1 and end >= duration * 0.95 for start, end in black_intervals):
+        raise RenderFailed("Upload MP4 mein full-duration black video frames hain; publishing blocked.")
+
+    try:
+        pixels = subprocess.run(
+            [ffmpeg, "-v", "error", "-i", str(path), "-vf", "fps=1,scale=32:32",
+             "-frames:v", "600", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
+            capture_output=True, timeout=45, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise RenderFailed("Upload MP4 visible-frame verification fail ya timeout ho gaya.") from None
+    frame_bytes = 32 * 32 * 3
+    if pixels.returncode != 0 or len(pixels.stdout) < frame_bytes or len(pixels.stdout) % frame_bytes:
+        raise RenderFailed("Upload MP4 ke visible frames decode nahi ho sake.")
+    sampled_frames = [
+        pixels.stdout[index:index + frame_bytes]
+        for index in range(0, len(pixels.stdout), frame_bytes)
+    ]
+    visible_frames = sum(
+        1 for frame in sampled_frames
+        if (sum(frame) / len(frame)) > 5.0 and max(frame) > 24
+    )
+    required_visible = max(1, math.ceil(len(sampled_frames) * 0.70))
+    if visible_frames < required_visible:
+        raise RenderFailed(
+            f"Upload MP4 visual quality failed: {visible_frames}/{len(sampled_frames)} sampled frames contain visible content."
+        )
+
     motion_audit = None
     if duration > 8:
         ffmpeg = shutil.which("ffmpeg")
