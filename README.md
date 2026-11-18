@@ -135,3 +135,16 @@ The diagnostic checks repository identity, virtualenv, GitHub CLI authentication
 ## Advanced firewall and Android phone safety
 
 SINTU includes an application-layer firewall: loopback-only service binding, admin authentication, dedicated bridge tokens, fixed command allowlists, API rate limiting, same-origin checks, security headers and audit logging. The read-only Android-safe configuration audit is documented in [Advanced Firewall & Android Safety](docs/ADVANCED_FIREWALL_ANDROID_SAFETY.md) (Hindi: [फ़ोन सुरक्षा](docs/README_HI_FIREWALL.md)). Run ` .venv/bin/python scripts/firewall_safety_audit.py --json` in Termux to inspect settings. It never changes Android firewall, VPN, DNS, Wi-Fi, mobile data or routing, so it cannot deliberately interrupt other phone apps. It reports unsafe settings rather than silently rewriting configuration.
+
+
+## Production and external publishing safety gates
+
+Video/media rendering and asset-generation endpoints are disabled by default unless
+`SINTU_PRODUCTION_ENABLED=true` is explicitly set by the owner after all required
+forensic, regression, worker, health and device gates pass. YouTube, Meta and TikTok
+upload/publishing endpoints (including YouTube public-approval creation) are separately
+disabled unless `SINTU_EXTERNAL_PUBLISHING_ENABLED=true` is explicitly set. Both
+flags default to `false`; enabling one does not enable the other. Revoking an
+existing public approval remains available while publishing is disabled. These
+server-side gates apply even when an administrator is authenticated or OAuth
+credentials are configured.

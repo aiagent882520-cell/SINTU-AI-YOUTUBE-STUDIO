@@ -11,6 +11,10 @@ from app import main, video_renderer
 
 def client_for_test(tmp_path, monkeypatch):
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "false")
+    # Ordinary endpoint contract tests opt in explicitly; dedicated policy tests
+    # remove these flags to verify the production-safe default is deny.
+    monkeypatch.setenv("SINTU_PRODUCTION_ENABLED", "true")
+    monkeypatch.setenv("SINTU_EXTERNAL_PUBLISHING_ENABLED", "true")
     monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "test.sqlite3")
     main._LOGIN_LIMITER.reset()
@@ -4053,3 +4057,47 @@ def test_main_render_ui_exposes_2d_animation_format_options(tmp_path, monkeypatc
     script = client.get("/static/app.js").text
     assert 'populateRenderFormatOptions' in script
     assert '"2d-cartoon","story-animation"' in script or '"2d-cartoon", "story-animation"' in script
+
+
+def test_media_production_and_external_publishing_are_disabled_by_default(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.delenv("SINTU_PRODUCTION_ENABLED", raising=False)
+    monkeypatch.delenv("SINTU_EXTERNAL_PUBLISHING_ENABLED", raising=False)
+
+    production_paths = [
+        "/api/render",
+        "/api/video/generate",
+        "/api/production/runs/" + ("a" * 32) + "/produce-media",
+        "/api/studio/render-queue/" + ("b" * 32) + "/execute",
+        "/api/images",
+        "/api/voice",
+    ]
+    for path in production_paths:
+        response = client.post(path, json={})
+        assert response.status_code == 503, (path, response.status_code, response.text)
+        assert "production is paused" in response.json()["detail"].lower()
+
+    publishing_paths = [
+        "/api/admin/youtube/publish/1?video_id=" + ("c" * 32) + "&title=Test",
+        "/api/admin/youtube/public-approvals",
+        "/api/admin/meta/facebook/publish/1?video_id=" + ("c" * 32) + "&title=Test",
+        "/api/admin/meta/instagram/publish/1?video_url=https%3A%2F%2Fexample.test%2Fvideo.mp4",
+        "/api/admin/tiktok/publish/1?video_id=" + ("c" * 32),
+    ]
+    for path in publishing_paths:
+        response = client.post(path, json={})
+        assert response.status_code == 503, (path, response.status_code, response.text)
+        assert "publishing is disabled" in response.json()["detail"].lower()
+
+
+def test_owner_can_explicitly_enable_production_and_publishing_gates(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_PRODUCTION_ENABLED", "true")
+    monkeypatch.setenv("SINTU_EXTERNAL_PUBLISHING_ENABLED", "true")
+
+    # Invalid payloads must reach route validation instead of the pause middleware.
+    assert client.post("/api/render", json={}).status_code != 503
+    assert client.post(
+        "/api/admin/youtube/publish/1",
+        params={"video_id": "c" * 32, "title": "Test"},
+    ).status_code != 503

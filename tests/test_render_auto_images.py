@@ -4,6 +4,9 @@ from app import main
 def _client(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "false")
+    # Endpoint contract tests opt in; policy tests separately assert the safe default.
+    monkeypatch.setenv("SINTU_PRODUCTION_ENABLED", "true")
+    monkeypatch.setenv("SINTU_EXTERNAL_PUBLISHING_ENABLED", "true")
     monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "sintu-test.sqlite3")
     main._LOGIN_LIMITER.reset()
