@@ -759,3 +759,42 @@ def test_inspect_video_marks_middle_and_last_sampling_failures_as_tool_failure(t
     ]
     assert report["frame_probe_exit"] == 1
     assert media_forensics.has_forensic_tool_failure(report) is True
+
+
+def test_extracted_frame_pixel_verification_distinguishes_black_and_visible_frames(tmp_path, monkeypatch):
+    colors = iter(["black", "white"])
+
+    def fake_run(command, timeout=120):
+        media_forensics.Image.new("RGB", (64, 64), next(colors)).save(command[-1])
+        return {"returncode": 0, "stdout": "", "stderr": ""}
+
+    monkeypatch.setattr(media_forensics, "run", fake_run)
+    black = media_forensics.extract_frame_pixel_verification(tmp_path / "clip.mp4", "0.0", "first")
+    visible = media_forensics.extract_frame_pixel_verification(tmp_path / "clip.mp4", "2.0", "middle")
+    assert black["status"] == "PASS"
+    assert black["near_black"] is True
+    assert black["mean_luma"] == 0.0
+    assert black["black_pixel_percentage"] == 100.0
+    assert visible["status"] == "PASS"
+    assert visible["near_black"] is False
+    assert visible["mean_luma"] == 255.0
+    assert visible["black_pixel_percentage"] == 0.0
+
+
+def test_extracted_frame_pixel_verification_fails_closed_on_timeout_and_temp_storage_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_forensics, "run", lambda *args, **kwargs: {
+        "returncode": None, "stdout": "", "stderr": "ffmpeg frame extraction timed out",
+    })
+    timed_out = media_forensics.extract_frame_pixel_verification(tmp_path / "clip.mp4", "1.0", "middle")
+    assert timed_out["status"] == "FAIL"
+    assert timed_out["extraction_exit"] is None
+    assert "timed out" in timed_out["error"]
+
+    monkeypatch.setattr(
+        media_forensics.tempfile, "TemporaryDirectory",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("temporary storage unavailable")),
+    )
+    no_storage = media_forensics.extract_frame_pixel_verification(tmp_path / "clip.mp4", "1.0", "middle")
+    assert no_storage["status"] == "FAIL"
+    assert no_storage["extraction_exit"] is None
+    assert "temporary storage unavailable" in no_storage["error"]
