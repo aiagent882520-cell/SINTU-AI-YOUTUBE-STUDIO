@@ -79,7 +79,7 @@ def test_frame_samples_use_independent_timestamp_probes(tmp_path, monkeypatch):
     assert all(sample["timestamp"] == "5.000000" for sample in samples)
     assert len(calls) == 3
     assert [calls[i][calls[i].index("-read_intervals") + 1] for i in range(3)] == [
-        "0.000000%+#1", "5.000000%+#1", "9.900000%+#1"
+        "0.000000%+1", "5.000000%+1", "9.900000%+1"
     ]
 
 
@@ -90,3 +90,17 @@ def test_frame_sample_reports_missing_frame_without_failing_report(tmp_path, mon
     sample = media_forensics.sample_decoded_frame(tmp_path / "clip.mp4", 2.0, "middle")
     assert sample["timestamp"] is None
     assert sample["error"] == "no decoded frame found at requested timestamp"
+
+
+def test_frame_sample_selects_frame_closest_to_requested_timestamp(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_forensics, "run", lambda *args, **kwargs: {
+        "returncode": 0,
+        "stdout": '{"frames":['
+                  '{"best_effort_timestamp_time":"4.958333","pict_type":"P"},'
+                  '{"best_effort_timestamp_time":"5.000000","pict_type":"B"},'
+                  '{"best_effort_timestamp_time":"5.041667","pict_type":"P"}]}',
+        "stderr": "",
+    })
+    sample = media_forensics.sample_decoded_frame(tmp_path / "clip.mp4", 5.02, "middle")
+    assert sample["timestamp"] == "5.041667"
+    assert sample["picture_type"] == "P"
