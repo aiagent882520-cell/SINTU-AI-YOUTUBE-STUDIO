@@ -231,7 +231,7 @@ def test_frame_sample_falls_back_to_sequential_decode_after_inaccurate_seek(tmp_
         assert command[command.index("-read_intervals") + 1] == "0%+6.000000"
         return {
             "returncode": 0,
-            "stdout": "4.958333,P\\n5.041667,B\\n",
+            "stdout": "4.958333,P\n5.041667,B\n",
             "stderr": "",
         }
 
@@ -250,10 +250,11 @@ def test_sequential_fallback_parses_late_timestamp_from_compact_csv(tmp_path, mo
 
     def fake_run(command, timeout=120):
         calls.append(command)
-        if "-read_intervals" in command and command[command.index("-read_intervals") + 1] != "0%+9.000000":
+        interval = command[command.index("-read_intervals") + 1]
+        if not interval.startswith("0%+"):
             return {"returncode": 0, "stdout": '{"frames":[]}', "stderr": ""}
         rows = [f"{index / 24:.6f},P" for index in range(217)]
-        return {"returncode": 0, "stdout": "\\n".join(rows), "stderr": ""}
+        return {"returncode": 0, "stdout": "\n".join(rows), "stderr": ""}
 
     monkeypatch.setattr(media_forensics, "run", fake_run)
     sample = media_forensics.sample_decoded_frame(tmp_path / "clip.mp4", 8.9, "last")
@@ -267,7 +268,7 @@ def test_sequential_fallback_parses_late_timestamp_from_compact_csv(tmp_path, mo
 def test_run_preserves_bounded_head_and_tail_for_large_filter_lists(monkeypatch):
     from types import SimpleNamespace
 
-    output = "blackdetect\\n" + ("x" * 600_000) + "\\nblackframe\\nfps\\nscale"
+    output = "blackdetect\n" + ("x" * 600_000) + "\nblackframe\nfps\nscale"
     monkeypatch.setattr(
         media_forensics.subprocess, "run",
         lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=output, stderr=""),
