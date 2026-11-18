@@ -353,3 +353,6 @@ Last updated: 2026-11-17 15:52 UTC
 
 - The forensic report now samples 30 evenly distributed decoded frames per valid video with FFmpeg `blackframe` and reports sampled black-frame count/percentage plus mean black-pixel percentage. Full-duration `blackdetect` intervals remain a separate check.
 - Missing blackframe output or FFmpeg failure is a forensic-tool failure. Regression tests cover parsing and percentage calculation.
+
+
+- Added an FFmpeg/FFprobe integration test that creates a synthetic 4-second black MP4 and verifies full-duration black detection, 30 distributed blackframe samples (100% black), all five timestamp samples, and no hidden tool failure.
