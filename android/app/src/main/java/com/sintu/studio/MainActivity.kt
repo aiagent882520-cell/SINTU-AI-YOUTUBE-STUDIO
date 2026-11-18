@@ -106,6 +106,7 @@ private fun SintuRoot() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StudioTabs(api: SintuApi) {
     var tab by remember { mutableIntStateOf(0) }
