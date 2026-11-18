@@ -134,6 +134,8 @@ def test_inspect_video_builds_report_from_three_frame_probes(tmp_path, monkeypat
             }), "stderr": ""}
         if command[0] == "ffmpeg" and "blackdetect=d=0.10:pix_th=0.10" in command:
             return {"returncode": 0, "stdout": "", "stderr": ""}
+        if command[0] == "ffmpeg" and any("blackframe=" in part for part in command):
+            return {"returncode": 0, "stdout": "", "stderr": "pblack:0\npblack:0\npblack:0"}
         return {"returncode": 0, "stdout": "", "stderr": ""}
 
     monkeypatch.setattr(media_forensics, "run", fake_run)
@@ -163,8 +165,9 @@ def test_frame_sample_rejects_only_preceding_keyframe_results(tmp_path, monkeypa
 def test_forensic_tool_failure_is_not_hidden_by_existing_video_file():
     good = {
         "exists": True, "safe_regular_file": True,
-        "ffprobe_exit": 0, "blackdetect_exit": 0, "decode_exit": 0,
-        "frame_probe_exit": 0,
+        "ffprobe_exit": 0, "blackdetect_exit": 0, "blackframe_exit": 0,
+        "decode_exit": 0, "frame_probe_exit": 0,
+        "black_frame_metrics": {"sampled_frame_count": 5},
         "metadata": {"format": "mov,mp4", "duration_seconds": 4.0,
                      "streams": [{"type": "video"}]},
         "decoded_frame_samples": [
@@ -357,3 +360,19 @@ def test_forensic_run_reports_missing_binary_and_timeout(tmp_path, monkeypatch):
     timed_out = media_forensics.run(["ffprobe", "-version"], timeout=1)
     assert timed_out["returncode"] is None
     assert "timed out" in timed_out["stderr"].lower()
+
+
+
+def test_blackframe_parser_and_percentage_summary():
+    values = media_forensics.parse_black_frame_percentages(
+        "[Parsed_blackframe] frame:0 pblack:100 pts:0 "
+        "[Parsed_blackframe] frame:1 pblack:100 pts:1 "
+        "[Parsed_blackframe] frame:2 pblack:0 pts:2 "
+        "[Parsed_blackframe] frame:3 pblack:20 pts:3"
+    )
+    assert values == [100, 100, 0, 20]
+    metrics = media_forensics.summarize_black_frame_percentages(values)
+    assert metrics["sampled_frame_count"] == 4
+    assert metrics["black_frame_count"] == 2
+    assert metrics["black_frame_percentage"] == 50.0
+    assert metrics["mean_black_pixel_percentage"] == 55.0
