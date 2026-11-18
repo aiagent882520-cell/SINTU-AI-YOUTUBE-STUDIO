@@ -438,3 +438,17 @@ Last updated: 2026-11-17 15:52 UTC
 - Issue #145 automation_self_test is queued as a relay liveness check. #146 `git_pull_ff_only` and #147 `restart_services` are queued in that order to deploy PR #143 and reload the relay. The restart action is deferred until ordinary queued work is drained.
 - #140 remains a failed, incomplete forensic report because the old 8k relay cap truncated the compact footer. It is not a valid post-fix full per-file result. After #146/#147 complete, rerun read-only media forensics and inspect all five target reports with the 20k footer.
 - Production remains PAUSED; no original media modified, repaired, regenerated, deleted, or uploaded; no YouTube upload/public visibility change or paid service.
+
+
+### Android #129 health audit result after stale recovery — 2026-11-18 10:09 UTC
+
+- Issue #129 was recovered from its stale claim at 10:00:50 UTC, reclaimed at 10:01:10 UTC, and completed at 10:09:22 UTC with **FAILED (exit 1)**.
+- The health audit footer is complete and machine-readable: **13 PASS, 0 WARN, 5 FAIL**. Pytest itself passed: **588 passed, 5 warnings in 241.58 seconds (4:01)**.
+- All five failures are the known full-duration black videos:
+  `3f4c2151e8e640109f464b2c2e9b7569.mp4`,
+  `59430f1fb7fd4bdf80cf8b7d9f456098.mp4`,
+  `8cfe9da88d5c43d184f3572e371ff4a6.mp4`,
+  `adf9268e5d5543a587defdde5d4c4edd.mp4`,
+  `afa4c87e3c1e42a197b7092e0e24040d.mp4`.
+- Other media checks passed. This confirms the remaining failure is visual content, not Python regression or AAC/H.264 profile. No originals changed.
+- #127 was requeued at 10:04:09 UTC and is awaiting execution. #145 automation self-test, #146 git pull and #147 restart remain queued behind the current relay queue. Do not duplicate any of them.
