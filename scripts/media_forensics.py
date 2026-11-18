@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import sqlite3
@@ -59,6 +60,34 @@ def parse_black_intervals(stderr: str) -> list[list[float]]:
     return [[float(a), float(b)] for a, b in re.findall(
         r"black_start:([0-9.]+)\s+black_end:([0-9.]+)", stderr
     )]
+
+
+
+def parse_black_frame_percentages(stderr: str) -> list[int]:
+    """Extract FFmpeg blackframe pblack percentages from sampled decoded frames."""
+    return [int(value) for value in re.findall(r"\bpblack:(\d+)\b", stderr)]
+
+
+def summarize_black_frame_percentages(values: list[int]) -> dict:
+    """Summarize evenly distributed blackframe samples; >=98% black pixels is a black frame."""
+    if not values:
+        return {
+            "sampled_frame_count": 0,
+            "black_frame_count": 0,
+            "black_frame_percentage": None,
+            "mean_black_pixel_percentage": None,
+            "black_pixel_threshold": 32,
+            "black_frame_cutoff_percent": 98,
+        }
+    black_count = sum(value >= 98 for value in values)
+    return {
+        "sampled_frame_count": len(values),
+        "black_frame_count": black_count,
+        "black_frame_percentage": round(black_count / len(values) * 100, 2),
+        "mean_black_pixel_percentage": round(sum(values) / len(values), 2),
+        "black_pixel_threshold": 32,
+        "black_frame_cutoff_percent": 98,
+    }
 
 
 def scan_text_logs(needles: tuple[str, ...]) -> list[dict]:
@@ -190,8 +219,11 @@ def parse_creation_time(value: str | None) -> float | None:
 
 
 def sample_decoded_frame(path: Path, seek_seconds: float, label: str) -> dict:
-    """Probe exactly one decoded frame near an independent timestamp."""
+    """Find a decoded frame at/after a timestamp, recovering from inaccurate demuxer seeks."""
     seek = max(0.0, float(seek_seconds))
+    sample = {"sample": label, "seek_seconds": round(seek, 6),
+              "timestamp": None, "picture_type": None, "error": "",
+              "sampling_method": "independent_seek"}
     result = run([
         "ffprobe", "-v", "error", "-select_streams", "v:0",
         "-read_intervals", f"{seek:.6f}%+1",
@@ -199,8 +231,6 @@ def sample_decoded_frame(path: Path, seek_seconds: float, label: str) -> dict:
         "-show_entries", "frame=best_effort_timestamp_time,pict_type",
         "-of", "json", str(path),
     ], timeout=30)
-    sample = {"sample": label, "seek_seconds": round(seek, 6),
-              "timestamp": None, "picture_type": None, "error": ""}
     if result["returncode"] != 0:
         sample["error"] = (result["stderr"] or "ffprobe frame sample failed")[:250]
         return sample
@@ -209,21 +239,49 @@ def sample_decoded_frame(path: Path, seek_seconds: float, label: str) -> dict:
     except (TypeError, ValueError, json.JSONDecodeError):
         sample["error"] = "invalid ffprobe frame-sample JSON"
         return sample
-    if not frames:
-        sample["error"] = "no decoded frame found at requested timestamp"
-        return sample
-    timed = []
-    for frame in frames:
+
+    def closest_at_or_after(items):
+        timed = []
+        for frame in items:
+            try:
+                timestamp = float(frame.get("best_effort_timestamp_time"))
+            except (TypeError, ValueError):
+                continue
+            if timestamp >= seek - 0.001:
+                timed.append((abs(timestamp - seek), timestamp, frame))
+        return min(timed, key=lambda item: item[0])[2] if timed else None
+
+    chosen = closest_at_or_after(frames)
+    if chosen is None:
+        # FFprobe documents that interval seeking is not frame-accurate: some
+        # demuxers seek back to an earlier keyframe, and the +1s window can end
+        # before the requested timestamp. Retry from t=0 so decoding advances
+        # sequentially through the target rather than trusting that seek point.
+        fallback = run([
+            "ffprobe", "-v", "error", "-select_streams", "v:0",
+            "-read_intervals", f"0%+{seek + 1.0:.6f}",
+            "-show_frames",
+            "-show_entries", "frame=best_effort_timestamp_time,pict_type",
+            "-of", "json", str(path),
+        ], timeout=120)
+        if fallback["returncode"] != 0:
+            detail = (fallback["stderr"] or "sequential ffprobe frame scan failed")[:180]
+            sample["error"] = f"timestamp seek found no usable frame; sequential fallback failed: {detail}"
+            return sample
         try:
-            timestamp = float(frame.get("best_effort_timestamp_time"))
-        except (TypeError, ValueError):
-            continue
-        if timestamp >= seek - 0.001:
-            timed.append((abs(timestamp - seek), timestamp, frame))
-    if not timed:
-        sample["error"] = "no decoded frame at or after the requested timestamp"
-        return sample
-    chosen = min(timed, key=lambda item: item[0])[2]
+            fallback_frames = json.loads(fallback["stdout"]).get("frames", [])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            sample["error"] = "invalid sequential ffprobe frame-scan JSON"
+            return sample
+        chosen = closest_at_or_after(fallback_frames)
+        if chosen is None:
+            sample["error"] = (
+                "no decoded frame found at requested timestamp" if not fallback_frames
+                else "no decoded frame at or after the requested timestamp"
+            )
+            return sample
+        sample["sampling_method"] = "sequential_fallback_from_start"
+
     sample["timestamp"] = chosen.get("best_effort_timestamp_time")
     sample["picture_type"] = chosen.get("pict_type")
     return sample
@@ -270,7 +328,12 @@ def inspect_video(path: Path) -> dict:
             raw = json.loads(probe["stdout"])
             fmt = raw.get("format", {})
             info["format"] = fmt.get("format_name")
-            info["duration_seconds"] = float(fmt.get("duration") or 0)
+            parsed_duration = float(fmt.get("duration") or 0)
+            if math.isfinite(parsed_duration) and parsed_duration > 0:
+                info["duration_seconds"] = parsed_duration
+            else:
+                info["duration_seconds"] = None
+                info["duration_error"] = "duration is not finite and positive"
             info["container_creation_time"] = (fmt.get("tags") or {}).get("creation_time")
             for stream in raw.get("streams", []):
                 info["streams"].append({
@@ -290,7 +353,25 @@ def inspect_video(path: Path) -> dict:
     decode = run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "null", "-"])
     intervals = parse_black_intervals(black["stderr"])
     duration = info["duration_seconds"] or 0
-    full_black = bool(duration and any(a <= 0.1 and b >= duration * 0.95 for a, b in intervals))
+    duration_valid = isinstance(duration, (int, float)) and math.isfinite(duration) and duration > 0
+    if duration_valid:
+        sample_fps = 30.0 / duration
+        blackframe = run([
+            "ffmpeg", "-hide_banner", "-i", str(path), "-vf",
+            f"fps={sample_fps:.8f},blackframe=amount=0:threshold=32",
+            "-an", "-frames:v", "30", "-f", "null", "-",
+        ])
+        blackframe_values = parse_black_frame_percentages(blackframe["stderr"])
+        black_frame_metrics = summarize_black_frame_percentages(blackframe_values)
+        blackframe_error = (
+            "" if blackframe["returncode"] == 0 and blackframe_values
+            else (blackframe["stderr"] or "no blackframe samples decoded")[:250]
+        )
+    else:
+        blackframe = {"returncode": None, "stderr": "invalid or missing video duration"}
+        black_frame_metrics = summarize_black_frame_percentages([])
+        blackframe_error = "invalid or missing video duration; black-frame sampling skipped"
+    full_black = bool(duration_valid and any(a <= 0.1 and b >= duration * 0.95 for a, b in intervals))
 
     fps = 0.0
     for stream in info["streams"]:
@@ -301,12 +382,27 @@ def inspect_video(path: Path) -> dict:
             except (TypeError, ValueError, ZeroDivisionError):
                 fps = 0.0
             break
-    end_seek = max(0.0, duration - (1.0 / fps if fps > 0 else 0.1))
-    samples = [
-        sample_decoded_frame(path, 0.0, "first"),
-        sample_decoded_frame(path, duration / 2.0, "middle"),
-        sample_decoded_frame(path, end_seek, "last"),
-    ]
+    if duration_valid:
+        end_seek = max(0.0, duration - (1.0 / fps if fps > 0 else 0.1))
+        # Five evenly distributed sample points catch black/blank intervals
+        # that a first/middle/last-only probe can miss.
+        sample_points = [
+            ("first", 0.0),
+            ("quarter", duration * 0.25),
+            ("middle", duration * 0.50),
+            ("three_quarter", duration * 0.75),
+            ("last", end_seek),
+        ]
+        samples = [
+            sample_decoded_frame(path, timestamp, label)
+            for label, timestamp in sample_points
+        ]
+    else:
+        samples = [{
+            "sample": label, "seek_seconds": None, "timestamp": None,
+            "picture_type": None, "sampling_method": "not_attempted",
+            "error": "invalid or missing video duration; frame sampling skipped",
+        } for label in ("first", "quarter", "middle", "three_quarter", "last")]
 
     backups = find_backups(path)
     creation_epoch = parse_creation_time(info.get("container_creation_time"))
@@ -330,6 +426,8 @@ def inspect_video(path: Path) -> dict:
         "ffprobe_exit": probe["returncode"], "metadata": info,
         "av_sync": analyze_av_sync(info["streams"]),
         "blackdetect_exit": black["returncode"], "black_intervals": intervals,
+        "blackframe_exit": blackframe["returncode"],
+        "black_frame_metrics": black_frame_metrics, "blackframe_error": blackframe_error,
         "full_duration_black": full_black, "decode_exit": decode["returncode"],
         "decode_errors": redact_secrets(decode["stderr"]) if decode["stderr"] else "",
         "decoded_frame_samples": samples,
@@ -342,16 +440,91 @@ def has_forensic_tool_failure(item: dict) -> bool:
     """Distinguish a completed black-video finding from failed forensic tooling."""
     if not item.get("exists") or not item.get("safe_regular_file"):
         return True
-    for key in ("ffprobe_exit", "blackdetect_exit", "decode_exit", "frame_probe_exit"):
+    for key in ("ffprobe_exit", "blackdetect_exit", "blackframe_exit", "decode_exit", "frame_probe_exit"):
         if item.get(key) != 0:
             return True
     metadata = item.get("metadata") or {}
-    if metadata.get("parse_error") or not metadata.get("format") or not metadata.get("duration_seconds"):
+    try:
+        duration = float(metadata.get("duration_seconds"))
+    except (TypeError, ValueError):
+        return True
+    if (metadata.get("parse_error") or not metadata.get("format")
+            or not math.isfinite(duration) or duration <= 0):
         return True
     if not any(stream.get("type") == "video" for stream in metadata.get("streams", [])):
         return True
+    black_metrics = item.get("black_frame_metrics") or {}
+    if black_metrics.get("sampled_frame_count") != 30:
+        return True
     samples = item.get("decoded_frame_samples") or []
-    return len(samples) != 3 or any(sample.get("error") or not sample.get("timestamp") for sample in samples)
+    return len(samples) != 5 or any(sample.get("error") or not sample.get("timestamp") for sample in samples)
+
+
+def compact_forensic_summary(report: dict) -> dict:
+    """Build a small per-file footer that survives the Termux relay's output-tail limit."""
+    targets = []
+    for item in report.get("targets", []):
+        metadata = item.get("metadata") or {}
+        streams = [
+            {key: stream.get(key) for key in (
+                "type", "codec", "resolution", "pixel_format", "frame_rate",
+                "frame_count", "sample_rate", "channels", "duration", "start_time",
+            )}
+            for stream in metadata.get("streams", [])
+        ]
+        targets.append({
+            "file": item.get("file"),
+            "exists": item.get("exists"),
+            "size_bytes": item.get("size_bytes"),
+            "sha256": item.get("sha256"),
+            "duration_seconds": metadata.get("duration_seconds"),
+            "streams": streams,
+            "full_duration_black": item.get("full_duration_black"),
+            "black_intervals": item.get("black_intervals", []),
+            "blackframe_exit": item.get("blackframe_exit"),
+            "black_frame_metrics": item.get("black_frame_metrics", {}),
+            "blackframe_error": item.get("blackframe_error"),
+            "decode_exit": item.get("decode_exit"),
+            "frame_probe_exit": item.get("frame_probe_exit"),
+            "samples": [
+                {key: sample.get(key) for key in (
+                    "sample", "seek_seconds", "timestamp", "picture_type",
+                    "sampling_method", "error",
+                )}
+                for sample in item.get("decoded_frame_samples", [])
+            ],
+            "backups": [
+                {key: backup.get(key) for key in ("path", "size_bytes", "sha256")}
+                for backup in item.get("pre_repair_backups", [])
+            ],
+            "asset_reference_time_utc": item.get("asset_reference_time_utc"),
+        })
+    return {
+        "status": report.get("status"),
+        "summary": report.get("summary", {}),
+        "targets": targets,
+        "candidate_source_assets": [
+            {key: asset.get(key) for key in (
+                "path", "size_bytes", "image_size", "mean_luma",
+                "luma_stddev", "near_black", "modified_utc",
+            )}
+            for asset in report.get("candidate_source_assets", [])[:10]
+        ],
+        "production_log_matches": [
+            {"path": match.get("path"), "line": match.get("line"),
+             "excerpt": str(match.get("excerpt", ""))[:180]}
+            for match in report.get("production_log_matches", [])[:5]
+        ],
+        "production_database_matches": [
+            {"db": match.get("db"), "table": match.get("table"),
+             "column": match.get("column"),
+             "record": {key: str(value)[:80] for key, value in list(
+                 (match.get("record") or {}).items()
+             )[:4]}}
+            for match in report.get("production_database_matches", [])[:5]
+        ],
+        "safety": report.get("safety", {}),
+    }
 
 
 def main() -> int:
@@ -385,6 +558,11 @@ def main() -> int:
         "note": "The audio repair used copy2 backups before replacing MP4s; backup mtimes are preferred for source correlation because current MP4 mtimes may reflect audio repair. Technical evidence only; no repair, quarantine, deletion, regeneration, or upload was performed.",
     }
     print(json.dumps(report, ensure_ascii=False, separators=(",", ":")))
+    # The GitHub Termux relay retains only the final 8,000 output characters.
+    # Keep per-file hashes, streams, black intervals, samples, backups and safety
+    # flags in a compact footer so no target's evidence is lost to truncation.
+    footer = compact_forensic_summary(report)
+    print("SINTU_FORENSICS_SUMMARY=" + json.dumps(footer, ensure_ascii=False, separators=(",", ":")))
     return 1 if tool_failures else 0
 
 

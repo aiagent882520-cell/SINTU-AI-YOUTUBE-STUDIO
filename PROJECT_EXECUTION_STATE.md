@@ -301,3 +301,79 @@ Last updated: 2026-11-17 15:52 UTC
   `cd ~/SINTU-AI-YOUTUBE-STUDIO && bash scripts/termux_apply_update.sh`
 - This script performs `git pull --ff-only origin main`, safely stops only PID-tracked SINTU processes whose command lines match, starts the API, bridge worker, GitHub issue relay and watchdog, and verifies the local API health endpoint. It does not enable production or publish videos.
 - After the command, the existing queued issues #118–#133 should be claimed sequentially by the Termux relay; each must return its own exit code and logs. Do not mark any device job passed until those comments arrive.
+
+
+### Issue #125 follow-up execution checkpoint — 2026-11-18
+
+- Android Issue #119 has a real Termux completion comment: SUCCESS, `tests/test_api.py` reports 187 passed, 5 warnings, 140.16 seconds, therefore command exit code 0. GitHub issue metadata: created 02:44:59 UTC and closed 09:26:46 UTC; the connector does not expose the exact comment-created timestamp. Warnings are Starlette/httpx TestClient deprecation and FastAPI `on_event` deprecations. Evidence: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/issues/119#issuecomment-6974436059
+- Issues #127 (`run_tests`) and #129 (`health_audit`) are still open with `sintu-command-running`; each has only a worker-claimed comment and no completion result, exit code, final log or artifact. Do not reissue while the current claim exists. #127 issue last updated 09:22:15 UTC; #129 last updated 09:20:33 UTC.
+- Issue #125 completed on Android with FAILED (exit 1). Available result excerpt: first frame timestamp 0.000000 decoded; middle and last samples returned no frame at/after the requested timestamp; FFmpeg full decode exit 0 and blackdetect exit 0; blackdetect spans essentially the full clip. The relay stores only the final 8,000 output characters, so the beginning of this large JSON report is truncated in the GitHub comment. This is a forensic-tool failure and black-media finding, not renderer root-cause proof.
+- Code review identified a credible sampler failure mechanism: FFprobe `-read_intervals <target>%+1` is a demuxer seek and may land on an earlier keyframe; the short interval can finish before the requested timestamp. The observed pre-target-only frames are consistent with this mechanism, but the exact device-file behavior still needs reproduction after deployment. Do not mark the mechanism as fully confirmed yet.
+- Draft PR #136 (`fix/forensic-sequential-frame-sampling`) adds a bounded sequential-from-zero FFprobe fallback only when the fast seek yields no usable frame at/after the target. Probe errors, invalid JSON, missing frames and fallback timeout remain explicit failures. Adds a regression test for inaccurate seek fallback. CI status has not yet been returned; do not merge/deploy until all required checks pass.
+- Renderer investigation: current `app/video_renderer.py` uses source-image validation, generated PNG frames, concat demuxing, CFR `fps` normalization, explicit FFmpeg filter graph, temporary MP4, and post-render FFprobe/blackdetect/visible-pixel validation before atomic replace. An older concat/fade timestamp issue was corrected on 2026-11-15; five failed files are dated 2026-11-17, so that older issue is not evidence for their cause. Their exact production-run/source-image/render-command provenance is not present in the currently available Android report excerpt. Renderer root cause remains UNKNOWN/BLOCKED.
+- No media was modified, repaired, regenerated, moved, deleted or uploaded. Production remains PAUSED and public publishing remains disabled.
+
+
+### Android queue continuation — 2026-11-18
+
+- Issue #126 restart_services completed SUCCESS at 09:26:59 UTC. Termux output: `SINTU service restart scheduled after the current queue result is acknowledged.` This proves the restart command returned success and scheduled the delayed restart; it does not independently prove a post-restart health check.
+- Issue #128 automation_self_test completed SUCCESS at 09:22:12 UTC: 7 checks pass, Python 3.14.10, authenticated gh CLI (credentials hidden), API healthy, bridge/worker online, automation-only enabled, relay singleton lock held.
+- Issues #127 and #129 remain open/running. Latest issue updates are #127 09:22:15 UTC and #129 09:20:33 UTC; both still have only worker-start comments and no exit code or result. Their claim age is below the 35-minute local worker stale-claim threshold at this checkpoint; do not duplicate/requeue them.
+- Issue #119 completion is confirmed at 09:26:46 UTC: 187 passed, 5 warnings, 140.16 seconds, exit 0. Exact worker-comment timestamp is not exposed by the GitHub connector.
+- FFmpeg official FFprobe documentation explicitly warns that `-read_intervals` seeking is not accurate and that a relative interval end is calculated from the actual seek point, not the requested timestamp. This confirms the sampler's incorrect assumption as a code-level root cause; the exact seek offset for each MP4 is unavailable because the Termux relay truncated the report's leading JSON. Reference: https://ffmpeg.org/ffprobe.html
+- PR #136 final CI run 44278274943 (run #1236): SUCCESS. Dependency security audit PASS; Python 3.11/3.12/3.13/3.14 all PASS; offline branded Hindi video E2E and motion audit PASS (sampled motion ratio 0.742); production Docker build and container health endpoint PASS. E2E artifact: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44278274943/artifacts/14415089754.
+
+
+### FFprobe sampler root-cause reproduction — 2026-11-18
+
+- Reproduced the exact failure mechanism in a disposable synthetic MP4 (6 seconds, 30 fps, MPEG-4 GOP/keyframe interval 150; no user media touched). Command equivalent: `ffprobe -read_intervals '2.000000%+1' -show_frames ...`.
+- Observed fast-seek output ended at timestamp **0.966667s**, despite the requested target being 2.000000s. The sequential-from-zero interval `0%+3.000000` returned frames through **2.966667s**. This directly reproduces the middle/last sample failure: FFprobe seeks to an earlier keyframe, then computes the relative +1s end from the actual seek point, not from the requested timestamp.
+- FFprobe's official documentation explicitly warns both that interval seeking is not accurate and that the relative interval end is computed from the seek point actually found. Therefore the **forensic sampler code defect is CONFIRMED**. Exact per-file seek offsets on the five Termux MP4s remain unavailable because the result comment was tail-truncated.
+- PR #136 now includes both a mocked regression test and a real FFmpeg/FFprobe long-GOP integration regression. The fallback remains bounded to 120 seconds and reports failure if no qualifying frame is decoded; it never masks missing tools or decode errors.
+- This finding does not identify why the five encoded video streams contain black pixels. Renderer/source-asset root cause remains UNKNOWN pending full source/render provenance and a new device forensic report.
+
+
+### Relay-safe forensic evidence footer — 2026-11-18
+
+- The failed #125 comment retained only the final 8,000 characters, cutting off the first part of the one-line JSON and preventing a complete per-file audit from the GitHub result.
+- PR #136 now adds five evenly distributed frame samples per target (0%, 25%, 50%, 75%, last frame) and a compact `SINTU_FORENSICS_SUMMARY=` footer after the full JSON. It preserves all five targets' hashes, sizes, duration/streams, black intervals, decode/sample exit data, sample errors/methods, backup hashes, source-candidate image metrics, bounded redacted production-log excerpts, database provenance excerpts and safety flags within the relay's output tail.
+- A regression test asserts the compact footer retains per-file evidence and remains under the 8,000-character relay cap for the fixture.
+
+
+### Forensic invalid-input and relay tests — 2026-11-18
+
+- PR #136 now rejects non-finite, zero or missing duration before constructing frame-seek timestamps; all five sample slots carry explicit errors and the report exits nonzero.
+- Added regression coverage for invalid duration, missing FFprobe executable and FFprobe timeout. These remain tool failures, never PASS.
+
+
+- Invalid/non-finite duration metadata is normalized to JSON `null` with an explicit duration error, so the forensic report remains strict-JSON serializable while failing closed. Regression test enforces `json.dumps(..., allow_nan=False)`.
+
+
+### Per-video black-frame percentage — 2026-11-18
+
+- The forensic report now samples 30 evenly distributed decoded frames per valid video with FFmpeg `blackframe` and reports sampled black-frame count/percentage plus mean black-pixel percentage. Full-duration `blackdetect` intervals remain a separate check.
+- Missing blackframe output or FFmpeg failure is a forensic-tool failure. Regression tests cover parsing and percentage calculation.
+
+
+- Added an FFmpeg/FFprobe integration test that creates a synthetic 4-second black MP4 and verifies full-duration black detection, 30 distributed blackframe samples (100% black), all five timestamp samples, and no hidden tool failure.
+
+
+- The black-frame sampling gate now requires exactly 30 decoded distributed samples per file; a short/partial sample set is a forensic-tool failure rather than a misleading percentage.
+
+
+### CI regression correction — 2026-11-18
+
+- First complete CI run exposed one test-fixture mismatch: the mocked blackframe command returned 3 pblack values while the new fail-closed contract requires 30. This was a test fixture defect, not a production-code failure; all four Python matrix jobs reported the same assertion.
+- Updated the fixture to provide 30 samples and renamed the test for five timestamp points. A fresh full CI run is required; no result is claimed yet.
+
+
+### PR #136 final validation checkpoint — 2026-11-18
+
+- Final code head at this checkpoint: `6f9c221ec1db5f5543986fdfdc0b27494f060a75`.
+- GitHub Actions run #1236 completed SUCCESS: security audit; Python 3.11, 3.12, 3.13, 3.14; offline Hindi branded video E2E; motion audit; production Docker build; and Docker health endpoint.
+- Offline E2E sampled motion ratio was 0.742. Artifact ID 14415089754 contains the generated MP4 and JSON reports.
+- The previous run #1234 failed only because the test mock returned 3 blackframe samples while the new gate required 30. The fixture was corrected to 30, and the fresh run #1236 passed all jobs.
+- Issue #95 now records: all five black MP4s were audio-repaired with video streams copied without re-encoding; they predate PR #122's all-duration black upload gate (merged 2026-11-18 07:13 UTC); candidate images were timestamped 4–13 minutes after the `afa` backup and are not proven sources; production logs/database have no matching provenance. Renderer/source-loss stage remains UNKNOWN.
+- Repository code search index availability is false, so a repo-wide TODO/FIXME scan cannot be completed through GitHub code search. Key renderer, API, bridge and generator modules were inspected; a complete local filesystem scan remains pending Android access.
+- Issues #127 and #129 remain claimed/running with no completion comment or exit code. Their claim timestamps are 09:22:15 UTC and 09:20:33 UTC respectively; at the checkpoint their ages remain below the 35-minute stale-claim threshold. Do not duplicate them. #119 is a separate successful `tests/test_api.py` run: 187 passed, 5 warnings, 140.16 seconds, exit 0.
+- PR #136 is validated in GitHub CI only. It is not yet merged or Android-deployed. Production remains PAUSED; original media and backups untouched; no upload/publishing or paid service used.
