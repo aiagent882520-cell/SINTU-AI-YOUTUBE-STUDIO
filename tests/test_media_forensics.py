@@ -298,6 +298,7 @@ def test_compact_forensic_summary_preserves_five_targets_under_relay_tail_cap():
                 "sampled_frame_count": 30, "black_frame_count": 30,
                 "black_frame_percentage": 100.0, "mean_black_pixel_percentage": 100.0,
                 "black_pixel_threshold": 32, "black_frame_cutoff_percent": 98,
+                "pblack_values": [100] * 30,
             },
             "blackframe_error": "",
             "decode_exit": 0,
@@ -343,6 +344,7 @@ def test_compact_forensic_summary_preserves_five_targets_under_relay_tail_cap():
     assert len(footer["targets"]) == 5
     assert all(len(target["samples"]) == 5 for target in footer["targets"])
     assert all(target["backups"][0]["sha256"] == "b" * 64 for target in footer["targets"])
+    assert all(len(target["black_frame_metrics"]["pblack_values"]) == 30 for target in footer["targets"])
     import json as json_module
     assert len(json_module.dumps(footer, separators=(",", ":"))) < 7000
 
@@ -407,6 +409,7 @@ def test_blackframe_parser_and_percentage_summary():
     assert metrics["black_frame_count"] == 2
     assert metrics["black_frame_percentage"] == 50.0
     assert metrics["mean_black_pixel_percentage"] == 55.0
+    assert metrics["pblack_values"] == [100, 100, 0, 20]
 
 
 
