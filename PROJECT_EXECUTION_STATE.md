@@ -427,3 +427,14 @@ Last updated: 2026-11-17 15:52 UTC
 - #125 initial forensic: FAILED exit 1 due inaccurate FFprobe timestamp seeking; sampler defect is confirmed and fixed in merged PR #136.
 - #138 post-merge forensic attempt: FAILED exit 1 because it was claimed before #137 finished deploying the merge, so it ran old code. #139 then passed the merged forensic regression suite (20 passed, exit 0).
 - #140 post-merge forensic attempt: FAILED exit 1. Five-point frame sampling/sequential fallback worked for the targets visible in the output, but the relay's 8k cap removed the compact footer and obscured the full per-file/tool-failure summary. A new run is required after the relay output-cap fix is merged and deployed.
+
+
+### Relay FIFO + forensic evidence retention merge — 2026-11-18 10:01 UTC
+
+- PR #143 merged to `main` as `7e9047fbcc8c45d41a3bb726603a018320e6ebe1`.
+- CI run #1244 (44280978113) completed SUCCESS: security audit, Python 3.11/3.12/3.13/3.14, Docker build, offline branded-video E2E and motion audit. All seven jobs PASS.
+- PR #143 fixes two verified relay defects: queued GitHub issues now execute oldest-first (rather than GitHub API's default newest-first order), and the relay retains 20,000 output characters instead of 8,000 so the compact five-file forensic footer is preserved.
+- Android queue state: #129 stale claim was recovered by the relay at 10:00:50 UTC and reclaimed at 10:01:10 UTC; it is now executing, no final exit code yet. #127 still has its original claim and no completion result; its 40-minute lease expires at 10:02:15 UTC if no result arrives.
+- Issue #145 automation_self_test is queued as a relay liveness check. #146 `git_pull_ff_only` and #147 `restart_services` are queued in that order to deploy PR #143 and reload the relay. The restart action is deferred until ordinary queued work is drained.
+- #140 remains a failed, incomplete forensic report because the old 8k relay cap truncated the compact footer. It is not a valid post-fix full per-file result. After #146/#147 complete, rerun read-only media forensics and inspect all five target reports with the 20k footer.
+- Production remains PAUSED; no original media modified, repaired, regenerated, deleted, or uploaded; no YouTube upload/public visibility change or paid service.
