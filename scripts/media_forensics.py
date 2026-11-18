@@ -7,9 +7,13 @@ import hashlib
 import json
 import math
 import os
+import platform
 import re
+import shutil
 import sqlite3
 import subprocess
+import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -39,6 +43,67 @@ def run(command: list[str], timeout: int = 120) -> dict:
                 "stderr": result.stderr[-6000:]}
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {"returncode": None, "stdout": "", "stderr": str(exc)[:300]}
+
+
+def inspect_environment() -> dict:
+    """Record Termux/Python/FFmpeg versions, executable paths and temp storage readiness."""
+    def tool_details(name: str) -> dict:
+        executable = shutil.which(name)
+        if not executable:
+            return {"available": False, "path": None, "version": None, "version_exit": None}
+        version_result = run([executable, "-version"], timeout=10)
+        lines = (version_result.get("stdout") or version_result.get("stderr") or "").splitlines()
+        return {
+            "available": version_result.get("returncode") == 0,
+            "path": executable,
+            "version": lines[0][:240] if lines else None,
+            "version_exit": version_result.get("returncode"),
+        }
+
+    ffmpeg = tool_details("ffmpeg")
+    ffprobe = tool_details("ffprobe")
+    filter_result = (
+        run([ffmpeg["path"], "-hide_banner", "-filters"], timeout=10)
+        if ffmpeg.get("path") else {"returncode": None, "stdout": "", "stderr": "ffmpeg not found"}
+    )
+    filter_text = (filter_result.get("stdout") or "") + "\n" + (filter_result.get("stderr") or "")
+    ffmpeg["filters"] = {
+        name: bool(re.search(r"\b" + re.escape(name) + r"\b", filter_text))
+        for name in ("blackdetect", "blackframe", "fps", "scale")
+    }
+    ffmpeg["filters_exit"] = filter_result.get("returncode")
+
+    temp_path = Path(tempfile.gettempdir())
+    temp_storage = {
+        "path": str(temp_path),
+        "exists": temp_path.is_dir(),
+        "writable": bool(temp_path.is_dir() and os.access(temp_path, os.W_OK)),
+        "write_test": False,
+        "free_bytes": None,
+        "error": "",
+    }
+    try:
+        if temp_storage["writable"]:
+            with tempfile.NamedTemporaryFile(
+                prefix="sintu-forensic-", dir=temp_path, delete=True
+            ) as temporary:
+                temporary.write(b"sintu-forensic-temp-check")
+                temporary.flush()
+                temp_storage["write_test"] = True
+        if temp_path.exists():
+            temp_storage["free_bytes"] = shutil.disk_usage(temp_path).free
+    except OSError as exc:
+        temp_storage["error"] = str(exc)[:250]
+
+    return {
+        "python": {"version": sys.version.split()[0], "executable": sys.executable},
+        "platform": platform.platform(),
+        "termux_version": os.environ.get("TERMUX_VERSION"),
+        "ffmpeg": ffmpeg,
+        "ffprobe": ffprobe,
+        "frame_sampling": "FFprobe decoded-frame JSON; no image-frame temporary files are created",
+        "temporary_storage": temp_storage,
+    }
 
 
 def sha256_file(path: Path) -> str:
@@ -419,6 +484,8 @@ def inspect_video(path: Path) -> dict:
         reference_source = "current-file-mtime-may-reflect-audio-repair"
     return {
         "file": path.name, "exists": True, "safe_regular_file": True,
+        "readable": os.access(path, os.R_OK),
+        "permissions_octal": oct(stat.st_mode & 0o777),
         "size_bytes": stat.st_size,
         "sha256": sha256_file(path),
         "modified_utc": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
@@ -479,6 +546,8 @@ def compact_forensic_summary(report: dict) -> dict:
         metrics = item.get("black_frame_metrics") or {}
         targets.append({
             "file": item.get("file"),
+            "readable": item.get("readable"),
+            "permissions": item.get("permissions_octal"),
             "bytes": item.get("size_bytes"),
             "sha256": item.get("sha256"),
             "duration": metadata.get("duration_seconds"),
@@ -511,6 +580,7 @@ def compact_forensic_summary(report: dict) -> dict:
         })
     return {
         "status": report.get("status"),
+        "environment": report.get("environment", {}),
         "summary": {
             "targets": (report.get("summary") or {}).get("target_count"),
             "black": (report.get("summary") or {}).get("full_duration_black_count"),
@@ -550,6 +620,7 @@ def main() -> int:
     tool_failures = sum(1 for item in videos if has_forensic_tool_failure(item))
     report = {
         "status": "READ_ONLY_FORENSICS",
+        "environment": inspect_environment(),
         "summary": {
             "target_count": len(videos),
             "inspected_count": sum(1 for item in videos if item.get("exists")),
