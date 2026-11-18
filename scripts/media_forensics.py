@@ -194,7 +194,7 @@ def sample_decoded_frame(path: Path, seek_seconds: float, label: str) -> dict:
     seek = max(0.0, float(seek_seconds))
     result = run([
         "ffprobe", "-v", "error", "-select_streams", "v:0",
-        "-read_intervals", f"{seek:.6f}%+#1",
+        "-read_intervals", f"{seek:.6f}%+1",
         "-show_frames",
         "-show_entries", "frame=best_effort_timestamp_time,pict_type",
         "-of", "json", str(path),
@@ -212,8 +212,17 @@ def sample_decoded_frame(path: Path, seek_seconds: float, label: str) -> dict:
     if not frames:
         sample["error"] = "no decoded frame found at requested timestamp"
         return sample
-    sample["timestamp"] = frames[0].get("best_effort_timestamp_time")
-    sample["picture_type"] = frames[0].get("pict_type")
+    timed = []
+    for frame in frames:
+        try:
+            timestamp = float(frame.get("best_effort_timestamp_time"))
+        except (TypeError, ValueError):
+            continue
+        if timestamp >= seek - 0.001:
+            timed.append((abs(timestamp - seek), timestamp, frame))
+    chosen = min(timed, key=lambda item: item[0])[2] if timed else frames[0]
+    sample["timestamp"] = chosen.get("best_effort_timestamp_time")
+    sample["picture_type"] = chosen.get("pict_type")
     return sample
 
 
