@@ -31,7 +31,7 @@ def test_final_mp4_verification_accepts_expected_video_and_audio(tmp_path, monke
     output = tmp_path / "final.mp4"
     output.write_bytes(b"mp4")
     result = _verify_rendered_output(output, 720, 1280, 8, require_audio=True)
-    assert result == {"duration_seconds": 8.0, "video_duration_seconds": 8.0, "frame_count": 240, "fps": 30.0, "resolution": "720x1280", "video_codec": "h264", "audio": True}
+    assert result == {"duration_seconds": 8.0, "video_duration_seconds": 8.0, "frame_count": 240, "fps": 30.0, "resolution": "720x1280", "video_codec": "h264", "audio": True, "black_intervals": [], "longest_black_segment_seconds": 0.0, "visible_frame_count": 1, "sampled_frame_count": 1}
 
 
 @pytest.mark.parametrize("metadata", [
