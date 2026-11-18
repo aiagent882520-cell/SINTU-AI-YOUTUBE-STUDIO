@@ -78,6 +78,7 @@ def summarize_black_frame_percentages(values: list[int]) -> dict:
             "mean_black_pixel_percentage": None,
             "black_pixel_threshold": 32,
             "black_frame_cutoff_percent": 98,
+            "pblack_values": [],
         }
     black_count = sum(value >= 98 for value in values)
     return {
@@ -87,6 +88,7 @@ def summarize_black_frame_percentages(values: list[int]) -> dict:
         "mean_black_pixel_percentage": round(sum(values) / len(values), 2),
         "black_pixel_threshold": 32,
         "black_frame_cutoff_percent": 98,
+        "pblack_values": values[:30],
     }
 
 
