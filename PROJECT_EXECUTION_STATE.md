@@ -801,3 +801,43 @@ Last updated: 2026-11-17 15:52 UTC
 - PR #190: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/190
 - SINTU CI run: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44314121500
 - Native Android CI run: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44314121386
+
+
+## Execution update — 2026-11-18 — PR #190 security commit review
+
+### Commit and live CI
+- Commit `cabc3e5bebb26cc507af4b75d591607f96ec92fd` exists; it changes `android/app/src/test/java/com/sintu/studio/SintuApiTest.kt` (+10 lines).
+- Exact-SHA workflow run `44322330831`: Android `android-build` PASS; Python 3.11 PASS; Python 3.13 PASS; dependency security audit PASS; Python 3.12 and 3.14 were IN_PROGRESS when checked. Complete CI is not yet green.
+
+### PR #190 review
+- PR OPEN + DRAFT; mergeable=true; 15 changed files, 861 additions, 9 deletions. Not merged.
+- Native client currently provides login/session, conversation create/list/read/send/delete, project create/list, and script/scene production package request. It explicitly does not render final MP4.
+- README lists remaining Android gaps: background upload/download recovery, native preview/download, media library, full timeline editor, offline queue, notifications, accessibility/device-size matrix, signed release package.
+- Cookie storage uses Android Keystore AES-GCM and records `scheme://host:port`; cookie jar clears on origin mismatch, malformed parse, expiry, or cookie mismatch; logout clears local session in finally.
+- Existing tests cover URL validation and basic host/port origin differences. Actual CookieJar save/load, scheme mismatch, expiry/invalid-cookie clearing, and logout/session-store integration are NOT VERIFIED.
+- GitHub CI does not establish physical-device installation or testing.
+
+### 15 changed files
+1. `.github/workflows/android-app.yml`
+2. `.github/workflows/tests.yml`
+3. `android/README.md`
+4. `android/app/build.gradle.kts`
+5. `android/app/proguard-rules.pro`
+6. `android/app/src/main/AndroidManifest.xml`
+7. `android/app/src/main/java/com/sintu/studio/MainActivity.kt`
+8. `android/app/src/main/java/com/sintu/studio/SecureSessionStore.kt`
+9. `android/app/src/main/java/com/sintu/studio/SintuApi.kt`
+10. `android/app/src/main/res/xml/network_security_config.xml`
+11. `android/app/src/test/java/com/sintu/studio/SintuApiTest.kt`
+12. `android/build.gradle.kts`
+13. `android/gradle.properties`
+14. `android/settings.gradle.kts`
+15. `scripts/ci_install_ffmpeg.sh`
+
+### Resume point
+1. Poll exact SHA `cabc3e5...` until Python 3.12 and 3.14 finish; inspect failures.
+2. Add tests for cookie persistence origin scheme/host/port mismatch, expired/malformed cookies, and logout clearing through a testable abstraction; run Android unit tests and CI.
+3. Compare Retrofit paths/DTOs with FastAPI route contracts and tests; fix confirmed mismatches only.
+4. Continue independent video pipeline, 60-format, 15-module, website, worker, and YouTube tasks. Do not merge or release while required gates remain open.
+
+Evidence: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/commit/cabc3e5bebb26cc507af4b75d591607f96ec92fd ; https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44322330831 ; https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/190
