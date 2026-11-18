@@ -390,3 +390,11 @@ Last updated: 2026-11-17 15:52 UTC
 - Issues #127 and #129 still have only their original worker-claimed comments, no completion comment/exit code/artifact. They have not yet crossed the 40-minute GitHub relay stale-claim lease at this checkpoint; do not duplicate them. Continue monitoring for the relay's built-in recovery.
 - Renderer/source-loss root cause for the five black MP4s remains UNKNOWN. Candidate source JPGs are not proven source assets; production log/database match arrays remain empty in the Android report. No original media was changed, repaired, regenerated, deleted, or uploaded. Production remains PAUSED.
 - Historical note: earlier entries saying PR #136 was unmerged or awaiting CI are superseded by this checkpoint. The merge and CI success above are authoritative.
+
+
+### GitHub Termux queue ordering defect — 2026-11-18
+
+- The post-merge deployment sequence exposed a real FIFO defect: Issue #138 (`media_forensics`) was claimed before older Issue #137 (`git_pull_ff_only`). It therefore ran the pre-PR-136 sampler and failed exit 1; only afterward did #137 fast-forward Termux to merge commit `3335107`. The later #139 regression test then passed (20 passed, exit 0).
+- GitHub's Issues API defaults to newest-first. `GitHub.pending()` previously accepted that order unchanged. A later diagnostic could therefore execute before an earlier update/deployment command.
+- Follow-up branch `fix/relay-oldest-first-queue` explicitly requests `sort=created,direction=asc` and locally sorts eligible jobs by `created_at`. A regression test simulates the API's newest-first response and asserts #137, #139, #140 FIFO order.
+- This is an automation sequencing fix; no media changes or production activation.
