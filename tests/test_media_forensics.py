@@ -350,9 +350,13 @@ def test_compact_forensic_summary_preserves_five_targets_under_relay_tail_cap():
             "blackframe_error": "",
             "decode_exit": 0,
             "frame_probe_exit": 0,
+            "pixel_probe_exit": 0,
             "decoded_frame_samples": [
                 {"sample": label, "seek_seconds": point, "timestamp": str(point),
-                 "sampling_method": "sequential_fallback_from_start", "error": ""}
+                 "sampling_method": "sequential_fallback_from_start", "error": "",
+                 "pixel_verification": {"status": "PASS", "mean_luma": 0.0,
+                                         "luma_stddev": 0.0, "black_pixel_percentage": 100.0,
+                                         "near_black": True}}
                 for label, point in (
                     ("first", 0.0), ("quarter", 2.26), ("middle", 4.52),
                     ("three_quarter", 6.78), ("last", 9.0)
@@ -375,7 +379,7 @@ def test_compact_forensic_summary_preserves_five_targets_under_relay_tail_cap():
                            "blackdetect": True, "blackframe": True, "fps": True, "scale": True}},
             "ffprobe": {"available": True, "path": "/data/data/com.termux/files/usr/bin/ffprobe",
                         "version": "ffprobe version 7.1.5"},
-            "frame_sampling": "FFprobe decoded-frame JSON",
+            "frame_sampling": "Five FFprobe timestamps plus extracted PNG pixel verification",
             "temporary_storage": {"path": "/data/data/com.termux/files/usr/tmp",
                                   "exists": True, "writable": True,
                                   "write_test": True, "free_bytes": 123456789},
@@ -758,6 +762,7 @@ def test_inspect_video_marks_middle_and_last_sampling_failures_as_tool_failure(t
         "middle", "three_quarter", "last",
     ]
     assert report["frame_probe_exit"] == 1
+    assert report["pixel_probe_exit"] == 1
     assert media_forensics.has_forensic_tool_failure(report) is True
 
 
