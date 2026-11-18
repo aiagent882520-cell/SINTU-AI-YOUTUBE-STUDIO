@@ -154,13 +154,13 @@ The following rows are extracted from `_FORMAT_ROWS` in the source tree. The lis
 - Termux Issue #178: latest main fast-forward pull succeeded.
 - Termux Issue #179: service restart command succeeded; result says restart was scheduled after current queue result acknowledgement.
 - Termux Issue #180: Android regression suite **614 passed, 5 warnings**.
-- Termux Issue #181: Android health audit **15 PASS / 3 FAIL**, pytest **614 passed, 5 warnings**. The three remaining failed media checks are:
+- Termux Issue #187 (post-PR183): Android health audit **15 PASS / 3 FAIL**, pytest **617 passed, 5 warnings**. The three remaining failed media checks are:
   - `3f4c2151e8e640109f464b2c2e9b7569.mp4`
   - `59430f1fb7fd4bdf80cf8b7d9f456098.mp4`
   - `8cfe9da88d5c43d184f3572e371ff4a6.mp4`
 - Android health audit #181 found the two previously disputed dim-visible files now PASS under the calibrated pixel checks. This does not resolve the three confirmed full-black files.
 - Termux Issue #182: automation self-test **7/7 checks passed** (repository/origin, Python 3.14.10, GitHub CLI auth, API health, worker/bridge and relay singleton).
-- Fresh Android engine probe (2026-11-18, Issue #188): Android 15 ARM64, 8 CPU cores, 3,762,049,024 bytes total RAM and 1,290,792,960 bytes available; approx 29.1 GB free storage. `llama-server` binary exists but is not reachable and no GGUF model files are present. `stable-diffusion.cpp` binaries are absent; ComfyUI is unreachable and no workflow is configured. Probe performed no model downloads/builds and started no render. Automatic heavy model download is unsafe on current free RAM; no generative AI image/video model can be claimed available. Earlier eSpeak NG and FFmpeg/FFprobe availability was reported by the prior Termux health checks; verify again before relying on it.
+- Fresh Android engine probe (2026-11-18, Issue #188): Android 15 ARM64, 8 CPU cores, 3,762,049,024 bytes total RAM and 1,290,792,960 bytes available; approx 29.1 GB free storage. `llama-server` binary exists but is not reachable and no GGUF model files are present. `stable-diffusion.cpp` binaries are absent; ComfyUI is unreachable and no workflow is configured. Probe performed no model downloads/builds and started no render. Automatic heavy model download is unsafe on current free RAM; no generative AI image/video model can be claimed available. Issue #189 confirms core_ready=true but production_ready=false due to `local_ai_model` and `comfyui`. Earlier eSpeak NG and FFmpeg/FFprobe availability was reported by the prior Termux health checks; verify again before relying on it.
 - No real topic-to-video run using Ollama + ComfyUI + configured neural Hindi voice has been evidenced on Android.
 
 ## Critical open blockers
