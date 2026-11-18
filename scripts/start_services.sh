@@ -25,15 +25,43 @@ if [[ "${SINTU_SKIP_DELAYED_RESTART:-0}" != "1" ]] &&
   echo "SINTU service restart scheduled after the current queue result is acknowledged."
   exit 0
 fi
+# PID files are hints, never authority. A reused PID is unlinked without
+# signalling the unrelated process; an unreadable identity fails closed.
+pid_is_expected() {
+  local pid_file="$1" marker="$2" pid cmd
+  [ -s "$pid_file" ] || return 1
+  pid="$(cat "$pid_file" 2>/dev/null || true)"
+  if [[ ! "$pid" =~ ^[0-9]+$ ]] || ! kill -0 "$pid" 2>/dev/null; then
+    rm -f "$pid_file"
+    return 1
+  fi
+  cmd="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
+  if [[ -z "$cmd" ]]; then cmd="$(ps -o args= -p "$pid" 2>/dev/null || true)"; fi
+  if [[ -z "$cmd" ]]; then
+    echo "[ERROR] Cannot verify process identity for PID $pid ($pid_file)." >&2
+    return 2
+  fi
+  if [[ "$cmd" == *"$marker"* ]]; then return 0; fi
+  echo "[WARN] Stale PID reference $pid in $pid_file; not signalling unrelated process; clearing reference." >&2
+  rm -f "$pid_file"
+  return 1
+}
+
 [ -x .venv/bin/python ] || { echo "SINTU virtualenv missing; run scripts/termux_one_command.sh first." >&2; exit 1; }
 [ -f .env ] || { echo "SINTU .env missing; run scripts/termux_one_command.sh first." >&2; exit 1; }
 
-if [ -f "$LOG_DIR/server.pid" ] && kill -0 "$(cat "$LOG_DIR/server.pid")" 2>/dev/null; then
+if pid_is_expected "$LOG_DIR/server.pid" "uvicorn app.main:app"; then
   :
 else
-  : > "$LOG_DIR/server.log"
-  nohup .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 >>"$LOG_DIR/server.log" 2>&1 </dev/null &
-  echo $! > "$LOG_DIR/server.pid"
+  state=$?
+  [ "$state" -ne 2 ] || exit 1
+  if ! curl -fsS http://127.0.0.1:8000/api/health >/dev/null 2>&1; then
+    : > "$LOG_DIR/server.log"
+    nohup .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 >>"$LOG_DIR/server.log" 2>&1 </dev/null &
+    echo $! > "$LOG_DIR/server.pid"
+  else
+    echo "[WARN] API health is already OK; cleared stale server PID reference without starting a duplicate."
+  fi
 fi
 
 ready=0
@@ -44,23 +72,14 @@ for _ in $(seq 1 45); do
 done
 [ "$ready" -eq 1 ] || { tail -n 60 "$LOG_DIR/server.log" >&2 || true; exit 1; }
 
-# Restore the optional local llama.cpp model server after Android reboot.
-if command -v llama-server >/dev/null 2>&1 && [ -d "$LOG_DIR/models" ]; then
-  MODEL_PATH="$(find "$LOG_DIR/models" -maxdepth 1 -type f -name '*.gguf' -size +100M -print -quit)"
-  if [ -n "$MODEL_PATH" ]; then
-    if [ -f "$LOG_DIR/llama-server.pid" ] && kill -0 "$(cat "$LOG_DIR/llama-server.pid")" 2>/dev/null; then
-      :
-    else
-      nohup llama-server -m "$MODEL_PATH" --host 127.0.0.1 --port 8080 -c 4096 -t 4 \
-        >>"$LOG_DIR/llama-server.log" 2>&1 </dev/null &
-      echo $! > "$LOG_DIR/llama-server.pid"
-    fi
-  fi
-fi
+# Local LLM servers are deliberately not auto-started: model size and RAM usage
+# require an explicit operator choice, separate from core service recovery.
 
-if [ -f "$LOG_DIR/bridge-worker.pid" ] && kill -0 "$(cat "$LOG_DIR/bridge-worker.pid")" 2>/dev/null; then
+if pid_is_expected "$LOG_DIR/bridge-worker.pid" "scripts/termux_bridge_worker.py"; then
   :
 else
+  state=$?
+  [ "$state" -ne 2 ] || exit 1
   : > "$LOG_DIR/bridge-worker.log"
   nohup .venv/bin/python scripts/termux_bridge_worker.py >>"$LOG_DIR/bridge-worker.log" 2>&1 </dev/null &
   echo $! > "$LOG_DIR/bridge-worker.pid"
@@ -77,25 +96,29 @@ elif ! gh auth status >/dev/null 2>&1; then
   echo "[WARN] GitHub issue relay not started: GitHub CLI is not authenticated." >&2
   echo "[WARN] Run 'gh auth login' in Termux; credentials are never printed by this launcher." >&2
 else
-  if [ -f "$LOG_DIR/github-relay.pid" ] && kill -0 "$(cat "$LOG_DIR/github-relay.pid")" 2>/dev/null; then
-    GITHUB_RELAY_STATUS="existing relay PID is alive"
+  if pid_is_expected "$LOG_DIR/github-relay.pid" "scripts/github_termux_relay.py"; then
+    GITHUB_RELAY_STATUS="existing relay process identity verified"
   else
-    : > "$LOG_DIR/github-relay.log"
-    nohup .venv/bin/python scripts/github_termux_relay.py >>"$LOG_DIR/github-relay.log" 2>&1 </dev/null &
-    echo $! > "$LOG_DIR/github-relay.pid"
-    GITHUB_RELAY_STATUS="relay start requested"
+    state=$?
+    if [ "$state" -eq 2 ]; then
+      GITHUB_RELAY_STATUS="not started: existing PID identity cannot be verified"
+      echo "[WARN] $GITHUB_RELAY_STATUS." >&2
+    else
+      : > "$LOG_DIR/github-relay.log"
+      nohup .venv/bin/python scripts/github_termux_relay.py >>"$LOG_DIR/github-relay.log" 2>&1 </dev/null &
+      echo $! > "$LOG_DIR/github-relay.pid"
+      GITHUB_RELAY_STATUS="relay start requested"
+    fi
   fi
 fi
 
 # Keep a lightweight watchdog alive so dead local processes are restarted.
 WATCHDOG_PID_FILE="$LOG_DIR/watchdog.pid"
-if [ -f "$WATCHDOG_PID_FILE" ] && kill -0 "$(cat "$WATCHDOG_PID_FILE")" 2>/dev/null; then
-  WATCHDOG_CMD="$(tr '\0' ' ' < "/proc/$(cat "$WATCHDOG_PID_FILE")/cmdline" 2>/dev/null || true)"
+if pid_is_expected "$WATCHDOG_PID_FILE" "scripts/termux_watchdog.sh"; then
+  :
 else
-  WATCHDOG_CMD=""
-fi
-if [[ "$WATCHDOG_CMD" != *"scripts/termux_watchdog.sh"* ]]; then
-  rm -f "$WATCHDOG_PID_FILE"
+  state=$?
+  [ "$state" -ne 2 ] || exit 1
   nohup bash scripts/termux_watchdog.sh >>"$LOG_DIR/watchdog.log" 2>&1 </dev/null &
   echo $! > "$WATCHDOG_PID_FILE"
 fi

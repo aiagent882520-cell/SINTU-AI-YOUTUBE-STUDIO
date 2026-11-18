@@ -37,3 +37,17 @@ def test_delayed_restart_uses_fixed_pid_files_and_command_identity():
     assert 'kill -TERM "$pid"' in helper
     assert "kill -KILL" not in helper
     assert "env -u SINTU_QUEUE_EXECUTOR -u SINTU_SKIP_DELAYED_RESTART bash scripts/start_services.sh" in helper
+
+
+def test_startup_validates_pid_command_identity_and_clears_only_stale_references():
+    launcher = (ROOT / "scripts" / "start_services.sh").read_text()
+    assert "pid_is_expected()" in launcher
+    assert '"/proc/$pid/cmdline"' in launcher
+    assert 'ps -o args= -p "$pid"' in launcher
+    assert "not signalling unrelated process; clearing reference" in launcher
+    assert "Cannot verify process identity" in launcher
+    assert "API health is already OK; cleared stale server PID reference" in launcher
+    assert 'pid_is_expected "$LOG_DIR/bridge-worker.pid"' in launcher
+    assert 'pid_is_expected "$LOG_DIR/github-relay.pid"' in launcher
+    assert "Local LLM servers are deliberately not auto-started" in launcher
+    assert "llama-server -m" not in launcher
