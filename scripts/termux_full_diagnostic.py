@@ -48,7 +48,7 @@ def version(binary: str) -> dict:
 
 def backend_probe() -> dict:
     base = os.getenv("SINTU_API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
-    url = base + "/health"
+    url = base + "/api/health"
     try:
         request = urllib.request.Request(url, headers={"User-Agent": "SINTU-Termux-Diagnostic/1.0"})
         with urllib.request.urlopen(request, timeout=3) as response:
@@ -134,7 +134,7 @@ def render_text(report: dict) -> str:
         f"Backend reachable: {report['backend']['reachable']} ({report['backend']['url']})",
         f"Android APK files found: {len(report['android']['apk_files_found'])}",
         f"MP4 inventory: {report['media']['count']} files in {report['media']['directory']}",
-        "Automation self-test: NOT RUN (run scripts/automation_self_test.py --json separately)",
+        "Automation self-test: " + str(report["automation_self_test"].get("status"))",
         "Safety: read-only; no model download, render, service change, media modification or upload.",
         "",
         "Full evidence is in the matching JSON report.",
@@ -147,7 +147,7 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, default=DATA_DIR / "diagnostics")
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    report = build_report()
+    report = build_report(run_automation=args.run_automation_self_test)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     json_path = args.output_dir / f"sintu_device_diagnostic_{stamp}.json"
     text_path = args.output_dir / f"sintu_device_diagnostic_{stamp}.txt"
