@@ -154,8 +154,6 @@ class SintuApiTest {
         assertEquals(1, store.clearCount)
     }
 
-}
-
 
     @Test
     fun offlineMediaDefaultsUsePhoneSafeRenderProfile() {
@@ -165,3 +163,4 @@ class SintuApiTest {
         assertEquals("standard", request.quality)
         assertEquals(true, request.burn_subtitles)
     }
+}
