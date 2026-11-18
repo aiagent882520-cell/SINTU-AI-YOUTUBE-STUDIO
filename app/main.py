@@ -4763,28 +4763,32 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 sound_effects_volume=payload.sound_effects_volume,
                 fps=payload.fps, quality=payload.quality,
             )
-        manifest = write_render_manifest(
-            data_dir=DATA_DIR,
-            run_id=run_id,
-            format_id=run["format_id"],
-            topic=run.get("topic", ""),
-            output_path=OUTPUT_DIR / rendered["filename"],
-            asset_paths=[*image_paths, audio_path, music_matches[0]],
-            settings={
-                "resolution": resolution,
-                "fps": payload.fps,
-                "quality": payload.quality,
-                "seconds_per_scene": payload.seconds_per_scene,
-                "scene_count": len(scene_prompts),
-                "subtitles_burned_in": bool(subtitle_lines),
-            },
-            engines={
-                "image": str((image_result.get("provider") if not use_procedural_2d else "SINTU Procedural 2D Animation") or "local"),
-                "voice": str(voice_result.get("provider") or "local"),
-                "music": str(music_result.get("provider") or "local"),
-                "renderer": "FFmpeg",
-            },
-        )
+        try:
+            manifest = write_render_manifest(
+                data_dir=DATA_DIR,
+                run_id=run_id,
+                format_id=run["format_id"],
+                topic=run.get("topic", ""),
+                output_path=OUTPUT_DIR / rendered["filename"],
+                asset_paths=[*image_paths, audio_path, music_matches[0]],
+                settings={
+                    "resolution": resolution,
+                    "fps": payload.fps,
+                    "quality": payload.quality,
+                    "seconds_per_scene": payload.seconds_per_scene,
+                    "scene_count": len(scene_prompts),
+                    "subtitles_burned_in": bool(subtitle_lines),
+                },
+                engines={
+                    "image": str((image_result.get("provider") if not use_procedural_2d else "SINTU Procedural 2D Animation") or "local"),
+                    "voice": str(voice_result.get("provider") or "local"),
+                    "music": str(music_result.get("provider") or "local"),
+                    "renderer": "FFmpeg",
+                },
+            )
+        except Exception as exc:
+            (OUTPUT_DIR / rendered["filename"]).unlink(missing_ok=True)
+            raise RenderFailed("Could not persist the render provenance manifest; the MP4 result is withheld.") from exc
         rendered["provenance_manifest"] = manifest["manifest_path"]
         updated = attach_render_result(run_id, rendered, owner)
         return {
