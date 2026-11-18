@@ -31,7 +31,7 @@ TARGETS = (
     "afa4c87e3c1e42a197b7092e0e24040d.mp4",
 )
 LOG_DIRS = ("logs", "data", ".sintu", "production_runs", "runs")
-ASSET_DIRS = ("generated_images", "generated_audio", "generated_assets", "assets")
+ASSET_DIRS = ("generated_images", "generated_audio", "generated_music", "generated_assets", "assets")
 TEXT_SUFFIXES = {".log", ".txt", ".json", ".jsonl"}
 SECRET_TERMS = ("token", "secret", "password", "credential", "authorization", "api_key", "oauth", "session_uri")
 
