@@ -903,7 +903,8 @@ Evidence: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/commit/c
 - This PR remains documentation-only and draft; no merge performed.
 
 ### PR #193 — content-addressed render provenance
-- Branch `feature/production-media-provenance`; latest exact head `3a12f1ce6d7f0563c5bf759c016390ca0f8386e2`; CI run `44331204541` at this checkpoint: Python 3.11/3.12/3.13/3.14 PASS, dependency security audit PASS, production Docker image build and health check PASS; offline branded-video E2E/motion audit still IN_PROGRESS.
+- Branch `feature/production-media-provenance`; latest exact head `5ae62f82b4723d7b55d8275685359392506655c4`; exact-head CI run `44332058237`: Python 3.11/3.12/3.13/3.14 PASS, dependency security audit PASS, production Docker build + health check PASS. Offline branded-video E2E/motion audit remains IN_PROGRESS; cache-first bounded apt setup is running.
+- Previous exact-head run `44331204541` (commit `3a12f1ce6d7f0563c5bf759c016390ca0f8386e2`) had the same four Python versions, security audit and Docker/health checks PASS; its E2E job was cancelled after an unusually long apt install.
 - Adds atomic private JSON manifests for both approved production render routes (`produce-media` and `render`). Each manifest records run ID, format ID, topic SHA-256 (not raw topic), relative paths, sizes and SHA-256 for final MP4 and supplied/generated source assets, render settings and engine labels.
 - Paths are confined to `SINTU_DATA_DIR`; symlink/path escapes are rejected. A render is withheld if its manifest cannot be saved. API tests assert manifest attachment; dedicated helper tests verify hashes, privacy, path boundaries, invalid run IDs and missing outputs.
 - Initial CI found and fixed three test/implementation issues: literal backslash-n in JSON terminator, route test doubles missing a real output filename, and unsafe cleanup when a mocked render result lacked filename. Exact-head CI is required for final approval.
