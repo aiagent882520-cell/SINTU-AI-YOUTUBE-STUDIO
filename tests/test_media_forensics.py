@@ -701,6 +701,7 @@ def test_real_partial_black_mp4_is_not_misclassified_as_full_duration_black(tmp_
     if created.returncode != 0:
         pytest.skip("FFmpeg build does not provide the libx264 test encoder")
     report = media_forensics.inspect_video(clip)
+    assert report["blackdetect_full_duration_black"] is False
     assert report["full_duration_black"] is False
     assert report["black_intervals"]
     assert report["black_intervals"][0][1] < report["metadata"]["duration_seconds"] * 0.95
@@ -803,3 +804,29 @@ def test_extracted_frame_pixel_verification_fails_closed_on_timeout_and_temp_sto
     assert no_storage["status"] == "FAIL"
     assert no_storage["extraction_exit"] is None
     assert "temporary storage unavailable" in no_storage["error"]
+
+
+def test_real_dark_gray_mp4_is_not_misclassified_as_full_black(tmp_path):
+    import shutil
+    import subprocess
+    import pytest
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("FFmpeg is required for dark-footage threshold regression")
+    clip = tmp_path / "dark-gray-visible.mp4"
+    created = subprocess.run([
+        ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "color=c=0x161616:s=160x120:r=24:d=4",
+        "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(clip),
+    ], capture_output=True, timeout=60, check=False)
+    if created.returncode != 0:
+        pytest.skip("FFmpeg build does not provide the libx264 test encoder")
+    report = media_forensics.inspect_video(clip)
+    assert report["blackdetect_full_duration_black"] is False
+    assert report["full_duration_black"] is False
+    assert report["pixel_verification"]["near_black_sample_count"] == 0
+    assert all(sample["pixel_verification"]["near_black"] is False
+               for sample in report["decoded_frame_samples"])
+    assert media_forensics.has_forensic_tool_failure(report) is False
+
