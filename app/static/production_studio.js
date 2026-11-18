@@ -115,6 +115,13 @@
    if(seconds<2||seconds>12){status.textContent="Seconds per scene 2 se 12 ke beech rakhein.";return;}
    button.disabled=true;output.hidden=false;output.textContent="Production run create ho raha hai…";
    try{
+    const providersResponse=await fetch("/api/providers",{credentials:"same-origin"});
+    const providers=await providersResponse.json().catch(()=>({}));
+    if(!providersResponse.ok)throw new Error(providers.detail||"Local AI readiness check failed.");
+    if(providers.local?.model_available!==true){
+     const model=providers.local?.model||"local text model";
+     throw new Error("Free local text model ready nahi hai ("+model+"). Pehle Ollama ya loopback llama.cpp model configure karein. Paid API automatically use nahi hogi.");
+    }
     const create=await fetch("/api/production/runs",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({format_id:state.format,topic:brief.brief})});
     const created=await create.json().catch(()=>({}));if(!create.ok)throw new Error(created.detail||"Production run create nahi hua.");
     const runId=created.run_id;status.textContent="Run "+runId+" · specialists, independent checkers aur five reviewers chal rahe hain…";
