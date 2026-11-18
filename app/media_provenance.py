@@ -77,7 +77,7 @@ def write_render_manifest(
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             json.dump(manifest, stream, ensure_ascii=False, indent=2, sort_keys=True)
-            stream.write("\\n")
+            stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary_name, destination)
