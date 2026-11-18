@@ -648,3 +648,14 @@ Last updated: 2026-11-17 15:52 UTC
 - PR #166 initial CI run #1278 found the limited-range H.264 black-level edge (Y=16); threshold16 was too strict. The correction uses FFmpeg blackframe threshold17 and blackdetect `pix_th=0.08`, while Pillow pixel threshold remains16.
 - Latest PR #166 CI run #1280: Python 3.11 PASS, 3.12 PASS, 3.13 PASS, 3.14 PASS; each suite reports 610 passed / 5 warnings; dependency security audit PASS. Docker and offline E2E/motion audit still IN_PROGRESS at this checkpoint.
 - PR #166 is not merged. Once exact-head Docker/E2E also pass, merge and queue a new Android fast-forward pull plus fresh forensic/health audit. Existing #164 must not be counted as post-fix validation.
+
+
+### Updated Android gates — Issues #162, #163, #164 — 2026-11-18
+
+- Issue #162 current Android regression rerun completed SUCCESS / exit 0 on Termux Python 3.14.10: **606 passed, 5 warnings in 198.34s (3m18s)**. This run includes the latest deployed forensic changes and is the current Android regression evidence. Warnings remain Starlette/httpx TestClient and FastAPI on_event lifecycle deprecations.
+- Issue #163 automation self-test completed SUCCESS / exit 0, JSON ok=true, all 7/7 checks. It confirms repo/origin, Python 3.14.10, gh authentication, Studio API health, bridge-worker heartbeat under automation-only mode, and relay singleton lock. It does not cover every task retry/shutdown branch.
+- Issue #164 health audit completed FAILED / exit 1: 13 PASS, 0 WARN, 5 FAIL. Pytest subcheck PASS (606 passed, 5 warnings in 198.82s); compile check PASS. The five failures are the same five named MP4s. No media repair or publishing occurred.
+- Latest Android forensic #161 returned tool exit 0, but the health/media gate remains red. First three videos have 5/5 decoded samples at mean luma 0 and 100% pixels <=16; last two have 5/5 samples at mean luma 22.11, standard deviation 1.571 and 0.122% pixels <=16, despite blackdetect full-duration intervals. The last two require human-visible review and threshold reconciliation; none of the five is repaired or publishable.
+- PR #167 was a stale-base attempt; PR #168 is the replacement proposal for verified stale/reused PID reference recovery. Do not merge or deploy either until branch ancestry is current and exact-head CI passes.
+- Main head at this checkpoint: e02443ca085afa7bb7ae687437abac6e4fb7ad29. Main CI run #1283 is IN_PROGRESS; do not claim a full main CI pass until its offline video E2E and all other jobs complete.
+- Production remains PAUSED, public publishing DISABLED, and original MP4s/backups untouched.
