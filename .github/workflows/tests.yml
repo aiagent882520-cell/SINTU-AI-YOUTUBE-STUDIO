@@ -42,11 +42,16 @@ jobs:
           node-version: "22"
       - name: Install FFmpeg
         run: |
-          if ! command -v ffmpeg >/dev/null 2>&1; then
-            sudo apt-get install -y --no-install-recommends ffmpeg
+          packages=()
+          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+            packages+=(ffmpeg)
           fi
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends fonts-noto-core
+          if ! fc-match -f '%{family}' 'Noto Sans' | grep -qi 'Noto Sans'; then
+            packages+=(fonts-noto-core)
+          fi
+          if [[ ${#packages[@]} -gt 0 ]]; then
+            sudo apt-get install -y --no-install-recommends "${packages[@]}"
+          fi
           ffmpeg -version
           ffprobe -version
           ffmpeg -hide_banner -filters | grep -q subtitles
@@ -85,7 +90,6 @@ jobs:
           cache-dependency-path: requirements-dev.txt
       - name: Install free local media tools
         run: |
-          sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg espeak-ng fonts-noto-core
           ffmpeg -version
           ffprobe -version
