@@ -35,12 +35,21 @@ TEXT_SUFFIXES = {".log", ".txt", ".json", ".jsonl"}
 SECRET_TERMS = ("token", "secret", "password", "credential", "authorization", "api_key", "oauth", "session_uri")
 
 
+def _bounded_text(value: str, limit: int) -> str:
+    """Keep bounded head and tail so tool listings and final diagnostics both survive."""
+    if len(value) <= limit:
+        return value
+    half = limit // 2
+    return value[:half] + "\\n...[output truncated]...\\n" + value[-half:]
+
+
 def run(command: list[str], timeout: int = 120) -> dict:
     try:
         result = subprocess.run(command, cwd=DATA_DIR, text=True, capture_output=True,
                                 timeout=timeout, check=False)
-        return {"returncode": result.returncode, "stdout": result.stdout[-16000:],
-                "stderr": result.stderr[-6000:]}
+        return {"returncode": result.returncode,
+                "stdout": _bounded_text(result.stdout, 512_000),
+                "stderr": _bounded_text(result.stderr, 128_000)}
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {"returncode": None, "stdout": "", "stderr": str(exc)[:300]}
 
@@ -329,16 +338,26 @@ def sample_decoded_frame(path: Path, seek_seconds: float, label: str) -> dict:
             "-read_intervals", f"0%+{seek + 1.0:.6f}",
             "-show_frames",
             "-show_entries", "frame=best_effort_timestamp_time,pict_type",
-            "-of", "json", str(path),
+            "-of", "csv=p=0", str(path),
         ], timeout=120)
         if fallback["returncode"] != 0:
             detail = (fallback["stderr"] or "sequential ffprobe frame scan failed")[:180]
             sample["error"] = f"timestamp seek found no usable frame; sequential fallback failed: {detail}"
             return sample
         try:
-            fallback_frames = json.loads(fallback["stdout"]).get("frames", [])
-        except (TypeError, ValueError, json.JSONDecodeError):
-            sample["error"] = "invalid sequential ffprobe frame-scan JSON"
+            # Compact CSV avoids a large JSON array. The previous bounded
+            # subprocess capture could cut the beginning of JSON for late
+            # timestamps, making otherwise valid scans unparsable.
+            fallback_frames = []
+            for row in csv.reader(fallback["stdout"].splitlines()):
+                if not row or not row[0].strip():
+                    continue
+                frame = {"best_effort_timestamp_time": row[0].strip()}
+                if len(row) > 1 and row[1].strip():
+                    frame["pict_type"] = row[1].strip()
+                fallback_frames.append(frame)
+        except (TypeError, ValueError, csv.Error):
+            sample["error"] = "invalid sequential ffprobe frame-scan CSV"
             return sample
         chosen = closest_at_or_after(fallback_frames)
         if chosen is None:
