@@ -138,6 +138,8 @@ def test_inspect_video_builds_report_from_three_frame_probes(tmp_path, monkeypat
 
     monkeypatch.setattr(media_forensics, "run", fake_run)
     report = media_forensics.inspect_video(video)
+    assert report["safe_regular_file"] is True
+    assert media_forensics.has_forensic_tool_failure(report) is False
     assert report["frame_probe_exit"] == 0
     assert [item["sample"] for item in report["decoded_frame_samples"]] == [
         "first", "middle", "last"
