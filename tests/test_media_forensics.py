@@ -104,3 +104,40 @@ def test_frame_sample_selects_frame_closest_to_requested_timestamp(tmp_path, mon
     sample = media_forensics.sample_decoded_frame(tmp_path / "clip.mp4", 5.02, "middle")
     assert sample["timestamp"] == "5.041667"
     assert sample["picture_type"] == "P"
+
+
+def test_inspect_video_builds_report_from_three_frame_probes(tmp_path, monkeypatch):
+    import json
+
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    media_dir = tmp_path / "generated_videos"
+    media_dir.mkdir()
+    video = media_dir / "sample.mp4"
+    video.write_bytes(b"sample video bytes")
+
+    def fake_run(command, timeout=120):
+        if command[0] == "ffprobe" and "-count_frames" in command:
+            return {"returncode": 0, "stdout": json.dumps({
+                "format": {"format_name": "mov,mp4", "duration": "10.0"},
+                "streams": [{"codec_type": "video", "codec_name": "h264",
+                             "width": 720, "height": 1280, "pix_fmt": "yuv420p",
+                             "avg_frame_rate": "24/1", "nb_read_frames": "240"}],
+            }), "stderr": ""}
+        if command[0] == "ffprobe" and "-read_intervals" in command:
+            seek = command[command.index("-read_intervals") + 1].split("%", 1)[0]
+            return {"returncode": 0, "stdout": json.dumps({
+                "frames": [{"best_effort_timestamp_time": seek, "pict_type": "P"}]
+            }), "stderr": ""}
+        if command[0] == "ffmpeg" and "blackdetect=d=0.10:pix_th=0.10" in command:
+            return {"returncode": 0, "stdout": "", "stderr": ""}
+        return {"returncode": 0, "stdout": "", "stderr": ""}
+
+    monkeypatch.setattr(media_forensics, "run", fake_run)
+    report = media_forensics.inspect_video(video)
+    assert report["frame_probe_exit"] == 0
+    assert [item["sample"] for item in report["decoded_frame_samples"]] == [
+        "first", "middle", "last"
+    ]
+    assert [item["timestamp"] for item in report["decoded_frame_samples"]] == [
+        "0.000000", "5.000000", "9.958333"
+    ]
