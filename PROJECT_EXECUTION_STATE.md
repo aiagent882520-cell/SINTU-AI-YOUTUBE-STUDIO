@@ -394,3 +394,10 @@ Last updated: 2026-11-17 15:52 UTC
 
 - Issue #141 confirmed the sequential frame fallback works on visible targets, but the first compact footer exceeded the actual relay tail once all five targets and provenance entries were included. PR #144 reduces the footer to a worst-case tested <7,000 characters and includes all 30 pblack values per file.
 - #127 and #129 still have only worker-claim comments; the GitHub relay's stale issue-claim recovery threshold is 40 minutes (not 35 minutes). Their claims are at 09:22:15 and 09:20:33 UTC; no duplicate command has been created.
+
+
+### Android stale-job recovery — 2026-11-18 10:04 UTC
+
+- Issue #129's 40-minute GitHub relay lease expired; the relay recorded a stale-claim recovery comment and re-claimed the same health_audit issue at 10:00:50 UTC. It is running again; no result/exit code yet.
+- Issue #127 exceeded the 40-minute relay lease without a result comment. Its existing issue was safely requeued at 10:04:09 UTC (same original `run_tests` payload; no duplicate issue created). Await the relay's new claim/result.
+- Issue #141 post-deploy forensic run is failed exit 1. Visible targets show timestamp sampling works; the full five-target summary is not yet available because the footer exceeded the relay tail. PR #144 addresses the size cap and adds raw pblack values.
