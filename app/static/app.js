@@ -1568,3 +1568,134 @@ $("loadYoutubeAnalytics")?.addEventListener("click",async()=>{
   output.hidden=false;notice.textContent=report.note||"Analytics loaded.";
  }catch(error){notice.textContent=error.message;}
 });
+
+/* Persistent SINTU AI Assistant conversations */
+let activeChatConversationId = null;
+function renderChatMessages(messages) {
+  const host = $("chatMessages");
+  if (!host) return;
+  if (!messages.length) {
+    host.innerHTML = '<p class="muted">Conversation khaali hai. Apna pehla message bhejein.</p>';
+    return;
+  }
+  host.innerHTML = messages.map(item => {
+    const isUser = item.role === "user";
+    const label = isUser ? "You" : "SINTU";
+    const state = item.status && item.status !== "completed" ? " · " + escapeHtml(item.status) : "";
+    return '<article style="padding:12px;margin:8px 0;border-radius:10px;background:' +
+      (isUser ? "rgba(70,120,190,.12)" : "rgba(80,160,120,.10)") + '">' +
+      '<strong>' + label + state + '</strong><div style="white-space:pre-wrap;overflow-wrap:anywhere;margin-top:6px">' +
+      escapeHtml(item.content) + '</div>' +
+      (item.provider ? '<small class="muted">' + escapeHtml(item.provider) + ' · ' + escapeHtml(item.model || "") + '</small>' : '') +
+      '</article>';
+  }).join("");
+  host.scrollTop = host.scrollHeight;
+}
+async function loadChatConversation(id) {
+  if (!id) {
+    activeChatConversationId = null;
+    renderChatMessages([]);
+    return;
+  }
+  const data = await request("/api/conversations/" + encodeURIComponent(id));
+  activeChatConversationId = data.conversation.id;
+  $("chatWorkflow").value = data.conversation.workflow;
+  renderChatMessages(data.messages || []);
+}
+async function loadChatConversations(preferredId = null) {
+  const select = $("chatConversationSelect");
+  if (!select) return;
+  try {
+    const data = await request("/api/conversations");
+    const items = data.conversations || [];
+    select.innerHTML = '<option value="">New conversation</option>' + items.map(item =>
+      '<option value="' + item.id + '">' + escapeHtml(item.title) + '</option>'
+    ).join("");
+    const chosen = preferredId || (activeChatConversationId && items.some(x => x.id === activeChatConversationId)
+      ? activeChatConversationId : "");
+    select.value = chosen ? String(chosen) : "";
+    if (chosen) await loadChatConversation(chosen);
+    else if (!activeChatConversationId) renderChatMessages([]);
+    $("chatNotice").textContent = items.length + " saved conversation(s).";
+  } catch (error) {
+    $("chatNotice").textContent = "Chat history load nahi hui: " + error.message;
+  }
+}
+$("chatNewConversation")?.addEventListener("click", async () => {
+  try {
+    const created = await request("/api/conversations", {
+      method: "POST",
+      body: JSON.stringify({workflow: $("chatWorkflow").value})
+    });
+    await loadChatConversations(created.id);
+    $("chatMessageInput").focus();
+  } catch (error) {
+    $("chatNotice").textContent = error.message;
+  }
+});
+$("chatConversationSelect")?.addEventListener("change", async () => {
+  const id = $("chatConversationSelect").value;
+  try {
+    await loadChatConversation(id ? Number(id) : null);
+    $("chatNotice").textContent = id ? "Conversation loaded." : "New conversation ready.";
+  } catch (error) {
+    $("chatNotice").textContent = error.message;
+  }
+});
+$("chatDeleteConversation")?.addEventListener("click", async () => {
+  if (!activeChatConversationId) {
+    $("chatNotice").textContent = "Delete karne ke liye saved conversation chunein.";
+    return;
+  }
+  try {
+    await request("/api/conversations/" + encodeURIComponent(activeChatConversationId), {method: "DELETE"});
+    activeChatConversationId = null;
+    await loadChatConversations();
+    $("chatNotice").textContent = "Conversation deleted.";
+  } catch (error) {
+    $("chatNotice").textContent = error.message;
+  }
+});
+async function sendChatMessage() {
+  const input = $("chatMessageInput");
+  const content = input.value.trim();
+  if (!content) {
+    $("chatNotice").textContent = "Pehle message likhein.";
+    input.focus();
+    return;
+  }
+  const button = $("chatSendMessage");
+  button.disabled = true;
+  $("chatNotice").textContent = "SINTU jawab taiyar kar raha hai…";
+  try {
+    if (!activeChatConversationId) {
+      const created = await request("/api/conversations", {
+        method: "POST",
+        body: JSON.stringify({workflow: $("chatWorkflow").value})
+      });
+      activeChatConversationId = created.id;
+    }
+    const result = await request("/api/conversations/" + encodeURIComponent(activeChatConversationId) + "/messages", {
+      method: "POST",
+      body: JSON.stringify({content})
+    });
+    input.value = "";
+    await loadChatConversations(activeChatConversationId);
+    $("chatNotice").textContent = "Reply generated · " + result.message.provider + " · " + result.message.model;
+  } catch (error) {
+    if (activeChatConversationId) {
+      try { await loadChatConversation(activeChatConversationId); } catch (_) {}
+    }
+    $("chatNotice").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+$("chatSendMessage")?.addEventListener("click", sendChatMessage);
+$("chatMessageInput")?.addEventListener("keydown", event => {
+  if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    sendChatMessage();
+  }
+});
+loadChatConversations();

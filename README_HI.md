@@ -78,6 +78,14 @@ These are registered format workflows and export profiles, not a claim that ever
 
 If Ollama is not installed/running, generation displays setup guidance and does not call a paid provider. Free local models still require compatible hardware.
 
+## Persistent AI Assistant — multi-conversation chat
+
+Dashboard mein authenticated user ke liye persistent Hindi/English text chat panel hai. User apni conversations create, list, read, rename, delete aur continue kar sakta hai. Har message existing local-first AI provider gateway se process hota hai aur recent chat history bounded context ke roop mein bheji jaati hai. Provider unavailable ya generation failure hone par status history mein save hota hai; fake success nahi dikhaya jata.
+
+API: `GET/POST /api/conversations`, `GET/PATCH/DELETE /api/conversations/{conversation_id}`, aur `POST /api/conversations/{conversation_id}/messages`.
+
+Yeh persistent text-chat foundation hai, complete multimodal assistant nahi. Streaming, document/file upload, image understanding, live web research/citations aur general tool calling is chat route mein abhi shamil nahi hain. Inhe complete kehne se pehle actual engine integration aur alag tests zaroori hain.
+
 ## Included in this build
 
 - Responsive mobile-first Hindi creator dashboard / installable PWA foundation.

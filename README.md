@@ -24,6 +24,14 @@ pkg install -y curl && curl -fsSL https://raw.githubusercontent.com/aiagent88252
 
 The installer is free/local-first, safe to rerun, preserves existing project data and `.env`, creates an isolated Python environment, installs Termux media dependencies, checks the app and starts it on `http://127.0.0.1:8000`. Save the first-run admin password printed in Termux. See [Termux installation details](docs/TERMUX_ONE_COMMAND.md).
 
+## Persistent AI Assistant conversations
+
+The dashboard includes a text-chat panel backed by persistent SQLite conversations. Authenticated users can create, list, read, rename, delete and continue their own conversations. Each message uses the existing local-first provider gateway and a bounded recent-history context. Provider-unavailable and generation-failure states are saved explicitly; they are not reported as successful replies.
+
+API: `GET/POST /api/conversations`, `GET/PATCH/DELETE /api/conversations/{conversation_id}`, and `POST /api/conversations/{conversation_id}/messages`.
+
+This is a persistent text-chat foundation, not yet a full multimodal assistant: streaming, file/document upload, image understanding, live web research/citations and general tool calling are not included in this chat route. These capabilities need real integrations and separate tests before being marked complete.
+
 ## Quick start
 
 1. Install Python 3.11+.

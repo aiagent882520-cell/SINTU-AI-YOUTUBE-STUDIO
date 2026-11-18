@@ -56,6 +56,83 @@ def test_generate_save_detail_and_export(tmp_path, monkeypatch):
     assert "not a rendered" in bundle.json()["notice"]
     assert client.get(f"/api/export/{body['id']}?format=exe").status_code == 400
 
+def test_persistent_conversations_keep_context_and_support_lifecycle(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    prompts = []
+
+    def fake_generate(prompt, workflow):
+        prompts.append((prompt, workflow))
+        return {"provider": "test", "model": "test-model", "output": f"reply-{len(prompts)}"}
+
+    monkeypatch.setattr(main, "generate_text", fake_generate)
+    created = client.post("/api/conversations", json={"workflow": "content"})
+    assert created.status_code == 200
+    conversation_id = created.json()["id"]
+
+    first = client.post(
+        f"/api/conversations/{conversation_id}/messages",
+        json={"content": "भारत के किलों पर बताओ"},
+    )
+    assert first.status_code == 200
+    assert first.json()["message"]["content"] == "reply-1"
+
+    second = client.post(
+        f"/api/conversations/{conversation_id}/messages",
+        json={"content": "अब इसे 60 सेकंड की स्क्रिप्ट बनाओ"},
+    )
+    assert second.status_code == 200
+    assert prompts[1][1] == "content"
+    assert "यूज़र: भारत के किलों पर बताओ" in prompts[1][0]
+    assert "SINTU: reply-1" in prompts[1][0]
+    assert "यूज़र: अब इसे 60 सेकंड की स्क्रिप्ट बनाओ" in prompts[1][0]
+
+    detail = client.get(f"/api/conversations/{conversation_id}")
+    assert detail.status_code == 200
+    assert [item["role"] for item in detail.json()["messages"]] == ["user", "assistant", "user", "assistant"]
+    assert detail.json()["messages"][-1]["provider"] == "test"
+
+    renamed = client.patch(
+        f"/api/conversations/{conversation_id}",
+        json={"title": "Fort research"},
+    )
+    assert renamed.status_code == 200
+    assert client.get("/api/conversations").json()["conversations"][0]["title"] == "Fort research"
+
+    deleted = client.delete(f"/api/conversations/{conversation_id}")
+    assert deleted.status_code == 200
+    assert deleted.json()["deleted"] is True
+    assert client.get(f"/api/conversations/{conversation_id}").status_code == 404
+
+
+def test_conversation_owner_scope_and_invalid_workflow(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    assert client.post("/api/conversations", json={"workflow": "not-a-workflow"}).status_code == 400
+    created = client.post("/api/conversations", json={"workflow": "content"}).json()
+    conversation_id = created["id"]
+    monkeypatch.setattr(main, "_conversation_owner_id", lambda request: 987654)
+    assert client.get(f"/api/conversations/{conversation_id}").status_code == 404
+    assert client.delete(f"/api/conversations/{conversation_id}").status_code == 404
+
+
+def test_conversation_persists_blocked_provider_result(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    created = client.post("/api/conversations", json={"workflow": "content"}).json()
+    conversation_id = created["id"]
+
+    def blocked_generate(prompt, workflow):
+        raise main.ProviderNotConfigured("Local model is not configured.")
+
+    monkeypatch.setattr(main, "generate_text", blocked_generate)
+    result = client.post(
+        f"/api/conversations/{conversation_id}/messages",
+        json={"content": "Hello SINTU"},
+    )
+    assert result.status_code == 503
+    messages = client.get(f"/api/conversations/{conversation_id}").json()["messages"]
+    assert [item["status"] for item in messages] == ["received", "blocked"]
+    assert "Local model is not configured." in messages[-1]["content"]
+
+
 def test_invalid_prompt_is_rejected(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     result = client.post("/api/generate", json={"prompt": "   ", "workflow": "shorts"})
@@ -89,9 +166,14 @@ def test_installable_app_shell(tmp_path, monkeypatch):
     assert "SHA-256" in app_script.text
     assert "backup-verify" in app_script.text
     assert "adminBackupHealth" in page.text
-    assert "sintu-studio-shell-v13" in worker.text
+    assert "sintu-studio-shell-v14" in worker.text
     assert "/static/offline.html" in worker.text
     assert 'id="flowPromptPreview"' in page.text
+    assert 'id="aiChat"' in page.text
+    assert 'id="chatConversationSelect"' in page.text
+    assert 'id="chatMessageInput"' in page.text
+    assert '$("chatSendMessage")' in app_script.text
+    assert '"/api/conversations"' in app_script.text
     assert "USER-PROVIDED SCENE ORDER" in app_script.text
     assert "turn ON the built-in Flow Agent" in app_script.text
     assert "ONE approval covering the total" in app_script.text
