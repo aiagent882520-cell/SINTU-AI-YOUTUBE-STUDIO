@@ -359,3 +359,9 @@ Last updated: 2026-11-17 15:52 UTC
 
 
 - The black-frame sampling gate now requires exactly 30 decoded distributed samples per file; a short/partial sample set is a forensic-tool failure rather than a misleading percentage.
+
+
+### CI regression correction — 2026-11-18
+
+- First complete CI run exposed one test-fixture mismatch: the mocked blackframe command returned 3 pblack values while the new fail-closed contract requires 30. This was a test fixture defect, not a production-code failure; all four Python matrix jobs reported the same assertion.
+- Updated the fixture to provide 30 samples and renamed the test for five timestamp points. A fresh full CI run is required; no result is claimed yet.
