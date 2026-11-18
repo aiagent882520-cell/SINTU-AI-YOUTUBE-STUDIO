@@ -409,3 +409,41 @@ def test_real_black_mp4_forensics_reports_black_percentage_and_five_samples(tmp_
         "first", "quarter", "middle", "three_quarter", "last"
     ]
     assert media_forensics.has_forensic_tool_failure(report) is False
+
+
+def test_forensic_environment_reports_tool_paths_versions_filters_and_temp_storage(monkeypatch):
+    monkeypatch.setattr(
+        media_forensics.shutil, "which",
+        lambda name: f"/opt/termux/bin/{name}",
+    )
+
+    def fake_run(command, timeout=120):
+        if command[0].endswith("ffmpeg") and "-filters" in command:
+            return {
+                "returncode": 0,
+                "stdout": " T.. blackdetect V->V detect video intervals\\n"
+                          " T.. blackframe V->V detect frames\\n"
+                          " ..C fps V->V force constant frame rate\\n"
+                          " ..C scale V->V scale video\\n",
+                "stderr": "",
+            }
+        return {
+            "returncode": 0,
+            "stdout": f"{Path(command[0]).name} version 7.1.5\\n",
+            "stderr": "",
+        }
+
+    monkeypatch.setattr(media_forensics, "run", fake_run)
+    environment = media_forensics.inspect_environment()
+    assert environment["python"]["version"]
+    assert environment["ffmpeg"]["path"] == "/opt/termux/bin/ffmpeg"
+    assert environment["ffmpeg"]["version"].startswith("ffmpeg version 7.1.5")
+    assert environment["ffprobe"]["path"] == "/opt/termux/bin/ffprobe"
+    assert environment["ffprobe"]["version"].startswith("ffprobe version 7.1.5")
+    assert environment["ffmpeg"]["filters"] == {
+        "blackdetect": True, "blackframe": True, "fps": True, "scale": True,
+    }
+    assert environment["frame_sampling"].startswith("FFprobe")
+    assert environment["temporary_storage"]["exists"] is True
+    assert environment["temporary_storage"]["write_test"] is True
+    assert environment["temporary_storage"]["free_bytes"] > 0
