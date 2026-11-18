@@ -292,7 +292,7 @@ def find_backups(path: Path) -> list[dict]:
 
 def _safe_data_path(relative: str) -> Path | None:
     """Resolve a manifest-relative path without allowing absolute or traversal paths."""
-    if not isinstance(relative, str) or not relative or "\\\\" in relative:
+    if not isinstance(relative, str) or not relative or chr(92) in relative:
         return None
     candidate = Path(relative)
     if candidate.is_absolute() or any(part in {"", ".", ".."} for part in candidate.parts):
@@ -339,7 +339,8 @@ def find_render_manifests(path: Path, known_hashes: set[str] | None = None) -> l
     manifest_dir = DATA_DIR / "production_manifests"
     if manifest_dir.is_symlink() or not manifest_dir.is_dir():
         return []
-    hashes = known_hashes or {sha256_file(path)}
+    current_hash = sha256_file(path)
+    hashes = known_hashes or {current_hash}
     matches = []
     for manifest_path in sorted(manifest_dir.glob("*.json"))[:1000]:
         if manifest_path.is_symlink() or not manifest_path.is_file():
@@ -358,7 +359,7 @@ def find_render_manifests(path: Path, known_hashes: set[str] | None = None) -> l
         output_hash = output.get("sha256")
         if (safe_output is None or Path(output_path).name != path.name
                 or not output_path.startswith("generated_videos/")
-                or output_hash not in hashes):
+                or not isinstance(output_hash, str) or output_hash not in hashes):
             continue
         inputs = manifest.get("inputs", [])
         if not isinstance(inputs, list):
@@ -369,7 +370,7 @@ def find_render_manifests(path: Path, known_hashes: set[str] | None = None) -> l
             "run_id": manifest.get("run_id"),
             "format_id": manifest.get("format_id"),
             "matched_output_sha256": output_hash,
-            "matched_copy": "current-file" if output_hash == sha256_file(path) else "pre-repair-backup",
+            "matched_copy": "current-file" if output_hash == current_hash else "pre-repair-backup",
             "engines": manifest.get("engines", {}) if isinstance(manifest.get("engines"), dict) else {},
             "settings": manifest.get("settings", {}) if isinstance(manifest.get("settings"), dict) else {},
             "inputs": [_verify_manifest_input(item) for item in inputs if isinstance(item, dict)],
