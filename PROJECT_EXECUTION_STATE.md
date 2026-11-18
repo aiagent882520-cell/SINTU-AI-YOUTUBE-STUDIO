@@ -462,3 +462,40 @@ Last updated: 2026-11-17 15:52 UTC
 - **Confirmed:** the historical renderer code contains a reproducible full-black output defect; it can blacken even bright input images. **Not confirmed:** exact per-file request/source linkage for all five originals, because no matching production log/database records exist and the Android FFmpeg version at original creation is not recorded. Do not claim each individual file's payload provenance is proven.
 - PR #149 adds a two-scene bright-image integration regression and missing-image rejection test; PR #151 adds raw per-frame blackframe percentages and a five-target compact footer. Both remain under CI/merge review at this checkpoint.
 - #127 Android full test suite remains running after stale-claim recovery; no exit code/result yet. #129 health audit completed FAILED exit 1 with 588 pytest PASS, 5 warnings, 13 health checks PASS and the five black MP4s as the only five failures.
+
+
+
+### Master execution checkpoint — 2026-11-18 11:25 UTC
+
+#### Repository and merged engineering work
+- Repository access is confirmed with admin/push permission; default branch is `main`.
+- PR #153 (`Add renderer fade regression and forensic toolchain diagnostics`) was reviewed and squash-merged to `main` as commit `7f6e4b2ea7f84af60437b544717ecc7d2a8fec5c`.
+- PR #153 changes only `scripts/media_forensics.py`, `tests/test_media_forensics.py`, and `tests/test_video_renderer_integration.py`. It adds FFmpeg/FFprobe executable/version/filter diagnostics, Python/platform/Termux and temp-storage checks, per-file readability/permission evidence, a real two-bright-scene fade integration regression, and rejection of missing scene images before FFmpeg starts.
+- PR-head CI run #1259 (`44285076949`) completed SUCCESS: Python 3.11, 3.12, 3.13, 3.14, dependency audit, offline branded-video E2E/motion audit, and Docker build/health all passed (7 jobs). The exact post-merge main run #1260 (`44294341299`) was IN_PROGRESS at this checkpoint; do not substitute PR-head CI for the post-merge result.
+
+#### Issues #145, #129, #127, #125
+- #145 is closed with `sintu-command-done`. Its actual Android Termux self-test output reports `ok=true` and 7/7 basic checks: repository, origin, Python 3.14.10, GitHub CLI authentication, Studio API, bridge/worker heartbeat with automation-only gate, and relay singleton lock. This does not yet prove task-queue processing, duplicate prevention, retry exhaustion, crash recovery, stale PID/lock recovery, or graceful shutdown; the broader lifecycle acceptance remains incomplete.
+- #129 is closed with `sintu-command-failed`. Actual Android result: pytest 588 passed, 5 warnings in 241.58s; health audit 13 PASS, 0 WARN, 5 FAIL, process exit 1. All five failures are the five named full-duration-black MP4s below. This is not a health PASS.
+- #127 remains OPEN with `sintu-command-running`; its comments show repeated claims/stale-claim recovery but no final result body, exit code, or artifact. Regression status remains pending/blocked, not PASS.
+- #125 is closed with `sintu-command-failed`, actual Android forensic process exit 1. In the retained output, FFprobe metadata and full-duration blackdetect completed, but first-frame sampling succeeded while middle and last samples returned no decoded frame at/after the requested timestamp; `frame_probe_exit=1`. The failed forensic command is not a successful per-file visual verification. The report footer was not retained in the available comment, so do not invent missing per-target hashes, sizes, sample metrics, or root-cause links.
+
+#### Five MP4s — current evidence and disposition
+- `3f4c2151e8e640109f464b2c2e9b7569.mp4`: 9.04s, 720x1280 H.264/yuv420p, AAC 48kHz stereo; black interval 0–9.0s; UNRESOLVED.
+- `59430f1fb7fd4bdf80cf8b7d9f456098.mp4`: 9.04s, 720x1280 H.264/yuv420p, AAC 48kHz stereo; black interval 0–9.0s; UNRESOLVED.
+- `8cfe9da88d5c43d184f3572e371ff4a6.mp4`: 6.08s, 720x1280 H.264/yuv420p, AAC 48kHz stereo; black interval 0–6.041667s; UNRESOLVED.
+- `adf9268e5d5543a587defdde5d4c4edd.mp4`: 4.08s, 720x1280 H.264/yuv420p, AAC 48kHz stereo; black interval 0–4.041667s; UNRESOLVED.
+- `afa4c87e3c1e42a197b7092e0e24040d.mp4`: 6.08s, 720x1280 H.264/yuv420p, AAC 48kHz stereo; black interval 0–6.041667s; UNRESOLVED.
+- #129's complete health footer confirms all five are the five media failures. #125's failed sampler means the latest forensic report is not sufficient to close any file. No repair/regeneration is authorized without per-file verified backup/hash and source inputs; originals must remain untouched.
+- Historical renderer defect remains confirmed at code/reproduction level: the pre-2026-11-15 concat + chained per-scene fade filter graph can turn bright images into a full-duration black H.264 MP4; a local FFmpeg 7.1.5 reproduction produced a 4.083333s/98-frame black output matching the duration/frame signature of `adf9268e5d5543a587defdde5d4c4edd.mp4`. The historical renderer fix is already on main. Exact production request/source attribution for each of the five individual originals remains unconfirmed; candidate assets existed but no matching production log/database record proves the mapping.
+- PR #153 now supplies a real renderer integration regression and richer environment diagnostics. This is code-level regression coverage, not proof that the five original Android files have been repaired.
+
+#### Python CI and Android status
+- PR #153 CI run #1259: Python 3.11 PASS, 3.12 PASS, 3.13 PASS, 3.14 PASS; dependency audit PASS; offline video E2E/motion PASS; Docker build/health PASS.
+- Post-merge main CI run #1260 was still in progress at this checkpoint.
+- Android device last reported Python 3.14.10 in #145. No current device run after merge commit `7f6e4b2` is present. Do not mark post-merge Termux deployment, forensic, health, or regression checks PASS.
+- No Android device execution can be initiated directly from this GitHub inspection session. It requires the already-running Termux relay to pull the new main commit and execute the queued diagnostic jobs, or the owner to run the documented Termux commands if the relay is offline.
+
+#### Safety and next execution
+- Video production remains PAUSED; public YouTube publishing remains DISABLED; no real upload or public publishing occurred; original media/backups were not modified by these inspections or PR #153.
+- Next: verify post-merge CI #1260; deploy main commit `7f6e4b2` to Android Termux; rerun forensic audit and retain all five full per-file reports plus the compact footer; verify backups/checksums and source/log/database mapping before any repair; then run the worker lifecycle and complete regression/health suites on-device and record actual timestamps/exit codes.
+- Do not close #127 or change any of the five MP4s to PASS without the actual result evidence. Keep the production gates closed until every required gate passes.
