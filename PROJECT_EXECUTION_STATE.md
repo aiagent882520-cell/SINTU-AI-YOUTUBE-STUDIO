@@ -691,3 +691,25 @@ Last updated: 2026-11-17 15:52 UTC
 - Other media checks, including two 32.04-second videos, passed motion audit (7/31 and 23/31 moving transitions respectively).
 - Safety fields: `paid_services_used=false`, `publishing_performed=false`.
 - Issue #173 Android regression is RUNNING; #174 self-test is queued. PR #169 server-side default-off production/publishing gate remains open with Python/security checks PASS and Docker/E2E running.
+
+
+### PR #169 merged — server-side default-off production/publishing gates — 2026-11-18
+- PR #169 merged as 72162e6ad471015a42e34c0cc2a78c003fbfb213. Exact rebased-head CI run #1298 passed Python 3.11/3.12/3.13/3.14, dependency security audit, production Docker build, and offline branded-video E2E/motion audit.
+- New server-side policy flags: SINTU_PRODUCTION_ENABLED=false and SINTU_EXTERNAL_PUBLISHING_ENABLED=false by default. Media production/render/asset-generation POST endpoints return HTTP 503 while production is paused. YouTube upload/public-approval creation, Meta publishing and TikTok publishing return HTTP 503 while external publishing is disabled. Public-approval revocation remains available.
+- API test fixtures explicitly opt in for ordinary endpoint contract tests; dedicated policy tests verify default-deny and explicit enable. This change does not enable production or publishing.
+
+### Android results after PR #166 and PR #168 — 2026-11-18
+- Issue #173 Android regression: SUCCESS / exit 0, 610 passed, 5 warnings in 201.24s (3m21s), Python 3.14.10.
+- Issue #174 automation self-test: SUCCESS / exit 0, 7/7 checks; repository/origin, Python 3.14.10, gh auth, API health, worker online with automation_only=true, relay singleton lock held.
+- Issue #175 pulled PR #168 to Android Termux successfully (fast-forward b93538d..6867e45). Issue #176 watchdog recovery test: PASS; bridge-worker PID 23191 -> 1456 and server PID 23614 -> 1740 were terminated/recovered. Device reboot remains untested. Issue #177 self-test: SUCCESS / 7/7.
+- Important: the #175 pull occurred before PR #169 merged. Android still needs to pull and restart onto PR #169 before its server-side production/publishing gates are verified on-device.
+
+### Post-PR #166 media gate and unresolved blockers
+- Issue #171 forensic rerun: SUCCESS / exit 0, five targets, zero tool failures. Calibrated consensus confirms three fully black videos and clears the two prior blackdetect false positives. The two low-luma files remain visually unreviewed (mean luma 22.11, stddev 1.571); no repair is claimed.
+- Issue #172 health audit: FAILED / exit 1, 15 PASS / 3 FAIL / 0 warnings; pytest 610 passed, 5 warnings in 259.00s. The only failures are 3f4c2151e8e640109f464b2c2e9b7569.mp4, 59430f1fb7fd4bdf80cf8b7d9f456098.mp4 and 8cfe9da88d5c43d184f3572e371ff4a6.mp4.
+- Production log matches and production database matches remain empty. Historical renderer fade/placeholder defect is confirmed by code and synthetic reproduction, but exact per-file invocation/source attribution is unproven. The first two black files are byte-identical (same SHA-256); all originals and backups remain untouched.
+- Human-visible frame review is still blocked: current forensic sampler deletes temporary thumbnails and the Android relay returns metrics only. Need retained/exported frame images for visual inspection before clearing the two low-luma files or repairing/regenerating any target.
+
+### Post-PR #169 Android deployment queue — 2026-11-18
+- Issues #178–#182 queued in order: git_pull_ff_only, restart_services, run_tests, health_audit, automation_self_test. These are required to deploy the default-off server gates and verify the live Android API/worker after restart.
+- Current operational policy: video production PAUSED; external publishing DISABLED; no upload or public publish performed; paid services unused. Full project remains NOT PRODUCTION READY until three black assets are safely resolved, two low-luma assets receive visual review, and post-PR #169 Android gates pass.
