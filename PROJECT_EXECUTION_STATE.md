@@ -874,7 +874,8 @@ Evidence: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/commit/c
 - PR #191 remains OPEN + DRAFT; branch `fix/forensics-generated-music-assets`.
 - Added `generated_music/` to read-only asset correlation and WAV metadata reporting (duration, sample rate, channels, sample width and frames).
 - The first expanded CI exposed a fixture-only defect: the test wrote escaped text bytes, causing a nominal six-second WAV to be measured as 24 seconds. The fixture was corrected to write exactly 264,600 PCM bytes (22,050 Hz × 6 seconds × 2 bytes/sample).
-- Corrected exact-head commit: `e091558c9b0417f16618369ce6e06d6e6961078b`; SINTU CI run `44329127820` was in progress at the latest check. Security audit had passed; all four Python jobs were still running. Do not claim the corrected run passes until it completes.
+- Corrected exact-head commit: `e091558c9b0417f16618369ce6e06d6e6961078b`; SINTU CI run `44329127820` completed SUCCESS (7/7): Python 3.11–3.14, dependency security audit, production Docker build and offline branded-video E2E/motion audit all PASS.
+- The offline E2E produced a 32-second, 720×1280 H.264/yuv420p MP4 with eSpeak NG Hindi narration, local procedural music and SINTU watermark. The media audit reported AAC 48 kHz stereo, no black intervals, 32 sampled frames, 23 moving transitions out of 31 and motion ratio 0.742. The offline media audit summary was 2 PASS / 0 warnings / 0 failures. Artifact `sintu-offline-video-e2e` (1,880,534 bytes; SHA-256 `9bfd3400e86624ac6fecbfbeed13182f97a1c0316522ea34cea03945cc2d7269`) contains the MP4 and audit evidence. This is CI offline pipeline evidence, not Android on-device generative AI or production readiness.
 - Earlier exact-head run `44327150811` (before WAV metadata test) passed Python 3.11–3.14, security audit, Docker and offline branded-video E2E/motion audit.
 
 ### Black MP4 third-target correlation — evidence boundary
