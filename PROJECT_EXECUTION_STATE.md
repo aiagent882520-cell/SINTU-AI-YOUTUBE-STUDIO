@@ -402,3 +402,10 @@ Last updated: 2026-11-17 15:52 UTC
 
 - The first post-merge forensic result (#140) successfully decoded all five requested timestamp positions for the targets visible in the relay output and used the sequential fallback at quarter/middle/three-quarter/last. It still exited 1; complete per-target status cannot yet be assessed because the 8,000-character relay tail cut off the compact footer. The result also shows full-duration blackdetect intervals and inconsistent blackframe metrics on some targets, which needs the complete report before drawing conclusions.
 - PR #143 additionally raises the GitHub relay output tail from 8,000 to 20,000 characters and tests that the compact forensic footer survives. This is designed to retain the whole per-file summary while remaining within GitHub issue-comment limits.
+
+
+### Project-wide source marker scan — 2026-11-18
+
+- Reviewed the repository tree (154 tracked files) and scanned the application Python modules, Termux/automation scripts, core renderer/health/production/upload modules, and primary frontend JS/CSS/HTML assets for `TODO`, `FIXME`, `XXX`, and `NotImplementedError`.
+- No such markers were found in the scanned runtime/source files. This is a source-marker scan, not proof that every feature/integration is complete; live Android and external-provider checks remain necessary.
+- GitHub's code-search index is unavailable for this repository, so no server-side repository-wide code-search result is claimed.
