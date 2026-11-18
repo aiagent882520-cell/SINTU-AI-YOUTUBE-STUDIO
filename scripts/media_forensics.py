@@ -155,7 +155,7 @@ def summarize_black_frame_percentages(values: list[int]) -> dict:
             "black_frame_count": 0,
             "black_frame_percentage": None,
             "mean_black_pixel_percentage": None,
-            "black_pixel_threshold": 32,
+            "black_pixel_threshold": 16,
             "black_frame_cutoff_percent": 98,
             "pblack_values": [],
         }
@@ -486,7 +486,7 @@ def inspect_video(path: Path) -> dict:
             info["parse_error"] = "invalid ffprobe JSON"
 
     black = run(["ffmpeg", "-hide_banner", "-i", str(path), "-vf",
-                 "blackdetect=d=0.10:pix_th=0.10", "-an", "-f", "null", "-"])
+                 "blackdetect=d=0.10:pix_th=0.08", "-an", "-f", "null", "-"])
     decode = run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "null", "-"])
     intervals = parse_black_intervals(black["stderr"])
     duration = info["duration_seconds"] or 0
@@ -495,7 +495,7 @@ def inspect_video(path: Path) -> dict:
         sample_fps = 30.0 / duration
         blackframe = run([
             "ffmpeg", "-hide_banner", "-i", str(path), "-vf",
-            f"fps={sample_fps:.8f},blackframe=amount=0:threshold=32",
+            f"fps={sample_fps:.8f},blackframe=amount=0:threshold=17",
             "-an", "-frames:v", "30", "-f", "null", "-",
         ])
         blackframe_values = parse_black_frame_percentages(blackframe["stderr"])
@@ -508,7 +508,9 @@ def inspect_video(path: Path) -> dict:
         blackframe = {"returncode": None, "stderr": "invalid or missing video duration"}
         black_frame_metrics = summarize_black_frame_percentages([])
         blackframe_error = "invalid or missing video duration; black-frame sampling skipped"
-    full_black = bool(duration_valid and any(a <= 0.1 and b >= duration * 0.95 for a, b in intervals))
+    blackdetect_full_black = bool(
+        duration_valid and any(a <= 0.1 and b >= duration * 0.95 for a, b in intervals)
+    )
 
     fps = 0.0
     for stream in info["streams"]:
@@ -584,6 +586,12 @@ def inspect_video(path: Path) -> dict:
         ],
     }
 
+    full_black = bool(
+        blackdetect_full_black
+        and black_frame_metrics.get("black_frame_count", 0) >= 29
+        and pixel_summary.get("near_black_sample_count", 0) == 5
+    )
+
     backups = find_backups(path)
     creation_epoch = parse_creation_time(info.get("container_creation_time"))
     if creation_epoch is not None:
@@ -609,7 +617,9 @@ def inspect_video(path: Path) -> dict:
         "av_sync": analyze_av_sync(info["streams"]),
         "blackdetect_exit": black["returncode"], "black_intervals": intervals,
         "blackframe_exit": blackframe["returncode"],
-        "black_frame_metrics": black_frame_metrics, "blackframe_error": blackframe_error,
+        "black_frame_metrics": black_frame_metrics,
+        "blackframe_luma_threshold": 17, "blackframe_error": blackframe_error,
+        "blackdetect_full_duration_black": blackdetect_full_black,
         "full_duration_black": full_black, "decode_exit": decode["returncode"],
         "decode_errors": redact_secrets(decode["stderr"]) if decode["stderr"] else "",
         "decoded_frame_samples": samples,
@@ -672,6 +682,7 @@ def compact_forensic_summary(report: dict) -> dict:
             "duration": metadata.get("duration_seconds"),
             "streams": streams,
             "full_black": item.get("full_duration_black"),
+            "blackdetect_full_black": item.get("blackdetect_full_duration_black"),
             "black_intervals": item.get("black_intervals", []),
             "exit": [
                 item.get("ffprobe_exit"), item.get("blackdetect_exit"),
