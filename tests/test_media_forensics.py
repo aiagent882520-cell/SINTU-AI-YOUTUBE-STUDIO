@@ -421,15 +421,15 @@ def test_forensic_environment_reports_tool_paths_versions_filters_and_temp_stora
         if command[0].endswith("ffmpeg") and "-filters" in command:
             return {
                 "returncode": 0,
-                "stdout": " T.. blackdetect V->V detect video intervals\\n"
-                          " T.. blackframe V->V detect frames\\n"
-                          " ..C fps V->V force constant frame rate\\n"
-                          " ..C scale V->V scale video\\n",
+                "stdout": " T.. blackdetect V->V detect video intervals\n"
+                          " T.. blackframe V->V detect frames\n"
+                          " ..C fps V->V force constant frame rate\n"
+                          " ..C scale V->V scale video\n",
                 "stderr": "",
             }
         return {
             "returncode": 0,
-            "stdout": f"{Path(command[0]).name} version 7.1.5\\n",
+            "stdout": f"{Path(command[0]).name} version 7.1.5\n",
             "stderr": "",
         }
 
