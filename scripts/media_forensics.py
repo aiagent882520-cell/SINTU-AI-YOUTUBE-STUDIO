@@ -688,10 +688,9 @@ def compact_forensic_summary(report: dict) -> dict:
             },
             "samples": [
                 [sample.get("sample"), sample.get("seek_seconds"), sample.get("timestamp"),
-                 sample.get("sampling_method"), str(sample.get("error", ""))[:60],
+                 str(sample.get("error", ""))[:60],
                  (sample.get("pixel_verification") or {}).get("status"),
                  (sample.get("pixel_verification") or {}).get("mean_luma"),
-                 (sample.get("pixel_verification") or {}).get("luma_stddev"),
                  (sample.get("pixel_verification") or {}).get("black_pixel_percentage"),
                  (sample.get("pixel_verification") or {}).get("near_black")]
                 for sample in item.get("decoded_frame_samples", [])
