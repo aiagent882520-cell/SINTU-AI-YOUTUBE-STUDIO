@@ -220,3 +220,14 @@ Last updated: 2026-11-17 15:52 UTC
 - PR #121 remains open. Its current CI run `44256743199`: all four Python matrix jobs, dependency security audit, and Docker build PASS; offline branded video E2E/motion audit is still running.
 - Termux #118–#120 remain queued with no claim/result comments. Do not count as Android test results.
 - Five black source MP4s remain untouched pending fresh Android forensic report. No upload or public publishing. Production remains PAUSED.
+
+
+### PR #122 offline E2E artifact independently inspected — 2026-11-18
+
+- Downloaded and inspected workflow artifact `sintu-offline-video-e2e` from run `44256749920` (artifact ID `14406770275`).
+- Real offline Hindi storyboard render: 32.04 seconds, 720x1280, H.264/yuv420p, AAC 48 kHz stereo, 8 scenes, eSpeak NG Hindi voiceover and procedural music, no paid services.
+- Independent FFprobe confirmed MP4 container and expected streams. Health audit: PASS, 2 checks PASS, 0 warnings, 0 failures; black intervals empty; 32 sampled frames, 23/31 moving transitions, motion ratio 0.742. No publishing performed.
+- Test render reports subtitles were not burned in; this is recorded as a capability gap for this E2E fixture, not a black-video failure.
+- PR #122 full required checks all PASS and PR merged as `f2d7bfdbd4914ea17252937ce49332c687b0ddc8`.
+- PR #121 matrix results: Python 3.11/3.12/3.13/3.14 each 571 passed, 5 warnings; security audit and Docker build PASS. Offline video E2E still running at the time of this checkpoint.
+- Termux #118–#120 still queued and unclaimed. No fresh Android forensic report or Android regression result. Five original MP4s untouched; no YouTube OAuth/channel verification. Public publishing disabled and production paused.
