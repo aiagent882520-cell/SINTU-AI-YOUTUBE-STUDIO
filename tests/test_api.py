@@ -3285,6 +3285,7 @@ def test_production_run_render_requires_approved_matching_format(tmp_path, monke
     response = client.post(f"/api/production/runs/{run_id}/render", json=payload)
     assert response.status_code == 200
     assert response.json()["render"]["video_id"] == "b" * 32
+    assert response.json()["render"]["provenance_manifest"] == "production_manifests/test.json"
     assert response.json()["published"] is False
 
 
@@ -3489,6 +3490,7 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
     })
     assert response.status_code == 200, response.text
     body = response.json()
+    assert body["render"]["provenance_manifest"] == "production_manifests/test.json"
     assert body["video_rendered"] is True and body["published"] is False
     assert len(body["generated_images"]) == 2
     assert body["render"]["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
@@ -3564,6 +3566,7 @@ def test_production_media_pipeline_uses_approved_storyboard_when_scene_prompts_o
         "घने जंगल में रहस्यमयी रास्ता, पेड़ों से छनती रोशनी, लो-एंगल कैमरा",
     ]
     assert response.json()["video_rendered"] is True
+    assert response.json()["render"]["provenance_manifest"] == "production_manifests/test.json"
     assert response.json()["published"] is False
     assert response.json()["render"]["subtitles_burned_in"] is True
     assert len(response.json()["subtitles"]) == 2
