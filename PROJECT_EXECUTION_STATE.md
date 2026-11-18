@@ -377,3 +377,16 @@ Last updated: 2026-11-17 15:52 UTC
 - Repository code search index availability is false, so a repo-wide TODO/FIXME scan cannot be completed through GitHub code search. Key renderer, API, bridge and generator modules were inspected; a complete local filesystem scan remains pending Android access.
 - Issues #127 and #129 remain claimed/running with no completion comment or exit code. Their claim timestamps are 09:22:15 UTC and 09:20:33 UTC respectively; at the checkpoint their ages remain below the 35-minute stale-claim threshold. Do not duplicate them. #119 is a separate successful `tests/test_api.py` run: 187 passed, 5 warnings, 140.16 seconds, exit 0.
 - PR #136 is validated in GitHub CI only. It is not yet merged or Android-deployed. Production remains PAUSED; original media and backups untouched; no upload/publishing or paid service used.
+
+
+### PR #136 merged + Termux post-merge deployment checkpoint — 2026-11-18 09:54 UTC
+
+- PR #136 merged to `main` as merge commit `333510712b26403bd9eb4d54c173d4857e63c326`. The merged code includes sequential fallback for inaccurate FFprobe seeks, five-point timestamp sampling, 30 distributed blackframe samples with fail-closed completeness, compact relay-safe per-file evidence footer, strict invalid-duration handling, and regression coverage.
+- GitHub Actions run #1236 (44278274943) completed SUCCESS: dependency security audit; Python 3.11, 3.12, 3.13, 3.14; offline branded Hindi video E2E and motion audit; Docker build. Sampled motion ratio 0.742. Artifact: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44278274943/artifacts/14415089754.
+- Android Issue #137 successfully fast-forwarded Termux from `02ef68b` to `3335107` (merge commit), exit code 0. The relay output explicitly confirms the three changed files were updated.
+- Android Issue #138 was claimed 09:53:40 UTC and failed exit 1 at 09:53:53 UTC. This run started before #137's successful pull completed, so it executed the old forensic sampler. Its report again shows blackdetect covering 100% of the sampled target, FFmpeg full decode exit 0, and old middle/last seek samples failing. This is NOT a post-fix regression result; do not treat it as evidence that merged code failed.
+- Android Issue #139 ran after the pull and completed SUCCESS, exit 0: `tests/test_media_forensics.py` — 20 passed in 2.55 seconds.
+- New read-only post-deployment forensic run Issue #140 was queued at 09:54:20 UTC. It must complete before per-video post-fix evidence can be assessed.
+- Issues #127 and #129 still have only their original worker-claimed comments, no completion comment/exit code/artifact. They have not yet crossed the 40-minute GitHub relay stale-claim lease at this checkpoint; do not duplicate them. Continue monitoring for the relay's built-in recovery.
+- Renderer/source-loss root cause for the five black MP4s remains UNKNOWN. Candidate source JPGs are not proven source assets; production log/database match arrays remain empty in the Android report. No original media was changed, repaired, regenerated, deleted, or uploaded. Production remains PAUSED.
+- Historical note: earlier entries saying PR #136 was unmerged or awaiting CI are superseded by this checkpoint. The merge and CI success above are authoritative.
