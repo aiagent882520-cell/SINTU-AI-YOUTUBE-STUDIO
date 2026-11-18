@@ -6,6 +6,7 @@ import okhttp3.CookieJar
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import retrofit2.Response
+import java.util.concurrent.TimeUnit
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
@@ -128,6 +129,10 @@ class SintuApi(context: Context, baseUrl: String) {
     init {
         val client = OkHttpClient.Builder()
             .cookieJar(PersistentSessionCookieJar(sessionStore))
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(180, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .callTimeout(240, TimeUnit.SECONDS)
             .build()
         service = Retrofit.Builder()
             .baseUrl(normalizedBaseUrl)
