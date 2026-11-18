@@ -440,6 +440,20 @@ Last updated: 2026-11-17 15:52 UTC
 - Production remains PAUSED; no original media modified, repaired, regenerated, deleted, or uploaded; no YouTube upload/public visibility change or paid service.
 
 
+### Android #129 health audit result after stale recovery — 2026-11-18 10:09 UTC
+
+- Issue #129 was recovered from its stale claim at 10:00:50 UTC, reclaimed at 10:01:10 UTC, and completed at 10:09:22 UTC with **FAILED (exit 1)**.
+- The health audit footer is complete and machine-readable: **13 PASS, 0 WARN, 5 FAIL**. Pytest itself passed: **588 passed, 5 warnings in 241.58 seconds (4:01)**.
+- All five failures are the known full-duration black videos:
+  `3f4c2151e8e640109f464b2c2e9b7569.mp4`,
+  `59430f1fb7fd4bdf80cf8b7d9f456098.mp4`,
+  `8cfe9da88d5c43d184f3572e371ff4a6.mp4`,
+  `adf9268e5d5543a587defdde5d4c4edd.mp4`,
+  `afa4c87e3c1e42a197b7092e0e24040d.mp4`.
+- Other media checks passed. This confirms the remaining failure is visual content, not Python regression or AAC/H.264 profile. No originals changed.
+- #127 was requeued at 10:04:09 UTC and is awaiting execution. #145 automation self-test, #146 git pull and #147 restart remain queued behind the current relay queue. Do not duplicate any of them.
+
+
 ### Renderer root-cause reproduction — 2026-11-18 10:05 UTC
 
 - Historical code at commit `b0e201846b27b71314427bb9e6097c76dd74aa6f` (2026-11-13) allowed `render_storyboard(image_paths=[])`, causing `_make_frame` to create a dark placeholder canvas RGB(16,24,39), and chained one timestamped fade-out/fade-in pair at every scene boundary after the concat demuxer. It did not expand each still to CFR with an `fps` filter before applying fades.
@@ -449,3 +463,12 @@ Last updated: 2026-11-17 15:52 UTC
 - **Renderer defect: CONFIRMED** — the pre-2026-11-15 storyboard renderer's chained fade graph (and permissive blank-image path) can output full-duration black MP4s; this is proven by historical code and a reproducible synthetic render. **Per-file invocation provenance: NOT CONFIRMED** — production logs/database do not link the five individual MP4s to exact request payloads/source images, and the Android FFmpeg version used at original creation is not recorded. Therefore the renderer bug is the confirmed code-level root cause candidate for these five files, while exact per-file parameter attribution remains UNKNOWN.
 - Follow-up PR adds a real two-scene, 4-second fade integration regression with bright source images, checks decoded frame count/visible pixels/black interval, and verifies missing scene images are rejected before FFmpeg starts.
 - No original MP4 or backup was modified, repaired, regenerated, deleted or uploaded.
+
+
+### Android queue recovery and post-PR143 deployment — 2026-11-18 10:10 UTC
+
+- Issue #145 automation_self_test completed SUCCESS at 10:09:57 UTC: repository/origin correct, Python 3.14.10, GitHub CLI authenticated (credentials hidden), API healthy, bridge worker online, automation-only enabled, relay singleton lock held.
+- Issue #146 `git_pull_ff_only` completed SUCCESS at 10:09:43 UTC. Termux fast-forwarded from `3335107` to `dc3ec28`; output confirms `scripts/github_termux_relay.py` and its FIFO ordering/output-retention changes were pulled to disk.
+- Issue #147 `restart_services` was closed with state_reason `not_planned`, label still `sintu-command-queued`, and **no worker claim or result comment**. Do not count this as a successful restart; the in-memory relay reload remains UNVERIFIED.
+- Issue #127 `run_tests` was recovered from its stale claim and reclaimed at 10:10:02 UTC. It is currently running; no final exit code or report yet.
+- PR #149 adds a real two-scene fade-render integration regression and missing-scene-image rejection test. It also adds forensic environment diagnostics for exact FFmpeg/FFprobe executable paths, versions, required filter availability, Python/platform/Termux version, file read permissions, and temporary-storage write/free-space checks. CI run #1248: Python 3.11–3.14 and security audit PASS; Docker PASS; offline E2E/motion audit still running at this checkpoint.
