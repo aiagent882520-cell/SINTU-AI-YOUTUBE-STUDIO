@@ -88,8 +88,25 @@ jobs:
           version: "release"
       - name: Install free local voice and font tools
         run: |
-          timeout 300 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq
-          timeout 600 sudo apt-get install -y --no-install-recommends espeak-ng fonts-noto-core
+          if ! command -v espeak-ng >/dev/null 2>&1 || ! fc-match "Noto Sans Devanagari" >/dev/null 2>&1; then
+            if ! timeout 120 sudo apt-get \
+                -o Acquire::Retries=1 \
+                -o Acquire::http::Timeout=20 \
+                -o Acquire::https::Timeout=20 \
+                install -y --no-install-recommends espeak-ng fonts-noto-core; then
+              echo "Cached package indexes unavailable; refreshing once."
+              timeout 180 sudo apt-get \
+                -o Acquire::Retries=1 \
+                -o Acquire::http::Timeout=20 \
+                -o Acquire::https::Timeout=20 \
+                update -qq
+              timeout 300 sudo apt-get \
+                -o Acquire::Retries=1 \
+                -o Acquire::http::Timeout=20 \
+                -o Acquire::https::Timeout=20 \
+                install -y --no-install-recommends espeak-ng fonts-noto-core
+            fi
+          fi
           ffmpeg -version
           ffprobe -version
           espeak-ng --voices=hi
