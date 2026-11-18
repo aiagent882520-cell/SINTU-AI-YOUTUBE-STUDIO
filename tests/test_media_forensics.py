@@ -89,9 +89,15 @@ def test_frame_samples_use_independent_timestamp_probes(tmp_path, monkeypatch):
 
 
 def test_frame_sample_reports_missing_frame_without_failing_report(tmp_path, monkeypatch):
-    monkeypatch.setattr(media_forensics, "run", lambda *args, **kwargs: {
-        "returncode": 0, "stdout": '{"frames":[]}', "stderr": ""
-    })
+    def fake_run(command, timeout=120):
+        interval = command[command.index("-read_intervals") + 1]
+        return {
+            "returncode": 0,
+            "stdout": '{"frames":[]}' if not interval.startswith("0%+") else "",
+            "stderr": "",
+        }
+
+    monkeypatch.setattr(media_forensics, "run", fake_run)
     sample = media_forensics.sample_decoded_frame(tmp_path / "clip.mp4", 2.0, "middle")
     assert sample["timestamp"] is None
     assert sample["error"] == "no decoded frame found at requested timestamp"
@@ -231,9 +237,7 @@ def test_frame_sample_falls_back_to_sequential_decode_after_inaccurate_seek(tmp_
         assert command[command.index("-read_intervals") + 1] == "0%+6.000000"
         return {
             "returncode": 0,
-            "stdout": '{"frames":['
-                      '{"best_effort_timestamp_time":"4.958333","pict_type":"P"},'
-                      '{"best_effort_timestamp_time":"5.041667","pict_type":"B"}]}',
+            "stdout": "4.958333,P\n5.041667,B\n",
             "stderr": "",
         }
 
@@ -245,6 +249,42 @@ def test_frame_sample_falls_back_to_sequential_decode_after_inaccurate_seek(tmp_
     assert sample["error"] == ""
     assert len(calls) == 2
     assert calls[1][1] == 120
+
+
+def test_sequential_fallback_parses_late_timestamp_from_compact_csv(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run(command, timeout=120):
+        calls.append(command)
+        interval = command[command.index("-read_intervals") + 1]
+        if not interval.startswith("0%+"):
+            return {"returncode": 0, "stdout": '{"frames":[]}', "stderr": ""}
+        rows = [f"{index / 24:.6f},P" for index in range(217)]
+        return {"returncode": 0, "stdout": "\n".join(rows), "stderr": ""}
+
+    monkeypatch.setattr(media_forensics, "run", fake_run)
+    sample = media_forensics.sample_decoded_frame(tmp_path / "clip.mp4", 8.9, "last")
+    assert sample["timestamp"] is not None
+    assert float(sample["timestamp"]) >= 8.9
+    assert sample["sampling_method"] == "sequential_fallback_from_start"
+    assert sample["error"] == ""
+    assert calls[-1][calls[-1].index("-of") + 1] == "csv=p=0"
+
+
+def test_run_preserves_bounded_head_and_tail_for_large_filter_lists(monkeypatch):
+    from types import SimpleNamespace
+
+    output = "blackdetect\n" + ("x" * 600_000) + "\nblackframe\nfps\nscale"
+    monkeypatch.setattr(
+        media_forensics.subprocess, "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=output, stderr=""),
+    )
+    result = media_forensics.run(["ffmpeg", "-filters"])
+    assert "blackdetect" in result["stdout"]
+    assert "blackframe" in result["stdout"]
+    assert "fps" in result["stdout"]
+    assert "scale" in result["stdout"]
+    assert len(result["stdout"]) < 513_000
 
 
 def test_real_ffprobe_inaccurate_seek_recovers_with_sequential_fallback(tmp_path):
@@ -496,3 +536,201 @@ def test_forensic_environment_reports_tool_paths_versions_filters_and_temp_stora
     assert environment["temporary_storage"]["exists"] is True
     assert environment["temporary_storage"]["write_test"] is True
     assert environment["temporary_storage"]["free_bytes"] > 0
+
+
+def test_missing_and_corrupt_video_inputs_fail_closed(tmp_path, monkeypatch):
+    missing = media_forensics.inspect_video(tmp_path / "missing.mp4")
+    assert media_forensics.has_forensic_tool_failure(missing) is True
+
+    corrupt = tmp_path / "corrupt.mp4"
+    corrupt.write_bytes(b"not an MP4 container")
+
+    def fake_run(command, timeout=120):
+        return {"returncode": 1, "stdout": "", "stderr": "invalid media data"}
+
+    monkeypatch.setattr(media_forensics, "run", fake_run)
+    report = media_forensics.inspect_video(corrupt)
+    assert report["exists"] is True
+    assert report["ffprobe_exit"] == 1
+    assert report["decode_exit"] == 1
+    assert media_forensics.has_forensic_tool_failure(report) is True
+
+
+def test_audio_only_container_is_not_accepted_as_visual_video(tmp_path, monkeypatch):
+    video = tmp_path / "audio-only.mp4"
+    video.write_bytes(b"fixture")
+    metadata = {
+        "format": {"format_name": "mov,mp4", "duration": "4.0"},
+        "streams": [{
+            "codec_type": "audio", "codec_name": "aac", "sample_rate": "48000",
+            "channels": 2, "duration": "4.0", "start_time": "0.0",
+        }],
+    }
+
+    def fake_run(command, timeout=120):
+        if command[0] == "ffprobe" and "-count_frames" in command:
+            return {"returncode": 0, "stdout": json.dumps(metadata), "stderr": ""}
+        if command[0] == "ffprobe" and "-read_intervals" in command:
+            interval = command[command.index("-read_intervals") + 1]
+            return {"returncode": 0, "stdout": '{"frames":[]}' if not interval.startswith("0%+") else "", "stderr": ""}
+        if command[0] == "ffmpeg" and any("blackframe=" in part for part in command):
+            return {"returncode": 0, "stdout": "", "stderr": "pblack:0\\n" * 30}
+        return {"returncode": 0, "stdout": "", "stderr": ""}
+
+    monkeypatch.setattr(media_forensics, "run", fake_run)
+    report = media_forensics.inspect_video(video)
+    assert not any(stream["type"] == "video" for stream in report["metadata"]["streams"])
+    assert report["frame_probe_exit"] == 1
+    assert media_forensics.has_forensic_tool_failure(report) is True
+
+
+def test_vfr_frame_sampling_uses_best_effort_decoded_timestamps(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_forensics, "run", lambda *args, **kwargs: {
+        "returncode": 0,
+        "stdout": '{"frames":['
+                  '{"best_effort_timestamp_time":"4.900000","pict_type":"P"},'
+                  '{"best_effort_timestamp_time":"5.130000","pict_type":"B"},'
+                  '{"best_effort_timestamp_time":"5.400000","pict_type":"P"}]}',
+        "stderr": "",
+    })
+    sample = media_forensics.sample_decoded_frame(tmp_path / "vfr.mp4", 5.02, "middle")
+    assert sample["timestamp"] == "5.130000"
+    assert sample["picture_type"] == "B"
+    assert sample["error"] == ""
+
+
+def test_forensic_environment_reports_temporary_storage_write_failure(tmp_path, monkeypatch):
+    import shutil
+
+    monkeypatch.setattr(media_forensics.shutil, "which", lambda name: f"/opt/bin/{name}")
+    monkeypatch.setattr(media_forensics.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        media_forensics.tempfile, "NamedTemporaryFile",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("temporary storage full")),
+    )
+
+    def fake_run(command, timeout=120):
+        if "-filters" in command:
+            return {"returncode": 0, "stdout": "blackdetect blackframe fps scale", "stderr": ""}
+        return {"returncode": 0, "stdout": "tool version 1.0", "stderr": ""}
+
+    monkeypatch.setattr(media_forensics, "run", fake_run)
+    environment = media_forensics.inspect_environment()
+    assert environment["temporary_storage"]["exists"] is True
+    assert environment["temporary_storage"]["write_test"] is False
+    assert "temporary storage full" in environment["temporary_storage"]["error"]
+    assert environment["temporary_storage"]["free_bytes"] == shutil.disk_usage(tmp_path).free
+
+
+def test_forensic_main_returns_nonzero_when_any_target_has_tool_failure(tmp_path, monkeypatch, capsys):
+    import sys
+
+    monkeypatch.setattr(media_forensics, "TARGETS", ("missing.mp4",))
+    monkeypatch.setattr(media_forensics, "MEDIA_DIR", tmp_path)
+    monkeypatch.setattr(media_forensics, "inspect_video", lambda path: {
+        "file": path.name, "exists": False, "safe_regular_file": False,
+    })
+    monkeypatch.setattr(media_forensics, "inspect_environment", lambda: {})
+    monkeypatch.setattr(media_forensics, "scan_text_logs", lambda needles: [])
+    monkeypatch.setattr(media_forensics, "scan_database_records", lambda needles: [])
+    monkeypatch.setattr(sys, "argv", ["media_forensics.py", "--json"])
+    assert media_forensics.main() == 1
+    assert "forensic_tool_failure_count" in capsys.readouterr().out
+
+
+def test_real_nonblack_mp4_forensics_passes_with_decoded_samples(tmp_path, monkeypatch):
+    import shutil
+    import subprocess
+    import pytest
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("FFmpeg is required for the real non-black MP4 regression")
+    clip = tmp_path / "visible-test-pattern.mp4"
+    created = subprocess.run([
+        ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "testsrc2=s=160x120:r=24:d=4",
+        "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(clip),
+    ], capture_output=True, timeout=60, check=False)
+    if created.returncode != 0:
+        pytest.skip("FFmpeg build does not provide the libx264 test encoder")
+    report = media_forensics.inspect_video(clip)
+    assert report["full_duration_black"] is False
+    assert report["frame_probe_exit"] == 0
+    assert media_forensics.has_forensic_tool_failure(report) is False
+
+
+def test_real_partial_black_mp4_is_not_misclassified_as_full_duration_black(tmp_path):
+    import shutil
+    import subprocess
+    import pytest
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("FFmpeg is required for the partial-black regression")
+    clip = tmp_path / "partial-black.mp4"
+    created = subprocess.run([
+        ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "color=c=black:s=160x120:r=24:d=1",
+        "-f", "lavfi", "-i", "color=c=white:s=160x120:r=24:d=3",
+        "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0,format=yuv420p[v]",
+        "-map", "[v]", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(clip),
+    ], capture_output=True, timeout=60, check=False)
+    if created.returncode != 0:
+        pytest.skip("FFmpeg build does not provide the libx264 test encoder")
+    report = media_forensics.inspect_video(clip)
+    assert report["full_duration_black"] is False
+    assert report["black_intervals"]
+    assert report["black_intervals"][0][1] < report["metadata"]["duration_seconds"] * 0.95
+    assert report["frame_probe_exit"] == 0
+    assert media_forensics.has_forensic_tool_failure(report) is False
+
+
+def test_missing_ffmpeg_and_ffprobe_are_reported_by_environment_probe(monkeypatch):
+    monkeypatch.setattr(media_forensics.shutil, "which", lambda name: None)
+    environment = media_forensics.inspect_environment()
+    assert environment["ffmpeg"]["available"] is False
+    assert environment["ffmpeg"]["path"] is None
+    assert environment["ffprobe"]["available"] is False
+    assert environment["ffprobe"]["path"] is None
+    assert environment["ffmpeg"]["filters"] == {
+        "blackdetect": False, "blackframe": False, "fps": False, "scale": False,
+    }
+
+
+def test_inspect_video_marks_middle_and_last_sampling_failures_as_tool_failure(tmp_path, monkeypatch):
+    video = tmp_path / "sampling-failure.mp4"
+    video.write_bytes(b"fixture")
+    metadata = {
+        "format": {"format_name": "mov,mp4", "duration": "4.0"},
+        "streams": [{
+            "codec_type": "video", "codec_name": "h264", "width": 160, "height": 120,
+            "pix_fmt": "yuv420p", "avg_frame_rate": "24/1", "nb_read_frames": "96",
+            "duration": "4.0", "start_time": "0.0",
+        }],
+    }
+
+    def fake_run(command, timeout=120):
+        if command[0] == "ffprobe" and "-count_frames" in command:
+            return {"returncode": 0, "stdout": json.dumps(metadata), "stderr": ""}
+        if command[0] == "ffprobe" and "-read_intervals" in command:
+            interval = command[command.index("-read_intervals") + 1]
+            if interval.startswith("0%+"):
+                return {"returncode": 0, "stdout": "", "stderr": ""}
+            seek = float(interval.split("%", 1)[0])
+            if seek >= 2.0:
+                return {"returncode": 0, "stdout": '{"frames":[]}', "stderr": ""}
+            return {"returncode": 0, "stdout": json.dumps({
+                "frames": [{"best_effort_timestamp_time": f"{seek:.6f}", "pict_type": "P"}]
+            }), "stderr": ""}
+        if command[0] == "ffmpeg" and any("blackframe=" in part for part in command):
+            return {"returncode": 0, "stdout": "", "stderr": "pblack:0\\n" * 30}
+        return {"returncode": 0, "stdout": "", "stderr": ""}
+
+    monkeypatch.setattr(media_forensics, "run", fake_run)
+    report = media_forensics.inspect_video(video)
+    assert [sample["sample"] for sample in report["decoded_frame_samples"] if sample["error"]] == [
+        "middle", "three_quarter", "last",
+    ]
+    assert report["frame_probe_exit"] == 1
+    assert media_forensics.has_forensic_tool_failure(report) is True
