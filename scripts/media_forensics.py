@@ -100,10 +100,14 @@ def inspect_environment() -> dict:
                 temporary.write(b"sintu-forensic-temp-check")
                 temporary.flush()
                 temp_storage["write_test"] = True
+    except OSError as exc:
+        temp_storage["error"] = str(exc)[:250]
+    try:
         if temp_path.exists():
             temp_storage["free_bytes"] = shutil.disk_usage(temp_path).free
     except OSError as exc:
-        temp_storage["error"] = str(exc)[:250]
+        if not temp_storage["error"]:
+            temp_storage["error"] = str(exc)[:250]
 
     return {
         "python": {"version": sys.version.split()[0], "executable": sys.executable},
