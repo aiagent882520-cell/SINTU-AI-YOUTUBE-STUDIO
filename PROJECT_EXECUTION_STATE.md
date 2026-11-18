@@ -347,3 +347,9 @@ Last updated: 2026-11-17 15:52 UTC
 
 
 - Invalid/non-finite duration metadata is normalized to JSON `null` with an explicit duration error, so the forensic report remains strict-JSON serializable while failing closed. Regression test enforces `json.dumps(..., allow_nan=False)`.
+
+
+### Per-video black-frame percentage — 2026-11-18
+
+- The forensic report now samples 30 evenly distributed decoded frames per valid video with FFmpeg `blackframe` and reports sampled black-frame count/percentage plus mean black-pixel percentage. Full-duration `blackdetect` intervals remain a separate check.
+- Missing blackframe output or FFmpeg failure is a forensic-tool failure. Regression tests cover parsing and percentage calculation.
