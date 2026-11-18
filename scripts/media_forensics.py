@@ -298,8 +298,9 @@ def inspect_video(path: Path) -> dict:
         "blackdetect_exit": black["returncode"], "black_intervals": intervals,
         "full_duration_black": full_black, "decode_exit": decode["returncode"],
         "decode_errors": redact_secrets(decode["stderr"]) if decode["stderr"] else "",
-        "decoded_frame_samples": samples, "frame_probe_exit": frames_result["returncode"],
-        "frame_probe_error": frames_result["stderr"][:250] if frames_result["returncode"] else "",
+        "decoded_frame_samples": samples,
+        "frame_probe_exit": 0 if all(not sample["error"] for sample in samples) else 1,
+        "frame_probe_error": "; ".join(sample["error"] for sample in samples if sample["error"])[:250],
     }
 
 
