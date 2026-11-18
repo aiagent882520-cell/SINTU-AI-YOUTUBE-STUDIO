@@ -172,7 +172,7 @@ def test_installable_app_shell(tmp_path, monkeypatch):
     assert 'id="aiChat"' in page.text
     assert 'id="chatConversationSelect"' in page.text
     assert 'id="chatMessageInput"' in page.text
-    assert 'id="chatSendMessage"' in app_script.text
+    assert '$("chatSendMessage")' in app_script.text
     assert '"/api/conversations"' in app_script.text
     assert "USER-PROVIDED SCENE ORDER" in app_script.text
     assert "turn ON the built-in Flow Agent" in app_script.text
