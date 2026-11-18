@@ -760,3 +760,44 @@ Last updated: 2026-11-17 15:52 UTC
 - Main CI run #1313 for checkpoint commit `3dc29d9` passed; exact PR #183 run #1310 also passed all 617-test Python matrix, security, offline E2E/motion and Docker checks.
 - Native Android client PR #190 is under development. First tranche includes Kotlin/Compose login, encrypted Android Keystore session-cookie storage, assistant conversation client, topic-to-script/scene project generation, project list, URL validation, unit tests and Android build/artifact workflow. Current CI encountered two environment setup failures; the latest attempt now locates the preinstalled SDK manager and is building. Do not mark Android app build complete until APKs and tests are produced and inspected. Release APK will be unsigned without owner signing key.
 - Production and external publishing remain disabled. No public upload, real generative render, model download or black-video repair was performed.
+
+
+## Execution update — 2026-11-18 14:00 UTC
+
+### Fresh Android Termux verification (Issue #181)
+
+- Issue #181 completed with **FAILED (exit 1)**. Compact audit footer is present and authoritative for the run: **15 PASS, 0 warnings, 3 FAIL**.
+- Android Termux Python regression: **614 passed, 5 warnings, 0 failed** in 216.65s; Python compile passed.
+- The only three failed health checks are the same full-duration black MP4s:
+  - `3f4c2151e8e640109f464b2c2e9b7569.mp4` — 9.04 s, black interval 0–9.0 s.
+  - `59430f1fb7fd4bdf80cf8b7d9f456098.mp4` — 9.04 s, black interval 0–9.0 s.
+  - `8cfe9da88d5c43d184f3572e371ff4a6.mp4` — 6.08 s, black interval 0–6.041667 s.
+- All three report H.264/yuv420p video and AAC 48 kHz stereo audio. This establishes visual black content, not the upstream render root cause. No repair/regeneration was performed. Preserve originals.
+- The two previously reported dim-visible files `adf9268e5d5543a587defdde5d4c4edd.mp4` and `afa4c87e3c1e42a197b7092e0e24040d.mp4` now PASS this audit's black interval check.
+
+### Fresh automation verification (Issue #182)
+
+- Issue #182 completed SUCCESS: **7/7 checks passed** on Android Termux.
+- Verified repository/origin, Python 3.14.10, authenticated GitHub CLI (credentials hidden), Studio API v0.3.0 healthy, bridge/worker online, automation-only mode, and GitHub relay singleton lock.
+- This verifies the automation self-test only; it does not clear the media failures or prove full reboot recovery.
+
+### Native Android PR #190
+
+- PR #190 remains **OPEN and DRAFT**, not merged.
+- Latest head observed: `bd932751bff911557a1b8d3acf4b326a0aec7dc8` on `feature/native-android-client`.
+- Latest CI runs on that head: SINTU CI run `44314121500` SUCCESS and Native Android App run `44314121386` SUCCESS.
+- Earlier attempts on older heads were cancelled; the latest two successful runs are the relevant evidence. CI success is not physical-device installation/testing and does not make the draft PR merge-ready by itself.
+
+### Immediate next execution point
+
+1. Continue forensic investigation of the three black MP4s using source asset mapping, render/job records and FFmpeg logs; record SHA256/metadata before any proposed repair. No original overwrite.
+2. Inspect PR #190 diff and draft checklist; complete missing native app integration and device-independent tests, then remove draft status only when genuinely review-ready. Do not merge solely because CI is green.
+3. Keep production rendering/publishing disabled until the real generative engine and complete topic-to-MP4 E2E gates pass.
+
+### Evidence links
+
+- Issue #181: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/issues/181
+- Issue #182: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/issues/182
+- PR #190: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/190
+- SINTU CI run: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44314121500
+- Native Android CI run: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44314121386
