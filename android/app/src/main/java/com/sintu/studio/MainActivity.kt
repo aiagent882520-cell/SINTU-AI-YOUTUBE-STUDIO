@@ -253,6 +253,15 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
                 scope.launch {
                     busy = true
                     try {
+                        val providers = api.providerStatus()
+                        val localModel = providers["local"] as? Map<*, *>
+                        if (localModel?.get("model_available") != true) {
+                            val modelName = localModel?.get("model")?.toString().orEmpty()
+                            notice = "Free local text model ready nahi hai" +
+                                (if (modelName.isNotBlank()) " ($modelName)" else "") +
+                                ". Pehle phone/server par supported local model configure karein. Paid API automatically use nahi hogi."
+                            return@launch
+                        }
                         val started = api.startProductionRun(formatId, topic.trim())
                         runId = started.run_id
                         runStatus = started.status
