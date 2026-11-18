@@ -171,7 +171,7 @@ class SintuApi(context: Context, baseUrl: String) {
             }
             val scheme = uri.scheme?.lowercase()
             val host = uri.host?.lowercase()
-            val loopback = host == "localhost" || host == "127.0.0.1" || host == "::1"
+            val loopback = host == "localhost" || host == "127.0.0.1"
             require(uri.rawUserInfo == null && host != null) { "Enter a valid SINTU server URL." }
             require(scheme == "https" || (scheme == "http" && loopback)) {
                 "Use HTTPS for remote servers. HTTP is allowed only for localhost/127.0.0.1."
