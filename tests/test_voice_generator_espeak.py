@@ -81,7 +81,7 @@ def test_local_engine_prefers_termux_espeak_ng_binary(monkeypatch):
         "run",
         lambda *args, **kwargs: SimpleNamespace(
             returncode=0,
-            stdout="Pty Language Age/Gender VoiceName File\\n 5 hi M Hindi\\n",
+            stdout="Pty Language Age/Gender VoiceName File\n 5 hi M Hindi\n",
             stderr="",
         ),
     )
