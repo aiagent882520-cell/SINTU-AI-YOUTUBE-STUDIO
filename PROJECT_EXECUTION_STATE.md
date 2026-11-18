@@ -632,3 +632,11 @@ Last updated: 2026-11-17 15:52 UTC
 - Issue #164 Android health audit is RUNNING at checkpoint; it started before PR #166 and therefore uses the old 0.10 blackdetect threshold. Its result must not be used to assess the threshold correction.
 - PR #166 (`fix/black-video-pixel-consensus`) is open and under CI. It tightens blackdetect to pix_th 0.03, aligns blackframe to luma threshold 16, and requires blackdetect + 29/30 blackframe + 5/5 decoded near-black pixels before declaring full-duration black. It adds real-media health/forensic tests for dark gray, pure black and partial black footage. Do not merge until exact-head CI passes.
 - After PR #166 merges, queue a new main pull and fresh health audit; the three pixel-confirmed black files remain UNRESOLVED and production remains PAUSED / public publishing DISABLED.
+
+
+
+### Black-threshold calibration checkpoint — 2026-11-18 12:04 UTC
+- PR #166 first exact-head run #1278 failed one regression: the pure-black MPEG-4 fixture decodes to limited-range Y=16, and FFmpeg blackframe `threshold=16` uses a strict comparison, so the 29/30 consensus did not classify it black. The other 609 tests passed.
+- Corrected threshold calibration: blackdetect `pix_th=0.08` (threshold ~20.4/255, between limited-range black Y=16 and the observed dark footage Y~22), blackframe luma threshold 17, and Pillow RGB pixel threshold remains <=16. This preserves true black while avoiding the two measured dark-visible false positives.
+- PR #166 latest exact head `501c48b078e7c8802c45b56f1e3cd18fd5dbb243`; CI run #1280 is IN_PROGRESS. Do not merge until all four Python versions, dependency audit, offline E2E and Docker pass.
+- Android Issue #164 health audit is still running from before PR #166 and uses the old threshold. Its result must be recorded but not treated as verification of the calibration. A fresh pull and health audit are required after PR #166 merge.
