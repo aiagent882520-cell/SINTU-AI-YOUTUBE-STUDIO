@@ -372,6 +372,7 @@ def main() -> int:
             "target_count": len(videos),
             "inspected_count": sum(1 for item in videos if item.get("exists")),
             "full_duration_black_count": sum(1 for item in videos if item.get("full_duration_black")),
+            "av_sync_failure_count": sum(1 for item in videos if item.get("av_sync", {}).get("status") in {"out_of_sync", "missing_audio_stream", "missing_video_stream"}),
             "forensic_tool_failure_count": tool_failures,
         },
         "targets": videos,
