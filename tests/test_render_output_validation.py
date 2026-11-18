@@ -204,3 +204,26 @@ def test_publish_gate_allows_short_clip_with_visible_content_and_partial_black_i
     result = verify_publishable_mp4(candidate)
     assert result["verified"] is True
     assert result["duration_seconds"] == pytest.approx(8.0, abs=0.1)
+
+
+def test_publish_gate_rejects_long_black_segment_even_when_most_frames_are_visible(tmp_path, monkeypatch):
+    import shutil
+    import subprocess
+
+    from app.video_renderer import verify_publishable_mp4
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("FFmpeg is required for the real long-black-segment test")
+    candidate = tmp_path / "long-black-segment.mp4"
+    created = subprocess.run([
+        ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "color=c=black:s=720x1280:r=24:d=3.2",
+        "-f", "lavfi", "-i", "color=c=red:s=720x1280:r=24:d=8.8",
+        "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0[v]",
+        "-map", "[v]", "-c:v", "libx264", "-preset", "ultrafast",
+        "-pix_fmt", "yuv420p", "-t", "12", "-movflags", "+faststart", str(candidate),
+    ], capture_output=True, timeout=60, check=False)
+    assert created.returncode == 0, created.stderr.decode("utf-8", "replace")
+    with pytest.raises(RenderFailed, match="long black segment"):
+        verify_publishable_mp4(candidate)
