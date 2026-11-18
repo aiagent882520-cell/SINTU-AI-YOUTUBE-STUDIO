@@ -160,7 +160,7 @@ The following rows are extracted from `_FORMAT_ROWS` in the source tree. The lis
   - `8cfe9da88d5c43d184f3572e371ff4a6.mp4`
 - Android health audit #181 found the two previously disputed dim-visible files now PASS under the calibrated pixel checks. This does not resolve the three confirmed full-black files.
 - Termux Issue #182: automation self-test **7/7 checks passed** (repository/origin, Python 3.14.10, GitHub CLI auth, API health, worker/bridge and relay singleton).
-- Historical Android engine probe (2026-11-17): Android 15 ARM64, 8 CPU cores, approx 3.76 GB total RAM and approx 1.1 GB available at probe time; no reachable Ollama model endpoint, no ComfyUI server/workflow, no Piper voice model. eSpeak NG and FFmpeg/FFprobe were available. Re-probe before relying on these values.
+- Fresh Android engine probe (2026-11-18, Issue #188): Android 15 ARM64, 8 CPU cores, 3,762,049,024 bytes total RAM and 1,290,792,960 bytes available; approx 29.1 GB free storage. `llama-server` binary exists but is not reachable and no GGUF model files are present. `stable-diffusion.cpp` binaries are absent; ComfyUI is unreachable and no workflow is configured. Probe performed no model downloads/builds and started no render. Automatic heavy model download is unsafe on current free RAM; no generative AI image/video model can be claimed available. Earlier eSpeak NG and FFmpeg/FFprobe availability was reported by the prior Termux health checks; verify again before relying on it.
 - No real topic-to-video run using Ollama + ComfyUI + configured neural Hindi voice has been evidenced on Android.
 
 ## Critical open blockers
