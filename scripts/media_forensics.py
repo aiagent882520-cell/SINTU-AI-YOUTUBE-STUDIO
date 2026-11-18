@@ -115,7 +115,7 @@ def inspect_environment() -> dict:
         "termux_version": os.environ.get("TERMUX_VERSION"),
         "ffmpeg": ffmpeg,
         "ffprobe": ffprobe,
-        "frame_sampling": "FFprobe decoded-frame JSON; no image-frame temporary files are created",
+        "frame_sampling": "Five FFprobe timestamp samples plus FFmpeg-extracted 64x64 PNG pixel verification; temporary thumbnails are removed after analysis",
         "temporary_storage": temp_storage,
     }
 
@@ -378,6 +378,52 @@ def sample_decoded_frame(path: Path, seek_seconds: float, label: str) -> dict:
     return sample
 
 
+def extract_frame_pixel_verification(path: Path, timestamp: str, label: str) -> dict:
+    """Extract a real decoded thumbnail and measure its pixels; temp PNG is always removed."""
+    try:
+        seek = float(timestamp)
+        if not math.isfinite(seek) or seek < 0:
+            raise ValueError("sample timestamp is not finite and non-negative")
+        with tempfile.TemporaryDirectory(prefix="sintu-frame-") as temporary_dir:
+            frame_path = Path(temporary_dir) / f"{label}.png"
+            result = run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(path),
+                "-ss", f"{seek:.6f}", "-frames:v", "1",
+                "-vf", "scale=64:64:flags=area", "-an", "-y", str(frame_path),
+            ], timeout=120)
+            if result["returncode"] != 0 or not frame_path.is_file() or frame_path.stat().st_size <= 0:
+                detail = (result.get("stderr") or "FFmpeg did not create a decoded frame thumbnail")[:220]
+                return {"status": "FAIL", "extraction_exit": result.get("returncode"),
+                        "error": detail}
+            with Image.open(frame_path) as extracted:
+                gray = extracted.convert("L")
+                stats = ImageStat.Stat(gray)
+                histogram = gray.histogram()
+                total = sum(histogram)
+                if total <= 0:
+                    return {"status": "FAIL", "extraction_exit": 0,
+                            "error": "decoded frame thumbnail contains no pixels"}
+                black_threshold = 16
+                black_pixels = sum(histogram[:black_threshold + 1])
+                mean_luma = float(stats.mean[0])
+                luma_stddev = float(stats.stddev[0])
+                black_percentage = black_pixels * 100.0 / total
+                return {
+                    "status": "PASS",
+                    "extraction_exit": 0,
+                    "resolution": f"{gray.width}x{gray.height}",
+                    "mean_luma": round(mean_luma, 3),
+                    "luma_stddev": round(luma_stddev, 3),
+                    "black_pixel_threshold": black_threshold,
+                    "black_pixel_percentage": round(black_percentage, 3),
+                    "near_black": bool(mean_luma <= 2.0 and luma_stddev <= 2.0
+                                       and black_percentage >= 99.5),
+                    "method": "FFmpeg sequential timestamp decode -> 64x64 grayscale PNG -> Pillow pixel histogram",
+                }
+    except (OSError, TypeError, ValueError) as exc:
+        return {"status": "FAIL", "extraction_exit": None, "error": str(exc)[:220]}
+
+
 def analyze_av_sync(streams: list[dict], tolerance_seconds: float = 0.25) -> dict:
     """Compare decoded container stream timelines; this is timestamp sync evidence, not lip-sync perception."""
     video = next((item for item in streams if item.get("type") == "video"), None)
@@ -488,12 +534,55 @@ def inspect_video(path: Path) -> dict:
             sample_decoded_frame(path, timestamp, label)
             for label, timestamp in sample_points
         ]
+        for sample in samples:
+            if sample.get("error") or not sample.get("timestamp"):
+                sample["pixel_verification"] = {
+                    "status": "NOT_ATTEMPTED",
+                    "extraction_exit": None,
+                    "error": sample.get("error") or "decoded timestamp unavailable",
+                }
+            else:
+                sample["pixel_verification"] = extract_frame_pixel_verification(
+                    path, sample["timestamp"], sample["sample"]
+                )
     else:
         samples = [{
             "sample": label, "seek_seconds": None, "timestamp": None,
             "picture_type": None, "sampling_method": "not_attempted",
             "error": "invalid or missing video duration; frame sampling skipped",
         } for label in ("first", "quarter", "middle", "three_quarter", "last")]
+        for sample in samples:
+            sample["pixel_verification"] = {
+                "status": "NOT_ATTEMPTED", "extraction_exit": None,
+                "error": sample["error"],
+            }
+
+    pixel_probe_exit = 0 if len(samples) == 5 and all(
+        sample.get("pixel_verification", {}).get("status") == "PASS"
+        for sample in samples
+    ) else 1
+    pixel_summary = {
+        "sampled_frame_count": sum(
+            sample.get("pixel_verification", {}).get("status") == "PASS"
+            for sample in samples
+        ),
+        "near_black_sample_count": sum(
+            sample.get("pixel_verification", {}).get("near_black") is True
+            for sample in samples
+        ),
+        "samples": [
+            {
+                "sample": sample.get("sample"),
+                "timestamp": sample.get("timestamp"),
+                "mean_luma": (sample.get("pixel_verification") or {}).get("mean_luma"),
+                "luma_stddev": (sample.get("pixel_verification") or {}).get("luma_stddev"),
+                "black_pixel_percentage": (sample.get("pixel_verification") or {}).get("black_pixel_percentage"),
+                "near_black": (sample.get("pixel_verification") or {}).get("near_black"),
+                "status": (sample.get("pixel_verification") or {}).get("status"),
+            }
+            for sample in samples
+        ],
+    }
 
     backups = find_backups(path)
     creation_epoch = parse_creation_time(info.get("container_creation_time"))
@@ -526,6 +615,8 @@ def inspect_video(path: Path) -> dict:
         "decoded_frame_samples": samples,
         "frame_probe_exit": 0 if all(not sample["error"] for sample in samples) else 1,
         "frame_probe_error": "; ".join(sample["error"] for sample in samples if sample["error"])[:250],
+        "pixel_probe_exit": pixel_probe_exit,
+        "pixel_verification": pixel_summary,
     }
 
 
@@ -533,7 +624,7 @@ def has_forensic_tool_failure(item: dict) -> bool:
     """Distinguish a completed black-video finding from failed forensic tooling."""
     if not item.get("exists") or not item.get("safe_regular_file"):
         return True
-    for key in ("ffprobe_exit", "blackdetect_exit", "blackframe_exit", "decode_exit", "frame_probe_exit"):
+    for key in ("ffprobe_exit", "blackdetect_exit", "blackframe_exit", "decode_exit", "frame_probe_exit", "pixel_probe_exit"):
         if item.get(key) != 0:
             return True
     metadata = item.get("metadata") or {}
@@ -550,7 +641,11 @@ def has_forensic_tool_failure(item: dict) -> bool:
     if black_metrics.get("sampled_frame_count") != 30:
         return True
     samples = item.get("decoded_frame_samples") or []
-    return len(samples) != 5 or any(sample.get("error") or not sample.get("timestamp") for sample in samples)
+    return len(samples) != 5 or any(
+        sample.get("error") or not sample.get("timestamp")
+        or (sample.get("pixel_verification") or {}).get("status") != "PASS"
+        for sample in samples
+    )
 
 
 def compact_forensic_summary(report: dict) -> dict:
@@ -593,7 +688,12 @@ def compact_forensic_summary(report: dict) -> dict:
             },
             "samples": [
                 [sample.get("sample"), sample.get("seek_seconds"), sample.get("timestamp"),
-                 sample.get("sampling_method"), str(sample.get("error", ""))[:60]]
+                 sample.get("sampling_method"), str(sample.get("error", ""))[:60],
+                 (sample.get("pixel_verification") or {}).get("status"),
+                 (sample.get("pixel_verification") or {}).get("mean_luma"),
+                 (sample.get("pixel_verification") or {}).get("luma_stddev"),
+                 (sample.get("pixel_verification") or {}).get("black_pixel_percentage"),
+                 (sample.get("pixel_verification") or {}).get("near_black")]
                 for sample in item.get("decoded_frame_samples", [])
             ],
             "backups": [
