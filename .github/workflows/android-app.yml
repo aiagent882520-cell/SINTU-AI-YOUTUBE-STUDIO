@@ -2,6 +2,7 @@ name: Native Android App
 
 on:
   push:
+    branches: [main]
     paths:
       - "android/**"
       - ".github/workflows/android-app.yml"
@@ -13,6 +14,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: native-android-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   android-build:
