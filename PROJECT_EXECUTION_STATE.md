@@ -713,3 +713,11 @@ Last updated: 2026-11-17 15:52 UTC
 ### Post-PR #169 Android deployment queue — 2026-11-18
 - Issues #178–#182 queued in order: git_pull_ff_only, restart_services, run_tests, health_audit, automation_self_test. These are required to deploy the default-off server gates and verify the live Android API/worker after restart.
 - Current operational policy: video production PAUSED; external publishing DISABLED; no upload or public publish performed; paid services unused. Full project remains NOT PRODUCTION READY until three black assets are safely resolved, two low-luma assets receive visual review, and post-PR #169 Android gates pass.
+
+
+### Post-PR #169 Android deployment checkpoint — 2026-11-18
+- Issue #178 pulled main to commit 72162e6ad471015a42e34c0cc2a78c003fbfb213 on Android Termux successfully (fast-forward 6867e45..72162e6; six files updated, including app/main.py, app/policy.py, .env.example, README and API tests).
+- Issue #180 post-PR #169 Android regression completed SUCCESS / exit 0: **614 passed, 5 warnings in 218.54s (3m38s)** on Python 3.14.10. This includes default-deny production/publishing API regression tests.
+- Issue #181 post-PR #169 health audit is currently claimed/running; result and exit code not yet available. Issue #182 post-PR #169 automation self-test is queued.
+- Issue #179 restart_services is intentionally deferred by the relay until ordinary queued work completes. The live API process restart and post-restart verification are therefore still pending; do not claim the new HTTP 503 production/publishing gates are live on the device until restart completes.
+- After #179 completes, run one post-restart automation/API check. Video production remains paused and publishing remains disabled; no real uploads or public publishing have occurred.
