@@ -659,3 +659,12 @@ Last updated: 2026-11-17 15:52 UTC
 - PR #167 was a stale-base attempt; PR #168 is the replacement proposal for verified stale/reused PID reference recovery. Do not merge or deploy either until branch ancestry is current and exact-head CI passes.
 - Main head at this checkpoint: e02443ca085afa7bb7ae687437abac6e4fb7ad29. Main CI run #1283 is IN_PROGRESS; do not claim a full main CI pass until its offline video E2E and all other jobs complete.
 - Production remains PAUSED, public publishing DISABLED, and original MP4s/backups untouched.
+
+
+
+### PR #166 merged — black detector calibrated; Android rerun queued — 2026-11-18
+- PR #166 exact-head CI run #1280 fully PASS: Python 3.11/3.12/3.13/3.14 each 610 passed / 5 warnings; dependency security audit PASS; production Docker build PASS; offline branded Hindi-video E2E and continuous-motion audit PASS (generated, metadata/black-frame/motion checked, artifact/evidence preserved).
+- PR #166 squash-merged as `b93538d024abfbacfe2abc98bb81ea02bb109ab2`.
+- Blackdetect now uses `pix_th=0.08`; blackframe luma threshold17 captures limited-range Y=16; Pillow black-pixel threshold remains16. A target is full-duration black only when blackdetect spans the duration, >=29/30 blackframe samples are black, and all five decoded pixel samples are near-black.
+- PR #168 remains open for additional stale/reused PID safety in Termux startup/watchdog. Its initial code was reviewed; the optional automatic llama-server startup was removed to avoid unexpected RAM use. Latest branch head `131214568a929434cf729ddd42890c7e99d851f0`; CI run #1288 pending/queued at checkpoint. PR #167 was closed as superseded by PR #168.
+- New post-PR #166 Android queue: #170 pull latest main; #171 forensic rerun; #172 health audit; #173 regression suite; #174 automation self-test. These results are required before changing production gates.
