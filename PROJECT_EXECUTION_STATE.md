@@ -321,7 +321,7 @@ Last updated: 2026-11-17 15:52 UTC
 - Issues #127 and #129 remain open/running. Latest issue updates are #127 09:22:15 UTC and #129 09:20:33 UTC; both still have only worker-start comments and no exit code or result. Their claim age is below the 35-minute local worker stale-claim threshold at this checkpoint; do not duplicate/requeue them.
 - Issue #119 completion is confirmed at 09:26:46 UTC: 187 passed, 5 warnings, 140.16 seconds, exit 0. Exact worker-comment timestamp is not exposed by the GitHub connector.
 - FFmpeg official FFprobe documentation explicitly warns that `-read_intervals` seeking is not accurate and that a relative interval end is calculated from the actual seek point, not the requested timestamp. This confirms the sampler's incorrect assumption as a code-level root cause; the exact seek offset for each MP4 is unavailable because the Termux relay truncated the report's leading JSON. Reference: https://ffmpeg.org/ffprobe.html
-- PR #136 CI run 44276456647: dependency audit PASS; Python 3.11/3.12/3.13/3.14 test jobs are running. Setup, FFmpeg/FFprobe verification, compile, Termux shell syntax and browser JS syntax steps have passed in the matrix so far. Offline E2E and Docker jobs are pending matrix completion. Do not merge yet.
+- PR #136 final CI run 44278274943 (run #1236): SUCCESS. Dependency security audit PASS; Python 3.11/3.12/3.13/3.14 all PASS; offline branded Hindi video E2E and motion audit PASS (sampled motion ratio 0.742); production Docker build and container health endpoint PASS. E2E artifact: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44278274943/artifacts/14415089754.
 
 
 ### FFprobe sampler root-cause reproduction — 2026-11-18
@@ -365,3 +365,15 @@ Last updated: 2026-11-17 15:52 UTC
 
 - First complete CI run exposed one test-fixture mismatch: the mocked blackframe command returned 3 pblack values while the new fail-closed contract requires 30. This was a test fixture defect, not a production-code failure; all four Python matrix jobs reported the same assertion.
 - Updated the fixture to provide 30 samples and renamed the test for five timestamp points. A fresh full CI run is required; no result is claimed yet.
+
+
+### PR #136 final validation checkpoint — 2026-11-18
+
+- Final code head at this checkpoint: `6f9c221ec1db5f5543986fdfdc0b27494f060a75`.
+- GitHub Actions run #1236 completed SUCCESS: security audit; Python 3.11, 3.12, 3.13, 3.14; offline Hindi branded video E2E; motion audit; production Docker build; and Docker health endpoint.
+- Offline E2E sampled motion ratio was 0.742. Artifact ID 14415089754 contains the generated MP4 and JSON reports.
+- The previous run #1234 failed only because the test mock returned 3 blackframe samples while the new gate required 30. The fixture was corrected to 30, and the fresh run #1236 passed all jobs.
+- Issue #95 now records: all five black MP4s were audio-repaired with video streams copied without re-encoding; they predate PR #122's all-duration black upload gate (merged 2026-11-18 07:13 UTC); candidate images were timestamped 4–13 minutes after the `afa` backup and are not proven sources; production logs/database have no matching provenance. Renderer/source-loss stage remains UNKNOWN.
+- Repository code search index availability is false, so a repo-wide TODO/FIXME scan cannot be completed through GitHub code search. Key renderer, API, bridge and generator modules were inspected; a complete local filesystem scan remains pending Android access.
+- Issues #127 and #129 remain claimed/running with no completion comment or exit code. Their claim timestamps are 09:22:15 UTC and 09:20:33 UTC respectively; at the checkpoint their ages remain below the 35-minute stale-claim threshold. Do not duplicate them. #119 is a separate successful `tests/test_api.py` run: 187 passed, 5 warnings, 140.16 seconds, exit 0.
+- PR #136 is validated in GitHub CI only. It is not yet merged or Android-deployed. Production remains PAUSED; original media and backups untouched; no upload/publishing or paid service used.
