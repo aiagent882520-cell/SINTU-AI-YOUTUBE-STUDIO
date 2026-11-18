@@ -43,7 +43,7 @@ jobs:
       - name: Setup FFmpeg
         uses: FedericoCarboni/setup-ffmpeg@36c6454b5a2348e7794ba2d82a21506605921e3d
         with:
-          ffmpeg-version: "7.1"
+          ffmpeg-version: "release"
       - name: Verify FFmpeg
         run: |
           ffmpeg -version
@@ -85,7 +85,7 @@ jobs:
       - name: Setup FFmpeg
         uses: FedericoCarboni/setup-ffmpeg@36c6454b5a2348e7794ba2d82a21506605921e3d
         with:
-          ffmpeg-version: "7.1"
+          ffmpeg-version: "release"
       - name: Install free local voice and font tools
         run: |
           packages=()
