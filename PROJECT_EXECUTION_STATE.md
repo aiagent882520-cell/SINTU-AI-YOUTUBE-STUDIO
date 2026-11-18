@@ -841,3 +841,21 @@ Last updated: 2026-11-17 15:52 UTC
 4. Continue independent video pipeline, 60-format, 15-module, website, worker, and YouTube tasks. Do not merge or release while required gates remain open.
 
 Evidence: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/commit/cabc3e5bebb26cc507af4b75d591607f96ec92fd ; https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44322330831 ; https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/190
+
+
+## Execution update — 2026-11-18 — consolidated Termux diagnostic implementation
+
+- Added `scripts/termux_full_diagnostic.py` (commit `3b588fc6b15da6b12bea1c4b2a1262eeca16613a`, follow-up fixes `c04e42c3be346faab1a5672dcd57f4e39b6b72a4`, `7e5c392a256730cf5ee40d6ac0703fad21a54857`, `3036090bac094bcef2f2ca37ae9c4773023ee4c8`).
+- Added `tests/test_termux_full_diagnostic.py` (commit `08b34c883675227af55e1cd2343b315c8c105f40`).
+- Script is read-only: records Git commit/tree state, Python and pip dependency health, FFmpeg/FFprobe versions, backend liveness via `/api/health`, engine/hardware probe, Android APK artifact inventory, MP4 inventory with SHA256, and writes timestamped JSON + text reports. Optional `--run-automation-self-test` runs the read-only control-plane self-test. It does not install models, start rendering, modify media, restart services or upload.
+- The newest SINTU CI run observed for commit `3036090...` is run `44323786030`, pending at checkpoint time. Previous run `44323727786` for the immediately preceding script version was still in progress; earlier superseded runs were cancelled. Do not claim tests pass until exact-head run completes.
+- The FastAPI Cloud external deployment check reported FAILURE for these documentation/script-only commits. No production deployment was attempted by this execution; treat this as an external deployment integration failure requiring separate investigation, not as a successful deploy.
+- Repository catalog source confirms exactly 60 `_FORMAT_ROWS` entries and 15 `STUDIO_MODULES` entries. Format profiles deliberately mark 360/VR/AR/virtual-production specialized pipelines blocked; generic export is not native generation. Only `2d-cartoon` and `story-animation` are flagged as native procedural generation, with explicit limitations. Existing test file validates profile count and selected constraints, but no 60-format individual MP4 E2E evidence exists.
+- The 15 registered modules are: AI Topic Studio; AI Writing Studio; AI Prompt Studio; AI Storyboard Studio; AI Image Studio; AI Video Studio; 2D Animation Studio; 3D Animation Studio; AI Film Studio; Documentary Studio; AI Voice Studio; AI Music Studio; AI Editing Studio; Quality Control Studio; YouTube Publishing Studio. Registry presence is not proof of full end-to-end integration.
+
+### Resume point
+1. Wait for exact-head SINTU CI run `44323786030`; fix diagnostic script/test failures before adding further work.
+2. Run the diagnostic on actual Termux with `python scripts/termux_full_diagnostic.py --run-automation-self-test`; attach resulting JSON and text paths/results to an Issue for review. Do not claim device verification before that evidence arrives.
+3. Continue PR #190 security edge-case tests and Android/backend API contract review.
+4. Investigate the 3 confirmed black clips using `scripts/media_forensics.py --json` on the real device; the script is read-only and correlates source assets, logs and DB records. Do not repair/overwrite originals.
+5. Continue actual implementation for pipeline, formats/modules, editor, website, workers and YouTube; maintain production/publishing gates closed.
