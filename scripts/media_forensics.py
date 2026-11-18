@@ -430,8 +430,19 @@ def compact_forensic_summary(report: dict) -> dict:
             )}
             for asset in report.get("candidate_source_assets", [])[:10]
         ],
-        "production_log_match_count": len(report.get("production_log_matches", [])),
-        "production_database_match_count": len(report.get("production_database_matches", [])),
+        "production_log_matches": [
+            {"path": match.get("path"), "line": match.get("line"),
+             "excerpt": str(match.get("excerpt", ""))[:180]}
+            for match in report.get("production_log_matches", [])[:5]
+        ],
+        "production_database_matches": [
+            {"db": match.get("db"), "table": match.get("table"),
+             "column": match.get("column"),
+             "record": {key: str(value)[:80] for key, value in list(
+                 (match.get("record") or {}).items()
+             )[:4]}}
+            for match in report.get("production_database_matches", [])[:5]
+        ],
         "safety": report.get("safety", {}),
     }
 
