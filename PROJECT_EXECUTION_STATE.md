@@ -859,3 +859,33 @@ Evidence: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/commit/c
 3. Continue PR #190 security edge-case tests and Android/backend API contract review.
 4. Investigate the 3 confirmed black clips using `scripts/media_forensics.py --json` on the real device; the script is read-only and correlates source assets, logs and DB records. Do not repair/overwrite originals.
 5. Continue actual implementation for pipeline, formats/modules, editor, website, workers and YouTube; maintain production/publishing gates closed.
+
+## Execution update — 2026-11-18 14:55 UTC — PR #190 Android CI and PR #191 forensic follow-up
+
+### PR #190 — native Android client exact-head validation
+- PR #190 remains OPEN + DRAFT; exact head: `c9c669cf84dea029e3d66af20cbb58c5de037ff3`.
+- Exact-head SINTU CI run `44327779276`: Python 3.11, 3.12, 3.13, 3.14, dependency security audit, production Docker build, and offline branded-video E2E/motion audit all PASS (7/7).
+- Exact-head Native Android run `44327779602`: Android build and unit tests PASS.
+- APK artifact `sintu-android-apks`: 17,829,266 bytes; SHA-256 `2b4347df5564114b52bdaa082c6b2f179fe02a42049c8216058fb76375cf4e4f`. Artifact is a CI build artifact, not a signed production release and not physical-device installation evidence.
+- Added/tested encrypted Android Keystore cookie persistence and issuing-origin binding. Tests cover persistence/reload, HTTPS-to-HTTP mismatch, port mismatch, expired cookie and malformed persisted cookie.
+- Native app remains a first tranche, not full feature parity: native timeline editing, media library upload/download, background recovery/notifications, offline queue, accessibility/device-size matrix, signed release packaging and physical-device verification remain open.
+
+### PR #191 — generated-music forensic correlation
+- PR #191 remains OPEN + DRAFT; branch `fix/forensics-generated-music-assets`.
+- Added `generated_music/` to read-only asset correlation and WAV metadata reporting (duration, sample rate, channels, sample width and frames).
+- The first expanded CI exposed a fixture-only defect: the test wrote escaped text bytes, causing a nominal six-second WAV to be measured as 24 seconds. The fixture was corrected to write exactly 264,600 PCM bytes (22,050 Hz × 6 seconds × 2 bytes/sample).
+- Corrected exact-head commit: `e091558c9b0417f16618369ce6e06d6e6961078b`; SINTU CI run `44329127820` was in progress at the latest check. Security audit had passed; all four Python jobs were still running. Do not claim the corrected run passes until it completes.
+- Earlier exact-head run `44327150811` (before WAV metadata test) passed Python 3.11–3.14, security audit, Docker and offline branded-video E2E/motion audit.
+
+### Black MP4 third-target correlation — evidence boundary
+- User-provided filesystem timestamps show generated WAV `generated_music/084681ae0f90436c82b1082bd50addf1.wav` at `2026-11-13T02:42:34.789838Z` and the third target's backup `media_backups/.../8cfe9da88d5c43d184f3572e371ff4a6.mp4` at `2026-11-13T02:42:36.833838Z`, a 2.044-second timestamp difference.
+- WAV size is 264,644 bytes, consistent with approximately six seconds of mono 22,050-Hz 16-bit PCM (44-byte WAV header plus 264,600 PCM bytes). The black MP4 duration is 6.083333 seconds.
+- This is a strong temporal/length correlation and a candidate from the same production run, but it does NOT prove the WAV caused or supplied the black video frames. Music is an audio asset, not evidence of visual source content. The first two black targets also share identical current bytes/hash; no exact production invocation has been attributed to any target.
+- No original MP4, backup, WAV or generated image was changed, repaired, moved, deleted, uploaded or published. Preserve all originals. The three true-black targets remain blocked by media quality gates.
+
+### Immediate next execution order
+1. Finish exact-head PR #191 CI `44329127820`; fix only any remaining confirmed test/code failure and rerun all gates.
+2. Continue source provenance for the three black MP4s. Distinguish timestamp correlation from proof of image/video source. Do not regenerate or repair without verified input provenance and backup-first/human review.
+3. PR #190 may be considered for review only after its full scope/limitations are understood; green CI and APK artifact do not establish full Android product readiness.
+4. Continue the topic-to-final-MP4 E2E, all 60 format acceptance checks, all 15 module integration checks, website/backend, worker recovery and YouTube security/resumable-upload gaps.
+5. Keep production rendering paused and external publishing disabled until real local engines and device E2E are verified. No paid services, model downloads, production deployment, PR merge or public publishing without explicit owner authorization.
