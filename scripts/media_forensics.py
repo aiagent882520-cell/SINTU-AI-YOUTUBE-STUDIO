@@ -189,6 +189,34 @@ def parse_creation_time(value: str | None) -> float | None:
         return None
 
 
+def sample_decoded_frame(path: Path, seek_seconds: float, label: str) -> dict:
+    """Probe exactly one decoded frame near an independent timestamp."""
+    seek = max(0.0, float(seek_seconds))
+    result = run([
+        "ffprobe", "-v", "error", "-select_streams", "v:0",
+        "-read_intervals", f"{seek:.6f}%+#1",
+        "-show_frames",
+        "-show_entries", "frame=best_effort_timestamp_time,pict_type",
+        "-of", "json", str(path),
+    ], timeout=30)
+    sample = {"sample": label, "seek_seconds": round(seek, 6),
+              "timestamp": None, "picture_type": None, "error": ""}
+    if result["returncode"] != 0:
+        sample["error"] = (result["stderr"] or "ffprobe frame sample failed")[:250]
+        return sample
+    try:
+        frames = json.loads(result["stdout"]).get("frames", [])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        sample["error"] = "invalid ffprobe frame-sample JSON"
+        return sample
+    if not frames:
+        sample["error"] = "no decoded frame found at requested timestamp"
+        return sample
+    sample["timestamp"] = frames[0].get("best_effort_timestamp_time")
+    sample["picture_type"] = frames[0].get("pict_type")
+    return sample
+
+
 def inspect_video(path: Path) -> dict:
     if path.is_symlink() or not path.is_file():
         return {"file": path.name, "exists": False, "safe_regular_file": False}
@@ -223,16 +251,21 @@ def inspect_video(path: Path) -> dict:
     duration = info["duration_seconds"] or 0
     full_black = bool(duration and any(a <= 0.1 and b >= duration * 0.95 for a, b in intervals))
 
-    frames_result = run(["ffprobe", "-v", "error", "-select_streams", "v:0",
-                         "-show_frames", "-show_entries", "frame=best_effort_timestamp_time,pict_type",
-                         "-of", "csv=p=0", str(path)], timeout=45)
-    frame_lines = frames_result["stdout"].splitlines()
-    samples = []
-    if frame_lines:
-        for label, index in (("first", 0), ("middle", len(frame_lines) // 2), ("last", len(frame_lines) - 1)):
-            parts = frame_lines[index].split(",")
-            samples.append({"sample": label, "timestamp": parts[0] if parts else "",
-                            "picture_type": parts[1] if len(parts) > 1 else ""})
+    fps = 0.0
+    for stream in info["streams"]:
+        if stream.get("type") == "video":
+            try:
+                numerator, denominator = (int(part) for part in str(stream.get("frame_rate", "0/1")).split("/", 1))
+                fps = numerator / denominator if denominator else 0.0
+            except (TypeError, ValueError, ZeroDivisionError):
+                fps = 0.0
+            break
+    end_seek = max(0.0, duration - (1.0 / fps if fps > 0 else 0.1))
+    samples = [
+        sample_decoded_frame(path, 0.0, "first"),
+        sample_decoded_frame(path, duration / 2.0, "middle"),
+        sample_decoded_frame(path, end_seek, "last"),
+    ]
 
     backups = find_backups(path)
     creation_epoch = parse_creation_time(info.get("container_creation_time"))
