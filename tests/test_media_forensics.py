@@ -1,3 +1,4 @@
+import json
 from scripts import media_forensics
 from scripts.media_forensics import parse_black_intervals, redact_secrets
 
