@@ -1,7 +1,6 @@
 package com.sintu.studio
 
 import android.content.Context
-import android.net.Uri
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
@@ -162,15 +161,17 @@ class SintuApi(context: Context, baseUrl: String) {
     companion object {
         fun normalizeBaseUrl(raw: String): String {
             val value = raw.trim()
-            val uri = Uri.parse(value)
+            val uri = try { java.net.URI(value) } catch (_: Exception) {
+                throw IllegalArgumentException("Enter a valid SINTU server URL.")
+            }
             val scheme = uri.scheme?.lowercase()
             val host = uri.host?.lowercase()
-            require(uri.userInfo == null && host != null) { "Enter a valid SINTU server URL." }
             val loopback = host == "localhost" || host == "127.0.0.1" || host == "::1"
+            require(uri.rawUserInfo == null && host != null) { "Enter a valid SINTU server URL." }
             require(scheme == "https" || (scheme == "http" && loopback)) {
                 "Use HTTPS for remote servers. HTTP is allowed only for localhost/127.0.0.1."
             }
-            require(uri.query == null && uri.fragment == null) { "Server URL must not include query or fragment." }
+            require(uri.rawQuery == null && uri.rawFragment == null) { "Server URL must not include query or fragment." }
             return if (value.endsWith("/")) value else "$value/"
         }
     }
