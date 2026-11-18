@@ -150,6 +150,9 @@ def test_inspect_video_builds_report_from_five_frame_probes(tmp_path, monkeypatc
     assert report["safe_regular_file"] is True
     assert media_forensics.has_forensic_tool_failure(report) is False
     assert report["frame_probe_exit"] == 0
+    assert report["pixel_probe_exit"] == 0
+    assert all(sample["pixel_verification"]["status"] == "PASS"
+               for sample in report["decoded_frame_samples"])
     assert [item["sample"] for item in report["decoded_frame_samples"]] == [
         "first", "quarter", "middle", "three_quarter", "last"
     ]
@@ -173,16 +176,16 @@ def test_forensic_tool_failure_is_not_hidden_by_existing_video_file():
     good = {
         "exists": True, "safe_regular_file": True,
         "ffprobe_exit": 0, "blackdetect_exit": 0, "blackframe_exit": 0,
-        "decode_exit": 0, "frame_probe_exit": 0,
+        "decode_exit": 0, "frame_probe_exit": 0, "pixel_probe_exit": 0,
         "black_frame_metrics": {"sampled_frame_count": 30},
         "metadata": {"format": "mov,mp4", "duration_seconds": 4.0,
                      "streams": [{"type": "video"}]},
         "decoded_frame_samples": [
-            {"sample": "first", "timestamp": "0.0", "error": ""},
-            {"sample": "quarter", "timestamp": "1.0", "error": ""},
-            {"sample": "middle", "timestamp": "2.0", "error": ""},
-            {"sample": "three_quarter", "timestamp": "3.0", "error": ""},
-            {"sample": "last", "timestamp": "3.9", "error": ""},
+            {"sample": "first", "timestamp": "0.0", "error": "", "pixel_verification": {"status": "PASS"}},
+            {"sample": "quarter", "timestamp": "1.0", "error": "", "pixel_verification": {"status": "PASS"}},
+            {"sample": "middle", "timestamp": "2.0", "error": "", "pixel_verification": {"status": "PASS"}},
+            {"sample": "three_quarter", "timestamp": "3.0", "error": "", "pixel_verification": {"status": "PASS"}},
+            {"sample": "last", "timestamp": "3.9", "error": "", "pixel_verification": {"status": "PASS"}},
         ],
         "full_duration_black": True,
     }
@@ -494,6 +497,10 @@ def test_real_black_mp4_forensics_reports_black_percentage_and_five_samples(tmp_
     assert report["black_frame_metrics"]["sampled_frame_count"] == 30
     assert report["black_frame_metrics"]["black_frame_count"] == 30
     assert report["black_frame_metrics"]["black_frame_percentage"] == 100.0
+    assert report["pixel_probe_exit"] == 0
+    assert report["pixel_verification"]["near_black_sample_count"] == 5
+    assert all(sample["pixel_verification"]["near_black"] is True
+               for sample in report["decoded_frame_samples"])
     assert [sample["sample"] for sample in report["decoded_frame_samples"]] == [
         "first", "quarter", "middle", "three_quarter", "last"
     ]
@@ -532,7 +539,7 @@ def test_forensic_environment_reports_tool_paths_versions_filters_and_temp_stora
     assert environment["ffmpeg"]["filters"] == {
         "blackdetect": True, "blackframe": True, "fps": True, "scale": True,
     }
-    assert environment["frame_sampling"].startswith("FFprobe")
+    assert environment["frame_sampling"].startswith("Five FFprobe")
     assert environment["temporary_storage"]["exists"] is True
     assert environment["temporary_storage"]["write_test"] is True
     assert environment["temporary_storage"]["free_bytes"] > 0
@@ -575,12 +582,16 @@ def test_audio_only_container_is_not_accepted_as_visual_video(tmp_path, monkeypa
             return {"returncode": 0, "stdout": '{"frames":[]}' if not interval.startswith("0%+") else "", "stderr": ""}
         if command[0] == "ffmpeg" and any("blackframe=" in part for part in command):
             return {"returncode": 0, "stdout": "", "stderr": "pblack:0\\n" * 30}
+        if command[0] == "ffmpeg" and any("scale=64:64:flags=area" in part for part in command):
+            media_forensics.Image.new("RGB", (64, 64), "white").save(command[-1])
+            return {"returncode": 0, "stdout": "", "stderr": ""}
         return {"returncode": 0, "stdout": "", "stderr": ""}
 
     monkeypatch.setattr(media_forensics, "run", fake_run)
     report = media_forensics.inspect_video(video)
     assert not any(stream["type"] == "video" for stream in report["metadata"]["streams"])
     assert report["frame_probe_exit"] == 1
+    assert report["pixel_probe_exit"] == 1
     assert media_forensics.has_forensic_tool_failure(report) is True
 
 
@@ -657,6 +668,10 @@ def test_real_nonblack_mp4_forensics_passes_with_decoded_samples(tmp_path, monke
     report = media_forensics.inspect_video(clip)
     assert report["full_duration_black"] is False
     assert report["frame_probe_exit"] == 0
+    assert report["pixel_probe_exit"] == 0
+    assert report["pixel_verification"]["near_black_sample_count"] == 0
+    assert any(sample["pixel_verification"]["mean_luma"] > 2.0
+               for sample in report["decoded_frame_samples"])
     assert media_forensics.has_forensic_tool_failure(report) is False
 
 
@@ -683,6 +698,10 @@ def test_real_partial_black_mp4_is_not_misclassified_as_full_duration_black(tmp_
     assert report["black_intervals"]
     assert report["black_intervals"][0][1] < report["metadata"]["duration_seconds"] * 0.95
     assert report["frame_probe_exit"] == 0
+    assert report["pixel_probe_exit"] == 0
+    assert report["decoded_frame_samples"][0]["pixel_verification"]["near_black"] is True
+    assert all(sample["pixel_verification"]["near_black"] is False
+               for sample in report["decoded_frame_samples"][1:])
     assert media_forensics.has_forensic_tool_failure(report) is False
 
 
@@ -725,6 +744,9 @@ def test_inspect_video_marks_middle_and_last_sampling_failures_as_tool_failure(t
             }), "stderr": ""}
         if command[0] == "ffmpeg" and any("blackframe=" in part for part in command):
             return {"returncode": 0, "stdout": "", "stderr": "pblack:0\\n" * 30}
+        if command[0] == "ffmpeg" and any("scale=64:64:flags=area" in part for part in command):
+            media_forensics.Image.new("RGB", (64, 64), "white").save(command[-1])
+            return {"returncode": 0, "stdout": "", "stderr": ""}
         return {"returncode": 0, "stdout": "", "stderr": ""}
 
     monkeypatch.setattr(media_forensics, "run", fake_run)
