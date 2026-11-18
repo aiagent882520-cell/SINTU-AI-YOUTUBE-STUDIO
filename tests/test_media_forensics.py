@@ -338,6 +338,8 @@ def test_inspect_video_fails_closed_on_non_finite_duration(tmp_path, monkeypatch
     assert all("invalid or missing video duration" in x["error"]
                for x in report["decoded_frame_samples"])
     assert media_forensics.has_forensic_tool_failure(report) is True
+    assert report["metadata"]["duration_seconds"] is None
+    json.dumps(report, allow_nan=False)
     assert not any("-read_intervals" in command for command in calls)
 
 
