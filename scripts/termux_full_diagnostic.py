@@ -134,7 +134,7 @@ def render_text(report: dict) -> str:
         f"Backend reachable: {report['backend']['reachable']} ({report['backend']['url']})",
         f"Android APK files found: {len(report['android']['apk_files_found'])}",
         f"MP4 inventory: {report['media']['count']} files in {report['media']['directory']}",
-        "Automation self-test: " + str(report["automation_self_test"].get("status"))",
+        "Automation self-test: " + str(report["automation_self_test"].get("status")),
         "Safety: read-only; no model download, render, service change, media modification or upload.",
         "",
         "Full evidence is in the matching JSON report.",
