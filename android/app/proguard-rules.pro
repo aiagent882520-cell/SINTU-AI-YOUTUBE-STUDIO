@@ -1,0 +1,3 @@
+-keepattributes Signature
+-keep class com.sintu.studio.api.** { *; }
+-keep class com.sintu.studio.model.** { *; }
