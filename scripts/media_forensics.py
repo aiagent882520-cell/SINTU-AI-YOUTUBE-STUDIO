@@ -238,8 +238,8 @@ def analyze_av_sync(streams: list[dict], tolerance_seconds: float = 0.25) -> dic
     if not audio:
         return {"status": "missing_audio_stream"}
     try:
-        video_start = float(video.get("start_time") or 0.0)
-        audio_start = float(audio.get("start_time") or 0.0)
+        video_start = float(video["start_time"])
+        audio_start = float(audio["start_time"])
         video_duration = float(video["duration"])
         audio_duration = float(audio["duration"])
     except (KeyError, TypeError, ValueError):
