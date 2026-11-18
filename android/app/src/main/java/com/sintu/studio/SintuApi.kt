@@ -185,7 +185,7 @@ class SintuApi(context: Context, baseUrl: String) {
 private fun <T> Response<T>.bodyOrThrow(): T {
     if (!isSuccessful) {
         val detail = errorBody()?.string()?.take(1200)
-        throw IllegalStateException(detail?.takeIf { it.isNotBlank() } ?: "SINTU server returned HTTP ${code}.")
+        throw IllegalStateException(detail?.takeIf { it.isNotBlank() } ?: "SINTU server returned HTTP ${code()}.")
     }
     return body() ?: throw IllegalStateException("SINTU server returned an empty response.")
 }
