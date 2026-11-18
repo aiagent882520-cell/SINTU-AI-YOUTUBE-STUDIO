@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import sqlite3
@@ -319,7 +320,8 @@ def inspect_video(path: Path) -> dict:
     decode = run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "null", "-"])
     intervals = parse_black_intervals(black["stderr"])
     duration = info["duration_seconds"] or 0
-    full_black = bool(duration and any(a <= 0.1 and b >= duration * 0.95 for a, b in intervals))
+    duration_valid = isinstance(duration, (int, float)) and math.isfinite(duration) and duration > 0
+    full_black = bool(duration_valid and any(a <= 0.1 and b >= duration * 0.95 for a, b in intervals))
 
     fps = 0.0
     for stream in info["streams"]:
@@ -330,20 +332,27 @@ def inspect_video(path: Path) -> dict:
             except (TypeError, ValueError, ZeroDivisionError):
                 fps = 0.0
             break
-    end_seek = max(0.0, duration - (1.0 / fps if fps > 0 else 0.1))
-    # Five evenly distributed sample points catch black/blank intervals
-    # that a first/middle/last-only probe can miss.
-    sample_points = [
-        ("first", 0.0),
-        ("quarter", duration * 0.25),
-        ("middle", duration * 0.50),
-        ("three_quarter", duration * 0.75),
-        ("last", end_seek),
-    ]
-    samples = [
-        sample_decoded_frame(path, timestamp, label)
-        for label, timestamp in sample_points
-    ]
+    if duration_valid:
+        end_seek = max(0.0, duration - (1.0 / fps if fps > 0 else 0.1))
+        # Five evenly distributed sample points catch black/blank intervals
+        # that a first/middle/last-only probe can miss.
+        sample_points = [
+            ("first", 0.0),
+            ("quarter", duration * 0.25),
+            ("middle", duration * 0.50),
+            ("three_quarter", duration * 0.75),
+            ("last", end_seek),
+        ]
+        samples = [
+            sample_decoded_frame(path, timestamp, label)
+            for label, timestamp in sample_points
+        ]
+    else:
+        samples = [{
+            "sample": label, "seek_seconds": None, "timestamp": None,
+            "picture_type": None, "sampling_method": "not_attempted",
+            "error": "invalid or missing video duration; frame sampling skipped",
+        } for label in ("first", "quarter", "middle", "three_quarter", "last")]
 
     backups = find_backups(path)
     creation_epoch = parse_creation_time(info.get("container_creation_time"))
@@ -383,7 +392,12 @@ def has_forensic_tool_failure(item: dict) -> bool:
         if item.get(key) != 0:
             return True
     metadata = item.get("metadata") or {}
-    if metadata.get("parse_error") or not metadata.get("format") or not metadata.get("duration_seconds"):
+    try:
+        duration = float(metadata.get("duration_seconds"))
+    except (TypeError, ValueError):
+        return True
+    if (metadata.get("parse_error") or not metadata.get("format")
+            or not math.isfinite(duration) or duration <= 0):
         return True
     if not any(stream.get("type") == "video" for stream in metadata.get("streams", [])):
         return True
