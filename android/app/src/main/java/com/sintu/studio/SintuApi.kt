@@ -127,6 +127,9 @@ private interface SintuService {
     @GET("api/auth/session")
     suspend fun session(): Response<SessionResponse>
 
+    @GET("api/providers")
+    suspend fun providerStatus(): Response<Map<String, Any?>>
+
     @GET("api/conversations")
     suspend fun conversations(): Response<ConversationsResponse>
 
@@ -197,6 +200,7 @@ class SintuApi(context: Context, baseUrl: String) {
     }
 
     suspend fun session(): SessionResponse = service.session().bodyOrThrow()
+    suspend fun providerStatus(): Map<String, Any?> = service.providerStatus().bodyOrThrow()
     suspend fun conversations(): ConversationsResponse = service.conversations().bodyOrThrow()
     suspend fun createConversation(workflow: String): ConversationCreateResponse =
         service.createConversation(ConversationCreateRequest(workflow = workflow)).bodyOrThrow()
