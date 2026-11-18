@@ -147,3 +147,21 @@ def test_relay_maps_watchdog_recovery_test_to_fixed_script():
     assert relay.command_for("watchdog_recovery_test", {}) == [
         relay.PYTHON, "scripts/watchdog_recovery_test.py", "--json"
     ]
+
+
+def test_relay_defers_restart_until_other_queued_jobs_are_drained(monkeypatch):
+    processed = []
+
+    def fake_process_issue(github, issue):
+        processed.append(issue["number"])
+        return issue["number"] == 1
+
+    monkeypatch.setattr(relay, "process_issue", fake_process_issue)
+    issues = [
+        {"number": 1, "body": '{"action":"restart_services"}'},
+        {"number": 2, "body": '{"action":"run_tests"}'},
+        {"number": 3, "body": '{"action":"media_forensics"}'},
+    ]
+
+    assert relay.process_pending(None, issues) is True
+    assert processed == [2, 3, 1]
