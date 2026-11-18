@@ -7,7 +7,7 @@ mkdir -p "$LOG_DIR"
 cd "$APP_DIR"
 
 process_state() {
-  local name="$1" marker="$2" file="$LOG_DIR/$1.pid" pid cmd
+  local name="$1" marker="$2" file="$LOG_DIR/$1.pid" pid cmd proc_state
   if [ ! -s "$file" ]; then return 1; fi
   pid="$(cat "$file" 2>/dev/null || true)"
   if [[ ! "$pid" =~ ^[0-9]+$ ]] || ! kill -0 "$pid" 2>/dev/null; then
@@ -20,9 +20,15 @@ process_state() {
     return 1
   fi
   cmd="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
+  if [[ -z "$cmd" ]]; then cmd="$(ps -o args= -p "$pid" 2>/dev/null || true)"; fi
+  if [[ -z "$cmd" ]]; then
+    printf '[WATCHDOG] Cannot verify PID %s for %s; refusing recovery action.\n' "$pid" "$name" >&2
+    return 2
+  fi
   if [[ "$cmd" == *"$marker"* ]]; then return 0; fi
-  printf '[WATCHDOG] Refusing to signal unrelated PID %s for %s\n' "$pid" "$name" >&2
-  return 2
+  printf '[WATCHDOG] Stale PID reference %s for %s; not signalling unrelated process; clearing reference.\n' "$pid" "$name" >&2
+  rm -f "$file"
+  return 1
 }
 
 while true; do
