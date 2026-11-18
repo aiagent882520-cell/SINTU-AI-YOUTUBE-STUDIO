@@ -1,18 +1,27 @@
 package com.sintu.studio
 
+import android.content.ContentValues
 import android.content.Context
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import okhttp3.Cookie
+import okhttp3.ResponseBody
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import retrofit2.Response
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Streaming
 import retrofit2.http.Path
 
 data class LoginRequest(val username: String, val password: String)
@@ -153,6 +162,10 @@ private interface SintuService {
         @Path("runId") runId: String,
         @Body body: ProductionMediaRequest
     ): Response<Map<String, Any?>>
+
+    @Streaming
+    @GET("api/videos/{videoId}")
+    suspend fun videoFile(@Path("videoId") videoId: String): Response<ResponseBody>
 }
 
 class SintuApi(context: Context, baseUrl: String) {
@@ -202,6 +215,68 @@ class SintuApi(context: Context, baseUrl: String) {
         service.productionRunStatus(runId).bodyOrThrow()
     suspend fun produceApprovedMedia(runId: String): Map<String, Any?> =
         service.produceApprovedMedia(runId, ProductionMediaRequest()).bodyOrThrow()
+
+    suspend fun downloadVideoToGallery(context: Context, videoId: String): Uri =
+        withContext(Dispatchers.IO) {
+            require(videoId.matches(Regex("[a-f0-9]{32}"))) { "Invalid SINTU video ID." }
+            require(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                "Gallery download requires Android 10 or newer."
+            }
+            val response = service.videoFile(videoId)
+            if (!response.isSuccessful) {
+                val detail = response.errorBody()?.string()?.take(1000)
+                throw IllegalStateException(detail?.takeIf { it.isNotBlank() }
+                    ?: "SINTU video download failed with HTTP ${response.code()}.")
+            }
+            val body = response.body()
+                ?: throw IllegalStateException("SINTU server returned an empty MP4.")
+            val maxBytes = 500L * 1024L * 1024L
+            try {
+                if (body.contentLength() > maxBytes) {
+                    throw IllegalStateException("MP4 exceeds the 500 MB phone-download limit.")
+                }
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, "SINTU_${videoId}.mp4")
+                    put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH,
+                        Environment.DIRECTORY_MOVIES + "/SINTU")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val resolver = context.applicationContext.contentResolver
+                val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+                    ?: throw IllegalStateException("Android could not create a Movies/SINTU file.")
+                try {
+                    val output = resolver.openOutputStream(uri, "w")
+                        ?: throw IllegalStateException("Android could not open the MP4 destination.")
+                    body.byteStream().use { input ->
+                        output.use { destination ->
+                            val buffer = ByteArray(64 * 1024)
+                            var total = 0L
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                total += count
+                                if (total > maxBytes) {
+                                    throw IllegalStateException("MP4 exceeded the 500 MB download limit.")
+                                }
+                                destination.write(buffer, 0, count)
+                            }
+                            destination.flush()
+                        }
+                    }
+                    val ready = ContentValues().apply {
+                        put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    }
+                    resolver.update(uri, ready, null, null)
+                    uri
+                } catch (error: Exception) {
+                    resolver.delete(uri, null, null)
+                    throw error
+                }
+            } finally {
+                body.close()
+            }
+        }
 
     companion object {
         fun normalizeBaseUrl(raw: String): String {
