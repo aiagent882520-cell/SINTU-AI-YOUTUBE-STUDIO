@@ -54,3 +54,39 @@ def test_forensics_prefers_pre_repair_backup_mtime_for_asset_correlation(tmp_pat
     assert len(result) == 1
     assert result[0]["sha256"] == media_forensics.sha256_file(backup)
     assert datetime.fromisoformat(result[0]["pre_repair_mtime_utc"]).timestamp() == original_time
+
+
+def test_frame_samples_use_independent_timestamp_probes(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run(command, timeout=120):
+        calls.append(command)
+        return {
+            "returncode": 0,
+            "stdout": '{"frames":[{"best_effort_timestamp_time":"5.000000","pict_type":"P"}]}',
+            "stderr": "",
+        }
+
+    monkeypatch.setattr(media_forensics, "run", fake_run)
+    path = tmp_path / "clip.mp4"
+    samples = [
+        media_forensics.sample_decoded_frame(path, 0.0, "first"),
+        media_forensics.sample_decoded_frame(path, 5.0, "middle"),
+        media_forensics.sample_decoded_frame(path, 9.9, "last"),
+    ]
+    assert [sample["sample"] for sample in samples] == ["first", "middle", "last"]
+    assert [sample["seek_seconds"] for sample in samples] == [0.0, 5.0, 9.9]
+    assert all(sample["timestamp"] == "5.000000" for sample in samples)
+    assert len(calls) == 3
+    assert [calls[i][calls[i].index("-read_intervals") + 1] for i in range(3)] == [
+        "0.000000%+#1", "5.000000%+#1", "9.900000%+#1"
+    ]
+
+
+def test_frame_sample_reports_missing_frame_without_failing_report(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_forensics, "run", lambda *args, **kwargs: {
+        "returncode": 0, "stdout": '{"frames":[]}', "stderr": ""
+    })
+    sample = media_forensics.sample_decoded_frame(tmp_path / "clip.mp4", 2.0, "middle")
+    assert sample["timestamp"] is None
+    assert sample["error"] == "no decoded frame found at requested timestamp"
