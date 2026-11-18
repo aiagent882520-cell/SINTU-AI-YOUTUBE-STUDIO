@@ -43,10 +43,10 @@ jobs:
       - name: Install FFmpeg
         run: |
           if ! command -v ffmpeg >/dev/null 2>&1; then
-            sudo apt-get install -y --no-install-recommends ffmpeg
+            timeout 600 sudo apt-get install -y --no-install-recommends ffmpeg
           fi
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends fonts-noto-core
+          timeout 300 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq
+          timeout 600 sudo apt-get install -y --no-install-recommends fonts-noto-core
           ffmpeg -version
           ffprobe -version
           ffmpeg -hide_banner -filters | grep -q subtitles
@@ -85,8 +85,8 @@ jobs:
           cache-dependency-path: requirements-dev.txt
       - name: Install free local media tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg espeak-ng fonts-noto-core
+          timeout 300 sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq
+          timeout 600 sudo apt-get install -y --no-install-recommends ffmpeg espeak-ng fonts-noto-core
           ffmpeg -version
           ffprobe -version
           espeak-ng --voices=hi
