@@ -615,3 +615,20 @@ Last updated: 2026-11-17 15:52 UTC
 - Issue #127 requires the updated Android regression rerun #162 before it can be considered current.
 - All five MP4s remain UNRESOLVED pending independent visual review and proven source provenance; first three confirmed black, last two ambiguous low-luma detector disagreements. No original or backup has been changed.
 - Video production remains PAUSED; public YouTube publishing remains DISABLED; no upload/publication or paid service was used.
+
+
+
+### Latest Android Termux evidence — Issues #160–#163, 2026-11-18 12:02 UTC
+- Issue #160 fast-forward pulled main from `bb0b84a` to `d93e376` (includes merged PR #158 and #165); command SUCCESS / exit 0. The queue pull did not run the separate `termux_apply_update.sh` script; services were separately verified/restarted through watchdog recovery Issue #159.
+- Issue #161 forensic rerun on that commit completed with **0 forensic tool failures**, all 25 actual decoded PNG samples extracted and analysed. The raw blackdetect interval still says 5/5 full black, but independent pixel consensus says only 3/5 are truly black:
+  - `3f4c2151...`: 5/5 near-black, mean luma 0, 100% pixels <=16, blackframe 30/30.
+  - `59430f1f...`: same; byte-identical duplicate of first file.
+  - `8cfe9da8...`: 5/5 near-black, mean luma 0, 100% pixels <=16, blackframe 30/30.
+  - `adf9268e...`: 0/5 near-black, mean luma 22.11, 0.122% pixels <=16, blackframe 0/30.
+  - `afa4c87e...`: 0/5 near-black, mean luma 22.11, 0.122% pixels <=16, blackframe 0/30.
+- The latter two are dark visible footage, not black; legacy blackdetect `pix_th=0.10` is a confirmed false-positive detector configuration. Keep them gated until health-audit threshold correction is deployed and rerun; do not mark them repaired.
+- Issue #162 post-PR #158/#165 Android pytest: **606 passed, 5 warnings in 198.34s (3m18s)**, exit 0.
+- Issue #163 post-PR #158/#165 Android self-test: SUCCESS / exit 0, 7/7 basic checks (repository/origin, Python 3.14.10, GitHub CLI auth, Studio API, worker heartbeat + automation-only, relay singleton).
+- Issue #164 Android health audit is RUNNING at checkpoint; it started before PR #166 and therefore uses the old 0.10 blackdetect threshold. Its result must not be used to assess the threshold correction.
+- PR #166 (`fix/black-video-pixel-consensus`) is open and under CI. It tightens blackdetect to pix_th 0.03, aligns blackframe to luma threshold 16, and requires blackdetect + 29/30 blackframe + 5/5 decoded near-black pixels before declaring full-duration black. It adds real-media health/forensic tests for dark gray, pure black and partial black footage. Do not merge until exact-head CI passes.
+- After PR #166 merges, queue a new main pull and fresh health audit; the three pixel-confirmed black files remain UNRESOLVED and production remains PAUSED / public publishing DISABLED.
