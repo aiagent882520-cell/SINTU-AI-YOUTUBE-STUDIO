@@ -810,7 +810,7 @@ def compact_forensic_summary(report: dict) -> dict:
                     "format_id": match.get("format_id"),
                     "matched_copy": match.get("matched_copy"),
                     "engines": match.get("engines"),
-                    "input_hashes_match": all(asset.get("hash_match") for asset in match.get("inputs", [])),
+                    "input_hashes_match": bool(match.get("inputs")) and all(asset.get("hash_match") for asset in match.get("inputs", [])),
                     "input_count": len(match.get("inputs", [])),
                 }
                 for match in item.get("render_provenance", [])
