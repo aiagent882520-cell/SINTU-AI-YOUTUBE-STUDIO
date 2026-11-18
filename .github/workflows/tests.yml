@@ -42,15 +42,8 @@ jobs:
           node-version: "22"
       - name: Install FFmpeg
         run: |
-          packages=()
           if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
-            packages+=(ffmpeg)
-          fi
-          if ! fc-match -f '%{family}' 'Noto Sans' | grep -qi 'Noto Sans'; then
-            packages+=(fonts-noto-core)
-          fi
-          if [[ ${#packages[@]} -gt 0 ]]; then
-            sudo apt-get install -y --no-install-recommends "${packages[@]}"
+            sudo apt-get install -y --no-install-recommends ffmpeg
           fi
           ffmpeg -version
           ffprobe -version
