@@ -190,8 +190,11 @@ def parse_creation_time(value: str | None) -> float | None:
 
 
 def sample_decoded_frame(path: Path, seek_seconds: float, label: str) -> dict:
-    """Probe exactly one decoded frame near an independent timestamp."""
+    """Find a decoded frame at/after a timestamp, recovering from inaccurate demuxer seeks."""
     seek = max(0.0, float(seek_seconds))
+    sample = {"sample": label, "seek_seconds": round(seek, 6),
+              "timestamp": None, "picture_type": None, "error": "",
+              "sampling_method": "independent_seek"}
     result = run([
         "ffprobe", "-v", "error", "-select_streams", "v:0",
         "-read_intervals", f"{seek:.6f}%+1",
@@ -199,8 +202,6 @@ def sample_decoded_frame(path: Path, seek_seconds: float, label: str) -> dict:
         "-show_entries", "frame=best_effort_timestamp_time,pict_type",
         "-of", "json", str(path),
     ], timeout=30)
-    sample = {"sample": label, "seek_seconds": round(seek, 6),
-              "timestamp": None, "picture_type": None, "error": ""}
     if result["returncode"] != 0:
         sample["error"] = (result["stderr"] or "ffprobe frame sample failed")[:250]
         return sample
@@ -209,21 +210,49 @@ def sample_decoded_frame(path: Path, seek_seconds: float, label: str) -> dict:
     except (TypeError, ValueError, json.JSONDecodeError):
         sample["error"] = "invalid ffprobe frame-sample JSON"
         return sample
-    if not frames:
-        sample["error"] = "no decoded frame found at requested timestamp"
-        return sample
-    timed = []
-    for frame in frames:
+
+    def closest_at_or_after(items):
+        timed = []
+        for frame in items:
+            try:
+                timestamp = float(frame.get("best_effort_timestamp_time"))
+            except (TypeError, ValueError):
+                continue
+            if timestamp >= seek - 0.001:
+                timed.append((abs(timestamp - seek), timestamp, frame))
+        return min(timed, key=lambda item: item[0])[2] if timed else None
+
+    chosen = closest_at_or_after(frames)
+    if chosen is None:
+        # FFprobe documents that interval seeking is not frame-accurate: some
+        # demuxers seek back to an earlier keyframe, and the +1s window can end
+        # before the requested timestamp. Retry from t=0 so decoding advances
+        # sequentially through the target rather than trusting that seek point.
+        fallback = run([
+            "ffprobe", "-v", "error", "-select_streams", "v:0",
+            "-read_intervals", f"0%+{seek + 1.0:.6f}",
+            "-show_frames",
+            "-show_entries", "frame=best_effort_timestamp_time,pict_type",
+            "-of", "json", str(path),
+        ], timeout=120)
+        if fallback["returncode"] != 0:
+            detail = (fallback["stderr"] or "sequential ffprobe frame scan failed")[:180]
+            sample["error"] = f"timestamp seek found no usable frame; sequential fallback failed: {detail}"
+            return sample
         try:
-            timestamp = float(frame.get("best_effort_timestamp_time"))
-        except (TypeError, ValueError):
-            continue
-        if timestamp >= seek - 0.001:
-            timed.append((abs(timestamp - seek), timestamp, frame))
-    if not timed:
-        sample["error"] = "no decoded frame at or after the requested timestamp"
-        return sample
-    chosen = min(timed, key=lambda item: item[0])[2]
+            fallback_frames = json.loads(fallback["stdout"]).get("frames", [])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            sample["error"] = "invalid sequential ffprobe frame-scan JSON"
+            return sample
+        chosen = closest_at_or_after(fallback_frames)
+        if chosen is None:
+            sample["error"] = (
+                "no decoded frame found at requested timestamp" if not fallback_frames
+                else "no decoded frame at or after the requested timestamp"
+            )
+            return sample
+        sample["sampling_method"] = "sequential_fallback_from_start"
+
     sample["timestamp"] = chosen.get("best_effort_timestamp_time")
     sample["picture_type"] = chosen.get("pict_type")
     return sample
