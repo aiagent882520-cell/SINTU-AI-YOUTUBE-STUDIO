@@ -115,9 +115,9 @@ private fun StudioTabs(api: SintuApi) {
         }
     }
     when (tab) {
-        0 -> AssistantScreen(api, Modifier.weight(1f))
-        1 -> VideoScreen(api, Modifier.weight(1f))
-        else -> ProjectsScreen(api, Modifier.weight(1f))
+        0 -> AssistantScreen(api, Modifier.fillMaxSize())
+        1 -> VideoScreen(api, Modifier.fillMaxSize())
+        else -> ProjectsScreen(api, Modifier.fillMaxSize())
     }
 }
 
