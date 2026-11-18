@@ -578,9 +578,21 @@ def compact_forensic_summary(report: dict) -> dict:
             ],
             "reference_time": item.get("asset_reference_time_utc"),
         })
+    environment = report.get("environment") or {}
+    ffmpeg = environment.get("ffmpeg") or {}
+    ffprobe = environment.get("ffprobe") or {}
+    temporary = environment.get("temporary_storage") or {}
+    compact_environment = {
+        "python": (environment.get("python") or {}).get("version"),
+        "platform": environment.get("platform"),
+        "termux": environment.get("termux_version"),
+        "ffmpeg": [ffmpeg.get("path"), ffmpeg.get("version"), ffmpeg.get("filters")],
+        "ffprobe": [ffprobe.get("path"), ffprobe.get("version")],
+        "temp": [temporary.get("path"), temporary.get("write_test"), temporary.get("free_bytes")],
+    }
     return {
         "status": report.get("status"),
-        "environment": report.get("environment", {}),
+        "environment": compact_environment,
         "summary": {
             "targets": (report.get("summary") or {}).get("target_count"),
             "black": (report.get("summary") or {}).get("full_duration_black_count"),
@@ -588,19 +600,19 @@ def compact_forensic_summary(report: dict) -> dict:
         },
         "targets": targets,
         "assets": [
-            [str(asset.get("path", ""))[-80:], asset.get("mean_luma"),
+            [str(asset.get("path", ""))[-64:], asset.get("mean_luma"),
              asset.get("near_black"), asset.get("modified_utc")]
-            for asset in report.get("candidate_source_assets", [])[:5]
+            for asset in report.get("candidate_source_assets", [])[:3]
         ],
         "logs": [
-            [str(match.get("path", ""))[-80:], match.get("line"),
-             str(match.get("excerpt", ""))[:80]]
-            for match in report.get("production_log_matches", [])[:3]
+            [str(match.get("path", ""))[-64:], match.get("line"),
+             str(match.get("excerpt", ""))[:60]]
+            for match in report.get("production_log_matches", [])[:2]
         ],
         "db": [
-            [str(match.get("db", ""))[-60:], match.get("table"), match.get("column"),
-             str((match.get("record") or {}).get("status", ""))[:40]]
-            for match in report.get("production_database_matches", [])[:3]
+            [str(match.get("db", ""))[-48:], match.get("table"), match.get("column"),
+             str((match.get("record") or {}).get("status", ""))[:32]]
+            for match in report.get("production_database_matches", [])[:2]
         ],
         "safety": report.get("safety", {}),
     }
