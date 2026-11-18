@@ -24,6 +24,7 @@ class SintuApiTest {
     @Test
     fun remotePlainHttpIsRejected() {
         assertRejected("http://studio.example.com")
+        assertRejected("http://[::1]:8000")
     }
 
     @Test
