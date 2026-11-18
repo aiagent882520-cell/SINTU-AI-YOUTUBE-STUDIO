@@ -124,15 +124,20 @@ class GitHub:
                 self.update_issue(int(issue["number"]), labels=[QUEUED_LABEL])
                 self.comment(int(issue["number"]), "♻️ Recovered stale claim after the previous Termux worker stopped responding.")
         query = urllib.parse.urlencode({
-            "state": "open", "labels": QUEUED_LABEL, "per_page": "50"
+            "state": "open", "labels": QUEUED_LABEL, "per_page": "50",
+            "sort": "created", "direction": "asc",
         })
         issues = self.request("GET", "/issues?" + query) or []
-        return [
+        eligible = [
             issue for issue in issues
             if "pull_request" not in issue
             and issue.get("user", {}).get("login", "").lower() == ALLOWED_ACTOR
             and issue.get("title", "").startswith("SINTU-CMD:")
         ]
+        # GitHub's default issue order is newest-first. Always enforce FIFO
+        # locally as well, so a later diagnostic cannot run before an earlier
+        # git_pull_ff_only deployment command.
+        return sorted(eligible, key=lambda issue: issue.get("created_at", ""))
 
     def comment(self, number: int, body: str):
         return self.request("POST", f"/issues/{number}/comments", {"body": body})
