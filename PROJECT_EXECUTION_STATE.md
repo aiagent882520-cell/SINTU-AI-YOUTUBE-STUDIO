@@ -241,3 +241,6 @@ Last updated: 2026-11-17 15:52 UTC
 - New Termux fast-forward deployment command queued as Issue #undefined. It is deliberately behind existing queued Android jobs #118–#120; no Android deployment is claimed until a device-side completion comment confirms the commit.
 - Once Termux reports the fast-forward result, restart services and run fresh read-only `media_forensics` plus Android regression. The relay has not yet claimed #118–#120, so device-side work remains blocked.
 - The five original MP4s remain untouched. OAuth/channel credentials remain absent. Public upload disabled; production PAUSED.
+
+
+- Follow-on read-only five-video forensic command queued as Issue #undefined, after deployment Issue #124. It will inspect the exact five named legacy MP4s, their frame timestamps, black intervals, decode status, A/V timing, source candidates, and local provenance without changing any media. Result is pending Android relay execution.
