@@ -957,3 +957,29 @@ Evidence: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/commit/c
 - The 60-format catalog and 15-module registry remain catalogs/scope definitions, not proof of 60 independent successful MP4 workflows. No all-60 format E2E evidence exists.
 - Phone constraints remain authoritative: do not install ComfyUI/PyTorch or download diffusion weights to the low-memory Android phone. Procedural illustrations must not be labelled AI-generated. Keep production and external publishing gates closed until on-device validation and all acceptance gates pass.
 - No PR was merged; no production deploy, YouTube upload, public publish, paid API, or original-media modification was performed.
+
+
+## Execution update — 2026-11-18 — latest exact-head verification
+
+### PR #195 — offline media + local-model preflight
+- Latest head `909e86368b819e9638b3bd4214bc741af4c379a7`; CI run `44347762212` completed SUCCESS (7/7): Python 3.11/3.12/3.13/3.14, dependency security audit, production Docker build/health check and offline branded-video E2E/motion audit all PASS.
+- The website production button now checks `/api/providers` before creating a run and explains when no local text model is ready; it does not silently fall back to a paid API.
+- Android-first offline media documentation explicitly separates procedural media assembly from specialist LLM text generation. Without a local text model, the full specialist production run cannot proceed; procedural art/TTS/music are not a replacement LLM.
+- PR #195 remains OPEN + DRAFT; not merged.
+
+### PR #193 — manifest-aware black-MP4 forensics
+- Latest head `dbc52705110ae9dc53fa4a12edbaff87b8217ddf`; CI run `44347593067` completed SUCCESS (7/7): all four Python versions, dependency audit, Docker build/health check and offline branded-video E2E/motion audit PASS.
+- Scanner now matches current MP4 or pre-repair backup hashes to content-addressed render manifests, then checks source-asset hashes and reports engine/settings evidence. Empty input lists no longer appear as a positive hash-verification result.
+- This is future/backup-linked traceability; historical black MP4s without matching manifests remain unattributed. PR #193 remains OPEN and not merged.
+
+### PR #190 — latest native Android client head
+- Latest head `ac04ea2f4694d182e43741f31e2d84c1ef55d916`.
+- Android Video screen now preflights local LLM availability, starts a format-specific production run, refreshes status, and allows MP4 generation only after backend status `completed`.
+- Default phone render profile is 720×1280, 24 fps, standard quality; user can choose a supported resolution. Authenticated MP4 download writes to Android MediaStore `Movies/SINTU`, capped at 500 MB with partial-file cleanup.
+- Added Android unit coverage for phone-safe render defaults. Exact-head CI is still running: SINTU CI `44347977584`, Native Android App `44347977635`. Earlier Android build success at `e52db8ec...` predates MediaStore download and the final low-memory profile; do not count it as latest-head validation.
+- No physical-device install, actual gallery download, background/rotation recovery, low-storage, thermal or accessibility matrix has been completed. PR #190 remains OPEN + DRAFT.
+
+### Cross-cutting limitation
+- The website and Android UI both now fail early with a clear explanation when the local text model is absent. No model/runtime was downloaded or installed, because the phone has limited free RAM and model selection requires separate size/license/device review.
+- The procedural media fallback can create visuals/audio/MP4 only when the necessary local TTS and FFmpeg tools are present and production gates are enabled. It does not prove generative-AI image creation or full autonomous topic-to-script generation.
+- No PR merged, no original media changed, no deployment, no paid API, no YouTube upload or public publishing.
