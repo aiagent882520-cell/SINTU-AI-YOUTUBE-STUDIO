@@ -1,7 +1,9 @@
 # Android-first offline media path
 
-SINTU's Android/Termux path must not require a desktop GPU, ComfyUI server,
-model download, cloud account, or paid API.
+SINTU's Android/Termux media-assembly path must not require a desktop GPU,
+ComfyUI server, model download, cloud account, or paid API. The separate
+specialist text-generation stage has an additional local-model requirement,
+documented below.
 
 ## Engines used on a phone
 
@@ -12,6 +14,22 @@ model download, cloud account, or paid API.
 | Background music | SINTU Procedural Composer | Procedurally synthesized audio; **not an AI music model** |
 | Video assembly | FFmpeg / FFprobe | Actual MP4 encoding, stream validation and media audit |
 | Optional generative image engine | A separately configured and validated ComfyUI host | Local generative AI only when the server, workflow, nodes and models are verified |
+
+
+## Text-generation requirement (separate from media assembly)
+
+The full specialist production run at `/api/production/runs` requires a
+working local text model through Ollama or a loopback OpenAI-compatible server
+(for example, a llama.cpp server). The procedural image, TTS, music and FFmpeg
+fallbacks do not replace an LLM and are not themselves AI script generation.
+
+- If no local text model is available, the Android client must report that
+  prerequisite and must not create a production run that will immediately fail.
+- Do not automatically install a runtime or download model weights on a
+  low-memory phone. A model must be chosen and its memory, storage, language
+  quality and license checked before an owner-approved installation.
+- A user-supplied Hindi narration and scene prompts can still be rendered with
+  the local media engines where the relevant rendering route is enabled.
 
 ## Low-resource safety
 
