@@ -735,3 +735,14 @@ Last updated: 2026-11-17 15:52 UTC
 - Verified CI and regression tests do not prove real AI topic-to-video. Current highest blockers: three black MP4s; missing local generative AI runtime/models; no native Android app; no individually verified 60-format render matrix; no verified real research/citation + chat/document/image understanding E2E; no live YouTube OAuth/channel upload; no production web deployment.
 - Safety remains: production paused; external publishing disabled; paid services disabled unless revenue exists and owner explicitly approves; no deployment, billing activation, public publishing or destructive media action without explicit authorization.
 - Next execution tranche: (1) inspect #181 full logs and black-video forensic provenance; (2) fresh Android resource/engine probe and restart confirmation; (3) map module routes/UI/backend and close missing integration gaps; (4) build format-specific acceptance matrix and native Android app plan/build scaffold only when toolchain can verify; (5) implement highest-value assistant/research/task-graph gaps with tests; (6) continue writing evidence and checkpoints here. Every format remains individually unverified until its own real render check passes.
+
+
+## PR #183 — persistent AI assistant chat merged (2026-11-18)
+
+- PR #183 merged to main as `d2a7c4f4da394c0b00e67d91f97a3a27e5d1c646`.
+- Implemented owner-scoped SQLite conversations and ordered messages; create/list/read/rename/delete endpoints; bounded recent history context; blocked/failed generation persistence; responsive dashboard chat panel; PWA cache v14; English/Hindi README docs.
+- Exact-head CI run #1310 on SHA `130b8adf5a8f3c7e64ccbbc8f356f1fedeca966a`: **617 passed, 5 warnings** on each Python 3.11, 3.12, 3.13, 3.14; dependency audit PASS; offline branded video E2E/motion audit PASS; production Docker build and health check PASS. A first test run failed only because the shell assertion looked for an HTML id in JS; the assertion was corrected and the final exact-head run passed all jobs.
+- Chat status is PARTIALLY IMPLEMENTED: live local LLM is not currently available on Android; streaming, file/document upload, image understanding, live research/citations and general tool calling are not in this chat feature.
+- Android deployment/verification queued in FIFO order: #184 pull main; #185 restart services; #186 regression tests; #187 health audit; #188 engine probe; #189 operational readiness. Do not treat queued issues as completed.
+- Main-branch CI run #1311 for merge commit is queued at checkpoint time; await its result before claiming post-merge CI success.
+- Safety: no production render, external publishing, upload or modification of the five legacy black MP4s was performed. Three confirmed black assets remain unresolved; production and publishing stay disabled.
