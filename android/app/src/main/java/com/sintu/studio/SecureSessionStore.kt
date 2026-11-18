@@ -19,7 +19,7 @@ internal interface SessionCookieStore {
 }
 
 /** Stores the SINTU session cookie encrypted and binds it to the server origin that issued it. */
-class SecureSessionStore(context: Context) : SessionCookieStore {
+internal class SecureSessionStore(context: Context) : SessionCookieStore {
     private val preferences = context.getSharedPreferences("sintu_secure_session", Context.MODE_PRIVATE)
 
     override fun save(value: String, origin: String) {
