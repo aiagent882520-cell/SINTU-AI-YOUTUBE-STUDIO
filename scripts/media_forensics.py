@@ -461,14 +461,14 @@ def has_forensic_tool_failure(item: dict) -> bool:
 
 
 def compact_forensic_summary(report: dict) -> dict:
-    """Build a small per-file footer that survives the Termux relay's output-tail limit."""
+    """Build a bounded per-file footer that fits inside the Termux relay's 8k tail."""
     targets = []
     for item in report.get("targets", []):
         metadata = item.get("metadata") or {}
         streams = [
             {key: stream.get(key) for key in (
-                "type", "codec", "resolution", "pixel_format", "frame_rate",
-                "frame_count", "sample_rate", "channels", "duration", "start_time",
+                "type", "codec", "resolution", "pixel_format", "frame_count",
+                "sample_rate", "channels", "duration",
             )}
             for stream in metadata.get("streams", [])
         ]
@@ -481,51 +481,54 @@ def compact_forensic_summary(report: dict) -> dict:
             "streams": streams,
             "full_duration_black": item.get("full_duration_black"),
             "black_intervals": item.get("black_intervals", []),
+            "ffprobe_exit": item.get("ffprobe_exit"),
+            "blackdetect_exit": item.get("blackdetect_exit"),
             "blackframe_exit": item.get("blackframe_exit"),
             "black_frame_metrics": item.get("black_frame_metrics", {}),
-            "blackframe_error": item.get("blackframe_error"),
+            "blackframe_error": str(item.get("blackframe_error", ""))[:100],
             "decode_exit": item.get("decode_exit"),
             "frame_probe_exit": item.get("frame_probe_exit"),
             "samples": [
-                {key: sample.get(key) for key in (
-                    "sample", "seek_seconds", "timestamp", "picture_type",
-                    "sampling_method", "error",
-                )}
+                {key: (str(sample.get(key, ""))[:100] if key == "error" else sample.get(key))
+                 for key in ("sample", "seek_seconds", "timestamp", "sampling_method", "error")}
                 for sample in item.get("decoded_frame_samples", [])
             ],
             "backups": [
-                {key: backup.get(key) for key in ("path", "size_bytes", "sha256")}
+                {"path": str(backup.get("path", ""))[:120],
+                 "size_bytes": backup.get("size_bytes"), "sha256": backup.get("sha256")}
                 for backup in item.get("pre_repair_backups", [])
             ],
             "asset_reference_time_utc": item.get("asset_reference_time_utc"),
         })
     return {
         "status": report.get("status"),
-        "summary": report.get("summary", {}),
+        "summary": {
+            key: (report.get("summary") or {}).get(key)
+            for key in ("target_count", "full_duration_black_count", "forensic_tool_failure_count")
+        },
         "targets": targets,
         "candidate_source_assets": [
-            {key: asset.get(key) for key in (
-                "path", "size_bytes", "image_size", "mean_luma",
-                "luma_stddev", "near_black", "modified_utc",
-            )}
-            for asset in report.get("candidate_source_assets", [])[:10]
+            {"path": str(asset.get("path", ""))[:120],
+             "mean_luma": asset.get("mean_luma"),
+             "near_black": asset.get("near_black"),
+             "modified_utc": asset.get("modified_utc")}
+            for asset in report.get("candidate_source_assets", [])[:5]
         ],
         "production_log_matches": [
-            {"path": match.get("path"), "line": match.get("line"),
-             "excerpt": str(match.get("excerpt", ""))[:180]}
-            for match in report.get("production_log_matches", [])[:5]
+            {"path": str(match.get("path", ""))[:100], "line": match.get("line"),
+             "excerpt": str(match.get("excerpt", ""))[:100]}
+            for match in report.get("production_log_matches", [])[:3]
         ],
         "production_database_matches": [
-            {"db": match.get("db"), "table": match.get("table"),
+            {"db": str(match.get("db", ""))[:80], "table": match.get("table"),
              "column": match.get("column"),
-             "record": {key: str(value)[:80] for key, value in list(
+             "record": {key: str(value)[:60] for key, value in list(
                  (match.get("record") or {}).items()
-             )[:4]}}
-            for match in report.get("production_database_matches", [])[:5]
+             )[:2]}}
+            for match in report.get("production_database_matches", [])[:3]
         ],
         "safety": report.get("safety", {}),
     }
-
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
