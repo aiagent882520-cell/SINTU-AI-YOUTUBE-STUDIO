@@ -62,7 +62,7 @@ data class ProjectGenerateResponse(val project: ProjectDto, val task: TaskDto)
 
 internal fun sessionCookieOrigin(url: HttpUrl): String = "${url.scheme}://${url.host}:${url.port}"
 
-private class PersistentSessionCookieJar(private val store: SecureSessionStore) : CookieJar {
+internal class PersistentSessionCookieJar(private val store: SessionCookieStore) : CookieJar {
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
         cookies.firstOrNull { it.name == SESSION_COOKIE && it.matches(url) }?.let { cookie ->
             if (cookie.expiresAt <= System.currentTimeMillis()) store.clear()
