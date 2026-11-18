@@ -51,4 +51,107 @@ class SintuApiTest {
             // Expected: insecure or malformed URL must fail closed.
         }
     }
+
+    private class FakeSessionCookieStore : SessionCookieStore {
+        var value: String? = null
+        var origin: String? = null
+        var clearCount: Int = 0
+
+        override fun save(value: String, origin: String) {
+            this.value = value
+            this.origin = origin
+        }
+
+        override fun read(origin: String): String? {
+            if (this.origin != origin) {
+                clear()
+                return null
+            }
+            return value
+        }
+
+        override fun clear() {
+            value = null
+            origin = null
+            clearCount++
+        }
+    }
+
+    @Test
+    fun cookieJarPersistsAndReloadsCookieForIssuingOrigin() {
+        val store = FakeSessionCookieStore()
+        val jar = PersistentSessionCookieJar(store)
+        val url = "https://studio.example.com/".toHttpUrl()
+        val cookie = okhttp3.Cookie.parse(
+            url, "sintu_admin_session=secret; Path=/; HttpOnly"
+        )!!
+
+        jar.saveFromResponse(url, listOf(cookie))
+
+        assertEquals("https://studio.example.com:443", store.origin)
+        assertEquals("secret", jar.loadForRequest(url).single().value)
+    }
+
+    @Test
+    fun cookieJarClearsCookieWhenSchemeChanges() {
+        val store = FakeSessionCookieStore()
+        val jar = PersistentSessionCookieJar(store)
+        val https = "https://studio.example.com/".toHttpUrl()
+        val cookie = okhttp3.Cookie.parse(
+            https, "sintu_admin_session=secret; Path=/; HttpOnly"
+        )!!
+        jar.saveFromResponse(https, listOf(cookie))
+
+        assertEquals(emptyList<okhttp3.Cookie>(), jar.loadForRequest(
+            "http://studio.example.com/".toHttpUrl()
+        ))
+        assertEquals(1, store.clearCount)
+    }
+
+    @Test
+    fun cookieJarClearsCookieWhenPortChanges() {
+        val store = FakeSessionCookieStore()
+        val jar = PersistentSessionCookieJar(store)
+        val original = "https://studio.example.com/".toHttpUrl()
+        val cookie = okhttp3.Cookie.parse(
+            original, "sintu_admin_session=secret; Path=/; HttpOnly"
+        )!!
+        jar.saveFromResponse(original, listOf(cookie))
+
+        assertEquals(emptyList<okhttp3.Cookie>(), jar.loadForRequest(
+            "https://studio.example.com:8443/".toHttpUrl()
+        ))
+        assertEquals(1, store.clearCount)
+    }
+
+    @Test
+    fun cookieJarClearsExpiredCookie() {
+        val store = FakeSessionCookieStore()
+        val jar = PersistentSessionCookieJar(store)
+        val url = "https://studio.example.com/".toHttpUrl()
+        val expired = okhttp3.Cookie.Builder()
+            .name("sintu_admin_session")
+            .value("secret")
+            .hostOnlyDomain(url.host)
+            .path("/")
+            .expiresAt(System.currentTimeMillis() - 1_000)
+            .httpOnly()
+            .build()
+        store.save(expired.toString(), sessionCookieOrigin(url))
+
+        assertEquals(emptyList<okhttp3.Cookie>(), jar.loadForRequest(url))
+        assertEquals(1, store.clearCount)
+    }
+
+    @Test
+    fun cookieJarClearsMalformedPersistedCookie() {
+        val store = FakeSessionCookieStore()
+        val jar = PersistentSessionCookieJar(store)
+        val url = "https://studio.example.com/".toHttpUrl()
+        store.save("this-is-not-a-cookie", sessionCookieOrigin(url))
+
+        assertEquals(emptyList<okhttp3.Cookie>(), jar.loadForRequest(url))
+        assertEquals(1, store.clearCount)
+    }
+
 }
