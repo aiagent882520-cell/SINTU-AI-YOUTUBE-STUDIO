@@ -59,6 +59,19 @@
       <div class="integration-card"><strong>Google Flow — all video formats</strong><span>Flow creates the visual clips in your Google account. SINTU passes your topic, selected format, target settings and scene list into a ready-to-paste prompt. Download Flow clips and import them into SINTU for voice, music, subtitles, watermark and final MP4 assembly. Flow generation/credits are external; this is not a direct API connection.</span><div class="actions"><button id="openGoogleFlow" type="button">Prepare scene prompts & open Google Flow</button></div><p id="flowHandoffNotice" class="muted" role="status"></p><label for="flowPromptPreview">Google Flow prompt (manual copy if clipboard is blocked)</label><textarea id="flowPromptPreview" rows="8" readonly hidden></textarea></div>
       <div class="integration-card"><strong>Google AI Studio — app, website, software & agent builder</strong><span>Use Build mode to create full-stack web apps, Android apps, software tools, assistants and AI agents from natural-language prompts. SINTU prepares a structured build prompt; project generation runs in Google AI Studio, not inside SINTU.</span><label for="aiStudioBuildPrompt">What should AI Studio build?</label><textarea id="aiStudioBuildPrompt" rows="3" maxlength="6000" placeholder="Example: Build a Hindi AI assistant with login, dashboard, database, admin panel and secure API integration."></textarea><div class="actions"><button id="openAIStudioBuild" type="button">Prepare build prompt & open AI Studio</button></div><p id="aiStudioHandoffNotice" class="muted" role="status"></p></div>
     </section>
+    <section class="panel" id="aiChat">
+      <div class="panel-head"><div><h2>SINTU AI Assistant</h2><p>Multi-conversation Hindi/English chat. Replies use the configured local-first text model.</p></div></div>
+      <div class="grid-two">
+        <div><label for="chatConversationSelect">Conversation history</label><select id="chatConversationSelect"><option value="">New conversation</option></select></div>
+        <div><label for="chatWorkflow">Assistant mode</label><select id="chatWorkflow"><option value="content">General assistant</option><option value="research">Research & fact-check plan</option><option value="script">Script & storytelling</option><option value="shorts">YouTube Shorts</option><option value="long-video">Long video</option></select></div>
+      </div>
+      <div class="actions"><button id="chatNewConversation" class="secondary" type="button">New chat</button><button id="chatDeleteConversation" class="secondary" type="button">Delete chat</button></div>
+      <div id="chatMessages" class="result" role="log" aria-live="polite" style="min-height:140px;max-height:420px;overflow:auto;white-space:normal"><p class="muted">New chat shuru karein ya history se conversation chunein.</p></div>
+      <label for="chatMessageInput">Message</label>
+      <textarea id="chatMessageInput" rows="3" maxlength="12000" placeholder="SINTU se kuch bhi poochhein… (Ctrl + Enter to send)"></textarea>
+      <div class="actions"><button id="chatSendMessage" type="button">Send message</button></div>
+      <p id="chatNotice" class="muted" role="status" aria-live="polite">Local AI model unavailable ho to SINTU blocked status dikhayega; paid fallback automatic nahi hai.</p>
+    </section>
     <section class="panel">
       <div class="panel-head"><div><h2>MP4 Storyboard Renderer</h2><p>AI clips, still-image scenes aur local 2D character animation ko voiceover, music, SFX, subtitles aur camera movement ke saath final MP4 mein banayein.</p></div></div>
       <label for="renderFormat">Video format</label>
