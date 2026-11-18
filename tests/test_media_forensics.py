@@ -231,9 +231,7 @@ def test_frame_sample_falls_back_to_sequential_decode_after_inaccurate_seek(tmp_
         assert command[command.index("-read_intervals") + 1] == "0%+6.000000"
         return {
             "returncode": 0,
-            "stdout": '{"frames":['
-                      '{"best_effort_timestamp_time":"4.958333","pict_type":"P"},'
-                      '{"best_effort_timestamp_time":"5.041667","pict_type":"B"}]}',
+            "stdout": "4.958333,P\\n5.041667,B\\n",
             "stderr": "",
         }
 
@@ -245,6 +243,41 @@ def test_frame_sample_falls_back_to_sequential_decode_after_inaccurate_seek(tmp_
     assert sample["error"] == ""
     assert len(calls) == 2
     assert calls[1][1] == 120
+
+
+def test_sequential_fallback_parses_late_timestamp_from_compact_csv(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run(command, timeout=120):
+        calls.append(command)
+        if "-read_intervals" in command and command[command.index("-read_intervals") + 1] != "0%+9.000000":
+            return {"returncode": 0, "stdout": '{"frames":[]}', "stderr": ""}
+        rows = [f"{index / 24:.6f},P" for index in range(217)]
+        return {"returncode": 0, "stdout": "\\n".join(rows), "stderr": ""}
+
+    monkeypatch.setattr(media_forensics, "run", fake_run)
+    sample = media_forensics.sample_decoded_frame(tmp_path / "clip.mp4", 8.9, "last")
+    assert sample["timestamp"] is not None
+    assert float(sample["timestamp"]) >= 8.9
+    assert sample["sampling_method"] == "sequential_fallback_from_start"
+    assert sample["error"] == ""
+    assert calls[-1][calls[-1].index("-of") + 1] == "csv=p=0"
+
+
+def test_run_preserves_bounded_head_and_tail_for_large_filter_lists(monkeypatch):
+    from types import SimpleNamespace
+
+    output = "blackdetect\\n" + ("x" * 600_000) + "\\nblackframe\\nfps\\nscale"
+    monkeypatch.setattr(
+        media_forensics.subprocess, "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=output, stderr=""),
+    )
+    result = media_forensics.run(["ffmpeg", "-filters"])
+    assert "blackdetect" in result["stdout"]
+    assert "blackframe" in result["stdout"]
+    assert "fps" in result["stdout"]
+    assert "scale" in result["stdout"]
+    assert len(result["stdout"]) < 513_000
 
 
 def test_real_ffprobe_inaccurate_seek_recovers_with_sequential_fallback(tmp_path):
