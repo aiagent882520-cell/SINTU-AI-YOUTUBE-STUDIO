@@ -231,3 +231,13 @@ Last updated: 2026-11-17 15:52 UTC
 - PR #122 full required checks all PASS and PR merged as `f2d7bfdbd4914ea17252937ce49332c687b0ddc8`.
 - PR #121 matrix results: Python 3.11/3.12/3.13/3.14 each 571 passed, 5 warnings; security audit and Docker build PASS. Offline video E2E still running at the time of this checkpoint.
 - Termux #118–#120 still queued and unclaimed. No fresh Android forensic report or Android regression result. Five original MP4s untouched; no YouTube OAuth/channel verification. Public publishing disabled and production paused.
+
+
+### PR #121 merged; Termux deployment queued — 2026-11-18
+
+- PR #121 merged successfully as `c0da836f11deb183ef3e2d83e621b378ae91c331` (squash). Expected head `59dccf282461cce0989d198b1cea1b51366303c8`; GitHub reported mergeable clean and all 7 checks completed PASS.
+- PR #121 Python matrix: Python 3.11, 3.12, 3.13, 3.14 each `571 passed, 5 warnings`; dependency security audit PASS; production Docker build PASS; offline branded video E2E/motion audit PASS.
+- PR #122 previously merged as `f2d7bfdbd4914ea17252937ce49332c687b0ddc8`; its Python matrix each `566 passed, 5 warnings`; security audit, Docker build, and offline E2E all PASS.
+- New Termux fast-forward deployment command queued as Issue #undefined. It is deliberately behind existing queued Android jobs #118–#120; no Android deployment is claimed until a device-side completion comment confirms the commit.
+- Once Termux reports the fast-forward result, restart services and run fresh read-only `media_forensics` plus Android regression. The relay has not yet claimed #118–#120, so device-side work remains blocked.
+- The five original MP4s remain untouched. OAuth/channel credentials remain absent. Public upload disabled; production PAUSED.
