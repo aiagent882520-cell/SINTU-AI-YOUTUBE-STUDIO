@@ -89,9 +89,15 @@ def test_frame_samples_use_independent_timestamp_probes(tmp_path, monkeypatch):
 
 
 def test_frame_sample_reports_missing_frame_without_failing_report(tmp_path, monkeypatch):
-    monkeypatch.setattr(media_forensics, "run", lambda *args, **kwargs: {
-        "returncode": 0, "stdout": '{"frames":[]}', "stderr": ""
-    })
+    def fake_run(command, timeout=120):
+        interval = command[command.index("-read_intervals") + 1]
+        return {
+            "returncode": 0,
+            "stdout": '{"frames":[]}' if not interval.startswith("0%+") else "",
+            "stderr": "",
+        }
+
+    monkeypatch.setattr(media_forensics, "run", fake_run)
     sample = media_forensics.sample_decoded_frame(tmp_path / "clip.mp4", 2.0, "middle")
     assert sample["timestamp"] is None
     assert sample["error"] == "no decoded frame found at requested timestamp"
