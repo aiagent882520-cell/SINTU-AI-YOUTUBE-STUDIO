@@ -4884,8 +4884,9 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput, 
                      "video": "supplied-local-clips-or-procedural-2D-if-requested"},
         )
     except Exception as exc:
-        output_file = OUTPUT_DIR / render_data["filename"]
-        output_file.unlink(missing_ok=True)
+        filename = render_data.get("filename") if isinstance(render_data, dict) else None
+        if isinstance(filename, str) and filename and Path(filename).name == filename:
+            (OUTPUT_DIR / filename).unlink(missing_ok=True)
         raise HTTPException(status_code=502, detail="Render provenance could not be saved; MP4 result is withheld.") from exc
     render_data["provenance_manifest"] = manifest["manifest_path"]
     try:
