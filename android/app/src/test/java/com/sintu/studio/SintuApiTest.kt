@@ -1,6 +1,8 @@
 package com.sintu.studio
 
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.fail
 import org.junit.Test
 
@@ -25,6 +27,14 @@ class SintuApiTest {
     fun remotePlainHttpIsRejected() {
         assertRejected("http://studio.example.com")
         assertRejected("http://[::1]:8000")
+    }
+
+    @Test
+    fun persistedSessionCookieOriginIsHostAndPortBound() {
+        val studio = sessionCookieOrigin("https://studio.example.com/".toHttpUrl())
+        assertEquals("https://studio.example.com:443", studio)
+        assertNotEquals(studio, sessionCookieOrigin("https://attacker.example/".toHttpUrl()))
+        assertNotEquals(studio, sessionCookieOrigin("https://studio.example.com:8443/".toHttpUrl()))
     }
 
     @Test
