@@ -31,7 +31,7 @@ def test_final_mp4_verification_accepts_expected_video_and_audio(tmp_path, monke
     output = tmp_path / "final.mp4"
     output.write_bytes(b"mp4")
     result = _verify_rendered_output(output, 720, 1280, 8, require_audio=True)
-    assert result == {"duration_seconds": 8.0, "video_duration_seconds": 8.0, "frame_count": 240, "fps": 30.0, "resolution": "720x1280", "video_codec": "h264", "audio": True}
+    assert result == {"duration_seconds": 8.0, "video_duration_seconds": 8.0, "frame_count": 240, "fps": 30.0, "resolution": "720x1280", "video_codec": "h264", "audio": True, "black_intervals": [], "longest_black_segment_seconds": 0.0, "visible_frame_count": 1, "sampled_frame_count": 1}
 
 
 @pytest.mark.parametrize("metadata", [
@@ -148,3 +148,109 @@ def test_final_mp4_verification_returns_motion_metrics_for_long_video(tmp_path, 
     output.write_bytes(b"mp4")
     result = _verify_rendered_output(output, 720, 1280, 12, require_audio=True)
     assert result["motion_audit"]["motion_ratio"] == 1.0
+
+
+def test_publish_gate_rejects_full_duration_black_mp4_even_with_valid_audio(tmp_path):
+    import shutil
+    import subprocess
+
+    from app.video_renderer import verify_publishable_mp4
+    from scripts.repair_media import needs_audio_repair
+
+    ffmpeg = shutil.which("ffmpeg")
+    ffprobe = shutil.which("ffprobe")
+    if not ffmpeg or not ffprobe:
+        pytest.skip("FFmpeg and FFprobe are required for the real black-frame gate test")
+    black = tmp_path / "black-with-valid-audio.mp4"
+    created = subprocess.run([
+        ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "color=c=black:s=720x1280:r=24:d=4",
+        "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=4",
+        "-map", "0:v:0", "-map", "1:a:0", "-c:v", "libx264", "-preset", "ultrafast",
+        "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "48000", "-ac", "2",
+        "-shortest", "-movflags", "+faststart", str(black),
+    ], capture_output=True, timeout=60, check=False)
+    assert created.returncode == 0, created.stderr.decode("utf-8", "replace")
+
+    probe = subprocess.run([
+        ffprobe, "-v", "error", "-show_streams", "-of", "json", str(black)
+    ], capture_output=True, text=True, timeout=30, check=False)
+    assert probe.returncode == 0
+    metadata = json.loads(probe.stdout)
+    assert needs_audio_repair(metadata) is False
+    with pytest.raises(RenderFailed, match="full-duration black"):
+        verify_publishable_mp4(black)
+
+
+def test_publish_gate_allows_short_clip_with_visible_content_and_partial_black_intro(tmp_path):
+    import shutil
+    import subprocess
+
+    from app.video_renderer import verify_publishable_mp4
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("FFmpeg is required for the real partial-black integration test")
+    candidate = tmp_path / "visible-after-intro.mp4"
+    created = subprocess.run([
+        ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "color=c=black:s=720x1280:r=24:d=2",
+        "-f", "lavfi", "-i", "color=c=red:s=720x1280:r=24:d=6",
+        "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0[v]",
+        "-map", "[v]", "-c:v", "libx264", "-preset", "ultrafast",
+        "-pix_fmt", "yuv420p", "-t", "8", "-movflags", "+faststart", str(candidate),
+    ], capture_output=True, timeout=60, check=False)
+    assert created.returncode == 0, created.stderr.decode("utf-8", "replace")
+    result = verify_publishable_mp4(candidate)
+    assert result["verified"] is True
+    assert result["duration_seconds"] == pytest.approx(8.0, abs=0.1)
+
+
+def test_publish_gate_rejects_long_black_segment_even_when_most_frames_are_visible(tmp_path, monkeypatch):
+    import shutil
+    import subprocess
+
+    from app.video_renderer import verify_publishable_mp4
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("FFmpeg is required for the real long-black-segment test")
+    candidate = tmp_path / "long-black-segment.mp4"
+    created = subprocess.run([
+        ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "color=c=black:s=720x1280:r=24:d=3.2",
+        "-f", "lavfi", "-i", "color=c=red:s=720x1280:r=24:d=8.8",
+        "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0[v]",
+        "-map", "[v]", "-c:v", "libx264", "-preset", "ultrafast",
+        "-pix_fmt", "yuv420p", "-t", "12", "-movflags", "+faststart", str(candidate),
+    ], capture_output=True, timeout=60, check=False)
+    assert created.returncode == 0, created.stderr.decode("utf-8", "replace")
+    with pytest.raises(RenderFailed, match="lamba black segment"):
+        verify_publishable_mp4(candidate)
+
+
+def test_render_gate_rejects_long_black_segment_before_publishing_output(tmp_path):
+    import shutil
+    import subprocess
+
+    from app.video_renderer import _verify_rendered_output
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("FFmpeg is required for the real render-time black-segment test")
+    candidate = tmp_path / "render-with-black-intro.mp4"
+    created = subprocess.run([
+        ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "color=c=black:s=720x1280:r=24:d=3.2",
+        "-f", "lavfi", "-i", "testsrc2=s=720x1280:r=24:d=8.8",
+        "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0[v]",
+        "-map", "[v]", "-c:v", "libx264", "-preset", "ultrafast",
+        "-pix_fmt", "yuv420p", "-r", "24", "-t", "12", "-movflags", "+faststart",
+        str(candidate),
+    ], capture_output=True, timeout=90, check=False)
+    assert created.returncode == 0, created.stderr.decode("utf-8", "replace")
+    with pytest.raises(RenderFailed, match="lamba black segment"):
+        _verify_rendered_output(
+            candidate, 720, 1280, 12, require_audio=False, expected_fps=24,
+            minimum_motion_ratio=0.40,
+        )

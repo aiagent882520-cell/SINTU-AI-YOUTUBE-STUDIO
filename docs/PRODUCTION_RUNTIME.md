@@ -23,6 +23,11 @@ On application startup, runs left in `running` or `reviewing` are moved to `paus
 
 ## Render-time motion quality gate
 
-Storyboard rendering defaults to a per-scene cinematic zoom/pan. Storyboards longer than eight seconds cannot select static/no-motion mode. Before a long MP4 is published to the output directory, the renderer samples actual decoded frames and rejects frozen or slideshow-like motion; camera-motion storyboards require at least 60% moving sampled transitions, while assembled source-video timelines require at least 20%. The measured motion ratio is returned with render metadata. A failed quality gate deletes the temporary render instead of exposing a weak MP4.
+Storyboard rendering defaults to a per-scene cinematic zoom/pan. Storyboards longer than eight seconds cannot select static/no-motion mode. Before an MP4 is published to the output directory, the renderer samples actual decoded frames, rejects full-duration black output and long black intervals (at least max(2.5 seconds, 25% of clip duration)), and rejects clips with fewer than 70% visible sampled frames. It also rejects frozen or slideshow-like motion for long clips; camera-motion storyboards require at least 60% moving sampled transitions, while assembled source-video timelines require at least 20%. The measured black-frame and motion diagnostics are returned with render metadata. A failed quality gate deletes the temporary render instead of exposing a weak MP4.
 
 The render API and Studio UI now default to slow cinematic zoom-in. Explicit static/no-motion mode is limited to clips of eight seconds or less. The same sampled-motion verifier also runs before a long MP4 can be passed to YouTube upload verification, so a frozen export is blocked before publishing.
+
+
+## Upload-time visual integrity gate
+
+Every upload path that calls `verify_publishable_mp4` must fail closed if FFprobe or FFmpeg is unavailable, the MP4/container/video stream is invalid, duration/frame metadata is inconsistent, or frame decoding fails. The gate detects full-duration black output and rejects a black interval at least `max(2.5 seconds, 25% of clip duration)`. It samples up to 600 decoded frames uniformly across the entire clip (up to 2 frames/second), and requires at least 70% of sampled frames to contain visible pixel content. The report includes black intervals, longest black segment, sample count and visible-frame count. This is a conservative technical screen, not a substitute for human review of narrative quality or actual playback on the target device.
