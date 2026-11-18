@@ -848,3 +848,24 @@ def test_nearby_assets_includes_generated_music_directory(tmp_path, monkeypatch)
     assert assets[0]["path"] == "generated_music/nearby.wav"
     assert assets[0]["size_bytes"] == music.stat().st_size
 
+
+def test_forensics_reports_generated_wav_duration_and_format(tmp_path, monkeypatch):
+    import wave
+
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    music_dir = tmp_path / "generated_music"
+    music_dir.mkdir()
+    music = music_dir / "six-seconds.wav"
+    with wave.open(str(music), "wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(22050)
+        audio.writeframes(b"\\x00\\x00" * (22050 * 6))
+
+    report = media_forensics.inspect_asset(music)
+
+    assert report["audio_duration_seconds"] == 6.0
+    assert report["audio_sample_rate"] == 22050
+    assert report["audio_channels"] == 1
+    assert report["audio_sample_width_bytes"] == 2
+
