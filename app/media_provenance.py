@@ -70,6 +70,8 @@ def write_render_manifest(
     }
     manifest_dir = root / "production_manifests"
     manifest_dir.mkdir(parents=True, exist_ok=True)
+    if manifest_dir.is_symlink() or not manifest_dir.resolve().is_relative_to(root):
+        raise ValueError("Production manifest directory must remain inside DATA_DIR.")
     destination = manifest_dir / f"{run_id}-{Path(output['path']).stem}.json"
     fd, temporary_name = tempfile.mkstemp(prefix=".manifest-", suffix=".tmp", dir=manifest_dir)
     try:
