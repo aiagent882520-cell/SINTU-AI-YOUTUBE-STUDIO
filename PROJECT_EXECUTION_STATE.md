@@ -331,3 +331,10 @@ Last updated: 2026-11-17 15:52 UTC
 - FFprobe's official documentation explicitly warns both that interval seeking is not accurate and that the relative interval end is computed from the seek point actually found. Therefore the **forensic sampler code defect is CONFIRMED**. Exact per-file seek offsets on the five Termux MP4s remain unavailable because the result comment was tail-truncated.
 - PR #136 now includes both a mocked regression test and a real FFmpeg/FFprobe long-GOP integration regression. The fallback remains bounded to 120 seconds and reports failure if no qualifying frame is decoded; it never masks missing tools or decode errors.
 - This finding does not identify why the five encoded video streams contain black pixels. Renderer/source-asset root cause remains UNKNOWN pending full source/render provenance and a new device forensic report.
+
+
+### Relay-safe forensic evidence footer — 2026-11-18
+
+- The failed #125 comment retained only the final 8,000 characters, cutting off the first part of the one-line JSON and preventing a complete per-file audit from the GitHub result.
+- PR #136 now adds a compact `SINTU_FORENSICS_SUMMARY=` footer after the full JSON. It preserves all five targets' hashes, sizes, duration/streams, black intervals, decode/sample exit data, sample errors/methods, backup hashes, source-candidate image metrics, provenance match counts and safety flags within the relay's output tail.
+- A regression test asserts the compact footer retains per-file evidence and remains under the 8,000-character relay cap for the fixture.
