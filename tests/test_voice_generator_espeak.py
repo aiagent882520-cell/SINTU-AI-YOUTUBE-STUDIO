@@ -65,3 +65,29 @@ def test_espeak_generates_validated_local_hindi_wav(tmp_path, monkeypatch):
     assert result["format"] == "WAV"
     assert result["local"] is True
     assert (tmp_path / result["filename"]).is_file()
+
+
+def test_local_engine_prefers_termux_espeak_ng_binary(monkeypatch):
+    monkeypatch.delenv("ESPEAK_EXECUTABLE", raising=False)
+    monkeypatch.delenv("PIPER_EXECUTABLE", raising=False)
+    monkeypatch.delenv("PIPER_MODEL_PATH", raising=False)
+
+    def which(name):
+        return "/data/data/com.termux/files/usr/bin/espeak-ng" if name == "espeak-ng" else None
+
+    monkeypatch.setattr(voice_generator.shutil, "which", which)
+    monkeypatch.setattr(
+        voice_generator.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=0,
+            stdout="Pty Language Age/Gender VoiceName File\\n 5 hi M Hindi\\n",
+            stderr="",
+        ),
+    )
+
+    assert voice_generator._local_tts_engines() == (
+        "eSpeak NG Hindi",
+        "/data/data/com.termux/files/usr/bin/espeak-ng",
+        None,
+    )
