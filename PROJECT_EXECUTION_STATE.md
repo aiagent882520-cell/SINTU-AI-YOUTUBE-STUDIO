@@ -553,3 +553,14 @@ Last updated: 2026-11-17 15:52 UTC
 - Audit safety fields: `paid_services_used=false`, `publishing_performed=false`.
 - The audit confirms that the quality gate still blocks these five videos. It does not prove they are repaired; they remain unresolved.
 
+
+
+
+### PR #165 — independent decoded-pixel verification merged — 2026-11-18
+- PR #165 passed exact-head CI run #1272: Python 3.11, 3.12, 3.13, 3.14 PASS; dependency security audit PASS; offline branded-video E2E/motion audit PASS; production Docker build PASS.
+- PR #165 squash-merged to `main` as `86e584103471c65de5bfabca567195ae870d809a`.
+- The forensic tool now extracts actual decoded thumbnails at five distributed FFprobe timestamps (first, quarter, middle, three-quarter, last), using FFmpeg sequential decode into temporary 64x64 PNGs, Pillow grayscale histograms and pixel statistics (mean luma, standard deviation, <=16 luma black-pixel percentage, strict near-black flag). Temporary thumbnails are removed automatically. Pixel extraction failures, timeout and temp-storage errors fail closed and set `pixel_probe_exit=1`.
+- Pixel metrics are included per sample and in the compact Termux footer. This is independent decoded-pixel evidence to resolve the blackdetect/blackframe disagreement. It is not yet run on the five originals.
+- Exact-head PR CI #1272 passed all 7 jobs. Main post-merge CI run is pending/in progress at this checkpoint.
+- Android Issue #127 remains OPEN/RUNNING with no final output/exit code. Issue #159 watchdog recovery test and #160 pull latest main, #161 media forensic rerun, #162 full tests, #163 self-test, #164 health audit remain queued. The queue should pull commit `86e5841` before the new forensic run.
+- Five MP4s remain UNRESOLVED. No repair, regeneration, deletion, overwrite, upload, or publishing has occurred. Keep production PAUSED and public publishing DISABLED.
