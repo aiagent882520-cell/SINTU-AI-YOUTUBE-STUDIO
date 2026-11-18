@@ -677,3 +677,17 @@ Last updated: 2026-11-17 15:52 UTC
 - Startup now verifies process command identity for API, bridge worker, relay and watchdog PID files. If a readable PID belongs to another process, it clears only the stale PID-file reference and never signals that unrelated process. If identity cannot be read, it fails closed. A healthy API is not duplicated. Watchdog clears verified stale references and restarts normally.
 - Removed automatic llama-server startup from core service recovery; optional model startup must be explicitly chosen to avoid surprise RAM consumption.
 - Android has not yet pulled PR #168; current Termux tree is at PR #166 commit `b93538d`. Queue a fresh pull and watchdog recovery test after current #172–#174 health/test/self-test jobs finish.
+
+
+
+### Post-PR #166 Android Health Audit #172 — final result, 2026-11-18 12:19:47 UTC
+- Issue #172 completed FAIL / exit 1 as expected because the three genuine black MP4s remain unresolved.
+- Pytest: **610 passed, 5 warnings in 259.00s (4m19s)**.
+- Health checks: **15 PASS, 0 WARN, 3 FAIL** out of 18. The only failed checks are:
+  - `3f4c2151e8e640109f464b2c2e9b7569.mp4`
+  - `59430f1fb7fd4bdf80cf8b7d9f456098.mp4`
+  - `8cfe9da88d5c43d184f3572e371ff4a6.mp4`
+- The two dark-visible files `adf9268e...` and `afa4c87e...` now PASS health audit; no black false positives remain.
+- Other media checks, including two 32.04-second videos, passed motion audit (7/31 and 23/31 moving transitions respectively).
+- Safety fields: `paid_services_used=false`, `publishing_performed=false`.
+- Issue #173 Android regression is RUNNING; #174 self-test is queued. PR #169 server-side default-off production/publishing gate remains open with Python/security checks PASS and Docker/E2E running.
