@@ -3,7 +3,7 @@ set -euo pipefail
 
 has_ffmpeg=0
 if command -v ffmpeg >/dev/null 2>&1 && command -v ffprobe >/dev/null 2>&1; then
-  if ffmpeg -hide_banner -filters 2>/dev/null | grep -q subtitles; then
+  if ffmpeg -hide_banner -filters 2>/dev/null | grep 'subtitles' >/dev/null; then
     has_ffmpeg=1
   fi
 fi
