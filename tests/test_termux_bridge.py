@@ -319,3 +319,57 @@ def test_worker_maps_watchdog_recovery_test_to_fixed_script(monkeypatch):
     assert worker.command_for({"action": "watchdog_recovery_test", "payload": {}}) == [
         "/sintu/.venv/bin/python", "scripts/watchdog_recovery_test.py", "--json"
     ]
+
+
+def test_bridge_worker_returns_restart_after_successful_restart_job(monkeypatch):
+    from scripts import termux_bridge_worker as worker
+
+    calls = []
+
+    def fake_request_json(path, method="GET", payload=None):
+        calls.append((path, method, payload))
+        if path.endswith("/jobs/next"):
+            return {
+                "job_id": "a" * 32,
+                "action": "restart_services",
+                "payload": {},
+            }
+        return {}
+
+    monkeypatch.setattr(worker, "request_json", fake_request_json)
+    monkeypatch.setattr(worker, "execute", lambda job: (0, "restart scheduled"))
+
+    assert worker.run_once() == "restart"
+    assert calls[-1][1] == "POST"
+    assert calls[-1][2]["status"] == "succeeded"
+
+
+def test_bridge_worker_exits_instead_of_polling_after_restart(monkeypatch):
+    import sys
+    from scripts import termux_bridge_worker as worker
+
+    calls = []
+    monkeypatch.setattr(worker, "TOKEN", "worker-token-that-is-at-least-32-bytes")
+    monkeypatch.setattr(sys, "argv", ["termux_bridge_worker"])
+    monkeypatch.setattr(worker, "run_once", lambda: calls.append("restart") or "restart")
+
+    assert worker.main() == 0
+    assert calls == ["restart"]
+
+
+def test_bridge_worker_stops_after_restart_even_if_acknowledgement_fails(monkeypatch):
+    from scripts import termux_bridge_worker as worker
+
+    def fake_request_json(path, method="GET", payload=None):
+        if path.endswith("/jobs/next"):
+            return {
+                "job_id": "b" * 32,
+                "action": "restart_services",
+                "payload": {},
+            }
+        raise RuntimeError("temporary bridge outage")
+
+    monkeypatch.setattr(worker, "request_json", fake_request_json)
+    monkeypatch.setattr(worker, "execute", lambda job: (0, "restart scheduled"))
+
+    assert worker.run_once() == "restart"
