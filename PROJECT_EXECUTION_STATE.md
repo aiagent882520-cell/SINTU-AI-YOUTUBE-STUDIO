@@ -890,3 +890,26 @@ Evidence: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/commit/c
 3. PR #190 may be considered for review only after its full scope/limitations are understood; green CI and APK artifact do not establish full Android product readiness.
 4. Continue the topic-to-final-MP4 E2E, all 60 format acceptance checks, all 15 module integration checks, website/backend, worker recovery and YouTube security/resumable-upload gaps.
 5. Keep production rendering paused and external publishing disabled until real local engines and device E2E are verified. No paid services, model downloads, production deployment, PR merge or public publishing without explicit owner authorization.
+
+## Execution update — 2026-11-18 15:07 UTC — forensic scanner and render provenance
+
+### PR #191 — generated music forensic scanner
+- Exact head `e091558c9b0417f16618369ce6e06d6e6961078b`; SINTU CI run `44329127820` completed SUCCESS (7/7): Python 3.11–3.14, dependency security audit, production Docker build and offline branded-video E2E/motion audit.
+- `scripts/media_forensics.py` now scans `generated_music/` and records WAV duration, sample rate, channels, sample width and frame count. Regression tests cover directory discovery and WAV metadata.
+- PR #191 is OPEN and marked Ready for review; not merged.
+
+### PR #192 — project execution checkpoint
+- Exact head before this update `dc568fdee1dbd6951cc3edc13b5547ed2868bcbf`; SINTU CI run `44329659494` completed SUCCESS (7/7): Python 3.11–3.14, dependency security audit, Docker build and offline branded-video E2E/motion audit.
+- This PR remains documentation-only and draft; no merge performed.
+
+### PR #193 — content-addressed render provenance
+- Branch `feature/production-media-provenance`; latest exact head `3a12f1ce6d7f0563c5bf759c016390ca0f8386e2`; CI run `44331204541` at this checkpoint: Python 3.11/3.12/3.13/3.14 PASS, dependency security audit PASS, production Docker image build and health check PASS; offline branded-video E2E/motion audit still IN_PROGRESS.
+- Adds atomic private JSON manifests for both approved production render routes (`produce-media` and `render`). Each manifest records run ID, format ID, topic SHA-256 (not raw topic), relative paths, sizes and SHA-256 for final MP4 and supplied/generated source assets, render settings and engine labels.
+- Paths are confined to `SINTU_DATA_DIR`; symlink/path escapes are rejected. A render is withheld if its manifest cannot be saved. API tests assert manifest attachment; dedicated helper tests verify hashes, privacy, path boundaries, invalid run IDs and missing outputs.
+- Initial CI found and fixed three test/implementation issues: literal backslash-n in JSON terminator, route test doubles missing a real output filename, and unsafe cleanup when a mocked render result lacked filename. Exact-head CI is required for final approval.
+- PR #193 remains OPEN + DRAFT; not merged. The manifest supports future provenance only; it does not retroactively identify the source of the three existing black MP4s.
+
+### Evidence boundaries / safety
+- The three first targets remain pixel-confirmed full-black files. Their historic per-file generation inputs are not conclusively attributed. The generated music WAV at `2026-11-13T02:42:34.789838Z` and the third MP4 backup at `02:42:36.833838Z` are temporally correlated by 2.044 seconds, but this is not proof that the WAV caused or supplied video frames.
+- The old concat/fade renderer defect was reproduced with bright inputs and the fix is already on main. Exact production request linkage for each historic MP4 remains unknown.
+- Do not alter originals/backups, regenerate or publish any target until source inputs are proven and owner review is completed. Production rendering and external publishing gates remain closed.
