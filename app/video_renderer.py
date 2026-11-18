@@ -391,12 +391,22 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
             r"black_start:([0-9.]+)\s+black_end:([0-9.]+)", black.stderr
         )
     ]
+    longest_black_seconds = max((end - start for start, end in black_intervals), default=0.0)
     if any(start <= 0.1 and end >= duration * 0.95 for start, end in black_intervals):
         raise RenderFailed("Upload MP4 mein full-duration black video frames hain; publishing blocked.")
+    maximum_black_segment = max(2.5, duration * 0.25)
+    if longest_black_seconds >= maximum_black_segment:
+        raise RenderFailed(
+            f"Upload MP4 mein lamba black segment hai ({longest_black_seconds:.2f}s); publishing blocked."
+        )
 
+    # Uniformly distribute up to 600 frame samples across the entire duration.
+    # This avoids inspecting only the opening 10 minutes of a longer render.
+    sample_rate = min(2.0, 600.0 / duration)
     try:
         pixels = subprocess.run(
-            [ffmpeg, "-v", "error", "-i", str(path), "-vf", "fps=1,scale=32:32",
+            [ffmpeg, "-v", "error", "-i", str(path), "-vf",
+             f"fps={sample_rate:.8f},scale=32:32",
              "-frames:v", "600", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
             capture_output=True, timeout=45, check=False,
         )
@@ -439,6 +449,10 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
         "verified": True, "size_bytes": size, "duration_seconds": duration,
         "video_duration_seconds": video_duration, "frame_count": frame_count,
         "fps": fps, "resolution": f"{width}x{height}", "video_codec": codec,
+        "black_intervals": black_intervals,
+        "longest_black_segment_seconds": round(longest_black_seconds, 3),
+        "sampled_frame_count": len(sampled_frames),
+        "visible_frame_count": visible_frames,
         "motion_audit": motion_audit,
     }
 
