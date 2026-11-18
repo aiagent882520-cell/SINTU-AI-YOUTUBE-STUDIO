@@ -4833,12 +4833,67 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput, 
     if not payload.image_ids and not payload.video_ids and not payload.timeline and not payload.timeline_items:
         raise HTTPException(status_code=400, detail="Final production render requires supplied scene images, AI video clips or a mixed media timeline; scene descriptions alone are not visuals.")
     rendered = render_video(payload)
+    render_data = rendered.get("render", rendered) if isinstance(rendered, dict) else rendered
+    asset_paths = []
+    for image_id in payload.image_ids:
+        asset_paths.append(IMAGE_DIR / f"{image_id}.jpg")
+    for video_id in payload.video_ids:
+        asset_paths.append(AI_VIDEO_DIR / f"{video_id}.mp4")
+    for item in payload.timeline_items:
+        asset_paths.append(
+            (IMAGE_DIR / f"{item.asset_id}.jpg") if item.kind == "image"
+            else (AI_VIDEO_DIR / f"{item.asset_id}.mp4")
+        )
+    for entry in payload.timeline:
+        image_match = re.fullmatch(r"image:([a-f0-9]{32}):\\d{1,2}:(?:cut|fade)", entry.strip())
+        video_match = re.fullmatch(r"video:([a-f0-9]{32}):.*", entry.strip())
+        if image_match:
+            asset_paths.append(IMAGE_DIR / f"{image_match.group(1)}.jpg")
+        elif video_match:
+            asset_paths.append(AI_VIDEO_DIR / f"{video_match.group(1)}.mp4")
+    for item in (rendered.get("scene_images") or []):
+        image_id = item.get("image_id") if isinstance(item, dict) else None
+        if isinstance(image_id, str) and re.fullmatch(r"[a-f0-9]{32}", image_id):
+            asset_paths.append(IMAGE_DIR / f"{image_id}.jpg")
+    if payload.audio_id:
+        audio_mp3 = AUDIO_DIR / f"{payload.audio_id}.mp3"
+        asset_paths.append(audio_mp3 if audio_mp3.is_file() else AUDIO_DIR / f"{payload.audio_id}.wav")
+    if payload.music_id:
+        music_matches = list(MUSIC_DIR.glob(payload.music_id + ".*"))
+        if music_matches:
+            asset_paths.append(music_matches[0])
+    try:
+        manifest = write_render_manifest(
+            data_dir=DATA_DIR,
+            run_id=run_id,
+            format_id=run["format_id"],
+            topic=run.get("topic", ""),
+            output_path=OUTPUT_DIR / render_data["filename"],
+            asset_paths=asset_paths,
+            settings={
+                "resolution": payload.resolution or "format-default",
+                "fps": payload.fps,
+                "quality": payload.quality,
+                "seconds_per_scene": payload.seconds_per_scene,
+                "scene_count": len(payload.scenes),
+                "transition": payload.transition,
+                "motion": payload.motion,
+                "auto_generate_images": payload.auto_generate_images,
+            },
+            engines={"renderer": "FFmpeg", "image": "ComfyUI/local-or-procedural-if-requested",
+                     "video": "supplied-local-clips-or-procedural-2D-if-requested"},
+        )
+    except Exception as exc:
+        output_file = OUTPUT_DIR / render_data["filename"]
+        output_file.unlink(missing_ok=True)
+        raise HTTPException(status_code=502, detail="Render provenance could not be saved; MP4 result is withheld.") from exc
+    render_data["provenance_manifest"] = manifest["manifest_path"]
     try:
         updated = attach_render_result(run_id, rendered, owner)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return {"run_id": run_id, "status": updated["status"], "render": rendered,
-            "published": False, "detail": "Final MP4 rendered and attached. YouTube publishing still requires separate approval."}
+            "published": False, "detail": "Final MP4 rendered, provenance recorded and attached. YouTube publishing still requires separate approval."}
 
 
 @app.get("/api/production/runs/{run_id}")
