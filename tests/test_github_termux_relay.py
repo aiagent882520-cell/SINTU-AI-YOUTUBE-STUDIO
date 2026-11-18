@@ -221,3 +221,30 @@ def test_relay_returns_queued_jobs_in_oldest_first_order():
     queued_url = next(url for url in github.urls if "labels=sintu-command-queued" in url)
     assert "sort=created" in queued_url
     assert "direction=asc" in queued_url
+
+
+def test_relay_preserves_compact_forensic_footer_with_20k_output_limit(monkeypatch):
+    import subprocess
+
+    class FakeGitHub:
+        def __init__(self):
+            self.comments = []
+            self.updates = []
+
+        def update_issue(self, number, **fields):
+            self.updates.append((number, fields))
+
+        def comment(self, number, body):
+            self.comments.append(body)
+
+    footer = "SINTU_FORENSICS_SUMMARY={\"status\":\"READ_ONLY_FORENSICS\"}"
+    stdout = ("x" * 9000) + footer
+    monkeypatch.setattr(
+        relay.subprocess, "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0, stdout, ""),
+    )
+    github = FakeGitHub()
+    issue = {"number": 145, "body": '{"action":"git_status"}'}
+    assert relay.process_issue(github, issue) is False
+    assert footer in github.comments[-1]
+    assert len(github.comments[-1]) > 9000
