@@ -209,3 +209,33 @@ def test_av_sync_does_not_assume_missing_start_timestamps_are_zero():
         {"type": "audio", "duration": "10.0"},
     ])
     assert report["status"] == "insufficient_stream_timing_metadata"
+
+
+def test_frame_sample_falls_back_to_sequential_decode_after_inaccurate_seek(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run(command, timeout=120):
+        calls.append((command, timeout))
+        if len(calls) == 1:
+            return {
+                "returncode": 0,
+                "stdout": '{"frames":[{"best_effort_timestamp_time":"0.000000","pict_type":"I"}]}',
+                "stderr": "",
+            }
+        assert command[command.index("-read_intervals") + 1] == "0%+6.000000"
+        return {
+            "returncode": 0,
+            "stdout": '{"frames":['
+                      '{"best_effort_timestamp_time":"4.958333","pict_type":"P"},'
+                      '{"best_effort_timestamp_time":"5.041667","pict_type":"B"}]}',
+            "stderr": "",
+        }
+
+    monkeypatch.setattr(media_forensics, "run", fake_run)
+    sample = media_forensics.sample_decoded_frame(tmp_path / "clip.mp4", 5.0, "middle")
+    assert sample["timestamp"] == "5.041667"
+    assert sample["picture_type"] == "B"
+    assert sample["sampling_method"] == "sequential_fallback_from_start"
+    assert sample["error"] == ""
+    assert len(calls) == 2
+    assert calls[1][1] == 120
