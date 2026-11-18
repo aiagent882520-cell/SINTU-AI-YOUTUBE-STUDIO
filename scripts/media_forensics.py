@@ -68,7 +68,7 @@ def inspect_environment() -> dict:
     )
     filter_text = (filter_result.get("stdout") or "") + "\n" + (filter_result.get("stderr") or "")
     ffmpeg["filters"] = {
-        name: bool(re.search(r"\\b" + re.escape(name) + r"\\\\b", filter_text))
+        name: bool(re.search(r"\b" + re.escape(name) + r"\\\\b", filter_text))
         for name in ("blackdetect", "blackframe", "fps", "scale")
     }
     ffmpeg["filters_exit"] = filter_result.get("returncode")
