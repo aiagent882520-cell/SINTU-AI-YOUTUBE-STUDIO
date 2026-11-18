@@ -640,3 +640,11 @@ Last updated: 2026-11-17 15:52 UTC
 - Corrected threshold calibration: blackdetect `pix_th=0.08` (threshold ~20.4/255, between limited-range black Y=16 and the observed dark footage Y~22), blackframe luma threshold 17, and Pillow RGB pixel threshold remains <=16. This preserves true black while avoiding the two measured dark-visible false positives.
 - PR #166 latest exact head `501c48b078e7c8802c45b56f1e3cd18fd5dbb243`; CI run #1280 is IN_PROGRESS. Do not merge until all four Python versions, dependency audit, offline E2E and Docker pass.
 - Android Issue #164 health audit is still running from before PR #166 and uses the old threshold. Its result must be recorded but not treated as verification of the calibration. A fresh pull and health audit are required after PR #166 merge.
+
+
+
+### Android Issue #164 and PR #166 latest CI — 2026-11-18 12:05 UTC
+- Issue #164 closed FAILED / exit 1 on the pre-PR #166 Termux tree: Python compile PASS; pytest **606 passed, 5 warnings in 198.82s**; health checks **13 PASS / 5 FAIL**. The five failures are the five named videos because the old `pix_th=0.10` threshold was still deployed. This is superseded for classification by Issue #161's pixel evidence: three true black, two dark-visible false positives.
+- PR #166 initial CI run #1278 found the limited-range H.264 black-level edge (Y=16); threshold16 was too strict. The correction uses FFmpeg blackframe threshold17 and blackdetect `pix_th=0.08`, while Pillow pixel threshold remains16.
+- Latest PR #166 CI run #1280: Python 3.11 PASS, 3.12 PASS, 3.13 PASS, 3.14 PASS; each suite reports 610 passed / 5 warnings; dependency security audit PASS. Docker and offline E2E/motion audit still IN_PROGRESS at this checkpoint.
+- PR #166 is not merged. Once exact-head Docker/E2E also pass, merge and queue a new Android fast-forward pull plus fresh forensic/health audit. Existing #164 must not be counted as post-fix validation.
