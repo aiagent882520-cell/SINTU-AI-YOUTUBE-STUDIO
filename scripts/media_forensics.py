@@ -62,6 +62,34 @@ def parse_black_intervals(stderr: str) -> list[list[float]]:
     )]
 
 
+
+def parse_black_frame_percentages(stderr: str) -> list[int]:
+    """Extract FFmpeg blackframe pblack percentages from sampled decoded frames."""
+    return [int(value) for value in re.findall(r"\bpblack:(\d+)\b", stderr)]
+
+
+def summarize_black_frame_percentages(values: list[int]) -> dict:
+    """Summarize evenly distributed blackframe samples; >=98% black pixels is a black frame."""
+    if not values:
+        return {
+            "sampled_frame_count": 0,
+            "black_frame_count": 0,
+            "black_frame_percentage": None,
+            "mean_black_pixel_percentage": None,
+            "black_pixel_threshold": 32,
+            "black_frame_cutoff_percent": 98,
+        }
+    black_count = sum(value >= 98 for value in values)
+    return {
+        "sampled_frame_count": len(values),
+        "black_frame_count": black_count,
+        "black_frame_percentage": round(black_count / len(values) * 100, 2),
+        "mean_black_pixel_percentage": round(sum(values) / len(values), 2),
+        "black_pixel_threshold": 32,
+        "black_frame_cutoff_percent": 98,
+    }
+
+
 def scan_text_logs(needles: tuple[str, ...]) -> list[dict]:
     matches = []
     for dirname in LOG_DIRS:
@@ -326,6 +354,23 @@ def inspect_video(path: Path) -> dict:
     intervals = parse_black_intervals(black["stderr"])
     duration = info["duration_seconds"] or 0
     duration_valid = isinstance(duration, (int, float)) and math.isfinite(duration) and duration > 0
+    if duration_valid:
+        sample_fps = 30.0 / duration
+        blackframe = run([
+            "ffmpeg", "-hide_banner", "-i", str(path), "-vf",
+            f"fps={sample_fps:.8f},blackframe=amount=0:threshold=32",
+            "-an", "-frames:v", "30", "-f", "null", "-",
+        ])
+        blackframe_values = parse_black_frame_percentages(blackframe["stderr"])
+        black_frame_metrics = summarize_black_frame_percentages(blackframe_values)
+        blackframe_error = (
+            "" if blackframe["returncode"] == 0 and blackframe_values
+            else (blackframe["stderr"] or "no blackframe samples decoded")[:250]
+        )
+    else:
+        blackframe = {"returncode": None, "stderr": "invalid or missing video duration"}
+        black_frame_metrics = summarize_black_frame_percentages([])
+        blackframe_error = "invalid or missing video duration; black-frame sampling skipped"
     full_black = bool(duration_valid and any(a <= 0.1 and b >= duration * 0.95 for a, b in intervals))
 
     fps = 0.0
@@ -381,6 +426,8 @@ def inspect_video(path: Path) -> dict:
         "ffprobe_exit": probe["returncode"], "metadata": info,
         "av_sync": analyze_av_sync(info["streams"]),
         "blackdetect_exit": black["returncode"], "black_intervals": intervals,
+        "blackframe_exit": blackframe["returncode"],
+        "black_frame_metrics": black_frame_metrics, "blackframe_error": blackframe_error,
         "full_duration_black": full_black, "decode_exit": decode["returncode"],
         "decode_errors": redact_secrets(decode["stderr"]) if decode["stderr"] else "",
         "decoded_frame_samples": samples,
@@ -393,7 +440,7 @@ def has_forensic_tool_failure(item: dict) -> bool:
     """Distinguish a completed black-video finding from failed forensic tooling."""
     if not item.get("exists") or not item.get("safe_regular_file"):
         return True
-    for key in ("ffprobe_exit", "blackdetect_exit", "decode_exit", "frame_probe_exit"):
+    for key in ("ffprobe_exit", "blackdetect_exit", "blackframe_exit", "decode_exit", "frame_probe_exit"):
         if item.get(key) != 0:
             return True
     metadata = item.get("metadata") or {}
@@ -405,6 +452,9 @@ def has_forensic_tool_failure(item: dict) -> bool:
             or not math.isfinite(duration) or duration <= 0):
         return True
     if not any(stream.get("type") == "video" for stream in metadata.get("streams", [])):
+        return True
+    black_metrics = item.get("black_frame_metrics") or {}
+    if black_metrics.get("sampled_frame_count", 0) <= 0:
         return True
     samples = item.get("decoded_frame_samples") or []
     return len(samples) != 5 or any(sample.get("error") or not sample.get("timestamp") for sample in samples)
@@ -431,6 +481,9 @@ def compact_forensic_summary(report: dict) -> dict:
             "streams": streams,
             "full_duration_black": item.get("full_duration_black"),
             "black_intervals": item.get("black_intervals", []),
+            "blackframe_exit": item.get("blackframe_exit"),
+            "black_frame_metrics": item.get("black_frame_metrics", {}),
+            "blackframe_error": item.get("blackframe_error"),
             "decode_exit": item.get("decode_exit"),
             "frame_probe_exit": item.get("frame_probe_exit"),
             "samples": [
