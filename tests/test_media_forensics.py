@@ -264,3 +264,44 @@ def test_real_ffprobe_inaccurate_seek_recovers_with_sequential_fallback(tmp_path
     assert float(sample["timestamp"]) >= 1.999
     assert sample["sampling_method"] == "sequential_fallback_from_start"
     assert sample["error"] == ""
+
+
+
+def test_compact_forensic_summary_preserves_per_file_evidence_for_relay_tail():
+    report = {
+        "status": "READ_ONLY_FORENSICS",
+        "summary": {"target_count": 1, "forensic_tool_failure_count": 1},
+        "targets": [{
+            "file": "clip.mp4", "exists": True, "size_bytes": 1234,
+            "sha256": "a" * 64, "metadata": {
+                "duration_seconds": 4.0,
+                "streams": [{"type": "video", "codec": "h264", "resolution": "720x1280",
+                             "pixel_format": "yuv420p", "frame_rate": "24/1",
+                             "frame_count": "96"}],
+            },
+            "full_duration_black": True, "black_intervals": [[0.0, 4.0]],
+            "decode_exit": 0, "frame_probe_exit": 1,
+            "decoded_frame_samples": [{
+                "sample": "middle", "seek_seconds": 2.0, "timestamp": None,
+                "picture_type": None, "sampling_method": "independent_seek",
+                "error": "no decoded frame at or after the requested timestamp",
+            }],
+            "pre_repair_backups": [{"path": "media_backups/clip.mp4",
+                                    "size_bytes": 1000, "sha256": "b" * 64}],
+            "asset_reference_time_utc": "2026-11-13T00:00:00+00:00",
+        }],
+        "candidate_source_assets": [{"path": "generated_images/source.jpg",
+                                     "size_bytes": 999, "mean_luma": 100.0}],
+        "production_log_matches": [],
+        "production_database_matches": [],
+        "safety": {"files_modified": False, "files_deleted": False},
+    }
+    footer = media_forensics.compact_forensic_summary(report)
+    assert footer["targets"][0]["file"] == "clip.mp4"
+    assert footer["targets"][0]["sha256"] == "a" * 64
+    assert footer["targets"][0]["black_intervals"] == [[0.0, 4.0]]
+    assert footer["targets"][0]["samples"][0]["error"]
+    assert footer["targets"][0]["backups"][0]["sha256"] == "b" * 64
+    assert footer["candidate_source_assets"][0]["path"] == "generated_images/source.jpg"
+    import json as json_module
+    assert len(json_module.dumps(footer, separators=(",", ":"))) < 8000
