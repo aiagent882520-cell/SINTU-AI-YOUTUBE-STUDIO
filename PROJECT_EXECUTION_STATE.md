@@ -338,3 +338,9 @@ Last updated: 2026-11-17 15:52 UTC
 - The failed #125 comment retained only the final 8,000 characters, cutting off the first part of the one-line JSON and preventing a complete per-file audit from the GitHub result.
 - PR #136 now adds five evenly distributed frame samples per target (0%, 25%, 50%, 75%, last frame) and a compact `SINTU_FORENSICS_SUMMARY=` footer after the full JSON. It preserves all five targets' hashes, sizes, duration/streams, black intervals, decode/sample exit data, sample errors/methods, backup hashes, source-candidate image metrics, bounded redacted production-log excerpts, database provenance excerpts and safety flags within the relay's output tail.
 - A regression test asserts the compact footer retains per-file evidence and remains under the 8,000-character relay cap for the fixture.
+
+
+### Forensic invalid-input and relay tests — 2026-11-18
+
+- PR #136 now rejects non-finite, zero or missing duration before constructing frame-seek timestamps; all five sample slots carry explicit errors and the report exits nonzero.
+- Added regression coverage for invalid duration, missing FFprobe executable and FFprobe timeout. These remain tool failures, never PASS.
