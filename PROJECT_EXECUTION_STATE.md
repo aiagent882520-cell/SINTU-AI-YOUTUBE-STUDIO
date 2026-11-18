@@ -390,3 +390,10 @@ Last updated: 2026-11-17 15:52 UTC
 - Issues #127 and #129 still have only their original worker-claimed comments, no completion comment/exit code/artifact. They have not yet crossed the 40-minute GitHub relay stale-claim lease at this checkpoint; do not duplicate them. Continue monitoring for the relay's built-in recovery.
 - Renderer/source-loss root cause for the five black MP4s remains UNKNOWN. Candidate source JPGs are not proven source assets; production log/database match arrays remain empty in the Android report. No original media was changed, repaired, regenerated, deleted, or uploaded. Production remains PAUSED.
 - Historical note: earlier entries saying PR #136 was unmerged or awaiting CI are superseded by this checkpoint. The merge and CI success above are authoritative.
+
+
+### PR #144 replacement branch — 2026-11-18
+
+- PR #144's original branch conflicts with the latest main documentation checkpoint, so its footer-cap fix is being replayed on a fresh branch from main commit `b88b765` rather than force-merging conflicting state.
+- The compact footer is bounded below 7,000 characters for five targets and retains 30 raw pblack values per target; a worst-case regression test checks five samples and backup hashes per file.
+- Correct GitHub relay stale-claim lease for issue jobs: 40 minutes. Local bridge job lease is 35 minutes.
