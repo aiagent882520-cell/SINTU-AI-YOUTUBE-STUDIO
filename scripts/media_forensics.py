@@ -320,7 +320,8 @@ def inspect_video(path: Path) -> dict:
         reference_epoch = stat.st_mtime
         reference_source = "current-file-mtime-may-reflect-audio-repair"
     return {
-        "file": path.name, "exists": True, "size_bytes": stat.st_size,
+        "file": path.name, "exists": True, "safe_regular_file": True,
+        "size_bytes": stat.st_size,
         "sha256": sha256_file(path),
         "modified_utc": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
         "pre_repair_backups": backups,
