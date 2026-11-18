@@ -310,3 +310,48 @@ def test_compact_forensic_summary_preserves_per_file_evidence_for_relay_tail():
     assert footer["candidate_source_assets"][0]["path"] == "generated_images/source.jpg"
     import json as json_module
     assert len(json_module.dumps(footer, separators=(",", ":"))) < 8000
+
+
+
+def test_inspect_video_fails_closed_on_non_finite_duration(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    media_dir = tmp_path / "generated_videos"
+    media_dir.mkdir()
+    video = media_dir / "invalid-duration.mp4"
+    video.write_bytes(b"not-used-by-mocked-probes")
+    calls = []
+
+    def fake_run(command, timeout=120):
+        calls.append(command)
+        if command[0] == "ffprobe" and "-count_frames" in command:
+            return {"returncode": 0, "stdout": json.dumps({
+                "format": {"format_name": "mov,mp4", "duration": "nan"},
+                "streams": [{"codec_type": "video", "avg_frame_rate": "24/1"}],
+            }), "stderr": ""}
+        if command[0] == "ffmpeg":
+            return {"returncode": 0, "stdout": "", "stderr": ""}
+        raise AssertionError("Frame sampling must not run with an invalid duration")
+
+    monkeypatch.setattr(media_forensics, "run", fake_run)
+    report = media_forensics.inspect_video(video)
+    assert report["frame_probe_exit"] == 1
+    assert all("invalid or missing video duration" in x["error"]
+               for x in report["decoded_frame_samples"])
+    assert media_forensics.has_forensic_tool_failure(report) is True
+    assert not any("-read_intervals" in command for command in calls)
+
+
+def test_forensic_run_reports_missing_binary_and_timeout(tmp_path, monkeypatch):
+    import subprocess
+
+    monkeypatch.setattr(media_forensics.subprocess, "run",
+                        lambda *args, **kwargs: (_ for _ in ()).throw(FileNotFoundError("ffprobe missing")))
+    missing = media_forensics.run(["ffprobe", "-version"])
+    assert missing["returncode"] is None
+    assert "ffprobe missing" in missing["stderr"]
+
+    monkeypatch.setattr(media_forensics.subprocess, "run",
+                        lambda *args, **kwargs: (_ for _ in ()).throw(subprocess.TimeoutExpired("ffprobe", 1)))
+    timed_out = media_forensics.run(["ffprobe", "-version"], timeout=1)
+    assert timed_out["returncode"] is None
+    assert "timed out" in timed_out["stderr"].lower()
