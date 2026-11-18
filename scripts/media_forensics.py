@@ -331,10 +331,18 @@ def inspect_video(path: Path) -> dict:
                 fps = 0.0
             break
     end_seek = max(0.0, duration - (1.0 / fps if fps > 0 else 0.1))
+    # Five evenly distributed sample points catch black/blank intervals
+    # that a first/middle/last-only probe can miss.
+    sample_points = [
+        ("first", 0.0),
+        ("quarter", duration * 0.25),
+        ("middle", duration * 0.50),
+        ("three_quarter", duration * 0.75),
+        ("last", end_seek),
+    ]
     samples = [
-        sample_decoded_frame(path, 0.0, "first"),
-        sample_decoded_frame(path, duration / 2.0, "middle"),
-        sample_decoded_frame(path, end_seek, "last"),
+        sample_decoded_frame(path, timestamp, label)
+        for label, timestamp in sample_points
     ]
 
     backups = find_backups(path)
@@ -380,7 +388,7 @@ def has_forensic_tool_failure(item: dict) -> bool:
     if not any(stream.get("type") == "video" for stream in metadata.get("streams", [])):
         return True
     samples = item.get("decoded_frame_samples") or []
-    return len(samples) != 3 or any(sample.get("error") or not sample.get("timestamp") for sample in samples)
+    return len(samples) != 5 or any(sample.get("error") or not sample.get("timestamp") for sample in samples)
 
 
 def compact_forensic_summary(report: dict) -> dict:
