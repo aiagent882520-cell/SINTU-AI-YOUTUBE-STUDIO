@@ -210,3 +210,13 @@ Last updated: 2026-11-17 15:52 UTC
 - Resource readiness remains blocked by historical device probe: about 1.03 GiB free RAM, no GGUF model, no configured/reachable ComfyUI workflow; eSpeak Hindi and FFmpeg available. No heavy model install or production run.
 - Branch protection/ruleset details could not be read with the connected GitHub integration (403 Resource not accessible by integration). Therefore repository-required approval policy is not independently verified. No PR merged or production deployment performed.
 - Current delivery status: code improvements and static/mock tests are progressing; CI matrix, Android regression, fresh five-video forensic report, OAuth verification, controlled production test, and production readiness remain incomplete. Production stays PAUSED and public publishing disabled.
+
+
+### PR #122 merged — 2026-11-18
+
+- PR #122 merged successfully by squash as `f2d7bfdbd4914ea17252937ce49332c687b0ddc8`; GitHub accepted the merge with expected head `440e0831aa67aca411b442ca2d3f1661f80dc365`.
+- All seven required CI jobs on PR head `440e0831aa67aca411b442ca2d3f1661f80dc365` completed PASS: Python 3.11, 3.12, 3.13, 3.14, dependency security audit, production Docker build, offline branded video E2E/motion audit.
+- Black-video upload gate now rejects full-duration black video and long black segments, distributes up to 600 frame samples across the full clip, and emits diagnostic fields for black intervals, longest segment, sampled/visible frames. Regression tests include fully black video, partial black intro, and long black segment.
+- PR #121 remains open. Its current CI run `44256743199`: all four Python matrix jobs, dependency security audit, and Docker build PASS; offline branded video E2E/motion audit is still running.
+- Termux #118–#120 remain queued with no claim/result comments. Do not count as Android test results.
+- Five black source MP4s remain untouched pending fresh Android forensic report. No upload or public publishing. Production remains PAUSED.
