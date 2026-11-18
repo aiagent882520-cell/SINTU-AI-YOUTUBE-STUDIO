@@ -201,3 +201,11 @@ def test_av_sync_flags_out_of_tolerance_and_missing_audio():
     assert media_forensics.analyze_av_sync([
         {"type": "video", "start_time": "0", "duration": "10"}
     ])["status"] == "missing_audio_stream"
+
+
+def test_av_sync_does_not_assume_missing_start_timestamps_are_zero():
+    report = media_forensics.analyze_av_sync([
+        {"type": "video", "duration": "10.0"},
+        {"type": "audio", "duration": "10.0"},
+    ])
+    assert report["status"] == "insufficient_stream_timing_metadata"
