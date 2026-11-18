@@ -244,3 +244,14 @@ Last updated: 2026-11-17 15:52 UTC
 
 
 - Follow-on read-only five-video forensic command queued as Issue #undefined, after deployment Issue #124. It will inspect the exact five named legacy MP4s, their frame timestamps, black intervals, decode status, A/V timing, source candidates, and local provenance without changing any media. Result is pending Android relay execution.
+
+
+### Post-deployment Android verification queue — 2026-11-18
+
+- Issue #undefined: `SINTU-CMD: restart_services` — queued for execution after the preceding Termux commands.
+- Issue #undefined: `SINTU-CMD: run_tests` — queued for execution after the preceding Termux commands.
+- Issue #undefined: `SINTU-CMD: automation_self_test` — queued for execution after the preceding Termux commands.
+- Issue #undefined: `SINTU-CMD: health_audit` — queued for execution after the preceding Termux commands.
+- Issue #undefined: `SINTU-CMD: operational_readiness` — queued for execution after the preceding Termux commands.
+- Issue #undefined: `SINTU-CMD: watchdog_recovery_test` — queued for execution after the preceding Termux commands.
+- These are unique follow-on jobs, not duplicates of #118–#120. They verify service restart, full Android pytest suite, automation, health/readiness, and watchdog recovery after the updated main branch is pulled.
