@@ -388,7 +388,7 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
         raise RenderFailed("Upload MP4 black-frame scan decode nahi ho saka.")
     black_intervals = [
         (float(start), float(end)) for start, end in re.findall(
-            r"black_start:([0-9.]+)\\s+black_end:([0-9.]+)", black.stderr
+            r"black_start:([0-9.]+)\s+black_end:([0-9.]+)", black.stderr
         )
     ]
     if any(start <= 0.1 and end >= duration * 0.95 for start, end in black_intervals):
