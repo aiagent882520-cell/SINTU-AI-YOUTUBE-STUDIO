@@ -398,3 +398,7 @@ Last updated: 2026-11-17 15:52 UTC
 - GitHub's Issues API defaults to newest-first. `GitHub.pending()` previously accepted that order unchanged. A later diagnostic could therefore execute before an earlier update/deployment command.
 - Follow-up branch `fix/relay-oldest-first-queue` explicitly requests `sort=created,direction=asc` and locally sorts eligible jobs by `created_at`. A regression test simulates the API's newest-first response and asserts #137, #139, #140 FIFO order.
 - This is an automation sequencing fix; no media changes or production activation.
+
+
+- The first post-merge forensic result (#140) successfully decoded all five requested timestamp positions for the targets visible in the relay output and used the sequential fallback at quarter/middle/three-quarter/last. It still exited 1; complete per-target status cannot yet be assessed because the 8,000-character relay tail cut off the compact footer. The result also shows full-duration blackdetect intervals and inconsistent blackframe metrics on some targets, which needs the complete report before drawing conclusions.
+- PR #143 additionally raises the GitHub relay output tail from 8,000 to 20,000 characters and tests that the compact forensic footer survives. This is designed to retain the whole per-file summary while remaining within GitHub issue-comment limits.
