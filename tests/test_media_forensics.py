@@ -152,3 +152,24 @@ def test_frame_sample_rejects_only_preceding_keyframe_results(tmp_path, monkeypa
     sample = media_forensics.sample_decoded_frame(tmp_path / "clip.mp4", 5.0, "middle")
     assert sample["timestamp"] is None
     assert sample["error"] == "no decoded frame at or after the requested timestamp"
+
+
+def test_forensic_tool_failure_is_not_hidden_by_existing_video_file():
+    good = {
+        "exists": True, "safe_regular_file": True,
+        "ffprobe_exit": 0, "blackdetect_exit": 0, "decode_exit": 0,
+        "frame_probe_exit": 0,
+        "metadata": {"format": "mov,mp4", "duration_seconds": 4.0,
+                     "streams": [{"type": "video"}]},
+        "decoded_frame_samples": [
+            {"sample": "first", "timestamp": "0.0", "error": ""},
+            {"sample": "middle", "timestamp": "2.0", "error": ""},
+            {"sample": "last", "timestamp": "3.9", "error": ""},
+        ],
+        "full_duration_black": True,
+    }
+    assert media_forensics.has_forensic_tool_failure(good) is False
+    broken_probe = {**good, "ffprobe_exit": 1}
+    assert media_forensics.has_forensic_tool_failure(broken_probe) is True
+    missing_sample = {**good, "decoded_frame_samples": good["decoded_frame_samples"][:2]}
+    assert media_forensics.has_forensic_tool_failure(missing_sample) is True
