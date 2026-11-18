@@ -61,6 +61,34 @@ def _model_inventory() -> list[dict]:
     return items
 
 
+def _comfyui_setup_gate(termux: bool, available_ram_bytes: int, free_disk_bytes: int | None) -> dict:
+    """Conservative host suitability check; this probe never installs ComfyUI or models."""
+    minimum_ram = 8 * 1024**3
+    minimum_disk = 20 * 1024**3
+    reasons = []
+    if termux:
+        reasons.append("Android/Termux is not an approved local ComfyUI host in this setup.")
+    if available_ram_bytes < minimum_ram:
+        reasons.append("At least 8 GiB currently available RAM is required for manual host review.")
+    if free_disk_bytes is None or free_disk_bytes < minimum_disk:
+        reasons.append("At least 20 GiB free disk space is required for manual host review.")
+    eligible = not reasons
+    return {
+        "status": "eligible_for_manual_review" if eligible else "blocked",
+        "eligible_for_manual_review": eligible,
+        "auto_install_allowed": False,
+        "install_performed": False,
+        "minimum_available_ram_bytes": minimum_ram,
+        "minimum_free_disk_bytes": minimum_disk,
+        "reasons": reasons,
+        "recommendation": (
+            "Use a separately managed Linux desktop/server and review its GPU, driver, model-license and workflow requirements."
+            if eligible else
+            "Do not install ComfyUI or download diffusion models on this device; use the procedural offline fallback until a suitable separate host is configured."
+        ),
+    }
+
+
 def build_report() -> dict:
     mem = _read_meminfo()
     total = mem.get("MemTotal", 0)
@@ -94,7 +122,8 @@ def build_report() -> dict:
                           "model_files": [m for m in models if m["name"].endswith(".gguf")]},
             "stable_diffusion_cpp": {"binaries": sd_bins, "server": sd_probe},
             "comfyui": {"server": comfy_probe,
-                        "workflow_configured": bool(os.getenv("COMFYUI_IMAGE_WORKFLOW_PATH", "").strip())},
+                        "workflow_configured": bool(os.getenv("COMFYUI_IMAGE_WORKFLOW_PATH", "").strip()),
+                        "setup_gate": _comfyui_setup_gate(termux, available, free_bytes)},
         },
         "recommendation": {"llama_model_tier": llama_tier, "image_model_tier": image_tier,
                            "install_policy": "No model downloads or engine builds performed by this probe."},
