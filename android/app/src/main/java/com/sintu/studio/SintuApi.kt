@@ -82,9 +82,9 @@ data class ProductionMediaRequest(
     val sound_effects_enabled: Boolean = true,
     val sound_effects_volume: Double = 0.18,
     val seconds_per_scene: Int = 4,
-    val resolution: String? = null,
-    val fps: Int = 30,
-    val quality: String = "high"
+    val resolution: String? = "720x1280",
+    val fps: Int = 24,
+    val quality: String = "standard"
 )
 
 internal fun sessionCookieOrigin(url: HttpUrl): String = "${url.scheme}://${url.host}:${url.port}"
@@ -217,8 +217,13 @@ class SintuApi(context: Context, baseUrl: String) {
         service.startProductionRun(ProductionRunCreateRequest(formatId, topic)).bodyOrThrow()
     suspend fun productionRunStatus(runId: String): Map<String, Any?> =
         service.productionRunStatus(runId).bodyOrThrow()
-    suspend fun produceApprovedMedia(runId: String): Map<String, Any?> =
-        service.produceApprovedMedia(runId, ProductionMediaRequest()).bodyOrThrow()
+    suspend fun produceApprovedMedia(
+        runId: String,
+        resolution: String = "720x1280"
+    ): Map<String, Any?> = service.produceApprovedMedia(
+        runId,
+        ProductionMediaRequest(resolution = resolution, fps = 24, quality = "standard")
+    ).bodyOrThrow()
 
     suspend fun downloadVideoToGallery(context: Context, videoId: String): Uri =
         withContext(Dispatchers.IO) {
