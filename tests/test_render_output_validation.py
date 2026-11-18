@@ -227,3 +227,30 @@ def test_publish_gate_rejects_long_black_segment_even_when_most_frames_are_visib
     assert created.returncode == 0, created.stderr.decode("utf-8", "replace")
     with pytest.raises(RenderFailed, match="lamba black segment"):
         verify_publishable_mp4(candidate)
+
+
+def test_render_gate_rejects_long_black_segment_before_publishing_output(tmp_path):
+    import shutil
+    import subprocess
+
+    from app.video_renderer import _verify_rendered_output
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("FFmpeg is required for the real render-time black-segment test")
+    candidate = tmp_path / "render-with-black-intro.mp4"
+    created = subprocess.run([
+        ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "color=c=black:s=720x1280:r=24:d=3.2",
+        "-f", "lavfi", "-i", "testsrc2=s=720x1280:r=24:d=8.8",
+        "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0[v]",
+        "-map", "[v]", "-c:v", "libx264", "-preset", "ultrafast",
+        "-pix_fmt", "yuv420p", "-r", "24", "-t", "12", "-movflags", "+faststart",
+        str(candidate),
+    ], capture_output=True, timeout=90, check=False)
+    assert created.returncode == 0, created.stderr.decode("utf-8", "replace")
+    with pytest.raises(RenderFailed, match="lamba black segment"):
+        _verify_rendered_output(
+            candidate, 720, 1280, 12, require_audio=False, expected_fps=24,
+            minimum_motion_ratio=0.40,
+        )
