@@ -239,3 +239,28 @@ def test_frame_sample_falls_back_to_sequential_decode_after_inaccurate_seek(tmp_
     assert sample["error"] == ""
     assert len(calls) == 2
     assert calls[1][1] == 120
+
+
+def test_real_ffprobe_inaccurate_seek_recovers_with_sequential_fallback(tmp_path):
+    import shutil
+    import subprocess
+
+    ffmpeg = shutil.which("ffmpeg")
+    ffprobe = shutil.which("ffprobe")
+    if not ffmpeg or not ffprobe:
+        import pytest
+        pytest.skip("FFmpeg and FFprobe are required for the real seek regression")
+    clip = tmp_path / "long-gop.mp4"
+    created = subprocess.run([
+        ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "testsrc2=s=160x120:r=30:d=6",
+        "-an", "-c:v", "mpeg4", "-g", "150", "-bf", "0", str(clip),
+    ], capture_output=True, timeout=60, check=False)
+    if created.returncode != 0:
+        import pytest
+        pytest.skip("FFmpeg build does not provide the MPEG-4 test encoder")
+    sample = media_forensics.sample_decoded_frame(clip, 2.0, "middle")
+    assert sample["timestamp"] is not None
+    assert float(sample["timestamp"]) >= 1.999
+    assert sample["sampling_method"] == "sequential_fallback_from_start"
+    assert sample["error"] == ""
