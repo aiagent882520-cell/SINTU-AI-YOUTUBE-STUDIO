@@ -189,3 +189,62 @@ def test_relay_exits_after_scheduled_restart_when_result_ack_fails(monkeypatch):
     issue = {"number": 77, "body": '{"action":"restart_services"}'}
 
     assert relay.process_issue(BrokenGitHub(), issue) is True
+
+
+def test_relay_returns_queued_jobs_in_oldest_first_order():
+    class FakeGitHub(relay.GitHub):
+        def __init__(self):
+            self.urls = []
+
+        def request(self, method, path, payload=None):
+            self.urls.append(path)
+            if "labels=sintu-command-running" in path:
+                return []
+            if "labels=sintu-command-queued" in path:
+                # Simulate GitHub's default newest-first API response.
+                return [
+                    {"number": 140, "created_at": "2026-11-18T09:54:20Z",
+                     "title": "SINTU-CMD: media_forensics",
+                     "user": {"login": relay.ALLOWED_ACTOR}},
+                    {"number": 139, "created_at": "2026-11-18T09:53:35Z",
+                     "title": "SINTU-CMD: run_tests",
+                     "user": {"login": relay.ALLOWED_ACTOR}},
+                    {"number": 137, "created_at": "2026-11-18T09:53:26Z",
+                     "title": "SINTU-CMD: git_pull_ff_only",
+                     "user": {"login": relay.ALLOWED_ACTOR}},
+                ]
+            raise AssertionError(f"Unexpected request: {method} {path}")
+
+    github = FakeGitHub()
+    pending = github.pending()
+    assert [issue["number"] for issue in pending] == [137, 139, 140]
+    queued_url = next(url for url in github.urls if "labels=sintu-command-queued" in url)
+    assert "sort=created" in queued_url
+    assert "direction=asc" in queued_url
+
+
+def test_relay_preserves_compact_forensic_footer_with_20k_output_limit(monkeypatch):
+    import subprocess
+
+    class FakeGitHub:
+        def __init__(self):
+            self.comments = []
+            self.updates = []
+
+        def update_issue(self, number, **fields):
+            self.updates.append((number, fields))
+
+        def comment(self, number, body):
+            self.comments.append(body)
+
+    footer = "SINTU_FORENSICS_SUMMARY={\"status\":\"READ_ONLY_FORENSICS\"}"
+    stdout = ("x" * 9000) + footer
+    monkeypatch.setattr(
+        relay.subprocess, "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0, stdout, ""),
+    )
+    github = FakeGitHub()
+    issue = {"number": 145, "body": '{"action":"git_status"}'}
+    assert relay.process_issue(github, issue) is False
+    assert footer in github.comments[-1]
+    assert len(github.comments[-1]) > 9000

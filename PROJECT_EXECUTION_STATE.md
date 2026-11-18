@@ -390,3 +390,40 @@ Last updated: 2026-11-17 15:52 UTC
 - Issues #127 and #129 still have only their original worker-claimed comments, no completion comment/exit code/artifact. They have not yet crossed the 40-minute GitHub relay stale-claim lease at this checkpoint; do not duplicate them. Continue monitoring for the relay's built-in recovery.
 - Renderer/source-loss root cause for the five black MP4s remains UNKNOWN. Candidate source JPGs are not proven source assets; production log/database match arrays remain empty in the Android report. No original media was changed, repaired, regenerated, deleted, or uploaded. Production remains PAUSED.
 - Historical note: earlier entries saying PR #136 was unmerged or awaiting CI are superseded by this checkpoint. The merge and CI success above are authoritative.
+
+
+### GitHub Termux queue ordering defect — 2026-11-18
+
+- The post-merge deployment sequence exposed a real FIFO defect: Issue #138 (`media_forensics`) was claimed before older Issue #137 (`git_pull_ff_only`). It therefore ran the pre-PR-136 sampler and failed exit 1; only afterward did #137 fast-forward Termux to merge commit `3335107`. The later #139 regression test then passed (20 passed, exit 0).
+- GitHub's Issues API defaults to newest-first. `GitHub.pending()` previously accepted that order unchanged. A later diagnostic could therefore execute before an earlier update/deployment command.
+- Follow-up branch `fix/relay-oldest-first-queue` explicitly requests `sort=created,direction=asc` and locally sorts eligible jobs by `created_at`. A regression test simulates the API's newest-first response and asserts #137, #139, #140 FIFO order.
+- This is an automation sequencing fix; no media changes or production activation.
+
+
+- The first post-merge forensic result (#140) successfully decoded all five requested timestamp positions for the targets visible in the relay output and used the sequential fallback at quarter/middle/three-quarter/last. It still exited 1; complete per-target status cannot yet be assessed because the 8,000-character relay tail cut off the compact footer. The result also shows full-duration blackdetect intervals and inconsistent blackframe metrics on some targets, which needs the complete report before drawing conclusions.
+- PR #143 additionally raises the GitHub relay output tail from 8,000 to 20,000 characters and tests that the compact forensic footer survives. This is designed to retain the whole per-file summary while remaining within GitHub issue-comment limits.
+
+
+### Project-wide source marker scan — 2026-11-18
+
+- Reviewed the repository tree (154 tracked files) and scanned the application Python modules, Termux/automation scripts, core renderer/health/production/upload modules, and primary frontend JS/CSS/HTML assets for `TODO`, `FIXME`, `XXX`, and `NotImplementedError`.
+- No such markers were found in the scanned runtime/source files. This is a source-marker scan, not proof that every feature/integration is complete; live Android and external-provider checks remain necessary.
+- GitHub's code-search index is unavailable for this repository, so no server-side repository-wide code-search result is claimed.
+
+
+### Required historical issue/module audit — 2026-11-18
+
+- #85 engine probe: Android SUCCESS. Device was Android 15/aarch64, 8 CPU cores, about 3.0 GB free home storage; llama-server binary exists but server unreachable and no model files; stable-diffusion.cpp binaries absent; ComfyUI unreachable/unconfigured. Probe performed no model downloads or rendering. Engine readiness is therefore NOT complete.
+- #86 media repair: Android SUCCESS, 15 files scanned, 9 audio streams repaired, 6 already valid, 0 repair failures. Each repaired video stream was copied without re-encoding and originals were backed up. This only repaired audio compatibility; it did not repair black visual content.
+- #87 health audit: Android FAILED exit 1, but it predates #86 and its audio failures are stale after the repair. Pytest in that audit passed (531 tests, 5 deprecation warnings).
+- #89 automation self-test: Android SUCCESS, seven checks passed; authenticated GitHub CLI, API, bridge/worker and relay lock confirmed.
+- #90 post-repair health audit: Android FAILED because the five known black MP4s remained full-duration black. Later #100 reported 534 pytest passed (5 warnings), 13 health checks PASS, 0 WARN, 5 FAIL; all five failures were those black videos.
+- #92 resumable YouTube upload and #93 public-visibility safety: implementation PRs merged and GitHub CI/unit tests passed. Live Google OAuth/channel and real upload/visibility verification remain blocked by unconfigured owner credentials/channel. No upload or public visibility change has occurred.
+- #95 remains OPEN: five black MP4s require source/render provenance and verified repair; original media and backups remain protected.
+- #119 Android API test: SUCCESS, 187 passed, 5 warnings, exit 0.
+- #126 restart command: SUCCESS; output says restart scheduled after queue result acknowledgement, but no independent post-restart health check is present.
+- #127 full run_tests and #129 health_audit: still only claimed, no completion comment, exit code, log or artifact. Await built-in 40-minute stale-claim recovery; do not duplicate.
+- #128 automation self-test: SUCCESS, seven checks passed.
+- #125 initial forensic: FAILED exit 1 due inaccurate FFprobe timestamp seeking; sampler defect is confirmed and fixed in merged PR #136.
+- #138 post-merge forensic attempt: FAILED exit 1 because it was claimed before #137 finished deploying the merge, so it ran old code. #139 then passed the merged forensic regression suite (20 passed, exit 0).
+- #140 post-merge forensic attempt: FAILED exit 1. Five-point frame sampling/sequential fallback worked for the targets visible in the output, but the relay's 8k cap removed the compact footer and obscured the full per-file/tool-failure summary. A new run is required after the relay output-cap fix is merged and deployed.

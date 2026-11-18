@@ -33,6 +33,7 @@ QUEUED_LABEL = "sintu-command-queued"
 RUNNING_LABEL = "sintu-command-running"
 DONE_LABEL = "sintu-command-done"
 FAILED_LABEL = "sintu-command-failed"
+MAX_ISSUE_OUTPUT_CHARS = 20_000
 PYTHON = str(ROOT / ".venv" / "bin" / "python")
 if not Path(PYTHON).exists():
     PYTHON = sys.executable
@@ -124,15 +125,20 @@ class GitHub:
                 self.update_issue(int(issue["number"]), labels=[QUEUED_LABEL])
                 self.comment(int(issue["number"]), "♻️ Recovered stale claim after the previous Termux worker stopped responding.")
         query = urllib.parse.urlencode({
-            "state": "open", "labels": QUEUED_LABEL, "per_page": "50"
+            "state": "open", "labels": QUEUED_LABEL, "per_page": "50",
+            "sort": "created", "direction": "asc",
         })
         issues = self.request("GET", "/issues?" + query) or []
-        return [
+        eligible = [
             issue for issue in issues
             if "pull_request" not in issue
             and issue.get("user", {}).get("login", "").lower() == ALLOWED_ACTOR
             and issue.get("title", "").startswith("SINTU-CMD:")
         ]
+        # GitHub's default issue order is newest-first. Always enforce FIFO
+        # locally as well, so a later diagnostic cannot run before an earlier
+        # git_pull_ff_only deployment command.
+        return sorted(eligible, key=lambda issue: issue.get("created_at", ""))
 
     def comment(self, number: int, body: str):
         return self.request("POST", f"/issues/{number}/comments", {"body": body})
@@ -232,7 +238,7 @@ def process_issue(github: GitHub, issue: dict) -> bool:
                  **({"SINTU_QUEUE_EXECUTOR": "github_termux_relay"} if action == "restart_services" else {})},
         )
         success = completed.returncode == 0
-        output = (completed.stdout or "")[-8000:] or "(no command output)"
+        output = (completed.stdout or "")[-MAX_ISSUE_OUTPUT_CHARS:] or "(no command output)"
         status = "SUCCESS" if success else f"FAILED (exit {completed.returncode})"
         label = DONE_LABEL if success else FAILED_LABEL
     except subprocess.TimeoutExpired:
