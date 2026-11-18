@@ -114,3 +114,69 @@ def test_audit_summary_passes_when_no_failures_or_warnings():
     assert result["pass"] == 1
     assert result["warnings"] == 0
     assert result["failures"] == 0
+
+
+def _create_health_audit_clip(path, color, duration=4):
+    import shutil
+    import subprocess
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("FFmpeg is required for media black-threshold tests")
+    created = subprocess.run([
+        ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", f"color=c={color}:s=160x120:r=24:d={duration}",
+        "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(path),
+    ], capture_output=True, timeout=60, check=False)
+    if created.returncode != 0:
+        pytest.skip("FFmpeg build does not provide the libx264 test encoder")
+
+
+def test_health_audit_does_not_flag_dark_visible_footage_as_black(tmp_path):
+    from scripts.project_health_audit import audit_media
+
+    clip = tmp_path / "dark-visible.mp4"
+    _create_health_audit_clip(clip, "0x161616")
+    results = []
+    assert audit_media(tmp_path, results) is True
+    assert results[0]["check"] == "media:dark-visible.mp4"
+    assert results[0]["status"] == "PASS"
+    assert results[0]["black_intervals"] == []
+
+
+def test_health_audit_still_fails_a_fully_black_mp4(tmp_path):
+    from scripts.project_health_audit import audit_media
+
+    clip = tmp_path / "fully-black.mp4"
+    _create_health_audit_clip(clip, "black")
+    results = []
+    assert audit_media(tmp_path, results) is False
+    assert results[0]["check"] == "media:fully-black.mp4"
+    assert results[0]["status"] == "FAIL"
+    assert results[0]["black_intervals"]
+
+
+def test_health_audit_allows_partial_black_but_not_full_duration_black(tmp_path):
+    import shutil
+    import subprocess
+    from scripts.project_health_audit import audit_media
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("FFmpeg is required for partial-black health audit regression")
+    clip = tmp_path / "partial-black.mp4"
+    created = subprocess.run([
+        ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "lavfi", "-i", "color=c=black:s=160x120:r=24:d=1",
+        "-f", "lavfi", "-i", "color=c=white:s=160x120:r=24:d=3",
+        "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0,format=yuv420p[v]",
+        "-map", "[v]", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(clip),
+    ], capture_output=True, timeout=60, check=False)
+    if created.returncode != 0:
+        pytest.skip("FFmpeg build does not provide the libx264 test encoder")
+    results = []
+    assert audit_media(tmp_path, results) is True
+    assert results[0]["status"] == "PASS"
+    assert results[0]["black_intervals"]
+    assert results[0]["black_intervals"][0][1] < 3.8
+
