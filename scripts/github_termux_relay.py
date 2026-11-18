@@ -240,14 +240,23 @@ def process_issue(github: GitHub, issue: dict) -> bool:
     except Exception as exc:
         success, output, status, label = False, str(exc), "FAILED (validation/runtime error)", FAILED_LABEL
 
-    github.comment(
-        number,
-        f"## SINTU Termux result: {status}\n\n"
-        f"Device: Android Termux\n\n"
-        f"\x60\x60\x60text\n{output}\n\x60\x60\x60",
-    )
-    github.update_issue(number, state="closed", labels=[label])
-    return success and action == "restart_services"
+    restart_requested = success and action == "restart_services"
+    try:
+        github.comment(
+            number,
+            f"## SINTU Termux result: {status}\n\n"
+            f"Device: Android Termux\n\n"
+            f"\x60\x60\x60text\n{output}\n\x60\x60\x60",
+        )
+        github.update_issue(number, state="closed", labels=[label])
+    except Exception:
+        if restart_requested:
+            # The delayed restart is already scheduled. Exit even if GitHub
+            # acknowledgement is temporarily unavailable; stale-claim
+            # recovery can safely requeue the issue after the lease expires.
+            return True
+        raise
+    return restart_requested
 
 
 def process_pending(github: GitHub, issues: list[dict]) -> bool:
