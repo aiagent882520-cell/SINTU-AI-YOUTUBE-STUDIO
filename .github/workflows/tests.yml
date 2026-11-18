@@ -40,12 +40,12 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "22"
-      - name: Setup FFmpeg
-        uses: FedericoCarboni/setup-ffmpeg@36c6454b5a2348e7794ba2d82a21506605921e3d
-        with:
-          ffmpeg-version: "release"
-      - name: Verify FFmpeg
+      - name: Install FFmpeg
         run: |
+          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+            timeout 180 sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update -qq
+            timeout 180 sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
           ffmpeg -version
           ffprobe -version
           ffmpeg -hide_banner -filters | grep -q subtitles
@@ -82,13 +82,12 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements-dev.txt
-      - name: Setup FFmpeg
-        uses: FedericoCarboni/setup-ffmpeg@36c6454b5a2348e7794ba2d82a21506605921e3d
-        with:
-          ffmpeg-version: "release"
-      - name: Install free local voice and font tools
+      - name: Install free local media and voice tools
         run: |
           packages=()
+          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+            packages+=(ffmpeg)
+          fi
           if ! command -v espeak-ng >/dev/null 2>&1; then
             packages+=(espeak-ng)
           fi
@@ -96,8 +95,8 @@ jobs:
             packages+=(fonts-noto-core)
           fi
           if [[ ${#packages[@]} -gt 0 ]]; then
-            sudo apt-get update -qq
-            sudo apt-get install -y --no-install-recommends "${packages[@]}"
+            timeout 180 sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update -qq
+            timeout 180 sudo apt-get install -y --no-install-recommends "${packages[@]}"
           fi
           ffmpeg -version
           ffprobe -version
