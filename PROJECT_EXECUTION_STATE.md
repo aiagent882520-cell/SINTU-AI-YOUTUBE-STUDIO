@@ -375,7 +375,7 @@ Last updated: 2026-11-17 15:52 UTC
 - The previous run #1234 failed only because the test mock returned 3 blackframe samples while the new gate required 30. The fixture was corrected to 30, and the fresh run #1236 passed all jobs.
 - Issue #95 now records: all five black MP4s were audio-repaired with video streams copied without re-encoding; they predate PR #122's all-duration black upload gate (merged 2026-11-18 07:13 UTC); candidate images were timestamped 4–13 minutes after the `afa` backup and are not proven sources; production logs/database have no matching provenance. Renderer/source-loss stage remains UNKNOWN.
 - Repository code search index availability is false, so a repo-wide TODO/FIXME scan cannot be completed through GitHub code search. Key renderer, API, bridge and generator modules were inspected; a complete local filesystem scan remains pending Android access.
-- Issues #127 and #129 remain claimed/running with no completion comment or exit code. Their claim timestamps are 09:22:15 UTC and 09:20:33 UTC respectively; at the checkpoint their ages remain below the 35-minute stale-claim threshold. Do not duplicate them. #119 is a separate successful `tests/test_api.py` run: 187 passed, 5 warnings, 140.16 seconds, exit 0.
+- Issues #127 and #129 remain claimed/running with no completion comment or exit code. Their claim timestamps are 09:22:15 UTC and 09:20:33 UTC respectively; at the checkpoint their ages remain below the 40-minute GitHub relay stale-claim threshold (the 35-minute threshold applies to local bridge jobs). Do not duplicate them. #119 is a separate successful `tests/test_api.py` run: 187 passed, 5 warnings, 140.16 seconds, exit 0.
 - PR #136 is validated in GitHub CI only. It is not yet merged or Android-deployed. Production remains PAUSED; original media and backups untouched; no upload/publishing or paid service used.
 
 
@@ -388,3 +388,9 @@ Last updated: 2026-11-17 15:52 UTC
 - Partial per-file results in #141: `8cfe9da8...` and `afa4c87e...` each show 30/30 blackframe samples (100%); `adf9268e...` reports blackdetect full-duration black but blackframe 0/30 (0%). This disagreement requires investigation; do not label all five black based on one detector. The issue #141 command still exited 1, and the first two target records plus summary were truncated from the relay output.
 - The compact summary in PR #136 did not fit the actual 8,000-character relay tail. New PR #143 caps the footer below 7,000 characters for five worst-case targets and preserves 30 raw pblack values per target to investigate blackdetect/blackframe disagreement.
 - Original MP4s and backups remain untouched; no repair, regeneration, upload or publishing. Production remains PAUSED.
+
+
+### Footer cap follow-up — 2026-11-18
+
+- Issue #141 confirmed the sequential frame fallback works on visible targets, but the first compact footer exceeded the actual relay tail once all five targets and provenance entries were included. PR #144 reduces the footer to a worst-case tested <7,000 characters and includes all 30 pblack values per file.
+- #127 and #129 still have only worker-claim comments; the GitHub relay's stale issue-claim recovery threshold is 40 minutes (not 35 minutes). Their claims are at 09:22:15 and 09:20:33 UTC; no duplicate command has been created.
