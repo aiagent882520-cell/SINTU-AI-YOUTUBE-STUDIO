@@ -72,21 +72,8 @@ for _ in $(seq 1 45); do
 done
 [ "$ready" -eq 1 ] || { tail -n 60 "$LOG_DIR/server.log" >&2 || true; exit 1; }
 
-# Restore the optional local llama.cpp model server after Android reboot.
-if command -v llama-server >/dev/null 2>&1 && [ -d "$LOG_DIR/models" ]; then
-  MODEL_PATH="$(find "$LOG_DIR/models" -maxdepth 1 -type f -name '*.gguf' -size +100M -print -quit)"
-  if [ -n "$MODEL_PATH" ]; then
-    if pid_is_expected "$LOG_DIR/llama-server.pid" "llama-server -m"; then
-      :
-    else
-      state=$?
-      [ "$state" -ne 2 ] || exit 1
-      nohup llama-server -m "$MODEL_PATH" --host 127.0.0.1 --port 8080 -c 4096 -t 4 \
-        >>"$LOG_DIR/llama-server.log" 2>&1 </dev/null &
-      echo $! > "$LOG_DIR/llama-server.pid"
-    fi
-  fi
-fi
+# Local LLM servers are deliberately not auto-started: model size and RAM usage
+# require an explicit operator choice, separate from core service recovery.
 
 if pid_is_expected "$LOG_DIR/bridge-worker.pid" "scripts/termux_bridge_worker.py"; then
   :
