@@ -229,6 +229,35 @@ def sample_decoded_frame(path: Path, seek_seconds: float, label: str) -> dict:
     return sample
 
 
+def analyze_av_sync(streams: list[dict], tolerance_seconds: float = 0.25) -> dict:
+    """Compare decoded container stream timelines; this is timestamp sync evidence, not lip-sync perception."""
+    video = next((item for item in streams if item.get("type") == "video"), None)
+    audio = next((item for item in streams if item.get("type") == "audio"), None)
+    if not video:
+        return {"status": "missing_video_stream"}
+    if not audio:
+        return {"status": "missing_audio_stream"}
+    try:
+        video_start = float(video.get("start_time") or 0.0)
+        audio_start = float(audio.get("start_time") or 0.0)
+        video_duration = float(video["duration"])
+        audio_duration = float(audio["duration"])
+    except (KeyError, TypeError, ValueError):
+        return {"status": "insufficient_stream_timing_metadata"}
+    start_delta = audio_start - video_start
+    end_delta = (audio_start + audio_duration) - (video_start + video_duration)
+    duration_delta = audio_duration - video_duration
+    in_sync = abs(start_delta) <= tolerance_seconds and abs(end_delta) <= max(tolerance_seconds, 0.5)
+    return {
+        "status": "within_tolerance" if in_sync else "out_of_sync",
+        "audio_minus_video_start_seconds": round(start_delta, 6),
+        "audio_minus_video_end_seconds": round(end_delta, 6),
+        "audio_minus_video_duration_seconds": round(duration_delta, 6),
+        "tolerance_seconds": tolerance_seconds,
+        "method": "ffprobe stream start_time and duration comparison; not perceptual lip-sync validation",
+    }
+
+
 def inspect_video(path: Path) -> dict:
     if path.is_symlink() or not path.is_file():
         return {"file": path.name, "exists": False, "safe_regular_file": False}
@@ -298,6 +327,7 @@ def inspect_video(path: Path) -> dict:
         "asset_reference_time_utc": datetime.fromtimestamp(reference_epoch, timezone.utc).isoformat() if reference_epoch else None,
         "asset_reference_time_source": reference_source,
         "ffprobe_exit": probe["returncode"], "metadata": info,
+        "av_sync": analyze_av_sync(info["streams"]),
         "blackdetect_exit": black["returncode"], "black_intervals": intervals,
         "full_duration_black": full_black, "decode_exit": decode["returncode"],
         "decode_errors": redact_secrets(decode["stderr"]) if decode["stderr"] else "",
