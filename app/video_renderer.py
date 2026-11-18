@@ -280,6 +280,31 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
     if require_audio is not None and has_audio != require_audio:
         raise RenderFailed("Final video audio stream expected setting se match nahi karti.")
 
+    # Reject full-black and long black segments at render time too, not
+    # only when a later upload is attempted.
+    try:
+        black = subprocess.run(
+            [ffmpeg, "-hide_banner", "-i", str(path), "-vf",
+             "blackdetect=d=0.5:pix_th=0.10", "-an", "-f", "null", "-"],
+            capture_output=True, text=True, timeout=45, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise RenderFailed("Final MP4 black-frame verification fail ya timeout ho gaya.") from None
+    if black.returncode != 0:
+        raise RenderFailed("Final MP4 black-frame scan decode nahi ho saka.")
+    black_intervals = [
+        (float(start), float(end)) for start, end in re.findall(
+            r"black_start:([0-9.]+)\\s+black_end:([0-9.]+)", black.stderr
+        )
+    ]
+    longest_black_seconds = max((end - start for start, end in black_intervals), default=0.0)
+    if any(start <= 0.1 and end >= duration * 0.95 for start, end in black_intervals):
+        raise RenderFailed("Final video mein full-duration black frames hain.")
+    if longest_black_seconds >= max(2.5, duration * 0.25):
+        raise RenderFailed(
+            f"Final video mein lamba black segment hai ({longest_black_seconds:.2f}s)."
+        )
+
     # Decode real pixels at one frame per second. Metadata-only checks let an
     # all-black H.264 file pass as a successful video; reject that failure mode.
     ffmpeg = shutil.which("ffmpeg")
@@ -309,7 +334,10 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         )
     verified = {"duration_seconds": duration, "video_duration_seconds": video_duration,
                 "frame_count": frame_count, "fps": actual_fps,
-                "resolution": f"{width}x{height}", "video_codec": codec, "audio": has_audio}
+                "resolution": f"{width}x{height}", "video_codec": codec, "audio": has_audio,
+                "black_intervals": black_intervals,
+                "longest_black_segment_seconds": round(longest_black_seconds, 3),
+                "visible_frame_count": visible, "sampled_frame_count": len(sampled)}
     if duration > 8:
         verified["motion_audit"] = validate_sampled_motion(
             pixels.stdout, minimum_ratio=minimum_motion_ratio
