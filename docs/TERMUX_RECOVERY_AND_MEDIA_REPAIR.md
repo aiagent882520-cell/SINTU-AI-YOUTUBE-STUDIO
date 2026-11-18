@@ -49,12 +49,14 @@ Default backups are stored under `media_backups/<UTC timestamp>/` inside the con
 
 ## GitHub allowlisted actions
 
-The GitHub Termux relay and local bridge support these fixed actions:
-- `restart_services`
-- `watchdog_recovery_test`
-- `media_repair`
+The GitHub Termux relay and local bridge support fixed allowlisted actions including:
+- `git_status`, `git_pull_ff_only`, `compile_check`
+- `run_tests` (only an existing Python file directly under `tests/`)
+- `automation_self_test`, `health_audit`, `operational_readiness`, `live_preflight`, `engine_probe`
+- `restart_services`, `watchdog_recovery_test`
+- `media_forensics` (read-only), `media_repair` (backup-first)
 
-They do not accept arbitrary shell commands or user-supplied paths. The media-repair action always uses the fixed project media directory and creates backups before replacing files.
+They do not accept arbitrary shell commands or arbitrary user-supplied paths. The media-repair action always uses the fixed project media directory and creates backups before replacing files.
 
 ## Android boot recovery
 
@@ -69,3 +71,5 @@ The GitHub relay and bridge worker are long-running processes. A plain `git pull
 Run `python scripts/media_forensics.py --json` on Android after the relay/worker has loaded the latest allowlist. It inspects only the five named legacy MP4 files and reports SHA-256/size/mtime, FFprobe container and stream metadata, black intervals, FFmpeg decoder errors, decoded first/middle/last frame timestamps, nearby source-asset timestamps, image luminance/variance, and matching production log/SQLite provenance. It redacts OAuth/session material and does not alter, move, delete, regenerate, or upload any media. A candidate image being nearby in time is not proof it was the source; confirm with production records before regeneration.
 
 The forensic report correlates candidate assets against the preserved pre-repair backup mtime when available. The audio repair uses `shutil.copy2` before replacing a repaired MP4, so the current MP4 filesystem mtime may reflect the audio-repair run rather than original video creation. A nearby asset based only on current mtime is not accepted as provenance.
+
+First/middle/last frames are queried with independent FFprobe timestamp windows; a frame returned only from a preceding keyframe is not accepted as the requested sample. The report includes stream start/end timing deltas for audio/video alignment. This is container timestamp evidence, not perceptual lip-sync validation. FFprobe, blackdetect, decode, or any frame-sample failure is recorded explicitly and makes the forensic command exit nonzero. A completed report may still correctly identify black or out-of-sync media without modifying it.

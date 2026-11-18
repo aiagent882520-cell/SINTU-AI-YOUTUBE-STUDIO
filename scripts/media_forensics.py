@@ -189,6 +189,75 @@ def parse_creation_time(value: str | None) -> float | None:
         return None
 
 
+def sample_decoded_frame(path: Path, seek_seconds: float, label: str) -> dict:
+    """Probe exactly one decoded frame near an independent timestamp."""
+    seek = max(0.0, float(seek_seconds))
+    result = run([
+        "ffprobe", "-v", "error", "-select_streams", "v:0",
+        "-read_intervals", f"{seek:.6f}%+1",
+        "-show_frames",
+        "-show_entries", "frame=best_effort_timestamp_time,pict_type",
+        "-of", "json", str(path),
+    ], timeout=30)
+    sample = {"sample": label, "seek_seconds": round(seek, 6),
+              "timestamp": None, "picture_type": None, "error": ""}
+    if result["returncode"] != 0:
+        sample["error"] = (result["stderr"] or "ffprobe frame sample failed")[:250]
+        return sample
+    try:
+        frames = json.loads(result["stdout"]).get("frames", [])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        sample["error"] = "invalid ffprobe frame-sample JSON"
+        return sample
+    if not frames:
+        sample["error"] = "no decoded frame found at requested timestamp"
+        return sample
+    timed = []
+    for frame in frames:
+        try:
+            timestamp = float(frame.get("best_effort_timestamp_time"))
+        except (TypeError, ValueError):
+            continue
+        if timestamp >= seek - 0.001:
+            timed.append((abs(timestamp - seek), timestamp, frame))
+    if not timed:
+        sample["error"] = "no decoded frame at or after the requested timestamp"
+        return sample
+    chosen = min(timed, key=lambda item: item[0])[2]
+    sample["timestamp"] = chosen.get("best_effort_timestamp_time")
+    sample["picture_type"] = chosen.get("pict_type")
+    return sample
+
+
+def analyze_av_sync(streams: list[dict], tolerance_seconds: float = 0.25) -> dict:
+    """Compare decoded container stream timelines; this is timestamp sync evidence, not lip-sync perception."""
+    video = next((item for item in streams if item.get("type") == "video"), None)
+    audio = next((item for item in streams if item.get("type") == "audio"), None)
+    if not video:
+        return {"status": "missing_video_stream"}
+    if not audio:
+        return {"status": "missing_audio_stream"}
+    try:
+        video_start = float(video["start_time"])
+        audio_start = float(audio["start_time"])
+        video_duration = float(video["duration"])
+        audio_duration = float(audio["duration"])
+    except (KeyError, TypeError, ValueError):
+        return {"status": "insufficient_stream_timing_metadata"}
+    start_delta = audio_start - video_start
+    end_delta = (audio_start + audio_duration) - (video_start + video_duration)
+    duration_delta = audio_duration - video_duration
+    in_sync = abs(start_delta) <= tolerance_seconds and abs(end_delta) <= max(tolerance_seconds, 0.5)
+    return {
+        "status": "within_tolerance" if in_sync else "out_of_sync",
+        "audio_minus_video_start_seconds": round(start_delta, 6),
+        "audio_minus_video_end_seconds": round(end_delta, 6),
+        "audio_minus_video_duration_seconds": round(duration_delta, 6),
+        "tolerance_seconds": tolerance_seconds,
+        "method": "ffprobe stream start_time and duration comparison; not perceptual lip-sync validation",
+    }
+
+
 def inspect_video(path: Path) -> dict:
     if path.is_symlink() or not path.is_file():
         return {"file": path.name, "exists": False, "safe_regular_file": False}
@@ -223,16 +292,21 @@ def inspect_video(path: Path) -> dict:
     duration = info["duration_seconds"] or 0
     full_black = bool(duration and any(a <= 0.1 and b >= duration * 0.95 for a, b in intervals))
 
-    frames_result = run(["ffprobe", "-v", "error", "-select_streams", "v:0",
-                         "-show_frames", "-show_entries", "frame=best_effort_timestamp_time,pict_type",
-                         "-of", "csv=p=0", str(path)], timeout=45)
-    frame_lines = frames_result["stdout"].splitlines()
-    samples = []
-    if frame_lines:
-        for label, index in (("first", 0), ("middle", len(frame_lines) // 2), ("last", len(frame_lines) - 1)):
-            parts = frame_lines[index].split(",")
-            samples.append({"sample": label, "timestamp": parts[0] if parts else "",
-                            "picture_type": parts[1] if len(parts) > 1 else ""})
+    fps = 0.0
+    for stream in info["streams"]:
+        if stream.get("type") == "video":
+            try:
+                numerator, denominator = (int(part) for part in str(stream.get("frame_rate", "0/1")).split("/", 1))
+                fps = numerator / denominator if denominator else 0.0
+            except (TypeError, ValueError, ZeroDivisionError):
+                fps = 0.0
+            break
+    end_seek = max(0.0, duration - (1.0 / fps if fps > 0 else 0.1))
+    samples = [
+        sample_decoded_frame(path, 0.0, "first"),
+        sample_decoded_frame(path, duration / 2.0, "middle"),
+        sample_decoded_frame(path, end_seek, "last"),
+    ]
 
     backups = find_backups(path)
     creation_epoch = parse_creation_time(info.get("container_creation_time"))
@@ -246,19 +320,38 @@ def inspect_video(path: Path) -> dict:
         reference_epoch = stat.st_mtime
         reference_source = "current-file-mtime-may-reflect-audio-repair"
     return {
-        "file": path.name, "exists": True, "size_bytes": stat.st_size,
+        "file": path.name, "exists": True, "safe_regular_file": True,
+        "size_bytes": stat.st_size,
         "sha256": sha256_file(path),
         "modified_utc": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
         "pre_repair_backups": backups,
         "asset_reference_time_utc": datetime.fromtimestamp(reference_epoch, timezone.utc).isoformat() if reference_epoch else None,
         "asset_reference_time_source": reference_source,
         "ffprobe_exit": probe["returncode"], "metadata": info,
+        "av_sync": analyze_av_sync(info["streams"]),
         "blackdetect_exit": black["returncode"], "black_intervals": intervals,
         "full_duration_black": full_black, "decode_exit": decode["returncode"],
         "decode_errors": redact_secrets(decode["stderr"]) if decode["stderr"] else "",
-        "decoded_frame_samples": samples, "frame_probe_exit": frames_result["returncode"],
-        "frame_probe_error": frames_result["stderr"][:250] if frames_result["returncode"] else "",
+        "decoded_frame_samples": samples,
+        "frame_probe_exit": 0 if all(not sample["error"] for sample in samples) else 1,
+        "frame_probe_error": "; ".join(sample["error"] for sample in samples if sample["error"])[:250],
     }
+
+
+def has_forensic_tool_failure(item: dict) -> bool:
+    """Distinguish a completed black-video finding from failed forensic tooling."""
+    if not item.get("exists") or not item.get("safe_regular_file"):
+        return True
+    for key in ("ffprobe_exit", "blackdetect_exit", "decode_exit", "frame_probe_exit"):
+        if item.get(key) != 0:
+            return True
+    metadata = item.get("metadata") or {}
+    if metadata.get("parse_error") or not metadata.get("format") or not metadata.get("duration_seconds"):
+        return True
+    if not any(stream.get("type") == "video" for stream in metadata.get("streams", [])):
+        return True
+    samples = item.get("decoded_frame_samples") or []
+    return len(samples) != 3 or any(sample.get("error") or not sample.get("timestamp") for sample in samples)
 
 
 def main() -> int:
@@ -273,8 +366,16 @@ def main() -> int:
             for asset in nearby_assets(datetime.fromisoformat(reference_time).timestamp()):
                 assets[asset["path"]] = asset
     needles = tuple(value for name in TARGETS for value in (name, Path(name).stem))
+    tool_failures = sum(1 for item in videos if has_forensic_tool_failure(item))
     report = {
         "status": "READ_ONLY_FORENSICS",
+        "summary": {
+            "target_count": len(videos),
+            "inspected_count": sum(1 for item in videos if item.get("exists")),
+            "full_duration_black_count": sum(1 for item in videos if item.get("full_duration_black")),
+            "av_sync_failure_count": sum(1 for item in videos if item.get("av_sync", {}).get("status") != "within_tolerance"),
+            "forensic_tool_failure_count": tool_failures,
+        },
         "targets": videos,
         "candidate_source_assets": list(assets.values()),
         "production_log_matches": scan_text_logs(needles),
@@ -284,7 +385,7 @@ def main() -> int:
         "note": "The audio repair used copy2 backups before replacing MP4s; backup mtimes are preferred for source correlation because current MP4 mtimes may reflect audio repair. Technical evidence only; no repair, quarantine, deletion, regeneration, or upload was performed.",
     }
     print(json.dumps(report, ensure_ascii=False, separators=(",", ":")))
-    return 0 if all(item.get("exists") for item in videos) else 1
+    return 1 if tool_failures else 0
 
 
 if __name__ == "__main__":
