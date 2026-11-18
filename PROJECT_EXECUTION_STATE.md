@@ -356,3 +356,6 @@ Last updated: 2026-11-17 15:52 UTC
 
 
 - Added an FFmpeg/FFprobe integration test that creates a synthetic 4-second black MP4 and verifies full-duration black detection, 30 distributed blackframe samples (100% black), all five timestamp samples, and no hidden tool failure.
+
+
+- The black-frame sampling gate now requires exactly 30 decoded distributed samples per file; a short/partial sample set is a forensic-tool failure rather than a misleading percentage.
