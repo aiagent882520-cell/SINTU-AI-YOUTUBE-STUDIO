@@ -294,7 +294,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         raise RenderFailed("Final MP4 black-frame scan decode nahi ho saka.")
     black_intervals = [
         (float(start), float(end)) for start, end in re.findall(
-            r"black_start:([0-9.]+)\\s+black_end:([0-9.]+)", black.stderr
+            r"black_start:([0-9.]+)\s+black_end:([0-9.]+)", black.stderr
         )
     ]
     longest_black_seconds = max((end - start for start, end in black_intervals), default=0.0)
