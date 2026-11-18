@@ -158,3 +158,43 @@ Last updated: 2026-11-17 15:52 UTC
 4. Re-run Android health/media audit only after a verified, backup-first resolution of the black assets; do not queue duplicate audits without a specific code/media change.
 5. Keep AI/model installation blocked until a fresh resource probe shows safe memory headroom; do not install large models automatically.
 6. Verify full Android reboot/Termux:Boot with owner participation; a process watchdog test is not a full reboot test.
+
+
+## Fresh execution addendum — 2026-11-18 (UTC)
+
+### Verified repository and Android deployment state
+
+- Main branch is at `f9500f084008dcacfac68d116dff975f395b02f5` after the Termux service-restart hardening in PR #114. Main CI run `44142453479` completed successfully with all 7 jobs: dependency audit, Python 3.11/3.12/3.13/3.14 tests, Docker build/health, and offline branded-video E2E/motion audit.
+- Android Termux fast-forwarded from `3efd4b2` to `f9500f0` through relay Issue #115. Issue #116 then reported SINTU API and Termux workers running. This confirms repository deployment and service restart, not successful execution of the newly queued regression jobs.
+- Fresh Android tasks are queued: Issue #117 read-only media forensics; #118 resumable-upload recovery tests; #119 API/public-approval tests; #120 automation self-test. At this addendum timestamp none has returned a Termux claim/result comment. Do not count them as device PASS.
+- Earlier Android evidence remains: automation self-test #98 was 7/7 PASS; post-repair health audit #100 was 13 PASS / 0 WARN / 5 FAIL and pytest 534 passed / 5 warnings. The five FAILs were the same five full-duration black MP4s. Those files remain untouched.
+
+### YouTube resumable upload and approval
+
+- Resumable upload implementation merged in PR #101 (`ffd0feb20daa9e84b6fbd7b5394b60b06ffc21d9`); public approval implementation merged in PR #108 (`0fc372e37205e8a42df67020c46b51d64bba3c9`); channel-wide duplicate-file protection merged in PR #111 (`3efd4b2fff4681230cff969aba959262813af665`).
+- The implementation includes encrypted persistent resumable session URI, 8 MiB chunk uploads, server Range probing, bounded retries, restart resume, OAuth refresh handling, immutable MP4 hash binding, cancellation/status, exact channel/video/title/content-bound one-time approval, 10-minute expiry, revocation, and private-first upload before any separately approved visibility change.
+- Mock regression tests cover interrupted transfer, server-acknowledged offset, process restart, expired sessions, malformed Range, changed source, duplicate prevention, approval binding/replay, expiry and revocation. No live Google API calls were used.
+- Android code deployment is verified by Issue #115. Android targeted test execution remains pending in Issues #118–#119. Real OAuth credentials, encryption secret and connected channel were absent in the last preflight; no real channel or upload has been verified. No approval token has been issued and no public upload occurred.
+- Issues #92 and #93 remain open pending Android regression evidence and (for live OAuth/channel verification) owner-supplied Google credentials. Do not close them merely because the implementation PRs merged.
+
+### Media forensic investigation and quality-gate hardening
+
+- Read-only forensic implementation PR #110 merged as `5ceb587d06dd94dface4f0afd9e6ccb6566253e5`. Its code was included in the Termux deployment to `f9500f0`. The initial Android forensic report (#104) was incomplete/truncated and used invalid frame sample selection; it did not establish source provenance or root cause.
+- A corrected forensic job is queued as Issue #117. It is read-only and must report all five targets, preserved pre-repair backup metadata, MP4 creation time, black intervals, decode results, independent first/middle/last frame samples, source-image luminance, and logs/SQLite provenance. No media changes are authorized by this diagnostic.
+- Source review found that the original forensic script dumped all frames then selected from a truncated stdout tail. PR #121 now changes it to independent timestamp probes and adds regression tests. Its CI run `44225838103` is in progress at this addendum timestamp (dependency audit and Python 3.11/3.13/3.14 passed; Python 3.12 still running). It is not merged/deployed.
+- A separate source review found that `verify_publishable_mp4` checked metadata and long-video motion but did not reject full-black short MP4s. PR #122 adds FFmpeg blackdetect plus visible-pixel checks and real FFmpeg tests for full-black valid-AAC and partial-black/visible clips. Its CI run `44225980757` is in progress; dependency audit passed and Python matrix jobs were still running. It is not merged/deployed.
+- The five black MP4s remain unmodified, unregenerated and not quarantined. No source asset has yet been confirmed. Issue #95 remains open; keep production paused and publishing blocked.
+
+### Resource and production constraints
+
+- Last measured Android available RAM was approximately 1.03 GiB with about 27.69 GiB free home storage; no GGUF model was present and ComfyUI was unreachable/unconfigured. Do not auto-install large models or ComfyUI without a fresh safe resource probe.
+- Last live preflight found FFmpeg/FFprobe available, eSpeak NG Hindi and procedural music available, but no local AI model, no configured image/video generation workflow, and no YouTube OAuth credentials/token-encryption configuration/connected channel.
+- Production remains PAUSED / automation-only. A controlled production test video has not been run on the Android device. No public publishing is authorized; keep it disabled and do not issue a public approval token.
+
+### Current next safe execution point
+
+1. Finish PR #121 and #122 CI; merge only if every required check passes.
+2. Deploy the merged commits to Termux with a confirmed fast-forward and service restart.
+3. Obtain fresh Issue #117 forensic report, then identify proven source/root cause before any backup-first regeneration/quarantine.
+4. Run queued Android tests #118–#120 and a fresh resource/health audit after code/media changes.
+5. Keep #92/#93/#95 open until their acceptance evidence exists. OAuth/channel live verification and full Android reboot/Termux:Boot recovery remain external/unverified.
