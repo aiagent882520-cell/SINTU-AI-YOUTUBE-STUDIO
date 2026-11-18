@@ -292,8 +292,11 @@ def test_compact_forensic_summary_preserves_per_file_evidence_for_relay_tail():
         }],
         "candidate_source_assets": [{"path": "generated_images/source.jpg",
                                      "size_bytes": 999, "mean_luma": 100.0}],
-        "production_log_matches": [],
-        "production_database_matches": [],
+        "production_log_matches": [{"path": "logs/render.log", "line": 12,
+                                     "excerpt": "renderer exit=1"}],
+        "production_database_matches": [{"db": "production_runtime.sqlite3",
+                                         "table": "production_runs", "column": "result_json",
+                                         "record": {"status": "failed"}}],
         "safety": {"files_modified": False, "files_deleted": False},
     }
     footer = media_forensics.compact_forensic_summary(report)
