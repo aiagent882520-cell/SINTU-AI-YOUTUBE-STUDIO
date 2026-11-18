@@ -533,3 +533,13 @@ Last updated: 2026-11-17 15:52 UTC
 - Issue #95 now contains the full #155 per-file hashes, backup hashes, detector disagreement and forensic tooling diagnosis.
 - All five originals and backups remain untouched. No repair, regeneration, quarantine, deletion, upload, or public publishing occurred. Production remains PAUSED and public publishing DISABLED.
 - Next: finish PR #158 exact-head CI; merge only if all required jobs pass; deploy that exact commit to Termux; rerun #155 and verify decoded pixels independently; then complete #157, #127, and #159 with actual Android exit codes before any media remediation.
+
+
+
+### PR #158 merge and post-merge Android execution queue — 2026-11-18 11:43 UTC
+- PR #158 passed exact-head CI run #1266: Python 3.11 PASS, 3.12 PASS, 3.13 PASS, 3.14 PASS; dependency security audit PASS; offline branded-video E2E/motion audit PASS; production Docker build PASS.
+- PR #158 was squash-merged to `main` as `e78322dc53cf2c0825600500dfae672738cc28e6`. This fixes the sequential FFprobe JSON truncation by using compact CSV and preserves bounded head/tail output for diagnostics. It also improves temp-storage reporting and expands forensic regression coverage (missing/corrupt/audio-only inputs, VFR timestamps, missing tools, late sample failures, nonzero exit, temp-storage failure, full-black/partial-black/valid non-black media).
+- Post-merge main CI run #1268 (`44297095327`) was IN_PROGRESS at checkpoint. Do not substitute PR CI for the post-merge main result.
+- Android Issue #157 health audit and #127 full regression remain open/running with no final output or exit code at checkpoint. Do not mark them PASS. Issue #159 watchdog recovery test remains queued.
+- Queued after the watchdog test: #160 pull latest main; #161 post-PR #158 forensic rerun; #162 post-merge full pytest; #163 automation self-test; #164 health audit. All are read-only except normal service restart/recovery behavior; production remains paused.
+- Keep the five MP4s unresolved until #161 returns all five target records with zero tool failures and independent decoded-pixel evidence. No repair/regeneration is authorized until source provenance and pixel evidence are reconciled.
