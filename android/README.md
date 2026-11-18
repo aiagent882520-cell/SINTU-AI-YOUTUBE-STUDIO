@@ -24,3 +24,7 @@ The debug APK is installable for device testing. The release APK produced by thi
 ## Current limitations
 
 This first native client tranche is not yet a complete parity release. Background upload/download recovery, native video preview/download, media library management, full timeline editing, offline project queueing, notifications, accessibility/device-size test matrix and signed release package remain outstanding. Real chat/generation also depends on the configured SINTU backend and available AI engines.
+
+## CI build evidence
+
+The GitHub Actions workflow `.github/workflows/android-app.yml` runs the URL-validation unit tests and assembles both `app-debug.apk` and `app-release-unsigned.apk`. The debug and unsigned release APKs are uploaded together as the `sintu-android-apks` workflow artifact. A successful CI build proves compilation/package creation, not installation or functional testing on a physical Android device.
