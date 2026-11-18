@@ -40,7 +40,7 @@ def _bounded_text(value: str, limit: int) -> str:
     if len(value) <= limit:
         return value
     half = limit // 2
-    return value[:half] + "\\n...[output truncated]...\\n" + value[-half:]
+    return value[:half] + "\n...[output truncated]...\n" + value[-half:]
 
 
 def run(command: list[str], timeout: int = 120) -> dict:
