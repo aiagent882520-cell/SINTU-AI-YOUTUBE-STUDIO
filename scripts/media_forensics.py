@@ -383,6 +383,59 @@ def has_forensic_tool_failure(item: dict) -> bool:
     return len(samples) != 3 or any(sample.get("error") or not sample.get("timestamp") for sample in samples)
 
 
+def compact_forensic_summary(report: dict) -> dict:
+    """Build a small per-file footer that survives the Termux relay's output-tail limit."""
+    targets = []
+    for item in report.get("targets", []):
+        metadata = item.get("metadata") or {}
+        streams = [
+            {key: stream.get(key) for key in (
+                "type", "codec", "resolution", "pixel_format", "frame_rate",
+                "frame_count", "sample_rate", "channels", "duration", "start_time",
+            )}
+            for stream in metadata.get("streams", [])
+        ]
+        targets.append({
+            "file": item.get("file"),
+            "exists": item.get("exists"),
+            "size_bytes": item.get("size_bytes"),
+            "sha256": item.get("sha256"),
+            "duration_seconds": metadata.get("duration_seconds"),
+            "streams": streams,
+            "full_duration_black": item.get("full_duration_black"),
+            "black_intervals": item.get("black_intervals", []),
+            "decode_exit": item.get("decode_exit"),
+            "frame_probe_exit": item.get("frame_probe_exit"),
+            "samples": [
+                {key: sample.get(key) for key in (
+                    "sample", "seek_seconds", "timestamp", "picture_type",
+                    "sampling_method", "error",
+                )}
+                for sample in item.get("decoded_frame_samples", [])
+            ],
+            "backups": [
+                {key: backup.get(key) for key in ("path", "size_bytes", "sha256")}
+                for backup in item.get("pre_repair_backups", [])
+            ],
+            "asset_reference_time_utc": item.get("asset_reference_time_utc"),
+        })
+    return {
+        "status": report.get("status"),
+        "summary": report.get("summary", {}),
+        "targets": targets,
+        "candidate_source_assets": [
+            {key: asset.get(key) for key in (
+                "path", "size_bytes", "image_size", "mean_luma",
+                "luma_stddev", "near_black", "modified_utc",
+            )}
+            for asset in report.get("candidate_source_assets", [])[:10]
+        ],
+        "production_log_match_count": len(report.get("production_log_matches", [])),
+        "production_database_match_count": len(report.get("production_database_matches", [])),
+        "safety": report.get("safety", {}),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true")
@@ -414,6 +467,11 @@ def main() -> int:
         "note": "The audio repair used copy2 backups before replacing MP4s; backup mtimes are preferred for source correlation because current MP4 mtimes may reflect audio repair. Technical evidence only; no repair, quarantine, deletion, regeneration, or upload was performed.",
     }
     print(json.dumps(report, ensure_ascii=False, separators=(",", ":")))
+    # The GitHub Termux relay retains only the final 8,000 output characters.
+    # Keep per-file hashes, streams, black intervals, samples, backups and safety
+    # flags in a compact footer so no target's evidence is lost to truncation.
+    footer = compact_forensic_summary(report)
+    print("SINTU_FORENSICS_SUMMARY=" + json.dumps(footer, ensure_ascii=False, separators=(",", ":")))
     return 1 if tool_failures else 0
 
 
