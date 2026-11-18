@@ -42,7 +42,7 @@ from .agents import list_agents
 from .production_catalog import production_catalog
 from .studio_scope import agent_registry, production_plan, scope_summary
 from . import studio_engine
-from .policy import paid_upgrades_allowed
+from .policy import paid_upgrades_allowed, production_actions_allowed, external_publishing_allowed
 from .blender_renderer import BLENDER_DIR, blender_status, render_scene, BlenderUnavailable, BlenderRenderFailed
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
@@ -89,6 +89,29 @@ def stop_google_flow_auto_import():
 _FIREWALL_LIMITER = RequestRateLimiter()
 
 
+def _is_media_production_action(path: str) -> bool:
+    fixed = {
+        "/api/studio/blender/render", "/api/render", "/api/video/generate",
+        "/api/music/generate", "/api/music/upload", "/api/images",
+        "/api/voice", "/api/subtitles",
+    }
+    return (
+        path in fixed
+        or bool(re.fullmatch(r"/api/studio/render-queue/[^/]+/execute", path))
+        or bool(re.fullmatch(r"/api/production/runs/[^/]+/(produce-media|render)", path))
+    )
+
+
+def _is_external_publishing_action(path: str) -> bool:
+    fixed = {"/api/admin/youtube/public-approvals"}
+    return (
+        path in fixed
+        or bool(re.fullmatch(r"/api/admin/youtube/publish/[^/]+", path))
+        or bool(re.fullmatch(r"/api/admin/meta/(facebook|instagram)/publish/[^/]+", path))
+        or bool(re.fullmatch(r"/api/admin/tiktok/publish/[^/]+", path))
+    )
+
+
 @app.middleware("http")
 async def application_firewall(request: Request, call_next):
     path = request.url.path
@@ -115,6 +138,19 @@ async def application_firewall(request: Request, call_next):
         fetch_site = request.headers.get("sec-fetch-site", "").lower()
         if (origin and not same_origin_request(origin, request.headers.get("host", ""), request.url.scheme)) or fetch_site == "cross-site":
             return JSONResponse(status_code=403, content={"detail": "Cross-origin request blocked by security policy."})
+
+    if request.method == "POST" and _is_media_production_action(path) and not production_actions_allowed():
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Video/media production is paused. Enable SINTU_PRODUCTION_ENABLED only after all readiness gates pass."},
+            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY"},
+        )
+    if request.method == "POST" and _is_external_publishing_action(path) and not external_publishing_allowed():
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "External publishing is disabled. Enable SINTU_EXTERNAL_PUBLISHING_ENABLED only after owner approval and all readiness gates pass."},
+            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY"},
+        )
 
     response = await call_next(request)
     # Defense-in-depth browser security headers. The app remains same-origin and
