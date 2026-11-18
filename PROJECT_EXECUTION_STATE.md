@@ -572,3 +572,11 @@ Last updated: 2026-11-17 15:52 UTC
 - Actual pytest: **593 passed, 5 warnings in 272.16s (4m32s)** on Python 3.14.10. Warnings are Starlette/httpx TestClient deprecation and FastAPI `on_event` lifecycle deprecations; no test failures.
 - This #127 execution began before the queued #160 pull of PR #158/#165 changes, so it validates the previously deployed code, not the latest pixel-verification commit. Issue #162 is queued to rerun the suite after latest main is pulled.
 - The relay recovered two stale claims before #127 completed; the final attempt succeeded. Issue #159 watchdog recovery test is now RUNNING; #160 pull latest main and #161 forensic rerun remain queued behind it.
+
+
+
+### Android watchdog recovery Issue #159 — final result, 2026-11-18 11:56:57 UTC
+- Issue #159 closed SUCCESS / exit 0 on Android Termux.
+- Actual worker crash-recovery test terminated and watchdog-recovered both processes: bridge-worker old PID 10629 -> new PID 23191; API server old PID 10605 -> new PID 23614.
+- This verifies process termination/restart in the current Termux session. A full Android device reboot was not tested.
+- Issue #160 is now RUNNING to pull latest main (including PR #158 and #165); #161 media forensic, #162 regression tests, #163 self-test and #164 health audit remain queued behind it.
