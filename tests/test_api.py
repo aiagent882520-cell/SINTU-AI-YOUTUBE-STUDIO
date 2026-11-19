@@ -2033,7 +2033,6 @@ def test_public_approval_revocation_and_expiry_block_upload_before_oauth(tmp_pat
     output_dir.mkdir()
     (output_dir / (video_id + ".mp4")).write_bytes(b"approval-revoke-test")
     write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
-    write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(main, "verify_publishable_mp4", lambda _: {"verified": True})
     monkeypatch.setattr(main, "_youtube_connection", lambda: {
