@@ -100,3 +100,16 @@ def test_timeline_trim_limits_match_render_api():
     helper_start = source.index("function updateTimelineTrim(item,field,rawValue)")
     helper_end = source.index('\n$("timelineEditor").addEventListener("change"', helper_start)
     assert "next>600" in source[helper_start:helper_end]
+
+
+def test_render_preflight_rejects_timeline_scene_and_subtitle_misalignment():
+    source = (ROOT / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    start = source.index('$("renderButton").addEventListener("click"')
+    end = source.index('\n$("musicUploadButton")', start)
+    handler = source[start:end]
+
+    assert "rawTimelineLines.length && rows.length !== rawTimelineLines.length" in handler
+    assert "rawSceneLines.length !== rows.length || rawSceneLines.some(line => !line)" in handler
+    assert "subtitles.length !== rows.length" in handler
+    assert "timeline_items: structuredTimelineItems(rows)" in handler
+    assert "subtitles," in handler
