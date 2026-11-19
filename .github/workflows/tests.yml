@@ -72,7 +72,7 @@ jobs:
   offline-video-e2e:
     name: Offline branded video E2E and motion audit
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     needs: [test]
     steps:
       - name: Checkout source
@@ -90,23 +90,19 @@ jobs:
       - name: Install free local voice and font tools
         run: |
           if ! command -v espeak-ng >/dev/null 2>&1 || ! fc-match "Noto Sans Devanagari" >/dev/null 2>&1; then
-            if ! timeout 120 sudo apt-get \
-                -o Acquire::Retries=1 \
-                -o Acquire::http::Timeout=20 \
-                -o Acquire::https::Timeout=20 \
-                install -y --no-install-recommends espeak-ng fonts-noto-core; then
-              echo "Cached package indexes unavailable; refreshing once."
-              timeout 180 sudo apt-get \
-                -o Acquire::Retries=1 \
-                -o Acquire::http::Timeout=20 \
-                -o Acquire::https::Timeout=20 \
-                update -qq
-              timeout 300 sudo apt-get \
-                -o Acquire::Retries=1 \
-                -o Acquire::http::Timeout=20 \
-                -o Acquire::https::Timeout=20 \
-                install -y --no-install-recommends espeak-ng fonts-noto-core
-            fi
+            # Refresh indexes once before installing: retrying a partially completed
+            # install against stale indexes wastes runner time and can leave packages
+            # half downloaded when Ubuntu mirrors are slow.
+            timeout 300 sudo apt-get \
+              -o Acquire::Retries=2 \
+              -o Acquire::http::Timeout=45 \
+              -o Acquire::https::Timeout=45 \
+              update -qq
+            timeout 900 sudo apt-get \
+              -o Acquire::Retries=3 \
+              -o Acquire::http::Timeout=45 \
+              -o Acquire::https::Timeout=45 \
+              install -y --no-install-recommends espeak-ng fonts-noto-core
           fi
           ffmpeg -version
           ffprobe -version
