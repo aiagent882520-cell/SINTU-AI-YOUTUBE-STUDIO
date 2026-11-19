@@ -128,3 +128,19 @@ def test_offline_media_ui_and_service_worker_include_persistent_queue(tmp_path, 
     worker = client.get("/static/sw.js")
     assert worker.status_code == 200
     assert "/static/offline_media.js" in worker.text
+
+
+def test_offline_media_refuses_same_size_corrupt_unindexed_destination(tmp_path):
+    import sqlite3
+    source = tmp_path / "first.part"
+    source.write_bytes(b"expected-content")
+    record = import_media_file(data_dir=tmp_path, source_path=source, filename="clip.mp4")
+    database = tmp_path / "offline_media" / "index.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute("DELETE FROM offline_media WHERE sha256=?", (record["sha256"],))
+    stored = tmp_path / "offline_media" / "files" / record["stored_name"]
+    stored.write_bytes(b"corrupt-content")  # same byte length, different SHA-256
+    retry = tmp_path / "retry.part"
+    retry.write_bytes(b"expected-content")
+    with pytest.raises(OfflineMediaError, match="hash mismatch"):
+        import_media_file(data_dir=tmp_path, source_path=retry, filename="clip.mp4")
