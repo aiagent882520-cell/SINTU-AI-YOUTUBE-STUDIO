@@ -60,14 +60,19 @@ def ensure_schema():
         CREATE TABLE IF NOT EXISTS studio_render_queue (
           id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT NOT NULL,
           status TEXT NOT NULL, payload_json TEXT NOT NULL, result_json TEXT,
-          created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+          created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+          progress_json TEXT NOT NULL DEFAULT '{}'
         );
         CREATE INDEX IF NOT EXISTS idx_studio_render_queue ON studio_render_queue(owner, status, created_at);
         """)
-        try:
-            conn.execute("ALTER TABLE studio_runs ADD COLUMN last_error TEXT")
-        except sqlite3.OperationalError:
-            pass
+        for table, column, definition in (
+            ("studio_runs", "last_error", "TEXT"),
+            ("studio_render_queue", "progress_json", "TEXT NOT NULL DEFAULT '{}'"),
+        ):
+            try:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+            except sqlite3.OperationalError:
+                pass
 
 def _row(row):
     return dict(row) if row else None
@@ -288,8 +293,31 @@ def list_render_queue(owner, project_id=None):
         item = dict(row)
         item["payload"] = json.loads(item.pop("payload_json"))
         item["result"] = json.loads(item.pop("result_json")) if item["result_json"] else None
+        item["progress"] = json.loads(item.pop("progress_json")) if item.get("progress_json") else {}
         result.append(item)
     return result
+
+
+def update_render_progress(owner, item_id, percent, stage="rendering"):
+    """Persist monotonic, bounded render progress for the owning user only."""
+    ensure_schema()
+    percent = max(0, min(99, int(percent)))
+    now = _now()
+    with _db() as conn:
+        row = conn.execute(
+            "SELECT status,progress_json FROM studio_render_queue WHERE id=? AND owner=?",
+            (item_id, owner),
+        ).fetchone()
+        if not row or row["status"] != "running":
+            return None
+        current = json.loads(row["progress_json"] or "{}")
+        percent = max(percent, int(current.get("percent", 0)))
+        progress = {"percent": percent, "stage": str(stage)[:40], "updated_at": now}
+        conn.execute(
+            "UPDATE studio_render_queue SET progress_json=?,updated_at=? WHERE id=? AND owner=? AND status='running'",
+            (json.dumps(progress), now, item_id, owner),
+        )
+    return progress
 
 
 def delete_asset(owner, asset_id):
