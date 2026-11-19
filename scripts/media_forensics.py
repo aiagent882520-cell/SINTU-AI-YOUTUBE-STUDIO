@@ -190,10 +190,12 @@ def scan_text_logs(needles: tuple[str, ...]) -> list[dict]:
             except OSError:
                 continue
             for number, line in enumerate(lines, 1):
-                if any(needle in line for needle in needles):
+                matched_terms = [needle for needle in needles if needle in line]
+                if matched_terms:
                     matches.append({"path": str(path.relative_to(DATA_DIR)),
-                                    "line": number, "excerpt": redact_secrets(line)})
-                    if len(matches) >= 20:
+                                    "line": number, "matched_terms": matched_terms[:10],
+                                    "excerpt": redact_secrets(line)})
+                    if len(matches) >= 50:
                         return matches
     return matches
 
@@ -221,7 +223,8 @@ def scan_database_records(needles: tuple[str, ...]) -> list[dict]:
                             safe = {key: redact_secrets(str(row[key])) for key in row.keys()
                                     if not any(term in key.lower() for term in SECRET_TERMS)}
                             results.append({"db": path.name, "table": table,
-                                            "column": name, "record": safe})
+                                            "column": name, "matched_terms": [needle],
+                                            "record": safe})
                             if len(results) >= 20:
                                 conn.close()
                                 return results
@@ -263,7 +266,8 @@ def inspect_asset(path: Path) -> dict:
     return item
 
 
-def nearby_assets(timestamp: float) -> list[dict]:
+def nearby_assets(timestamp: float, window_seconds: int = 900) -> list[dict]:
+    """Return the closest timestamp candidates; mtime proximity is not source proof."""
     found = []
     allowed = {".png", ".jpg", ".jpeg", ".webp", ".wav", ".mp3", ".m4a", ".aac", ".ogg", ".mp4"}
     for dirname in ASSET_DIRS:
@@ -275,13 +279,32 @@ def nearby_assets(timestamp: float) -> list[dict]:
                 continue
             try:
                 stat = path.stat()
-                if abs(stat.st_mtime - timestamp) <= 900:
-                    found.append(inspect_asset(path))
+                delta = abs(stat.st_mtime - timestamp)
+                if delta <= window_seconds:
+                    item = inspect_asset(path)
+                    item["reference_time_delta_seconds"] = round(delta, 3)
+                    item["mtime_offset_from_reference_seconds"] = round(stat.st_mtime - timestamp, 3)
+                    item["correlation_basis"] = "mtime_proximity_only_not_proof"
+                    found.append(item)
             except OSError:
                 continue
-            if len(found) >= 20:
-                return found
-    return found
+    return sorted(found, key=lambda item: (
+        item["reference_time_delta_seconds"], item["path"]
+    ))[:20]
+
+
+def source_asset_needles(assets: list[dict]) -> tuple[str, ...]:
+    """Build bounded path/name tokens for read-only log and SQLite reference scans."""
+    values = []
+    for asset in assets:
+        relative = str(asset.get("path") or "")
+        if not relative:
+            continue
+        filename = Path(relative).name
+        for candidate in (relative, filename, Path(filename).stem):
+            if len(candidate) >= 8 and candidate not in values:
+                values.append(candidate)
+    return tuple(values[:60])
 
 
 def find_backups(path: Path) -> list[dict]:
@@ -758,6 +781,16 @@ def compact_forensic_summary(report: dict) -> dict:
              str(match.get("excerpt", ""))[:60]]
             for match in report.get("production_log_matches", [])[:2]
         ],
+        "asset_logs": [
+            [str(match.get("path", ""))[-64:], match.get("line"),
+             match.get("matched_terms", [])[:2], str(match.get("excerpt", ""))[:60]]
+            for match in report.get("source_asset_log_matches", [])[:3]
+        ],
+        "asset_db": [
+            [str(match.get("db", ""))[-48:], match.get("table"), match.get("column"),
+             match.get("matched_terms", [])[:2]]
+            for match in report.get("source_asset_database_matches", [])[:3]
+        ],
         "db": [
             [str(match.get("db", ""))[-48:], match.get("table"), match.get("column"),
              str((match.get("record") or {}).get("status", ""))[:32]]
@@ -778,6 +811,7 @@ def main() -> int:
             for asset in nearby_assets(datetime.fromisoformat(reference_time).timestamp()):
                 assets[asset["path"]] = asset
     needles = tuple(value for name in TARGETS for value in (name, Path(name).stem))
+    asset_needles = source_asset_needles(list(assets.values()))
     tool_failures = sum(1 for item in videos if has_forensic_tool_failure(item))
     report = {
         "status": "READ_ONLY_FORENSICS",
@@ -793,6 +827,8 @@ def main() -> int:
         "candidate_source_assets": list(assets.values()),
         "production_log_matches": scan_text_logs(needles),
         "production_database_matches": scan_database_records(needles),
+        "source_asset_log_matches": scan_text_logs(asset_needles),
+        "source_asset_database_matches": scan_database_records(asset_needles),
         "safety": {"files_modified": False, "files_deleted": False, "files_moved": False,
                    "uploads_performed": False, "public_publishing_performed": False},
         "note": "The audio repair used copy2 backups before replacing MP4s; backup mtimes are preferred for source correlation because current MP4 mtimes may reflect audio repair. Technical evidence only; no repair, quarantine, deletion, regeneration, or upload was performed.",
