@@ -35,7 +35,7 @@ class OfflineMediaUploadWorker(
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val rawUri = inputData.getString(KEY_URI) ?: return@withContext Result.failure(error("Missing media URI."))
+        val rawUri = inputData.getString(KEY_URI) ?: return@withContext Result.failure(failureData("Missing media URI."))
         val filename = inputData.getString(KEY_FILENAME)?.takeIf { it.isNotBlank() }
             ?: return@withContext Result.failure(error("Missing media filename."))
         val mimeType = inputData.getString(KEY_MIME)?.ifBlank { null } ?: "application/octet-stream"
@@ -88,15 +88,15 @@ class OfflineMediaUploadWorker(
         } catch (error: IOException) {
             Result.retry()
         } catch (error: SecurityException) {
-            Result.failure(error("Android document permission expired. Re-select the media file."))
+            Result.failure(failureData("Android document permission expired. Re-select the media file."))
         } catch (error: Exception) {
-            Result.failure(error(error.message ?: "Offline media upload failed."))
+            Result.failure(failureData(error.message ?: "Offline media upload failed."))
         } finally {
             temp.delete()
         }
     }
 
-    private fun error(message: String) = workDataOf(KEY_ERROR to message.take(500))
+    private fun failureData(message: String) = workDataOf(KEY_ERROR to message.take(500))
 
     companion object {
         const val TAG = "sintu-offline-media-upload"
