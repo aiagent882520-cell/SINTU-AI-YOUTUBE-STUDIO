@@ -1203,3 +1203,26 @@ No PR merged, no deployment or publishing, and no original media modified.
 1. Wait for exact-head run `44443793005`; inspect and fix any remaining failures.
 2. Once PR #193 CI passes, run the same publishing gate against route-level API tests and confirm no alternate external upload path bypasses it.
 3. Continue persistent offline media import/index/queue/retry/sync and Android physical-device tests.
+
+
+## Cross-PR engineering update — 2026-11-19
+
+### PR #193 — publishing quality gate is CI-verified
+- Latest PR #193 head: `1d596b2e474b17d3ab3e5598a95c6a8e2024c761`.
+- Exact-head CI run `44444061447`: **SUCCESS 7/7**. Python 3.11, 3.12, 3.13 and 3.14 each report **643 passed, 5 warnings**; dependency security audit, production Docker build and offline branded-video E2E/motion audit all passed.
+- Route-level integration tests now prove YouTube, Facebook and TikTok reject MP4s without exact persisted PASS provenance before OAuth/network access; Instagram remote-URL publishing remains fail-closed.
+- Safe remux, provenance manifest, quality gate and route integration tests are included in this exact passing head. No external publishing was performed.
+
+### PR #195 — persistent offline media import and queue implementation
+- Latest PR #195 head: `71405fa6e75820909083208b7592974c98b61bc8`.
+- Added browser/PWA IndexedDB queue for local image/audio/video files, reload persistence, foreground upload, manual retry and retry on network restoration.
+- Added streamed backend import API, 256 MiB per-file cap, extension allowlist, SHA-256 content-addressed storage, SQLite index, duplicate detection, integrity-verified downloads, symlink protection and stale partial-upload cleanup.
+- Added tests for import/dedup/list/download, unsupported/empty/oversized input, tamper and same-size corrupt-file detection, symlinked storage, stale partial recovery and PWA wiring.
+- Exact-head CI run `44444598305` is QUEUED at checkpoint time. Earlier runs were on superseded intermediate commits and do not verify this latest head.
+- Explicit limitations: IndexedDB quota/eviction; sync only in browser foreground/manual/online event, not Android OS background work; native WorkManager, resumable chunk transfer/cancellation, device authentication and media decode checks remain outstanding.
+
+### PR #192 checkpoint
+- Previous checkpoint head `3839f4b803d380448b1fa65fa4a60593d4cbbdb0`: exact-head CI `44443858323` SUCCESS (7/7).
+- This update changes the checkpoint and requires a fresh exact-head CI run.
+
+No PR merged; no publishing, deployment, paid service or original-media modification performed. Physical Android-device validation remains pending.
