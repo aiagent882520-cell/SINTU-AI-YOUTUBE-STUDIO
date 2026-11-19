@@ -93,7 +93,7 @@ async function openStudio() {
       await new Promise(resolve => setTimeout(resolve, 150));
       const range = route.request().headers().range;
       if (range) {
-        const match = /^bytes=(\\d+)-(\\d*)$/.exec(range);
+        const match = /^bytes=(\d+)-(\d*)$/.exec(range);
         if (!match) return route.fulfill({ status: 416, headers: { "Content-Range": "bytes */" + webm.length } });
         const start = Number(match[1]);
         const end = match[2] ? Math.min(Number(match[2]), webm.length - 1) : webm.length - 1;
