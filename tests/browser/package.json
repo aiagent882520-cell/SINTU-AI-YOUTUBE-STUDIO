@@ -1,0 +1,8 @@
+{
+  "name": "sintu-browser-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "devDependencies": {
+    "playwright": "1.55.0"
+  }
+}
