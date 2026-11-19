@@ -1,6 +1,13 @@
 package com.sintu.studio
 
 import android.os.Bundle
+import android.content.Intent
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.livedata.observeAsState
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
@@ -230,6 +237,35 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
     var videoId by remember { mutableStateOf("") }
     var downloadedUri by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var mediaNotice by remember { mutableStateOf("Select files to queue uploads. WorkManager retries when connectivity returns.") }
+    val mediaWork = remember(context) {
+        WorkManager.getInstance(context).getWorkInfosByTagLiveData(OfflineMediaUploadWorker.TAG)
+    }.observeAsState(initial = emptyList())
+    val mediaPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            var queued = 0
+            for (uri in uris) {
+                try {
+                    context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    var filename = uri.lastPathSegment?.substringAfterLast('/')?.take(180) ?: "offline-media"
+                    context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                            if (index >= 0) filename = cursor.getString(index)?.take(180) ?: filename
+                        }
+                    }
+                    val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
+                    OfflineMediaUploadWorker.enqueue(context, uri, filename, mime)
+                    queued += 1
+                } catch (error: Exception) {
+                    mediaNotice = error.message ?: "Could not queue selected media."
+                }
+            }
+            if (queued > 0) mediaNotice = "$queued file(s) queued. Upload continues under Android WorkManager when network is available."
+        }
+    }
 
     Column(
         modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 12.dp),
@@ -366,6 +402,33 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
             ) { Text(if (busy) "Downloading…" else "Download MP4 to phone") }
             if (downloadedUri.isNotBlank()) {
                 Text("Saved to Movies/SINTU · " + downloadedUri, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        Divider()
+        Text("Native offline media queue", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text("Files remain in Android document storage. WorkManager keeps upload jobs across app restarts and retries on network restoration. Each file is capped at 256 MiB; chunk-level resume is not supported yet.", style = MaterialTheme.typography.bodySmall)
+        Button(
+            onClick = { mediaPicker.launch(arrayOf("image/*", "audio/*", "video/*")) },
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Select media from phone and queue upload") }
+        Text(mediaNotice, style = MaterialTheme.typography.bodySmall)
+        if (mediaWork.value.isEmpty()) {
+            Text("No native media upload jobs yet.", style = MaterialTheme.typography.bodySmall)
+        } else {
+            mediaWork.value.take(8).forEach { work ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(work.state.name, fontWeight = FontWeight.Bold)
+                        Text(work.outputData.getString("filename") ?: "Queued media", style = MaterialTheme.typography.bodySmall)
+                        work.outputData.getString("sha256")?.takeIf { it.isNotBlank() }?.let {
+                            Text("SHA-256: $it", style = MaterialTheme.typography.labelSmall)
+                        }
+                        work.outputData.getString(OfflineMediaUploadWorker.KEY_ERROR)?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
             }
         }
         Text(
