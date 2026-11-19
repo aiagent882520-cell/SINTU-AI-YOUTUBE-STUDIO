@@ -11,7 +11,7 @@ def test_render_queue_api_uses_durable_claim_and_completion(tmp_path, monkeypatc
     })
     project_id = "b" * 32
     created = main.studio_enqueue_render(
-        main.StudioRenderInput(project_id=project_id, payload={"title": "lease integration"}),
+        main.StudioRenderInput(project_id=project_id, payload={"title": "lease integration", "scenes": ["fort at dawn"]}),
         object(),
     )
     item_id = created["item"]["id"]
@@ -32,7 +32,7 @@ def test_render_queue_api_failure_is_durable_and_retryable(tmp_path, monkeypatch
     monkeypatch.setattr(main, "render_video", lambda payload: (_ for _ in ()).throw(RuntimeError("ffmpeg failed")))
     project_id = "c" * 32
     created = main.studio_enqueue_render(
-        main.StudioRenderInput(project_id=project_id, payload={"title": "failure"}),
+        main.StudioRenderInput(project_id=project_id, payload={"title": "failure", "scenes": ["fort at night"]}),
         object(),
     )
     item_id = created["item"]["id"]
