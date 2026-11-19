@@ -26,6 +26,9 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Streaming
 import retrofit2.http.Path
+import retrofit2.http.Query
+import retrofit2.http.Header
+import retrofit2.http.PUT
 
 data class LoginRequest(val username: String, val password: String)
 data class LoginResponse(val authenticated: Boolean = false, val username: String = "", val role: String = "")
@@ -169,11 +172,17 @@ private interface SintuService {
         @Body body: ProductionMediaRequest
     ): Response<Map<String, Any?>>
 
-    @POST("api/offline-media/import")
-    suspend fun importOfflineMedia(
-        @retrofit2.http.Query("filename") filename: String,
-        @Body body: RequestBody
-    ): Response<Map<String, Any?>>
+    @POST("api/offline-media/uploads")
+    suspend fun createOfflineMediaUpload(@Query("filename") filename: String, @Query("size_bytes") sizeBytes: Long, @Query("sha256") sha256: String): Response<Map<String, Any?>>
+
+    @GET("api/offline-media/uploads/{uploadId}")
+    suspend fun offlineMediaUploadStatus(@Path("uploadId") uploadId: String): Response<Map<String, Any?>>
+
+    @PUT("api/offline-media/uploads/{uploadId}/chunks")
+    suspend fun uploadOfflineMediaChunk(@Path("uploadId") uploadId: String, @Query("offset") offset: Long, @Header("X-Chunk-SHA256") chunkSha256: String, @Body body: RequestBody): Response<Map<String, Any?>>
+
+    @POST("api/offline-media/uploads/{uploadId}/complete")
+    suspend fun completeOfflineMediaUpload(@Path("uploadId") uploadId: String): Response<Map<String, Any?>>
 
     @Streaming
     @GET("api/videos/{videoId}")
@@ -234,14 +243,19 @@ class SintuApi(context: Context, baseUrl: String) {
         ProductionMediaRequest(resolution = resolution, fps = 24, quality = "standard")
     ).bodyOrThrow()
 
-    suspend fun importOfflineMedia(file: File, filename: String, mimeType: String): Map<String, Any?> =
-        withContext(Dispatchers.IO) {
-            require(file.isFile && file.length() in 1..(256L * 1024L * 1024L)) {
-                "Media file must be between 1 byte and 256 MiB."
-            }
-            val mediaType = mimeType.toMediaTypeOrNull() ?: "application/octet-stream".toMediaTypeOrNull()!!
-            service.importOfflineMedia(filename, okhttp3.RequestBody.create(mediaType, file)).bodyOrThrow()
-        }
+    suspend fun createOfflineMediaUpload(filename: String, sizeBytes: Long, sha256: String): Map<String, Any?> =
+        service.createOfflineMediaUpload(filename, sizeBytes, sha256).bodyOrThrow()
+
+    suspend fun offlineMediaUploadStatus(uploadId: String): Map<String, Any?> =
+        service.offlineMediaUploadStatus(uploadId).bodyOrThrow()
+
+    suspend fun uploadOfflineMediaChunk(uploadId: String, offset: Long, bytes: ByteArray, sha256: String): Map<String, Any?> {
+        val mediaType = "application/octet-stream".toMediaTypeOrNull()!!
+        return service.uploadOfflineMediaChunk(uploadId, offset, sha256, okhttp3.RequestBody.create(mediaType, bytes)).bodyOrThrow()
+    }
+
+    suspend fun completeOfflineMediaUpload(uploadId: String): Map<String, Any?> =
+        service.completeOfflineMediaUpload(uploadId).bodyOrThrow()
 
     suspend fun downloadVideoToGallery(context: Context, videoId: String): Uri =
         withContext(Dispatchers.IO) {
