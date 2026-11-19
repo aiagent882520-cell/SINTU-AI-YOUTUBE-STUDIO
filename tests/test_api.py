@@ -3053,8 +3053,12 @@ def test_render_queue_executes_existing_ffmpeg_renderer(tmp_path, monkeypatch):
     item_id = queued.json()["item"]["id"]
     executed = client.post(f"/api/studio/render-queue/{item_id}/execute")
     assert executed.status_code == 200
-    assert executed.json()["item"]["status"] == "completed"
-    assert executed.json()["render"]["video_id"] == "f"*32
+    assert executed.json()["item"]["status"] == "running"
+    refreshed = client.get("/api/studio/render-queue", params={"project_id": project_id})
+    assert refreshed.status_code == 200
+    completed = next(item for item in refreshed.json()["queue"] if item["id"] == item_id)
+    assert completed["status"] == "completed"
+    assert completed["result"]["video_id"] == "f"*32
 
 
 def test_piper_voice_is_free_and_does_not_need_media_token(tmp_path, monkeypatch):
