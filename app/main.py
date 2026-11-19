@@ -2260,6 +2260,36 @@ def youtube_public_approval_revoke(payload: YouTubePublicApprovalRevokeInput, re
             "note": "Revocation blocks any pending or resumed public visibility action. An already-applied public video is not automatically changed."}
 
 
+@app.get("/api/admin/youtube/uploads")
+def youtube_upload_history(
+    limit: int = Query(default=50, ge=1, le=200),
+    status: str | None = Query(default=None, max_length=20),
+):
+    if status is not None and status not in UPLOAD_STATES:
+        raise HTTPException(status_code=400, detail="Invalid YouTube upload status filter.")
+    query = """SELECT calendar_id,video_id,title,privacy_status,file_size,
+        acknowledged_offset,status,youtube_video_id,processing_status,created_at,updated_at
+        FROM youtube_uploads"""
+    parameters = []
+    if status is not None:
+        query += " WHERE status=?"
+        parameters.append(status)
+    query += " ORDER BY updated_at DESC,calendar_id DESC LIMIT ?"
+    parameters.append(limit)
+    with db() as conn:
+        rows = conn.execute(query, parameters).fetchall()
+    uploads = []
+    for row in rows:
+        item = dict(row)
+        size = item["file_size"]
+        item["progress_percent"] = (
+            round(min(100.0, max(0.0, item["acknowledged_offset"]) / size * 100), 2)
+            if size else 0.0
+        )
+        uploads.append(item)
+    return {"uploads": uploads, "count": len(uploads), "limit": limit, "status_filter": status}
+
+
 @app.get("/api/admin/youtube/uploads/{calendar_id}")
 def youtube_upload_status(calendar_id: int):
     with db() as conn:
