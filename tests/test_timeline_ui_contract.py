@@ -47,3 +47,13 @@ def test_timeline_preview_uses_current_image_item_without_stale_index():
     assert '"/api/images/' in preview and "item.id" in preview
     assert "rows[index].id" not in preview
     assert "try{\n     const playback=video.play();" in preview
+
+
+def test_video_preview_metadata_is_initialized_once():
+    source = (ROOT / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    start = source.index("let activeTimelinePreview = null;")
+    end = source.index('\n$("timelinePreviewPlay").addEventListener', start)
+    preview = source[start:end]
+
+    assert "metadataHandled=false" in preview
+    assert "if(metadataHandled||settled)return;" in preview
