@@ -46,6 +46,7 @@ from .policy import paid_upgrades_allowed, production_actions_allowed, external_
 from .blender_renderer import BLENDER_DIR, blender_status, render_scene, BlenderUnavailable, BlenderRenderFailed
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
+from . import render_process
 from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, verify_publishable_mp4, RendererUnavailable, RenderFailed, OUTPUT_DIR
 from .format_rendering import all_format_render_profiles, format_render_profile
 from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable, VoiceGenerationFailed, AUDIO_DIR
@@ -1668,8 +1669,12 @@ def _execute_studio_render_queue(owner: str, item_id: str):
     if not item or item["status"] != "running":
         return
     try:
-        result = render_video(RenderInput(**item["payload"]))
+        with render_process.render_job(item_id):
+            result = render_video(RenderInput(**item["payload"]))
         studio_engine.update_render_item(owner, item_id, "completed", result)
+    except render_process.RenderProcessCancelled:
+        try: studio_engine.update_render_item(owner, item_id, "cancelled", {"error": "Render cancelled by user."})
+        except ValueError: pass
     except HTTPException as exc:
         try: studio_engine.update_render_item(owner, item_id, "failed", {"status_code": exc.status_code, "error": str(exc.detail)})
         except ValueError: pass
@@ -1691,9 +1696,17 @@ def studio_execute_render_queue(item_id: str, request: Request, background_tasks
 
 @app.post("/api/studio/render-queue/{item_id}/cancel")
 def studio_cancel_render_queue(item_id: str, request: Request):
-    item = studio_engine.cancel_queued_render(_studio_owner(request), item_id)
-    if not item: raise HTTPException(status_code=409, detail="Only a queued render can be cancelled; running renders cannot be cancelled through this control.")
-    return {"item": item, "cancelled": True}
+    owner = _studio_owner(request)
+    item = next((entry for entry in studio_engine.list_render_queue(owner) if entry["id"] == item_id), None)
+    if not item:
+        raise HTTPException(status_code=404, detail="Render queue item not found.")
+    if item["status"] == "queued":
+        cancelled = studio_engine.cancel_queued_render(owner, item_id)
+        return {"item": cancelled, "cancelled": bool(cancelled)}
+    if item["status"] == "running" and render_process.cancel_render_process(item_id):
+        return {"item": next((entry for entry in studio_engine.list_render_queue(owner) if entry["id"] == item_id), item),
+                "cancellation_requested": True, "note": "Active FFmpeg stage is stopping; poll queue for cancelled status."}
+    raise HTTPException(status_code=409, detail="Render is not currently cancellable (no active FFmpeg stage or already finished).")
 
 
 @app.post("/api/studio/render-queue/{item_id}/retry")
