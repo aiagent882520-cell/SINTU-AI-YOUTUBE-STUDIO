@@ -905,7 +905,25 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                 next_index += 1
             music_index = None
             if music_path:
-                command += ["-stream_loop", "-1", "-i", str(music_path)]
+                # Avoid an unbounded demuxer loop when the supplied track already
+                # covers the complete timeline. Besides wasting work, stream_loop
+                # can make short mixed-timeline renders stall on some FFmpeg builds.
+                music_probe = subprocess.run(
+                    [ffprobe, "-v", "error", "-show_entries", "format=duration",
+                     "-of", "default=noprint_wrappers=1:nokey=1", str(music_path)],
+                    capture_output=True, text=True, timeout=30, check=False,
+                )
+                if music_probe.returncode != 0:
+                    raise RenderFailed("Background music duration read nahi ho saki.")
+                try:
+                    music_duration = float(music_probe.stdout.strip())
+                except (TypeError, ValueError):
+                    raise RenderFailed("Background music duration invalid hai.") from None
+                if not math.isfinite(music_duration) or music_duration <= 0:
+                    raise RenderFailed("Background music duration finite aur positive honi chahiye.")
+                if music_duration + 0.05 < total_duration:
+                    command += ["-stream_loop", "-1"]
+                command += ["-i", str(music_path)]
                 music_index = next_index
                 next_index += 1
             brand_index = next_index
