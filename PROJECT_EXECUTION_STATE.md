@@ -1181,3 +1181,13 @@ The following PRs remain open and unmerged: #213, #209, #207, #206, #205, #204, 
 
 ### Historical PR #192
 - PR #192 remains open/draft and conflicts with current main because it also appends to PROJECT_EXECUTION_STATE.md. Its 573-line historical appendix contains unique older status records for PRs #190–#202 and forensic chronology. Do not auto-merge or close until its unique history is reconciled into the authoritative checkpoint. Current PR #219 checkpoint is the active update path.
+
+
+## Latest update — PR #224 merged; 60-second E2E rerun — 2026-11-19 11:55 UTC
+
+- PR #224 merged into main at 160cf148b18d06cc1c36f8f31737172cfd6366f5. Exact run 44517701642: **SUCCESS 8/8** (Python 3.11–3.14, dependency audit, Docker, Chromium, offline E2E). Python 3.14 logged 702 passed, 5 warnings in 55.82s. The mixed timeline test now uses a test-only 160x284 profile; production profiles are unchanged.
+- PR #222 latest head ae20ee5bad84a2c0c2066ff3277e106534967250. Exact run 44518946207 is IN_PROGRESS on current main 160cf...; dependency security audit passed and four Python test jobs were running. This run includes the merged faster mixed-timeline test and explicit assertions for 15 scenes × 4s, 15 subtitle cues and 60s music. No 60-second MP4 output has been verified yet.
+- Prior PR #222 run 44517162187 on head 7eb9c09... failed because Python 3.14 timed out in the pre-existing mixed-timeline FFmpeg test; it did not reach the offline 60-second render. PR #224 addresses that test runtime; do not treat the prior failure as a failure of the 60-second MP4.
+- Main SHA is 160cf148b18d06cc1c36f8f31737172cfd6366f5. Main CI run 44518879015 is IN_PROGRESS; security audit passed and Python jobs were running.
+- PR #219 checkpoint branch has been retargeted to main 160cf...; its previous run 44518662615 was against the earlier base and is superseded by the next exact-head run after this checkpoint update.
+- PR #218, #220, #221, #223 and #224 are merged. PR #219, #222 remain open. PR #192 remains open/draft and conflicting on the same checkpoint file; its unique historical appendix still requires reconciliation.
