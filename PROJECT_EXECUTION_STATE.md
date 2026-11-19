@@ -1063,3 +1063,50 @@ The following PRs remain open and unmerged: #213, #209, #207, #206, #205, #204, 
 - YouTube OAuth/channel/upload: BLOCKED pending owner credentials, OAuth consent and channel verification. No upload/public publish performed.
 - 60 formats / 15 modules: catalog scope exists; individual end-to-end acceptance remains UNVERIFIED.
 - Website full user-journey/accessibility walkthrough and durable multi-worker job execution remain incomplete.
+
+
+## Latest verified CI and engineering results — 2026-11-19 11:33 UTC
+
+### PR #218 — complete CI PASS on current head
+- Current head: 561d47c7ff80084ccf19dd2f7cab4c2e17b2e706.
+- Exact run 44515295282: 8/8 jobs SUCCESS — Python 3.11–3.14, dependency audit, Docker, real Chromium browser tests, offline branded video E2E/motion audit.
+- Python matrix: 701 passed, 5 warnings on Python 3.12. Added real FastAPI /api/ai-videos/{id} byte-range tests for normal ranges (206), suffix ranges (206), and unsatisfiable ranges (416).
+- Chromium log: 6/6 PASS, including actual video trim-start playback position and trim-end stop, invalid trim rejection, image load/error, stop cancellation, and subtitle reorder alignment.
+- Offline artifact remains the 32.04-second smoke clip (8 scenes), procedural images, eSpeak NG Hindi, procedural music, no burned subtitles; 0 black intervals and motion ratio 0.742. This does not yet satisfy the requested 60-second acceptance.
+- PR #218 is OPEN and unmerged. No independent GitHub review approval/comments were recorded.
+
+### PR #219 — checkpoint documentation
+- Current head: 2157a6baba860bf2ecf03c3f3b90439c5e1a07a6.
+- Exact run 44514401790: SUCCESS 7/7 (Python 3.11–3.14, dependency audit, offline video E2E/motion audit, Docker).
+- PR #219 is OPEN and unmerged.
+
+### PR #220 — Ubuntu E2E dependency provisioning
+- Head cb8476b71ea1e43ec1a1b1a0d07688fa0b0921d0.
+- Exact run 44512589628: SUCCESS 7/7. The apt-index refresh/retry and 15-minute install ceiling allowed eSpeak NG and Noto fonts to install and the offline Hindi video E2E/motion audit to finish. No checks were skipped.
+- PR #220 is OPEN and unmerged.
+
+### PR #221 — atomic SQLite studio render-queue claim
+- Current head 935934416768e15fcde29c2fa146af5784c7ab19.
+- Retargeted base to PR #220 branch so it inherits the verified apt dependency fix; PR #220 must merge before #221 can be merged into main.
+- Exact run 44514872178: SUCCESS 7/7. Python matrix, security audit, Docker and offline E2E all passed.
+- The concurrent two-thread claim regression ensures exactly one worker changes a queued item to running, then verifies completion and owner isolation.
+- PR #221 is OPEN and unmerged.
+
+### PR #222 — 60-second Hindi subtitled offline acceptance
+- Current head 75b0ffac00031ad3017bb089a74ab379da199934.
+- Exact run 44515483070 was IN_PROGRESS at this checkpoint. Security audit and Python 3.11 passed; Python 3.12–3.14 were still running. The 60-second E2E job had not started.
+- The prior 10-scene/6-second attempt failed renderer motion audit (29/59 transitions, 49.2%, below the 60% requirement). The test was changed to 15 scenes × 4 seconds, 15 Hindi subtitle cues, and the same 60-second total. This keeps the known 4-second scene motion cadence.
+- A prior unit-test failure also exposed a mismatch in mocked scene count/duration; tests were updated to expect 15 scene assets, 15 subtitle cues, 60 seconds and burned-in subtitles.
+- Do not claim 60-second output PASS until exact-head run verifies real MP4 duration, burned subtitles, voice/music, no black intervals and motion ratio.
+
+### Merge/review
+- No PR has been merged in this continuation. PR #218–#220 have exact-head green CI; #221 green on stacked base #220; #222 still pending.
+- GitHub review endpoints for #218/#219 returned empty review and review-comment lists. CI success alone is not an independent code-review approval. Keep merge status separate from test status.
+
+### Remaining product gates
+- Real AI image inference remains UNVERIFIED/BLOCKED; current offline E2E uses procedural art and must not be described as AI-generated.
+- Physical Android installation/lifecycle acceptance remains BLOCKED pending actual device report/ADB/Termux evidence.
+- Historical three-black-MP4 project/source/job mapping remains UNKNOWN pending Termux scanner output; originals and backups remain untouched.
+- YouTube OAuth/channel identity/live upload remain BLOCKED pending owner credentials and consent; no public upload performed.
+- 60 individual formats and 15 modules remain unverified beyond inventory/catalog registration.
+- Full website journeys, multi-track editor workflows, durable distributed worker recovery and actual Android editor playback remain incomplete.
