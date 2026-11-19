@@ -24,11 +24,12 @@ MAX_SCENE_IMAGE_PIXELS = 16_777_216
 
 MAX_SOURCE_VIDEO_BYTES = 100 * 1024 * 1024
 
-# Keep FFmpeg's filter graph and codec thread pools bounded on Termux and CI runners.
-try:
-    FFMPEG_THREAD_COUNT = max(1, min(8, int(os.getenv("SINTU_FFMPEG_THREADS", "2"))))
-except ValueError:
-    FFMPEG_THREAD_COUNT = 2
+def _ffmpeg_thread_count() -> int:
+    """Bound encoder threads to protect low-memory phones and shared CI runners."""
+    try:
+        return max(1, min(8, int(os.getenv("SINTU_FFMPEG_THREADS", "2"))))
+    except ValueError:
+        return 2
 
 # Mobile Termux devices need more time for portrait H.264 encoding with two audio tracks.
 try:
@@ -970,7 +971,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,apad,atrim=duration={total_duration:.3f}[aout]")
 
             command += ["-filter_complex", ";".join(filters), "-map", video_map, "-map", "[aout]",
-                        "-c:v", "libx264", "-threads", str(FFMPEG_THREAD_COUNT), "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
+                        "-c:v", "libx264", "-threads", str(_ffmpeg_thread_count()), "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
                         "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", "-t", f"{total_duration:.3f}",
                         "-movflags", "+faststart", str(temporary_output_path)]
             completed = subprocess.run(command, capture_output=True, text=True, timeout=RENDER_TIMEOUT_SECONDS, check=False)
