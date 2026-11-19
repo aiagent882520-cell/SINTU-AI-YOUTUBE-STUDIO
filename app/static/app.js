@@ -127,15 +127,17 @@ async function playTimelinePreview(){
   stage.innerHTML='<img alt="Timeline scene" style="width:100%;max-height:420px;object-fit:contain" src="/api/images/'+item.id+'">';
   const image=stage.querySelector("img");
   return new Promise((resolve,reject)=>{
-   let settled=false,timer=null;
+   let settled=false,timer=null,loadTimer=setTimeout(()=>onError(),30000);
    const cleanup=()=>{
     if(timer!==null)clearTimeout(timer);
+    if(loadTimer!==null)clearTimeout(loadTimer);
     image.removeEventListener("load",onLoad);
     image.removeEventListener("error",onError);
    };
    const finish=keepGoing=>{if(settled)return;settled=true;cleanup();finishCurrent=null;resolve(keepGoing);};
    const onLoad=()=>{
     if(settled)return;
+    if(loadTimer!==null){clearTimeout(loadTimer);loadTimer=null;}
     timer=setTimeout(()=>finish(true),durationMs);
    };
    const onError=()=>{
@@ -154,8 +156,10 @@ async function playTimelinePreview(){
   const video=stage.querySelector("video");
   video.volume=Math.min(1,item.audioVolume??.25);
   return new Promise((resolve,reject)=>{
-   let settled=false,metadataHandled=false,playbackStarted=false;
+   let settled=false,metadataHandled=false,playbackStarted=false,seekTimer=null,loadTimer=setTimeout(()=>onError(),30000);
    const cleanup=()=>{
+    if(seekTimer!==null)clearTimeout(seekTimer);
+    if(loadTimer!==null)clearTimeout(loadTimer);
     video.removeEventListener("loadedmetadata",onMetadata);
     video.removeEventListener("seeked",onSeeked);
     video.removeEventListener("timeupdate",onTimeUpdate);
@@ -172,15 +176,17 @@ async function playTimelinePreview(){
      if(playback&&typeof playback.catch==="function")playback.catch(error=>{if(!cancelled){settled=true;cleanup();finishCurrent=null;reject(error);}});
     }catch(error){onError();}
    };
-   const onSeeked=()=>startPlayback();
+   const onSeeked=()=>{if(seekTimer!==null){clearTimeout(seekTimer);seekTimer=null;}startPlayback();};
    const onMetadata=()=>{
     if(metadataHandled||settled)return;
     metadataHandled=true;
+    if(loadTimer!==null){clearTimeout(loadTimer);loadTimer=null;}
     const trimStart=Number(item.trimStart)||0;
     if(!Number.isFinite(video.duration)||trimStart>=video.duration){onError();return;}
     try{
      if(trimStart>0.05&&Math.abs(video.currentTime-trimStart)>0.05){
       video.addEventListener("seeked",onSeeked,{once:true});
+      seekTimer=setTimeout(()=>onError(),30000);
       video.currentTime=trimStart;
       return;
      }
