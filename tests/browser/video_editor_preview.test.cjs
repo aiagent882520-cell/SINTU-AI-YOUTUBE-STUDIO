@@ -50,7 +50,7 @@ before(async () => {
       response.setHeader("Accept-Ranges", "bytes");
       response.setHeader("Cache-Control", "no-store");
       if (range) {
-        const match = /^bytes=(\\d*)-(\\d*)$/.exec(range);
+        const match = /^bytes=(\d*)-(\d*)$/.exec(range);
         if (!match || (!match[1] && !match[2])) {
           response.writeHead(416, { "Content-Range": "bytes */" + webm.length });
           response.end();
