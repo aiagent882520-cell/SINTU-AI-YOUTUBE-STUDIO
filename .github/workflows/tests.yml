@@ -112,16 +112,19 @@ jobs:
           version: "release"
       - name: Install free local voice and font tools
         run: |
-          if ! command -v espeak-ng >/dev/null 2>&1 || ! fc-match "Noto Sans Devanagari" >/dev/null 2>&1; then
-            # Refresh indexes once before installing: retrying a partially completed
-            # install against stale indexes wastes runner time and can leave packages
-            # half downloaded when Ubuntu mirrors are slow.
-            timeout 600 sudo apt-get \
-              -o Acquire::Retries=3 \
-              -o Acquire::http::Timeout=60 \
-              -o Acquire::https::Timeout=60 \
-              -o Acquire::Languages=none \
-              update -qq
+          font_family="$(fc-match -f '%{family}' 'Noto Sans Devanagari' 2>/dev/null | cut -d, -f1 || true)"
+          if ! command -v espeak-ng >/dev/null 2>&1 || [[ "$font_family" != "Noto Sans Devanagari" ]]; then
+            # GitHub's Ubuntu image often already has a usable apt package index.
+            # Reuse it when both packages are indexed; only contact slow mirrors
+            # when package metadata is genuinely missing.
+            if ! apt-cache show espeak-ng >/dev/null 2>&1 || ! apt-cache show fonts-noto-core >/dev/null 2>&1; then
+              timeout 600 sudo apt-get \
+                -o Acquire::Retries=3 \
+                -o Acquire::http::Timeout=60 \
+                -o Acquire::https::Timeout=60 \
+                -o Acquire::Languages=none \
+                update -qq
+            fi
             timeout 900 sudo apt-get \
               -o Acquire::Retries=3 \
               -o Acquire::http::Timeout=45 \
