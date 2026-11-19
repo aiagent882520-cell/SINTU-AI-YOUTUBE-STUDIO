@@ -121,17 +121,14 @@ jobs:
             -e 's|https://security.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' {} +
           font_family="$(fc-match -f '%{family}' 'Noto Sans Devanagari' 2>/dev/null | cut -d, -f1 || true)"
           if ! command -v espeak-ng >/dev/null 2>&1 || [[ "$font_family" != "Noto Sans Devanagari" ]]; then
-            # GitHub's Ubuntu image often already has a usable apt package index.
-            # Reuse it when both packages are indexed; only contact slow mirrors
-            # when package metadata is genuinely missing.
-            if ! apt-cache show espeak-ng >/dev/null 2>&1 || ! apt-cache show fonts-noto-core >/dev/null 2>&1; then
-              timeout 600 sudo apt-get \
-                -o Acquire::Retries=5 \
-                -o Acquire::http::Timeout=30 \
-                -o Acquire::https::Timeout=30 \
-                -o Acquire::Languages=none \
-                update -qq
-            fi
+            # Refresh indexes after mirror rewrite so package archives resolve
+            # against the canonical mirror rather than stale regional/security URLs.
+            timeout 600 sudo apt-get \
+              -o Acquire::Retries=5 \
+              -o Acquire::http::Timeout=30 \
+              -o Acquire::https::Timeout=30 \
+              -o Acquire::Languages=none \
+              update -qq
             timeout 900 sudo apt-get \
               -o Acquire::Retries=5 \
               -o Acquire::http::Timeout=30 \
