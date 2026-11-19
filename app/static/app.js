@@ -85,14 +85,73 @@ $("timelineEditor").addEventListener("change",event=>{
  else if(field==="audioVolume")x.audioVolume=Number(event.target.value)/100;
  else x[field]=event.target.value;syncTimelineFields(rows);
 });
-function playTimelinePreview(){
- const rows=timelineRows(),stage=$("timelinePreviewStage"),notice=$("timelinePreviewNotice");if(!rows.length){notice.textContent="Preview ke liye scenes add karein.";return;}let i=0,timer=null;
- const stop=()=>{if(timer)clearTimeout(timer);const v=stage.querySelector("video");if(v)v.pause();};
- $("timelinePreviewStop").onclick=()=>{stop();notice.textContent="Preview stopped.";};
- const next=()=>{stop();if(i>=rows.length){notice.textContent="Sequence preview complete.";return;}const x=rows[i];notice.textContent="Preview scene "+(i+1)+" / "+rows.length;
-  if(x.kind==="image"){stage.innerHTML='<img alt="Timeline scene" style="width:100%;max-height:420px;object-fit:contain" src="/api/images/'+x.id+'">';timer=setTimeout(()=>{i++;next();},x.duration*1000);}
-  else{stage.innerHTML='<video controls autoplay playsinline style="width:100%;max-height:420px" src="/api/ai-videos/'+x.id+'"></video>';const v=stage.querySelector("video");v.volume=Math.min(1,x.audioVolume??.25);v.addEventListener("loadedmetadata",()=>{v.currentTime=x.trimStart||0;});v.addEventListener("timeupdate",()=>{if(x.trimEnd!==null&&v.currentTime>=x.trimEnd){v.pause();i++;next();}});v.addEventListener("ended",()=>{i++;next();});}
- };next();
+let activeTimelinePreview = null;
+function stopActiveTimelinePreview(message="Preview stopped."){
+ if(!activeTimelinePreview)return;
+ const current=activeTimelinePreview;
+ activeTimelinePreview=null;
+ current.stop();
+ const notice=$("timelinePreviewNotice");
+ if(notice)notice.textContent=message;
+}
+async function playTimelinePreview(){
+ stopActiveTimelinePreview("Restarting timeline preview…");
+ const rows=timelineRows(),stage=$("timelinePreviewStage"),notice=$("timelinePreviewNotice");
+ if(!rows.length){notice.textContent="Preview ke liye scenes add karein.";return;}
+ let cancelled=false,finishCurrent=null;
+ const session={stop:()=>{cancelled=true;if(finishCurrent)finishCurrent(false);}};
+ activeTimelinePreview=session;
+ $("timelinePreviewStop").onclick=()=>stopActiveTimelinePreview();
+ const waitForImage=(durationMs)=>{
+  stage.innerHTML='<img alt="Timeline scene" style="width:100%;max-height:420px;object-fit:contain" src="/api/images/'+rows[index].id+'">';
+  return new Promise(resolve=>{
+   const timer=setTimeout(()=>{finishCurrent=null;resolve(true);},durationMs);
+   finishCurrent=(keepGoing)=>{clearTimeout(timer);finishCurrent=null;resolve(keepGoing);};
+  });
+ };
+ const waitForVideo=(item)=>{
+  stage.innerHTML='<video controls playsinline style="width:100%;max-height:420px" src="/api/ai-videos/'+item.id+'"></video>';
+  const video=stage.querySelector("video");
+  video.volume=Math.min(1,item.audioVolume??.25);
+  return new Promise((resolve,reject)=>{
+   let settled=false;
+   const cleanup=()=>{
+    video.removeEventListener("loadedmetadata",onMetadata);
+    video.removeEventListener("timeupdate",onTimeUpdate);
+    video.removeEventListener("ended",onEnded);
+    video.removeEventListener("error",onError);
+    video.pause();
+   };
+   const finish=(keepGoing)=>{if(settled)return;settled=true;cleanup();finishCurrent=null;resolve(keepGoing);};
+   const onMetadata=()=>{
+    try{video.currentTime=item.trimStart||0;}catch(error){onError();}
+    const playback=video.play();
+    if(playback&&typeof playback.catch==="function")playback.catch(error=>{if(!cancelled){settled=true;cleanup();finishCurrent=null;reject(error);}});
+   };
+   const onTimeUpdate=()=>{if(item.trimEnd!==null&&video.currentTime>=item.trimEnd)finish(true);};
+   const onEnded=()=>finish(true);
+   const onError=()=>{if(settled)return;settled=true;cleanup();finishCurrent=null;reject(new Error("Timeline video preview load/playback failed."));};
+   video.addEventListener("loadedmetadata",onMetadata,{once:true});
+   video.addEventListener("timeupdate",onTimeUpdate);
+   video.addEventListener("ended",onEnded,{once:true});
+   video.addEventListener("error",onError,{once:true});
+   finishCurrent=keepGoing=>finish(keepGoing);
+   if(video.readyState>=1)onMetadata();
+  });
+ };
+ try{
+  for(let index=0;index<rows.length&&!cancelled;index++){
+   const item=rows[index];
+   notice.textContent="Preview scene "+(index+1)+" / "+rows.length;
+   const keepGoing=item.kind==="image"
+    ?await waitForImage(item.duration*1000)
+    :await waitForVideo(item);
+   if(!keepGoing||cancelled)break;
+  }
+  if(activeTimelinePreview===session){activeTimelinePreview=null;notice.textContent=cancelled?"Preview stopped.":"Sequence preview complete.";}
+ }catch(error){
+  if(activeTimelinePreview===session){activeTimelinePreview=null;notice.textContent=error.message||"Timeline preview failed.";}
+ }
 }
 $("timelinePreviewPlay").addEventListener("click",playTimelinePreview);
 
