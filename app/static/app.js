@@ -42,6 +42,8 @@ function syncTimelineFields(rows){
  $("renderTimeline").value=rows.map(x=>x.kind==="image"?"image:"+x.id+":"+x.duration+":"+x.transition:"video:"+x.id+":"+(x.trimStart||0)+":"+(x.trimEnd??"")+":"+(x.audioVolume??.25)+":"+x.transition).join("\n");
  $("renderScenes").value=rows.map(x=>x.scene||"").join("\n");
  $("renderImageIds").value=rows.filter(x=>x.kind==="image").map(x=>x.id).join(", ");$("renderVideoIds").value=rows.filter(x=>x.kind==="video").map(x=>x.id).join(", ");renderTimelineEditor(rows);
+ // Notify editor draft recovery when timeline edits are made programmatically (move/remove/trim).
+ $("renderTimeline").dispatchEvent(new Event("input", {bubbles:true}));
 }
 function renderTimelineEditor(rows=timelineRows()){
  const e=$("timelineEditor");if(!rows.length){e.innerHTML='<p class="muted">Abhi timeline khaali hai. AI image ya AI video generate karein.</p>';return;}
