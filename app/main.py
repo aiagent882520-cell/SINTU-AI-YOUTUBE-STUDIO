@@ -4118,7 +4118,7 @@ def upload_music(payload: MusicUploadInput, media_token: str = Header(default=""
 
 
 @app.post("/api/render")
-def render_video(payload: RenderInput):
+def render_video(payload: RenderInput, progress_callback=None):
     title = payload.title.strip()
     scenes = [scene.strip() for scene in payload.scenes]
     if payload.timeline and payload.timeline_items:
@@ -4278,7 +4278,8 @@ def render_video(payload: RenderInput):
                                          subtitles=payload.subtitles, transition=payload.transition, transitions=scene_transitions,
                                          sound_effects_enabled=payload.sound_effects_enabled,
                                          sound_effects_volume=payload.sound_effects_volume,
-                                         resolution=resolution, fps=payload.fps, quality=payload.quality)
+                                         resolution=resolution, fps=payload.fps, quality=payload.quality,
+                                         progress_callback=progress_callback)
         if payload.format_id in {"2d-cartoon", "story-animation"} and not image_paths and not video_paths and not timeline_entries and not payload.auto_generate_images:
             from .animation_2d import render_2d_animation_clips
             try:
@@ -4294,6 +4295,7 @@ def render_video(payload: RenderInput):
                         sound_effects_enabled=payload.sound_effects_enabled,
                         sound_effects_volume=payload.sound_effects_volume,
                         resolution=resolution, fps=payload.fps, quality=payload.quality,
+                        progress_callback=progress_callback,
                     )
                 rendered["animation_mode"] = "2D character animation"
                 rendered["animation_provider"] = "SINTU Procedural 2D Animation (local)"
@@ -4308,14 +4310,16 @@ def render_video(payload: RenderInput):
                                    scene_descriptions=scenes, sound_effects_enabled=payload.sound_effects_enabled,
                                    sound_effects_volume=payload.sound_effects_volume,
                                    transition=payload.transition, resolution=resolution,
-                                   fps=payload.fps, quality=payload.quality)
+                                   fps=payload.fps, quality=payload.quality,
+                                   progress_callback=progress_callback)
         rendered = render_storyboard(title, scenes, payload.seconds_per_scene,
                                       image_paths=image_paths, audio_path=audio_path,
                                       subtitles=payload.subtitles, music_path=music_path,
                                       music_volume=payload.music_volume, transition=payload.transition, motion=payload.motion,
                                       sound_effects_enabled=payload.sound_effects_enabled,
                                       sound_effects_volume=payload.sound_effects_volume,
-                                      resolution=resolution, fps=payload.fps, quality=payload.quality)
+                                      resolution=resolution, fps=payload.fps, quality=payload.quality,
+                                      progress_callback=progress_callback)
         if generated_scene_images:
             rendered["scene_images"] = [
                 {"image_id": item["image_id"], "provider": item["provider"], "url": item["url"]}
