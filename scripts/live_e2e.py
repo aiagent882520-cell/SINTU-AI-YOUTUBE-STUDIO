@@ -162,7 +162,7 @@ def _live_video(prompt: str | list[str]) -> dict:
 
 
 def _offline_storyboard_e2e(topic: str) -> dict:
-    """Build a 60-second local Hindi short with visuals, narration, music and timed subtitles."""
+    """Build a 60-second local Hindi short with 15 four-second scenes, narration, music and timed subtitles."""
     clean_topic = topic.strip()
     if not clean_topic or len(clean_topic) > 300:
         raise ValueError("Offline video test topic must contain 1 to 300 characters.")
