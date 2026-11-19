@@ -21,6 +21,7 @@ def _write_render(command):
 
 def _mock_probe_and_ffmpeg(monkeypatch, tmp_path, *, fail_verify=False):
     monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path / "out")
+    monkeypatch.setattr(video_renderer, "_validate_source_video", lambda path: None)
     monkeypatch.setattr(video_renderer.shutil, "which", lambda name: f"/usr/bin/{name}")
     def fake_run(command, **kwargs):
         if command[0].endswith("ffprobe"):
