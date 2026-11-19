@@ -1300,3 +1300,10 @@ No merge, public deployment, external publishing, paid service or original-media
 - This gate is intentionally conservative: very dark footage may need human review; FFmpeg availability is required for generated-video validation. It does not enable paid APIs or publishing.
 
 No PR merged and no deployment or public publishing performed.
+
+## Follow-up CI completion and source-video validation correction — 2026-11-19
+
+- PR #197 exact-head SINTU CI run `44454386105` completed **SUCCESS 7/7** on `6a5df950380c132b7a72229b35bc9cfb49b1a3b4`; Python 3.11–3.14, dependency audit, production Docker build and offline branded-video E2E/motion audit all passed. Exact-head Android build `44454386122` completed SUCCESS; artifact ID `14497068029`, SHA-256 `e1b8914e5a499f30047e9694605a932f09085357e81861292e542d6b2c321a54`.
+- PR #198 first CI attempt `44454853870` failed during compile because a newline was missing in the new test file. Corrected in commit `519fbbb9bb25f49855720a5cb4c241b855b228fe`; exact-head rerun `44454994041` is IN_PROGRESS. Do not use the failed first attempt as evidence against the production code; do not claim the corrected run passed until all jobs finish.
+- PR #192 checkpoint update commit `93921d84aa3d6cf4be415c9916d96ad5eaf8cc9b` has exact-head CI run `44454925826` in progress.
+- PR #197 remains open/draft; PR #198 remains open/draft. No merge, deployment, external upload, public publishing or modification of historical black MP4s.
