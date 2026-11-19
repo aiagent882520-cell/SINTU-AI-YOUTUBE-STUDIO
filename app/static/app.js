@@ -154,7 +154,8 @@ async function playTimelinePreview(){
  const waitForVideo=(item)=>{
   stage.innerHTML='<video controls playsinline style="width:100%;max-height:420px" src="/api/ai-videos/'+item.id+'"></video>';
   const video=stage.querySelector("video");
-  video.volume=Math.min(1,item.audioVolume??.25);
+  const requestedVolume=Number(item.audioVolume??.25);
+  video.volume=Number.isFinite(requestedVolume)?Math.max(0,Math.min(1,requestedVolume)):.25;
   return new Promise((resolve,reject)=>{
    let settled=false,metadataHandled=false,playbackStarted=false,seekTimer=null,loadTimer=setTimeout(()=>onError(),30000);
    const cleanup=()=>{
@@ -168,6 +169,7 @@ async function playTimelinePreview(){
     video.pause();
    };
    const finish=(keepGoing)=>{if(settled)return;settled=true;cleanup();finishCurrent=null;resolve(keepGoing);};
+   const fail=message=>{if(settled)return;settled=true;cleanup();finishCurrent=null;reject(new Error(message));};
    const startPlayback=()=>{
     if(settled||playbackStarted)return;
     playbackStarted=true;
@@ -182,7 +184,8 @@ async function playTimelinePreview(){
     metadataHandled=true;
     if(loadTimer!==null){clearTimeout(loadTimer);loadTimer=null;}
     const trimStart=Number(item.trimStart)||0;
-    if(!Number.isFinite(video.duration)||trimStart>=video.duration){onError();return;}
+    const trimEnd=item.trimEnd==null?null:Number(item.trimEnd);
+    if(!Number.isFinite(video.duration)||trimStart>=video.duration||(trimEnd!==null&&(!Number.isFinite(trimEnd)||trimEnd<=trimStart||trimEnd>video.duration+0.05||trimEnd-trimStart<0.25))){fail("Video trim range source clip ki duration ke andar aur kam se kam 0.25 seconds hona chahiye.");return;}
     try{
      if(trimStart>0.05&&Math.abs(video.currentTime-trimStart)>0.05){
       video.addEventListener("seeked",onSeeked,{once:true});
