@@ -11,6 +11,9 @@ import okhttp3.ResponseBody
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
+import okhttp3.RequestBody
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import java.io.File
 import retrofit2.Response
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -166,6 +169,12 @@ private interface SintuService {
         @Body body: ProductionMediaRequest
     ): Response<Map<String, Any?>>
 
+    @POST("api/offline-media/import")
+    suspend fun importOfflineMedia(
+        @retrofit2.http.Query("filename") filename: String,
+        @Body body: RequestBody
+    ): Response<Map<String, Any?>>
+
     @Streaming
     @GET("api/videos/{videoId}")
     suspend fun videoFile(@Path("videoId") videoId: String): Response<ResponseBody>
@@ -224,6 +233,15 @@ class SintuApi(context: Context, baseUrl: String) {
         runId,
         ProductionMediaRequest(resolution = resolution, fps = 24, quality = "standard")
     ).bodyOrThrow()
+
+    suspend fun importOfflineMedia(file: File, filename: String, mimeType: String): Map<String, Any?> =
+        withContext(Dispatchers.IO) {
+            require(file.isFile && file.length() in 1..(256L * 1024L * 1024L)) {
+                "Media file must be between 1 byte and 256 MiB."
+            }
+            val mediaType = mimeType.toMediaTypeOrNull() ?: "application/octet-stream".toMediaTypeOrNull()!!
+            service.importOfflineMedia(filename, okhttp3.RequestBody.create(mediaType, file)).bodyOrThrow()
+        }
 
     suspend fun downloadVideoToGallery(context: Context, videoId: String): Uri =
         withContext(Dispatchers.IO) {
