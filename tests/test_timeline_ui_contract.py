@@ -18,3 +18,20 @@ def test_subtitle_payload_remains_connected_to_render_queue():
     source = (ROOT / "app" / "static" / "app.js").read_text(encoding="utf-8")
 
     assert "subtitles:subtitleLines()" in source
+
+
+def test_timeline_preview_has_single_cancellable_session():
+    source = (ROOT / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    start = source.index("let activeTimelinePreview = null;")
+    end = source.index('\n$("timelinePreviewPlay").addEventListener', start)
+    preview = source[start:end]
+
+    assert "stopActiveTimelinePreview(" in preview
+    assert "activeTimelinePreview=session" in preview
+    assert "finishCurrent(false)" in preview
+    assert 'video.removeEventListener("loadedmetadata",onMetadata)' in preview
+    assert 'video.removeEventListener("timeupdate",onTimeUpdate)' in preview
+    assert 'video.removeEventListener("ended",onEnded)' in preview
+    assert "video.pause()" in preview
+    assert "item.trimEnd!==null&&video.currentTime>=item.trimEnd" in preview
+    assert "playback.catch" in preview
