@@ -177,6 +177,10 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "dramatic sunset silhouette, cinematic contrast",
         "hidden underground passage and mysterious stone doorway",
         "distant watchtower above a rugged mountain ridge",
+        "moonlit fort ramparts above a silent desert",
+        "massive iron-studded gate with ancient defensive architecture",
+        "secret water reservoir hidden beneath a stone courtyard",
+        "narrow stairway winding through an old fortress wall",
         "wide closing shot, atmospheric light fading into dusk",
     ]
     scenes = [f"{clean_topic}, {shot}" for shot in shot_specs]
@@ -205,7 +209,10 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "पानी के कुंड लंबी घेराबंदी में जीवन बचाते थे।",
         "पुराने महल और अंधेरी सुरंगें आज भी रहस्य समेटे हैं।",
         "पहरेदार मीनारें बीते युग की गवाही देती हैं।",
-        "वास्तुकला में साहस, विज्ञान और कला का मेल है।",
+        "चाँदनी में इनकी प्राचीरें रहस्यमयी दिखाई देती हैं।",
+        "लोहे से जड़े विशाल दरवाज़े सुरक्षा की मिसाल हैं।",
+        "भूमिगत जलाशय कठिन समय में जीवन बचाते थे।",
+        "घुमावदार सीढ़ियाँ किले की रक्षा व्यवस्था दिखाती हैं।",
         "इन धरोहरों को जानना भारत के अतीत से मिलना है।",
     ]
     voice = generate_voiceover(narration)
@@ -213,7 +220,7 @@ def _offline_storyboard_e2e(topic: str) -> dict:
     if not audio_path.is_file() or audio_path.stat().st_size <= 0:
         raise RuntimeError("Local Hindi voiceover was not saved.")
 
-    seconds_per_scene = 6
+    seconds_per_scene = 4
     target_duration = len(scenes) * seconds_per_scene
     music = generate_music(
         f"cinematic Indian historical documentary background score, orchestral atmosphere, "
