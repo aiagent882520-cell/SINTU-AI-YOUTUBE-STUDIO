@@ -273,6 +273,14 @@ test("real Chromium renders safe admin YouTube upload history and refreshes it",
     encrypted_session_uri: "SECRET_SESSION_URI_MUST_NOT_RENDER",
   };
   try {
+    await page.evaluate(() => {
+      window.__youtubeHistoryRefreshCount = 0;
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = (...args) => {
+        if (String(args[0]).includes("/api/admin/youtube/uploads")) window.__youtubeHistoryRefreshCount += 1;
+        return originalFetch(...args);
+      };
+    });
     await page.route("**/api/auth/session", route => route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -303,9 +311,7 @@ test("real Chromium renders safe admin YouTube upload history and refreshes it",
     assert.doesNotMatch(await history.textContent(), /SECRET_SESSION_URI_MUST_NOT_RENDER/);
     assert.equal(await history.locator('a[href="https://www.youtube.com/watch?v=abc12345678"]').count(), 1);
     await page.locator("#youtubeUploadHistoryRefresh").click();
-    await page.waitForFunction(() => window.__youtubeHistoryRefreshCount === 2, null, { timeout: 3000 }).catch(async () => {
-      assert.ok(historyRequests >= 2, "history refresh did not make a second request");
-    });
+    await page.waitForFunction(() => window.__youtubeHistoryRefreshCount >= 2);
     assert.ok(historyRequests >= 2);
   } finally {
     await context.close();
