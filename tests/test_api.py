@@ -166,7 +166,7 @@ def test_installable_app_shell(tmp_path, monkeypatch):
     assert "SHA-256" in app_script.text
     assert "backup-verify" in app_script.text
     assert "adminBackupHealth" in page.text
-    assert "sintu-studio-shell-v14" in worker.text
+    assert "sintu-studio-shell-v15" in worker.text
     assert "/static/offline.html" in worker.text
     assert 'id="flowPromptPreview"' in page.text
     assert 'id="aiChat"' in page.text
