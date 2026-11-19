@@ -112,20 +112,27 @@ jobs:
           version: "release"
       - name: Install free local voice and font tools
         run: |
-          if ! command -v espeak-ng >/dev/null 2>&1 || ! fc-match "Noto Sans Devanagari" >/dev/null 2>&1; then
-            # Refresh indexes once before installing: retrying a partially completed
-            # install against stale indexes wastes runner time and can leave packages
-            # half downloaded when Ubuntu mirrors are slow.
+          # The regional EC2 mirror and security.ubuntu.com returned repeated 503s.
+          # Pin this short-lived CI install to the canonical Ubuntu archive mirror.
+          sudo find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) -exec sed -i \
+            -e 's|http://us-east-2.ec2.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
+            -e 's|https://us-east-2.ec2.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
+            -e 's|http://security.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
+            -e 's|https://security.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' {} +
+          font_family="$(fc-match -f '%{family}' 'Noto Sans Devanagari' 2>/dev/null | cut -d, -f1 || true)"
+          if ! command -v espeak-ng >/dev/null 2>&1 || [[ "$font_family" != "Noto Sans Devanagari" ]]; then
+            # Refresh indexes after mirror rewrite so package archives resolve
+            # against the canonical mirror rather than stale regional/security URLs.
             timeout 600 sudo apt-get \
-              -o Acquire::Retries=3 \
-              -o Acquire::http::Timeout=60 \
-              -o Acquire::https::Timeout=60 \
+              -o Acquire::Retries=5 \
+              -o Acquire::http::Timeout=30 \
+              -o Acquire::https::Timeout=30 \
               -o Acquire::Languages=none \
               update -qq
             timeout 900 sudo apt-get \
-              -o Acquire::Retries=3 \
-              -o Acquire::http::Timeout=45 \
-              -o Acquire::https::Timeout=45 \
+              -o Acquire::Retries=5 \
+              -o Acquire::http::Timeout=30 \
+              -o Acquire::https::Timeout=30 \
               install -y --no-install-recommends espeak-ng fonts-noto-core
           fi
           ffmpeg -version
