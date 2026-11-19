@@ -118,6 +118,26 @@ def _validate_video(raw: bytes) -> bytes:
         raise VideoGenerationFailed("Generated MP4 mein valid supported-size video stream nahi hai.")
     if not math.isfinite(duration) or duration <= 0 or duration > 600:
         raise VideoGenerationFailed("Generated MP4 ki duration invalid hai.")
+
+    # Decode real pixels: valid MP4 metadata can still describe an all-black clip.
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise VideoGenerationFailed("Video ke actual pixels verify karne ke liye FFmpeg required hai.")
+    try:
+        pixels = subprocess.run(
+            [ffmpeg, "-v", "error", "-i", str(candidate), "-vf", "fps=1,scale=32:32",
+             "-an", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
+            capture_output=True, check=False, timeout=45,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise VideoGenerationFailed("Generated video ke actual visual frames verify nahi ho sake.") from None
+    frame_bytes = 32 * 32 * 3
+    if pixels.returncode != 0 or len(pixels.stdout) < frame_bytes or len(pixels.stdout) % frame_bytes:
+        raise VideoGenerationFailed("Generated MP4 mein decodable visual frames nahi hain.")
+    sampled = [pixels.stdout[index:index + frame_bytes] for index in range(0, len(pixels.stdout), frame_bytes)]
+    visible = sum(1 for frame in sampled if sum(frame) / len(frame) > 5.0 and max(frame) > 24)
+    if visible < max(1, math.ceil(len(sampled) * 0.70)):
+        raise VideoGenerationFailed(f"Generated MP4 visual check failed: sirf {visible}/{len(sampled)} sampled frames mein visible content hai.")
     return raw
 
 
