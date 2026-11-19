@@ -1235,3 +1235,59 @@ The following PRs remain open and unmerged: #213, #209, #207, #206, #205, #204, 
 
 ### Required device-side evidence
 Run the read-only forensic scanner and Android diagnostic on the actual Termux phone. The exact five-file forensic command and safety notes are in docs/TERMUX_BLACK_MP4_FORENSIC_RUN.md. Attach only the generated report; never send .env, OAuth tokens, private keys or model files. Do not overwrite or repair original MP4s.
+
+
+## Continued autonomous engineering checkpoint — 2026-11-19 12:33 UTC
+
+### Main branch and merged CI fixes
+- Main SHA at checkpoint: 24518b7d264b6559d3609f2d4731416eedb29851.
+- PR #226 merged: Compose saved-instance-state restoration for Assistant draft/selection and native Video Studio production state. Android build run 44520983487 passed on the earlier exact PR head; later native Android Image Studio build is separately recorded below.
+- PR #229 merged at main SHA 24518b7d264b6559d3609f2d4731416eedb29851: apt index refresh timeout raised from 300 to 600 seconds, bounded retries increased, and language index downloads disabled. This addresses the actual Ubuntu mirror timeout before offline Hindi E2E generation.
+- PR #218/#219/#220/#221/#222/#223/#224 remain merged as recorded in prior sections.
+
+### PR #225 — browser Video Editor draft recovery
+- Head d7b383114f28e3a35fa08c153a879d21fbbf5fa8.
+- Adds versioned, 128 KiB bounded localStorage draft for editor title, scenes, timeline, IDs, subtitles, music and render settings; excludes file bytes and authentication/session data. Restore is explicit; Clear prevents pagehide from re-saving the cleared draft.
+- Programmatic timeline mutations dispatch input events so reorder/trim updates auto-save.
+- Exact CI run 44523451493: Python 3.11–3.14 PASS, dependency security audit PASS, Chromium browser suite PASS (7 tests), Production Docker build PASS; offline branded E2E still IN_PROGRESS at checkpoint time.
+- Browser refresh recovery does not claim server-side project persistence or Android lifecycle recovery.
+
+### PR #227 — native Android Image Studio
+- Head 2d32619160244f301713619640e1548fff7ee60a.
+- Adds Images tab, authenticated server image capability/generation/download APIs, scene/thumbnail prompts, aspect selection, JPEG size/magic/dimension guards, preview and MediaStore save to Pictures/SINTU.
+- UI displays actual provider; procedural output is explicitly labelled not AI-generated. Image generation button follows the server production safety gate.
+- Added request/response metadata and production-gate regression tests.
+- Android build run 44523472532 PASS; APK artifact ID 14528169032, URL https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44523472532/artifacts/14528169032.
+- Exact SINTU CI run 44523472533: Python 3.11–3.14 PASS, security audit PASS, Chromium PASS, Docker PASS; offline E2E IN_PROGRESS at checkpoint time.
+- Physical phone install, login, gallery save, and lifecycle acceptance remain UNVERIFIED. No model was downloaded to the low-memory phone; real AI inference still requires a configured ComfyUI host/workflow/model.
+
+### PR #228 — researched ten-fort Hindi video acceptance
+- Head f2c11bd823251febee8a29dd9bbc5dcffbabdf1b.
+- Acceptance script now names Bhangarh, Kumbhalgarh, Golconda, Chittorgarh, Daulatabad, Kangra, Mehrangarh, Junagarh, Jaisalmer and Gwalior; distinguishes Bhangarh folklore from verified historical fact; includes ten official tourism/heritage source URLs in its report.
+- 15 Hindi subtitle cues, Hindi eSpeak NG narration, local procedural music, 15 scene illustrations and SINTU watermark.
+- Earlier exact-head run 44522419649 on ancestor 30f51ebb18df93598210dc060edb17036fbb8f6c passed 8/8 and generated artifact 14528661121. Audit: MP4 60.04s, 720x1280 H.264/AAC, 5,129,863 bytes, 60 sampled frames, motion ratio 0.915, zero black intervals, 15 burned subtitles, ten named forts and ten source records.
+- Images are SINTU Procedural Art (offline), not generative AI. No paid services or publishing.
+- Current exact-head run 44523497608: Python matrix, dependency audit, Chromium and Docker PASS; offline E2E IN_PROGRESS at checkpoint time.
+
+### PR #230 — Video Editor undo/redo
+- Head 48d77111bba35369cecdf152fab382585ce684d9.
+- Adds bounded 50-step snapshots for editor text, scenes, timeline, media IDs, subtitles, audio/music and render settings; adds Undo/Redo controls and redraws timeline without rewriting scene-only drafts.
+- Real Chromium test covers undo/redo and clip reorder. An initial run exposed missing history notification for programmatic timeline edits; the renderer now dispatches an input event from syncTimelineFields and the test is rerunning on the corrected head.
+- Exact run 44524110964: Python 3.11–3.14 and security audit PASS; Chromium, Docker and offline E2E still IN_PROGRESS at checkpoint time.
+
+### PR #231 — YouTube upload history API and admin UI
+- Head 562b6f70e215e85c0304b181ce46a52962a53722.
+- Adds GET /api/admin/youtube/uploads with bounded limit 1–200, optional valid-state filter, newest-first ordering and acknowledged progress percentage.
+- Response omits encrypted resumable session URI, source MP4 SHA-256, description hash and public-approval token/digest.
+- Admin YouTube panel renders escaped titles/status/privacy/progress and only creates a YouTube link for a validated video ID. Viewing history never initiates an upload.
+- Added API tests for ordering, filtering, progress and secret redaction, plus Chromium test for escaped XSS title, secret non-rendering and refresh.
+- Exact run 44524153579: Python 3.11–3.14 and security audit PASS; Chromium, Docker and offline E2E still IN_PROGRESS at checkpoint time.
+
+### Remaining gates unchanged
+- PRs #206/#207/#209 remain stale/stacked; the render queue still lacks a durable multi-worker worker/lease lifecycle. PR #221 atomic studio queue claim does not solve FastAPI BackgroundTasks durability or the separate process-local FFmpeg cancellation registry.
+- Three historical black MP4 source/project/job mappings remain UNKNOWN pending actual Termux forensic scanner output. Originals/backups remain untouched.
+- AI Image Studio real inference remains BLOCKED until a compatible open-source ComfyUI host, validated workflow and model are configured. Current offline E2E uses procedural illustrations.
+- Physical Android install and device acceptance remain UNVERIFIED despite successful CI APK builds.
+- YouTube OAuth/channel/live upload remain BLOCKED pending owner credentials, consent, encryption key and channel verification. No live upload/public publish was performed.
+- 60 formats and 15 modules remain catalogued; individual full render acceptance is still UNVERIFIED.
+- Full website journey/accessibility, worker crash recovery, and end-to-end browser-to-Android media handoff remain incomplete.
