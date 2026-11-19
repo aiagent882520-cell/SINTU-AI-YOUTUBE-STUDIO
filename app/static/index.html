@@ -387,6 +387,21 @@
   <p id="localMediaStatus" class="muted" role="status" aria-live="polite">Free local engines required: validated ComfyUI image workflow, Piper Hindi voice model, FFmpeg and FFprobe. Paid providers are not enabled.</p>
  </section><pre id="productionPackageOutput" class="production-output" hidden></pre><h3>Saved projects</h3><div id="localDrafts" class="draft-grid"></div>
  <h3>Project Memory, Asset Library, Versions & Render Queue</h3><div class="grid-two"><div><label for="studioMemoryKey">Project memory key</label><input id="studioMemoryKey" placeholder="character_style"><label for="studioMemoryValue">Project memory value</label><textarea id="studioMemoryValue" rows="2" placeholder="Character wears a blue jacket in every scene"></textarea><button id="saveStudioMemory" class="secondary" type="button">Save project memory</button></div><div><label for="studioAssetKind">Asset type</label><select id="studioAssetKind"><option value="reference">Reference</option><option value="image">Image</option><option value="video">Video</option><option value="audio">Audio</option><option value="model">3D model</option><option value="render">Render</option><option value="document">Document</option></select><label for="studioAssetName">Asset name</label><input id="studioAssetName" placeholder="Main character reference"><label for="studioAssetUri">Asset URI / local path</label><input id="studioAssetUri" placeholder="local path or generated asset URL"><button id="addStudioAsset" class="secondary" type="button">Add asset metadata</button></div></div><div class="actions"><button id="refreshStudioTools" class="secondary" type="button">Refresh project tools</button></div><p id="studioToolsNotice" class="muted" role="status"></p><div class="grid-two"><div><b>Saved memory & assets</b><div id="studioMemoryList" class="draft-grid"></div><div id="studioAssetList" class="draft-grid"></div></div><div><b>Version history</b><div id="studioVersionList" class="draft-grid"></div><b>Render queue</b><div id="studioRenderQueueList" class="draft-grid"></div></div></div>
+ <section class="panel" id="offlineMediaPanel">
+  <h3>Offline Media Library</h3>
+  <p class="muted">Phone se image, audio aur video files local IndexedDB queue mein save karein. Internet aane par manual ya automatic retry se server library mein sync hongi. Server duplicate content ko SHA-256 se deduplicate karta hai.</p>
+  <label for="offlineMediaFiles">Import local media</label>
+  <input id="offlineMediaFiles" type="file" multiple accept="video/*,audio/*,image/*">
+  <div class="actions">
+   <button id="offlineMediaImport" type="button">Save to offline queue</button>
+   <button id="offlineMediaSync" class="secondary" type="button">Sync queued media</button>
+  </div>
+  <p id="offlineMediaStatus" class="muted" role="status">Offline media library ready check ho rahi hai…</p>
+  <div class="grid-two">
+   <div><b>On-device queue</b><div id="offlineMediaQueue" class="draft-grid"></div></div>
+   <div><b>Server library</b><div id="offlineMediaServerList" class="draft-grid"></div></div>
+  </div>
+ </section>
  <p class="muted small-note">Projects login account ke server par sync hote hain; server unavailable ho to local device fallback use hota hai. External OAuth, advanced video/image models, 3D/VR/AR engines aur platform approvals baad mein connect honge. Core project, plans, local rendering, memory, assets, versions aur independent checker queue abhi available hain.</p>
 </section>
 
