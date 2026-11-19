@@ -45,6 +45,29 @@ def test_storyboard_renderer_creates_verified_watermarked_mp4(tmp_path, monkeypa
     assert result["resolution"] == "720x1280"
 
 
+
+def test_ai_clip_renderer_uses_configured_mobile_render_timeout(tmp_path, monkeypatch):
+    ffmpeg, _ = _ffmpeg_tools()
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr(video_renderer, "RENDER_TIMEOUT_SECONDS", 123)
+    source = _make_source_clip(tmp_path / "timeout-source.mp4")
+    real_run = subprocess.run
+    captured = {}
+
+    def recording_run(command, **kwargs):
+        if "-filter_complex" in command and str(command[-1]).endswith(".mp4"):
+            captured["timeout"] = kwargs.get("timeout")
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(video_renderer.subprocess, "run", recording_run)
+    result = video_renderer.render_ai_clips(
+        [source], resolution="720x1280", fps=24, quality="standard", transition="cut",
+    )
+
+    assert captured["timeout"] == 123
+    assert (tmp_path / result["filename"]).is_file()
+
+
 def test_ai_clip_renderer_creates_verified_final_mp4(tmp_path, monkeypatch):
     _ffmpeg_tools()
     monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
