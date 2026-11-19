@@ -242,6 +242,7 @@ private fun ImageStudioScreen(api: SintuApi, modifier: Modifier = Modifier) {
     var imageId by rememberSaveable { mutableStateOf("") }
     var provider by rememberSaveable { mutableStateOf("") }
     var notice by rememberSaveable { mutableStateOf("Checking the configured local image engine…") }
+    var canGenerate by remember { mutableStateOf(false) }
     var savedUri by rememberSaveable { mutableStateOf("") }
     var preview by remember { mutableStateOf<Bitmap?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -251,7 +252,10 @@ private fun ImageStudioScreen(api: SintuApi, modifier: Modifier = Modifier) {
             val capabilities = api.imageCapabilities()
             val engine = capabilities["local_engine"]?.toString().orEmpty()
             val comfy = capabilities["comfyui_available"] == true
-            notice = if (comfy) {
+            canGenerate = capabilities["production_enabled"] == true
+            notice = if (!canGenerate) {
+                "Image generation is paused by the server production safety gate. Enable it only after all readiness checks pass."
+            } else if (comfy) {
                 "Local ComfyUI AI engine available: " + engine
             } else {
                 "AI inference is not configured. Current free fallback: " + engine +
@@ -341,7 +345,7 @@ private fun ImageStudioScreen(api: SintuApi, modifier: Modifier = Modifier) {
                     } finally { busy = false }
                 }
             },
-            enabled = !busy && prompt.isNotBlank(),
+            enabled = !busy && prompt.isNotBlank() && canGenerate,
             modifier = Modifier.fillMaxWidth()
         ) { Text(if (busy) "Generating…" else "Generate image") }
 
