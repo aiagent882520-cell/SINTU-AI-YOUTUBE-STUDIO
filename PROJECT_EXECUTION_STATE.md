@@ -1372,3 +1372,34 @@ Thus the older renderer defect is temporally plausible, not ruled out. This timi
 - Adds `generated_music/` to the read-only source-asset correlation scan and records WAV duration/sample-rate/channel/sample-width/frame-count metadata, with regression coverage for generated WAV discovery.
 - PR #191 remains open, non-draft, unmerged. This enables richer correlation but does not itself prove that a particular WAV produced any of the black MP4s.
 - Original issue #90 was annotated with the later pixel-forensics correction: three assets confirmed full-black; two are dark-visible and not confirmed full-black. No media changed.
+
+
+## One-shot execution tranche — repository inventory and acceptance matrix — 2026-11-19
+
+### Current main-branch inventory (read-only GitHub tree inspection)
+- Main SHA inspected: `4edbdb90efbf8ee3cb0a08cd5be9a5db80e9ae23`; recursive tree was complete (not truncated), with 157 tracked files.
+- Main contains a FastAPI backend, static/PWA web assets, Termux scripts, production catalog/runtime, and 59 test-named files.
+- The main tree does **not** contain an Android Gradle/Kotlin/Java project. Native Android code exists on open PR #190's branch only; its CI APK build does not equal a merged or physically installed app.
+- Repository catalog declares 60 video formats and 15 studio modules. These are scope registrations only; individual functional acceptance remains unverified.
+
+### PR #201 — deeper source asset provenance tracing
+- PR #201 head `e8f9a5a4866b387a4667ebcb06897ddd4f4a7910`, exact-head run `44457679211`: **SUCCESS 7/7** (Python 3.11–3.14, dependency audit, Docker build, offline branded-video E2E/motion audit).
+- Adds generated_music scanning, WAV metadata, timestamp-distance ranking, signed mtime deltas, explicit candidate-only labeling, and log/SQLite searches for sufficiently specific source asset references.
+- PR body updated with exact-head CI evidence. PR remains draft/open/unmerged.
+- This is a read-only scanner enhancement. Without a fresh Termux report containing matching production records, the three black MP4 root causes remain **UNPROVEN**.
+
+### PR #202 — 60-format / 15-module evidence matrix
+- Created draft PR: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/202
+- Branch `docs/format-module-acceptance-matrix`, commit `7d372dcd711c5149916f37ee75872762ed2e9713`.
+- Adds `docs/FORMAT_MODULE_ACCEPTANCE_MATRIX.md` with all 60 declared formats and 15 registered modules, every row marked **UNVERIFIED** until its own real acceptance evidence exists.
+- Matrix defines required proof: authenticated UI/API action, persistence, actual engine execution, real MP4 decode/frame/audio checks, SHA-256/log evidence, and separate Android/web validation.
+- Exact-head workflow had not appeared yet at checkpoint update time. Do not claim CI pass until it is observed.
+- Documentation matrix does not implement missing engines or prove any format/module complete.
+
+### Current blockers and safety
+- Three full-black historical MP4s remain without proven source/job/render mapping; preserve originals and backups.
+- Android native PR #190 remains unmerged and physical phone install/login/feature tests are not evidenced by CI artifacts.
+- No verified on-device local diffusion model/runtime; no genuine phone-side AI image generation acceptance evidence.
+- No completed 60-format individual render matrix; no proof that all 15 modules have end-to-end backend/engine integrations.
+- YouTube OAuth credentials/channel identity/live upload and production website deployment remain unverified.
+- No PR merged, deployment performed, media modified, public upload or publishing performed.
