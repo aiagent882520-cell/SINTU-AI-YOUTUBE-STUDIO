@@ -82,7 +82,7 @@ class OfflineMediaUploadWorker(appContext: Context, params: WorkerParameters) : 
             var uploadId = sessionPrefs.getString(sessionKey, null)
             var status: Map<String, Any?>? = null
             if (uploadId != null) {
-                try { status = api.offlineMediaUploadStatus(uploadId) }
+                try { status = api.offlineMediaUploadStatus(activeUploadId) }
                 catch (error: HttpException) {
                     if (error.code() == 404) { uploadId = null } else throw error
                 }
@@ -97,6 +97,7 @@ class OfflineMediaUploadWorker(appContext: Context, params: WorkerParameters) : 
             if (status?.get("size_bytes").asLongOrNull() != temp.length()) {
                 throw IllegalStateException("Saved upload session does not match the selected media size.")
             }
+            val activeUploadId = uploadId ?: throw IllegalStateException("Server did not provide an upload session ID.")
             var offset = status?.get("offset").asLongOrNull() ?: 0L
             if (offset !in 0..temp.length()) throw IllegalStateException("Server returned an invalid upload offset.")
             RandomAccessFile(temp, "r").use { source ->
@@ -107,7 +108,7 @@ class OfflineMediaUploadWorker(appContext: Context, params: WorkerParameters) : 
                     source.seek(offset)
                     source.readFully(bytes)
                     try {
-                        val response = api.uploadOfflineMediaChunk(uploadId, offset, bytes, sha256Hex(bytes))
+                        val response = api.uploadOfflineMediaChunk(activeUploadId, offset, bytes, sha256Hex(bytes))
                         offset = response["offset"].asLongOrNull()
                             ?: throw IllegalStateException("Server did not confirm the chunk offset.")
                     } catch (conflict: HttpException) {
@@ -121,7 +122,7 @@ class OfflineMediaUploadWorker(appContext: Context, params: WorkerParameters) : 
                     if (offset !in 0..temp.length()) throw IllegalStateException("Server returned an invalid upload offset.")
                 }
             }
-            val completed = api.completeOfflineMediaUpload(uploadId)
+            val completed = api.completeOfflineMediaUpload(activeUploadId)
             val media = completed["media"] as? Map<*, *>
             val sha = media?.get("sha256")?.toString().orEmpty()
             if (sha != fileSha) throw IllegalStateException("Server completed the upload with an unexpected SHA-256.")
