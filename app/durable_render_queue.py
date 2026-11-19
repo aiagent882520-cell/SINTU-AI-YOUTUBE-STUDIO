@@ -239,3 +239,20 @@ def get_item(owner: str, item_id: str) -> dict | None:
     with _connect() as conn:
         row = conn.execute("SELECT * FROM studio_render_queue WHERE id=? AND owner=?", (item_id, owner)).fetchone()
     return _decode(row)
+
+
+def cancel_queued(owner: str, item_id: str) -> dict | None:
+    """Cancel only work that has not been leased; active renders require worker fencing."""
+    ensure_schema()
+    now = _stamp()
+    with _connect() as conn:
+        changed = conn.execute(
+            """UPDATE studio_render_queue SET status='cancelled',updated_at=?
+               WHERE id=? AND owner=? AND status='queued'""",
+            (now, item_id, owner),
+        )
+        if changed.rowcount != 1:
+            return None
+        row = conn.execute("SELECT * FROM studio_render_queue WHERE id=?", (item_id,)).fetchone()
+    return _decode(row)
+
