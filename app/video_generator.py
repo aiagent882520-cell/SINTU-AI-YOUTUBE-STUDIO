@@ -6,6 +6,7 @@ import os
 import re
 import math
 import subprocess
+import shutil
 import tempfile
 import urllib.error
 import urllib.request
