@@ -42,6 +42,7 @@ def write_render_manifest(
     asset_paths: list[Path],
     settings: dict[str, Any] | None = None,
     engines: dict[str, str] | None = None,
+    quality_report: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Atomically record hashes and relative paths for a successful render and its inputs.
 
@@ -67,6 +68,14 @@ def write_render_manifest(
         "inputs": assets,
         "settings": settings or {},
         "engines": engines or {},
+        "quality_check": ({
+            "status": "PASS",
+            "verified": True,
+            "report": quality_report,
+        } if isinstance(quality_report, dict) and quality_report.get("verified") is True else {
+            "status": "MISSING",
+            "verified": False,
+        }),
     }
     manifest_dir = root / "production_manifests"
     manifest_dir.mkdir(parents=True, exist_ok=True)
