@@ -475,6 +475,9 @@ def test_blackframe_parser_and_percentage_summary():
     assert metrics["black_frame_percentage"] == 50.0
     assert metrics["mean_black_pixel_percentage"] == 55.0
     assert metrics["pblack_values"] == [100, 100, 0, 20]
+    assert metrics["black_pixel_threshold"] == 17
+    empty_metrics = media_forensics.summarize_black_frame_percentages([])
+    assert empty_metrics["black_pixel_threshold"] == 17
 
 
 
