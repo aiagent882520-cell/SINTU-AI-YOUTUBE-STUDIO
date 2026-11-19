@@ -70,4 +70,4 @@ def test_android_image_api_returns_validated_procedural_jpeg(tmp_path, monkeypat
     image_response = client.get(data["url"])
     assert image_response.status_code == 200
     assert image_response.headers["content-type"] == "image/jpeg"
-    assert image_response.content[:3] == b"\\xff\\xd8\\xff"
+    assert image_response.content[:3] == b"\xff\xd8\xff"
