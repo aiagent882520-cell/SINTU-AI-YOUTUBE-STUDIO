@@ -177,6 +177,8 @@ def test_video_timeline_preview_validates_trim_and_clamps_native_volume():
 
     assert "Number.isFinite(requestedVolume)?Math.max(0,Math.min(1,requestedVolume)):.25" in preview
     assert "trimEnd<=trimStart" in preview
+    assert "trimStart<0||trimStart>600" in preview
+    assert "trimEnd>600" in preview
     assert "trimEnd>video.duration+0.05" in preview
     assert "trimEnd-trimStart<0.25" in preview
     assert 'fail("Video trim range source clip ki duration ke andar aur kam se kam 0.25 seconds hona chahiye.")' in preview
