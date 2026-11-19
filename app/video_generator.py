@@ -124,11 +124,14 @@ def _validate_video(raw: bytes) -> bytes:
     if not ffmpeg:
         raise VideoGenerationFailed("Video ke actual pixels verify karne ke liye FFmpeg required hai.")
     try:
-        pixels = subprocess.run(
-            [ffmpeg, "-v", "error", "-i", str(candidate), "-vf", "fps=1,scale=32:32",
-             "-an", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
-            capture_output=True, check=False, timeout=45,
-        )
+        with tempfile.TemporaryDirectory(prefix="sintu-video-pixels-") as pixel_dir:
+            pixel_candidate = Path(pixel_dir) / "candidate.mp4"
+            pixel_candidate.write_bytes(raw)
+            pixels = subprocess.run(
+                [ffmpeg, "-v", "error", "-i", str(pixel_candidate), "-vf", "fps=1,scale=32:32",
+                 "-an", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
+                capture_output=True, check=False, timeout=45,
+            )
     except (OSError, subprocess.TimeoutExpired):
         raise VideoGenerationFailed("Generated video ke actual visual frames verify nahi ho sake.") from None
     frame_bytes = 32 * 32 * 3
