@@ -466,10 +466,16 @@ def test_mixed_timeline_mixes_source_voice_music_and_burns_subtitles(tmp_path, m
         pytest.skip("FFmpeg libass subtitles filter is unavailable")
     monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
     # Keep this full FFmpeg graph test CPU-bounded; production portrait dimensions
-    # are exercised by the offline end-to-end render job.
+    # are exercised by the offline end-to-end render job. The graph is under test,
+    # not the production encoding preset, so use a tiny frame and ultrafast x264.
     test_profiles = dict(video_renderer.OUTPUT_PROFILES)
     test_profiles["160x284"] = (160, 284)
     monkeypatch.setattr(video_renderer, "OUTPUT_PROFILES", test_profiles)
+    monkeypatch.setenv("SINTU_FFMPEG_THREADS", "1")
+    monkeypatch.setattr(
+        video_renderer, "_render_settings",
+        lambda resolution, fps, quality: (160, 284, 35, "ultrafast"),
+    )
 
     source = tmp_path / "source-with-audio.mp4"
     generated = subprocess.run(
