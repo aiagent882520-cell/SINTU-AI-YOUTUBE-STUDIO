@@ -269,7 +269,20 @@ private fun ImageStudioScreen(api: SintuApi, modifier: Modifier = Modifier) {
         try {
             val bytes = api.downloadImageBytes(imageId)
             val bitmap = withContext(Dispatchers.IO) {
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                val width = bounds.outWidth
+                val height = bounds.outHeight
+                require(width in 1..8192 && height in 1..8192 &&
+                    width.toLong() * height.toLong() <= 16_000_000L) {
+                    "Image dimensions exceed the safe Android preview limit."
+                }
+                var sampleSize = 1
+                while (width / sampleSize > 1600 || height / sampleSize > 1600) {
+                    sampleSize *= 2
+                }
+                val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
             }
             preview = bitmap ?: throw IllegalStateException("Generated image could not be decoded on this device.")
         } catch (error: Exception) {
