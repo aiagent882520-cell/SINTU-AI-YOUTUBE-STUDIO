@@ -301,8 +301,12 @@ def source_asset_needles(assets: list[dict]) -> tuple[str, ...]:
         if not relative:
             continue
         filename = Path(relative).name
-        for candidate in (relative, filename, Path(filename).stem):
-            if len(candidate) >= 8 and candidate not in values:
+        stem = Path(filename).stem
+        # Ignore short/generic names to avoid noisy false-positive log matches.
+        if len(stem) < 8:
+            continue
+        for candidate in (relative, filename, stem):
+            if candidate not in values:
                 values.append(candidate)
     return tuple(values[:60])
 
