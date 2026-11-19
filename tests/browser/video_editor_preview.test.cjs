@@ -236,6 +236,37 @@ test("real Chromium stop control cancels an active image preview", async () => {
   }
 });
 
+test("real Chromium timeline undo and redo restore clip order and scene text", async () => {
+  const { context, page } = await openStudio();
+  try {
+    await setTimeline(
+      page,
+      "image:" + "a".repeat(32) + ":2:cut\nimage:" + "b".repeat(32) + ":2:cut",
+      "First fort\nSecond fort",
+      "पहला किला\nदूसरा किला",
+    );
+    assert.equal(await page.locator("#timelineUndo").isEnabled(), true);
+    await page.locator("#timelineUndo").click({ force: true });
+    assert.equal(await page.locator("#renderTimeline").inputValue(), "");
+    await page.locator("#timelineRedo").click({ force: true });
+    assert.match(await page.locator("#renderTimeline").inputValue(), /^image:a{32}:2:cut\nimage:b{32}:2:cut$/);
+    assert.equal(await page.locator("#renderScenes").inputValue(), "First fort\nSecond fort");
+
+    await page.locator('#timelineEditor button[data-action="down"]').first().click({ force: true });
+    assert.match(await page.locator("#renderTimeline").inputValue(), /^image:b{32}:2:cut\nimage:a{32}:2:cut$/);
+    await page.locator("#timelineUndo").click({ force: true });
+    assert.match(await page.locator("#renderTimeline").inputValue(), /^image:a{32}:2:cut\nimage:b{32}:2:cut$/);
+    await page.locator("#timelineRedo").click({ force: true });
+    assert.match(await page.locator("#renderTimeline").inputValue(), /^image:b{32}:2:cut\nimage:a{32}:2:cut$/);
+    assert.equal(await page.locator("#renderScenes").inputValue(), "Second fort\nFirst fort");
+  } finally {
+    await context.close();
+  }
+});
+
+
+
+
 test("real Chromium keeps subtitles aligned when timeline clips are reordered", async () => {
   const { context, page } = await openStudio();
   try {
