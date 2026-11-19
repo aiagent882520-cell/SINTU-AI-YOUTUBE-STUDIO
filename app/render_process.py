@@ -123,6 +123,12 @@ def run_render_process(command, *, timeout: float, text: bool = True,
                 raise subprocess.TimeoutExpired(ffmpeg_command, timeout)
             time.sleep(0.05)
 
+        with _lock:
+            cancelled_after_exit = bool(job_id and job_id in _cancelled)
+        if cancelled_after_exit:
+            if reader:
+                reader.join(timeout=1)
+            raise RenderProcessCancelled("Render cancelled by user.")
         if reader:
             reader.join(timeout=1)
         if report_progress:
