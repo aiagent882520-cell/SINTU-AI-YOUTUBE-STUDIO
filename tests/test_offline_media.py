@@ -129,3 +129,48 @@ def test_offline_media_refuses_same_size_corrupt_unindexed_destination(tmp_path)
     retry.write_bytes(b"expected-content")
     with pytest.raises(OfflineMediaError, match="hash mismatch"):
         import_media_file(data_dir=tmp_path, source_path=retry, filename="clip.mp4")
+
+def test_resumable_upload_accepts_ordered_verified_chunks_and_completes_idempotently(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    payload = b"resumable-video-payload"
+    digest = hashlib.sha256(payload).hexdigest()
+    created = client.post(f"/api/offline-media/uploads?filename=clip.mp4&size_bytes={len(payload)}&sha256={digest}")
+    assert created.status_code == 201, created.text
+    upload_id = created.json()["upload_id"]
+    split = 9
+    first = payload[:split]
+    response = client.put(f"/api/offline-media/uploads/{upload_id}/chunks?offset=0", content=first, headers={"X-Chunk-SHA256": hashlib.sha256(first).hexdigest()})
+    assert response.status_code == 200, response.text
+    assert response.json()["offset"] == split
+    conflict = client.put(f"/api/offline-media/uploads/{upload_id}/chunks?offset=0", content=first, headers={"X-Chunk-SHA256": hashlib.sha256(first).hexdigest()})
+    assert conflict.status_code == 409
+    rest = payload[split:]
+    appended = client.put(f"/api/offline-media/uploads/{upload_id}/chunks?offset={split}", content=rest, headers={"X-Chunk-SHA256": hashlib.sha256(rest).hexdigest()})
+    assert appended.status_code == 200
+    completed = client.post(f"/api/offline-media/uploads/{upload_id}/complete")
+    assert completed.status_code == 201, completed.text
+    assert completed.json()["media"]["sha256"] == digest
+    again = client.post(f"/api/offline-media/uploads/{upload_id}/complete")
+    assert again.status_code == 201
+    assert again.json()["media"]["sha256"] == digest
+
+def test_resumable_upload_rejects_bad_chunk_hash_and_incomplete_completion(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    payload = b"integrity-check"
+    digest = hashlib.sha256(payload).hexdigest()
+    created = client.post(f"/api/offline-media/uploads?filename=clip.mp4&size_bytes={len(payload)}&sha256={digest}")
+    upload_id = created.json()["upload_id"]
+    bad = client.put(f"/api/offline-media/uploads/{upload_id}/chunks?offset=0", content=payload, headers={"X-Chunk-SHA256": "0" * 64})
+    assert bad.status_code == 400
+    incomplete = client.post(f"/api/offline-media/uploads/{upload_id}/complete")
+    assert incomplete.status_code == 409
+
+def test_resumable_upload_rejects_wrong_final_sha256(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    payload = b"wrong-final-digest"
+    created = client.post(f"/api/offline-media/uploads?filename=clip.mp4&size_bytes={len(payload)}&sha256=" + "0" * 64)
+    upload_id = created.json()["upload_id"]
+    chunk = client.put(f"/api/offline-media/uploads/{upload_id}/chunks?offset=0", content=payload, headers={"X-Chunk-SHA256": hashlib.sha256(payload).hexdigest()})
+    assert chunk.status_code == 200
+    complete = client.post(f"/api/offline-media/uploads/{upload_id}/complete")
+    assert complete.status_code == 400
