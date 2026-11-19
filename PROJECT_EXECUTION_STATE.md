@@ -1315,3 +1315,12 @@ No PR merged and no deployment or public publishing performed.
 - PR #199 exact-head CI run `44455725441`: dependency security audit SUCCESS; Python 3.11–3.14 tests remain IN_PROGRESS. Overall run is IN_PROGRESS; no pass claimed.
 - Both new gates may conservatively reject very dark artistic footage; manual review may be needed. FFmpeg is required and validation fails closed when it is unavailable or decoding cannot be completed. No historical media was accessed or modified.
 - PRs #198 and #199 remain draft/open/unmerged. No merge, deployment, external upload or public publishing performed.
+
+
+## CI result correction — PR #198 passed; PR #199 test isolation fixed — 2026-11-19
+
+- PR #198 exact-head run `44455132568` on `147e9e40af0a66eddaa575167a3b8012533df2eb` completed **SUCCESS 7/7**: Python 3.11–3.14, dependency audit, production Docker build and offline branded-video E2E/motion audit.
+- PR #199 first exact-head run `44455725441` failed: 611 tests passed and 9 failed because legacy renderer tests mocked subprocess/probe behavior and did not isolate the new source-pixel validator. The failures exposed test-fixture coupling, not a failed real black-MP4 regression assertion.
+- Updated atomic-render and mocked timeline tests to stub `_validate_source_video` where source-pixel validation is not under test. Dedicated source-security tests still exercise the new gate, including real FFmpeg-generated all-black H.264 rejection.
+- PR #199 latest head is now `da04542f1cfc3637073f261df363072f313f2450`; exact-head CI run `44455947418` is QUEUED. No pass claimed until it completes.
+- PR #198 and #199 remain draft/open/unmerged. No historical media touched; no merge, deployment or publishing performed.
