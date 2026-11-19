@@ -44,6 +44,17 @@ def _validate_source_video(path: Path) -> None:
 
 
 
+def _validate_audio_file(path: Path, label: str) -> None:
+    """Reject missing, empty, or symlinked narration/music inputs before FFmpeg opens them."""
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"{label} file nahi mili ya safe regular file nahi hai.")
+    try:
+        if path.stat().st_size <= 0:
+            raise ValueError(f"{label} file empty hai.")
+    except OSError:
+        raise ValueError(f"{label} file read nahi ho sakti.") from None
+
+
 def _validate_scene_image(path: Path) -> None:
     """Reject oversized, unsupported or malformed user-supplied scene images."""
     try:
@@ -586,8 +597,8 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         raise ValueError("Music volume 0 se 1 ke beech hona chahiye.")
     if not isinstance(sound_effects_enabled, bool) or not 0.0 <= sound_effects_volume <= 1.0:
         raise ValueError("Sound effects enable flag ya volume invalid hai.")
-    if music_path and not music_path.is_file():
-        raise ValueError("Background music file nahi mili.")
+    if music_path:
+        _validate_audio_file(music_path, "Background music")
 
     if image_paths is None or len(image_paths) != len(scenes):
         raise ValueError("Har scene ke liye real scene image required hai; blank placeholder render disabled hai.")
@@ -793,10 +804,10 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         raise ValueError("Har subtitle line text hona chahiye aur 1000 characters se chhoti honi chahiye.")
     for path in video_paths:
         _validate_source_video(path)
-    if audio_path and not audio_path.is_file():
-        raise ValueError("Voiceover audio file nahi mili.")
-    if music_path and not music_path.is_file():
-        raise ValueError("Background music file nahi mili.")
+    if audio_path:
+        _validate_audio_file(audio_path, "Voiceover audio")
+    if music_path:
+        _validate_audio_file(music_path, "Background music")
 
     clip_info = []
     total_duration = 0.0
