@@ -248,3 +248,33 @@ def test_resumable_upload_serializes_concurrent_process_writes(tmp_path):
     assert len(conflicts) == 1
     assert "Offset conflict" in conflicts[0]
     assert get_upload(data_dir=tmp_path, upload_id=upload_id)["offset"] in {len(first), len(second)}
+
+
+def test_resumable_unknown_session_does_not_create_session_directories(tmp_path):
+    from app.resumable_media_upload import ResumableUploadError, get_upload
+
+    unknown_id = "A" * 32
+    with pytest.raises(ResumableUploadError, match="not found"):
+        get_upload(data_dir=tmp_path, upload_id=unknown_id)
+
+    root = tmp_path / "offline_media" / ".resumable"
+    assert root.is_dir()
+    assert not (root / unknown_id).exists()
+
+
+def test_resumable_upload_rejects_symlinked_offline_media_root(tmp_path):
+    from app.resumable_media_upload import ResumableUploadError, create_upload
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (tmp_path / "offline_media").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ResumableUploadError, match="must not be a symlink"):
+        create_upload(
+            data_dir=tmp_path,
+            filename="clip.mp4",
+            size_bytes=1,
+            sha256=hashlib.sha256(b"x").hexdigest(),
+        )
+
+    assert not (outside / ".resumable").exists()
