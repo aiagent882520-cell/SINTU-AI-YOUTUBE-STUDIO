@@ -1307,3 +1307,11 @@ No PR merged and no deployment or public publishing performed.
 - PR #198 first CI attempt `44454853870` failed during compile because a newline was missing in the new test file. Corrected in commit `519fbbb9bb25f49855720a5cb4c241b855b228fe`; exact-head rerun `44454994041` is IN_PROGRESS. Do not use the failed first attempt as evidence against the production code; do not claim the corrected run passed until all jobs finish.
 - PR #192 checkpoint update commit `93921d84aa3d6cf4be415c9916d96ad5eaf8cc9b` has exact-head CI run `44454925826` in progress.
 - PR #197 remains open/draft; PR #198 remains open/draft. No merge, deployment, external upload, public publishing or modification of historical black MP4s.
+
+## Latest exact-head verification — 2026-11-19 (PR #198 / #199)
+
+- PR #198 current head is `147e9e40af0a66eddaa575167a3b8012533df2eb`. Exact-head SINTU CI run `44455132568`: Python 3.11–3.14, dependency security audit and production Docker build are SUCCESS; offline branded-video E2E/motion audit remains IN_PROGRESS. Overall run is IN_PROGRESS; no full CI pass claimed.
+- PR #199 draft: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/199; branch `fix/validate-ai-source-video-pixels`; head `09cf884200907c1687d56001efcc31a902655205`. Fixes a second confirmed gap: renderer source validation previously checked file type/size but not decoded pixels. It now samples up to 600 frames at 1 fps, scales to 32x32 and rejects decode failures or clips with fewer than 70% visibly non-black samples. Added a real FFmpeg all-black H.264 regression test.
+- PR #199 exact-head CI run `44455725441`: dependency security audit SUCCESS; Python 3.11–3.14 tests remain IN_PROGRESS. Overall run is IN_PROGRESS; no pass claimed.
+- Both new gates may conservatively reject very dark artistic footage; manual review may be needed. FFmpeg is required and validation fails closed when it is unavailable or decoding cannot be completed. No historical media was accessed or modified.
+- PRs #198 and #199 remain draft/open/unmerged. No merge, deployment, external upload or public publishing performed.
