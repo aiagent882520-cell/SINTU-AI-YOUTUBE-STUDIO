@@ -14,6 +14,7 @@ import okhttp3.OkHttpClient
 import okhttp3.RequestBody
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import java.io.File
+import java.io.ByteArrayOutputStream
 import retrofit2.Response
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -265,10 +266,24 @@ class SintuApi(context: Context, baseUrl: String) {
             if (body.contentLength() > MAX_IMAGE_DOWNLOAD_BYTES) {
                 throw IllegalStateException("Image exceeds the 15 MB phone-download limit.")
             }
-            val bytes = body.bytes()
-            require(bytes.isNotEmpty() && bytes.size <= MAX_IMAGE_DOWNLOAD_BYTES) {
-                "Image response is empty or exceeds the 15 MB phone-download limit."
+            val output = ByteArrayOutputStream(
+                body.contentLength().takeIf { it in 1..MAX_IMAGE_DOWNLOAD_BYTES.toLong() }?.toInt() ?: 64 * 1024
+            )
+            body.byteStream().use { input ->
+                val buffer = ByteArray(32 * 1024)
+                var total = 0
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    total += count
+                    require(total <= MAX_IMAGE_DOWNLOAD_BYTES) {
+                        "Image response exceeds the 15 MB phone-download limit."
+                    }
+                    output.write(buffer, 0, count)
+                }
             }
+            val bytes = output.toByteArray()
+            require(bytes.isNotEmpty()) { "SINTU server returned an empty image." }
             require(bytes.size >= 3 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()) {
                 "SINTU image response is not a valid JPEG."
             }
