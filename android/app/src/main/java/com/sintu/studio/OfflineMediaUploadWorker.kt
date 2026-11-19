@@ -21,6 +21,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import retrofit2.HttpException
 
+internal fun isRetryableOfflineUploadHttpStatus(code: Int): Boolean =
+    code == 408 || code == 429 || code in 500..599
+
 /**
  * Resumable across process death at the job level: WorkManager persists the request and retries
  * the whole file transfer when connectivity returns. Individual uploads are streamed from a
@@ -77,7 +80,7 @@ class OfflineMediaUploadWorker(
                 "filename" to filename
             ))
         } catch (error: HttpException) {
-            if (error.code() == 408 || error.code() == 429 || error.code() >= 500) {
+            if (isRetryableOfflineUploadHttpStatus(error.code())) {
                 Result.retry()
             } else {
                 Result.failure(error(error.message().take(300)))
