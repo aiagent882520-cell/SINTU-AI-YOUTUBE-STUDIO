@@ -6,6 +6,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -38,6 +39,14 @@ def _lock(upload_id: str) -> threading.Lock:
     with _LOCKS_GUARD:
         return _LOCKS.setdefault(upload_id, threading.Lock())
 
+def _write_metadata(path: Path, metadata: dict[str, Any]) -> None:
+    temporary = path.with_name(path.name + "." + secrets.token_hex(8) + ".tmp")
+    with temporary.open("x", encoding="utf-8") as stream:
+        stream.write(json.dumps(metadata))
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, path)
+
 
 def _paths(data_dir: Path, upload_id: str) -> tuple[Path, Path]:
     if not _SESSION_ID.fullmatch(upload_id):
@@ -63,8 +72,8 @@ def create_upload(*, data_dir: Path, filename: str, size_bytes: int, sha256: str
     metadata = {"id": upload_id, "filename": safe_name, "size_bytes": size_bytes,
                 "sha256": sha256, "offset": 0, "created_at": int(time.time()),
                 "status": "uploading"}
-    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
     payload_path.touch(mode=0o600)
+    _write_metadata(metadata_path, metadata)
     return {"upload_id": upload_id, "offset": 0, "chunk_size": _CHUNK_BYTES}
 
 
@@ -103,7 +112,7 @@ def append_upload_chunk(*, data_dir: Path, upload_id: str, offset: int,
             output.flush()
             os.fsync(output.fileno())
         metadata["offset"] = expected + len(chunk)
-        metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+        _write_metadata(metadata_path, metadata)
         return {"upload_id": upload_id, "offset": metadata["offset"],
                 "size_bytes": metadata["size_bytes"]}
 
@@ -125,12 +134,19 @@ def complete_upload(*, data_dir: Path, upload_id: str,
                 digest.update(block)
         if digest.hexdigest() != metadata["sha256"]:
             raise ResumableUploadError("Final media SHA-256 verification failed.")
+        staging_path = payload_path.with_name("finalizing.part")
+        if staging_path.is_symlink():
+            raise ResumableUploadError("Upload finalization path is unsafe.")
+        staging_path.unlink(missing_ok=True)
+        shutil.copyfile(payload_path, staging_path)
         try:
-            record = import_media_file(data_dir=data_dir, source_path=payload_path,
+            record = import_media_file(data_dir=data_dir, source_path=staging_path,
                                        filename=metadata["filename"], content_type=content_type)
         except OfflineMediaError as exc:
+            staging_path.unlink(missing_ok=True)
             raise ResumableUploadError(str(exc)) from None
         metadata["status"] = "completed"
         metadata["media"] = record
-        metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+        _write_metadata(metadata_path, metadata)
+        payload_path.unlink(missing_ok=True)
         return {"media": record, "duplicate": record["duplicate"]}
