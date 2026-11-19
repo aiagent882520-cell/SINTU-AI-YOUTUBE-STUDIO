@@ -85,7 +85,7 @@ def get_upload(*, data_dir: Path, upload_id: str) -> dict[str, Any]:
     if metadata.get("status") == "uploading" and (not payload_path.is_file() or payload_path.is_symlink()):
         raise ResumableUploadError("Upload payload is missing or unsafe.")
     return {"upload_id": upload_id, "offset": int(metadata["offset"]),
-            "size_bytes": int(metadata["size_bytes"]), "status": metadata["status"]}
+            "size_bytes": int(metadata["size_bytes"]), "sha256": metadata["sha256"], "status": metadata["status"]}
 
 
 def append_upload_chunk(*, data_dir: Path, upload_id: str, offset: int,
