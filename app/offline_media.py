@@ -35,6 +35,12 @@ def _paths(data_dir: Path) -> tuple[Path, Path, Path, Path]:
         directory.mkdir(parents=True, exist_ok=True)
         if not directory.resolve().is_relative_to(root.resolve()):
             raise OfflineMediaError("Offline media storage escaped its data directory.")
+    for stale in incoming.glob("*.part"):
+        try:
+            if stale.is_file() and not stale.is_symlink() and stale.stat().st_mtime < time.time() - 86400:
+                stale.unlink()
+        except OSError:
+            pass
     database = root / "index.sqlite3"
     if database.is_symlink():
         raise OfflineMediaError("Offline media index must not be a symlink.")
@@ -60,6 +66,24 @@ def _connect(database: Path) -> sqlite3.Connection:
     return connection
 
 
+@contextmanager
+def _database(database: Path):
+    connection = _connect(database)
+    try:
+        with connection:
+            yield connection
+    finally:
+        connection.close()
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def import_media_file(
     *, data_dir: Path, source_path: Path, filename: str, content_type: str = "application/octet-stream"
 ) -> dict[str, Any]:
@@ -72,11 +96,7 @@ def import_media_file(
     size = source.stat().st_size
     if size <= 0 or size > MAX_MEDIA_BYTES:
         raise OfflineMediaError("Media size must be between 1 byte and 256 MiB.")
-    digest = hashlib.sha256()
-    with source.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    sha256 = digest.hexdigest()
+    sha256 = _sha256_file(source)
     root, media_dir, _, database = _paths(data_dir)
     safe_name = Path(filename.replace("\\", "/")).name.strip()
     if not safe_name or len(safe_name) > 180 or any(ord(char) < 32 for char in safe_name):
@@ -99,13 +119,13 @@ def import_media_file(
     import datetime
     imported_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
     try:
-        with _connect(database) as connection:
+        with _database(database) as connection:
             existing = connection.execute("SELECT * FROM offline_media WHERE sha256=?", (sha256,)).fetchone()
             if existing:
                 existing_path = media_dir / existing["stored_name"]
                 if existing_path.is_symlink() or not existing_path.is_file():
                     raise OfflineMediaError("Indexed media file is missing or unsafe.")
-                if hashlib.sha256(existing_path.read_bytes()).hexdigest() != sha256:
+                if _sha256_file(existing_path) != sha256:
                     raise OfflineMediaError("Indexed media hash no longer matches its content.")
                 record = dict(existing)
                 duplicate = True
@@ -161,7 +181,7 @@ def get_offline_media_path(*, data_dir: Path, sha256: str) -> tuple[Path, dict[s
     path = media_dir / record["stored_name"]
     if path.is_symlink() or not path.is_file() or path.stat().st_size != record["size_bytes"]:
         raise OfflineMediaError("Offline media file is missing or unsafe.")
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    digest = _sha256_file(path)
     if digest != sha256:
         raise OfflineMediaError("Offline media hash verification failed.")
     return path, record
