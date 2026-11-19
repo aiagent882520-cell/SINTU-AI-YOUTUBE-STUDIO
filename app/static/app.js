@@ -1502,6 +1502,32 @@ async function loadPublishingConnections(){
 }
 $("publishingConnectionsRefresh")?.addEventListener("click",loadPublishingConnections);
 
+async function loadYouTubeUploadHistory() {
+ const host = $("youtubeUploadHistory");
+ const notice = $("youtubeUploadHistoryNotice");
+ if (!host || !notice) return;
+ try {
+  const data = await request("/api/admin/youtube/uploads?limit=50");
+  host.innerHTML = data.uploads.length ? data.uploads.map(item => {
+   const progress = Math.max(0, Math.min(100, Number(item.progress_percent) || 0));
+   const videoId = typeof item.youtube_video_id === "string" && /^[A-Za-z0-9_-]{6,20}$/.test(item.youtube_video_id)
+    ? item.youtube_video_id : "";
+   const link = videoId
+    ? '<a href="https://www.youtube.com/watch?v='+encodeURIComponent(videoId)+'" target="_blank" rel="noopener noreferrer">Open YouTube video</a>'
+    : (item.youtube_video_id ? "Video ID: "+calendarEscape(item.youtube_video_id) : "YouTube video ID not available yet");
+   return '<article class="calendar-item"><div><strong>'+calendarEscape(item.title||"Untitled upload")+'</strong>'+
+    '<span>'+calendarEscape(item.status)+' · '+calendarEscape(item.privacy_status||"private")+'</span>'+
+    '<small>Calendar #'+calendarEscape(item.calendar_id)+' · '+progress.toFixed(2)+'% · '+calendarEscape(item.processing_status||"processing status pending")+'</small>'+
+    '<p>'+link+'</p></div></article>';
+  }).join("") : '<p class="muted">No YouTube upload records yet.</p>';
+  notice.textContent = data.count+" upload record(s), newest first.";
+ } catch (error) {
+  host.innerHTML = "";
+  notice.textContent = "Upload history unavailable: "+error.message;
+ }
+}
+$("youtubeUploadHistoryRefresh")?.addEventListener("click",loadYouTubeUploadHistory);
+
 async function loadYouTubeAdminPanel() {
  const panel = $("youtubeAdminPanel"); if (!panel) return;
  try {
@@ -1514,6 +1540,7 @@ async function loadYouTubeAdminPanel() {
    : "Not connected. OAuth client: "+(data.oauth_configured?"configured":"missing")+" · token encryption: "+(data.encryption_configured?"configured":"missing");
   $("youtubeConnect").disabled = !data.oauth_configured || !data.encryption_configured;
   $("youtubeDisconnect").hidden = !data.connected;
+  await loadYouTubeUploadHistory();
  } catch(error) { $("youtubeConnectionStatus").textContent = error.message; }
 }
 $("youtubeConnect")?.addEventListener("click", async () => {
