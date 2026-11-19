@@ -1269,3 +1269,16 @@ No merge, public deployment, external publishing, paid service or original-media
 ### PR #196 latest-head CI result update — 2026-11-19
 - SINTU CI run `44446166762` for exact head `c60722aa1502e3a53c193bb39659253f900a1171` completed SUCCESS: Python 3.11, 3.12, 3.13, 3.14; dependency security audit; offline branded-video E2E/motion audit; production Docker build.
 - Native Android build run `44446166768` for the same exact head remains IN_PROGRESS; no APK/build PASS claimed. Android build log retrieval was not yet available while the job is running.
+
+
+## PR #197 — resumable offline media upload verified (2026-11-19)
+
+- Draft PR: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/197
+- Exact latest head: `9ff85bf666bfdb892b5e6a550927754a27184b7a`, based on PR #196 head `c60722aa1502e3a53c193bb39659253f900a1171`.
+- Implements authenticated resumable upload sessions with bounded 4 MiB chunks, sequential offset validation, per-chunk SHA-256, final whole-file SHA-256, persisted offsets/fsync, status/resume, and Android WorkManager session-ID persistence/reconciliation.
+- Follow-up concurrency hardening replaced process-local locking with POSIX `fcntl.flock` session locks for append and completion critical sections. Added a concurrent same-offset chunk regression test; exactly one write should succeed and the other receive an offset conflict.
+- Exact-head SINTU CI run `44448557216`: **SUCCESS 7/7** — Python 3.11, 3.12, 3.13, 3.14, dependency security audit, production Docker build, offline branded-video E2E/motion audit.
+- Exact-head Android build run `44448557210`: **SUCCESS** — Gradle Android build workflow completed.
+- Verified Android APK workflow artifact: `sintu-android-apks`, artifact ID `14495075930`, 18,436,848 bytes, SHA-256 `56202dbe37a09ed491594b1135fabb996a96e3712224934a82e25f00c991bfac`; artifact expires 2026-12-03 03:07:50 UTC. This is CI artifact evidence only; physical-phone installation/transfer is not verified.
+- PR #197 remains open and draft; no merge, deployment, or external publishing performed.
+- Remaining: install/test on actual Android phone; exercise upload interruption/process death/network recovery; inspect lock behavior under independent processes and harden stale-session cleanup/crash recovery; continue black-MP4 forensic investigation. Historical black-MP4 root cause remains unproven.
