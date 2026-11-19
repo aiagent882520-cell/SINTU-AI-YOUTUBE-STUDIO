@@ -32,7 +32,7 @@ except ValueError:
 
 
 def _validate_source_video(path: Path) -> None:
-    """Bound source MP4 size before invoking FFprobe or FFmpeg."""
+    """Bound and decode sampled source pixels; metadata/extension alone cannot reject black MP4s."""
     if path.is_symlink() or not path.is_file() or path.suffix.lower() != ".mp4":
         raise ValueError("Selected AI video clip file nahi mili, safe regular file nahi hai ya MP4 nahi hai.")
     try:
@@ -41,6 +41,24 @@ def _validate_source_video(path: Path) -> None:
         raise ValueError("Selected AI video clip file read nahi ho sakti.") from None
     if size <= 0 or size > MAX_SOURCE_VIDEO_BYTES:
         raise ValueError("AI video clip empty hai ya 100 MB limit se badi hai.")
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RendererUnavailable("AI source clip ke actual pixels verify karne ke liye FFmpeg required hai.")
+    try:
+        pixels = subprocess.run(
+            [ffmpeg, "-v", "error", "-i", str(path), "-vf", "fps=1,scale=32:32",
+             "-frames:v", "600", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
+            capture_output=True, check=False, timeout=45,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise ValueError("AI source video ke visual frames verify nahi ho sake.") from None
+    frame_bytes = 32 * 32 * 3
+    if pixels.returncode != 0 or len(pixels.stdout) < frame_bytes or len(pixels.stdout) % frame_bytes:
+        raise ValueError("AI source MP4 mein decodable visual frames nahi hain.")
+    frames = [pixels.stdout[i:i + frame_bytes] for i in range(0, len(pixels.stdout), frame_bytes)]
+    visible = sum(1 for frame in frames if sum(frame) / len(frame) > 5.0 and max(frame) > 24)
+    if visible < max(1, math.ceil(len(frames) * 0.70)):
+        raise ValueError(f"AI source MP4 visual check failed: {visible}/{len(frames)} sampled frames contain visible content.")
 
 
 

@@ -1,12 +1,33 @@
 import pytest
+import shutil
+import subprocess
+from types import SimpleNamespace
 
 from app.video_renderer import _validate_source_video
 
 
-def test_source_video_validation_accepts_mp4(tmp_path):
+def test_source_video_validation_accepts_mp4(tmp_path, monkeypatch):
     path = tmp_path / "clip.mp4"
     path.write_bytes(b"valid-source")
+    monkeypatch.setattr("app.video_renderer.shutil.which", lambda name: "/usr/bin/ffmpeg")
+    monkeypatch.setattr("app.video_renderer.subprocess.run", lambda *a, **k: SimpleNamespace(returncode=0, stdout=bytes([80, 120, 160]) * (32 * 32), stderr=b""))
     _validate_source_video(path)
+
+
+def test_source_video_validation_rejects_all_black_real_mp4(tmp_path):
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("FFmpeg is required for the real MP4 integration test")
+    path = tmp_path / "black.mp4"
+    result = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
+         "-i", "color=c=black:s=160x284:r=12:d=1", "-an", "-c:v", "libx264",
+         "-pix_fmt", "yuv420p", str(path)],
+        capture_output=True, check=False, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
+    with pytest.raises(ValueError, match="visual check"):
+        _validate_source_video(path)
 
 
 def test_source_video_validation_rejects_wrong_extension(tmp_path):
