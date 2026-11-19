@@ -40,7 +40,7 @@ function structuredTimelineItems(rows=timelineRows()){
 }
 function syncTimelineFields(rows){
  $("renderTimeline").value=rows.map(x=>x.kind==="image"?"image:"+x.id+":"+x.duration+":"+x.transition:"video:"+x.id+":"+(x.trimStart||0)+":"+(x.trimEnd??"")+":"+(x.audioVolume??.25)+":"+x.transition).join("\n");
- $("renderScenes").value=rows.map(x=>x.scene||"").join("\n");$("renderSubtitles").value="";
+ $("renderScenes").value=rows.map(x=>x.scene||"").join("\n");
  $("renderImageIds").value=rows.filter(x=>x.kind==="image").map(x=>x.id).join(", ");$("renderVideoIds").value=rows.filter(x=>x.kind==="video").map(x=>x.id).join(", ");renderTimelineEditor(rows);
 }
 function renderTimelineEditor(rows=timelineRows()){
