@@ -125,6 +125,18 @@ def run_render_process(command, *, timeout: float, text: bool = True,
 
         if reader:
             reader.join(timeout=1)
+        if report_progress:
+            while True:
+                try:
+                    line = progress_queue.get_nowait()
+                except queue.Empty:
+                    break
+                if line.startswith("out_time_ms="):
+                    try:
+                        elapsed = int(line.split("=", 1)[1]) / 1_000_000
+                        progress_callback(min(99, max(0, int(elapsed * 100 / total_duration))))
+                    except (ValueError, TypeError, ZeroDivisionError):
+                        pass
         stdout = None
         if process.stdout is not None:
             if report_progress:
