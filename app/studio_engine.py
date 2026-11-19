@@ -298,6 +298,19 @@ def delete_asset(owner, asset_id):
         cur = conn.execute("DELETE FROM studio_assets WHERE owner=? AND id=?", (owner, asset_id))
     return cur.rowcount > 0
 
+def recover_interrupted_render_queue():
+    """Mark renders left running by a stopped server as failed and safely retryable."""
+    ensure_schema()
+    now = _now()
+    result = {"error": "Render interrupted because the application process stopped.", "error_type": "server_restart", "retryable": True}
+    with _db() as conn:
+        cur = conn.execute(
+            "UPDATE studio_render_queue SET status='failed',result_json=?,updated_at=? WHERE status='running'",
+            (json.dumps(result, ensure_ascii=False), now),
+        )
+    return cur.rowcount
+
+
 def cancel_queued_render(owner, item_id):
     ensure_schema()
     now = _now()
