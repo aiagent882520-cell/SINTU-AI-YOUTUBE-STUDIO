@@ -8,6 +8,7 @@
   const queueNode = document.getElementById("offlineMediaQueue");
   const serverNode = document.getElementById("offlineMediaServerList");
   const DB_NAME = "sintu-offline-media-v1";
+  const ALLOWED_EXTENSIONS = new Set([".mp4",".mov",".mkv",".webm",".avi",".mp3",".wav",".m4a",".aac",".ogg",".flac",".jpg",".jpeg",".png",".webp"]);
   const STORE = "queue";
   let dbPromise;
   let syncing = false;
@@ -102,6 +103,8 @@
     try {
       if (navigator.storage?.persist) await navigator.storage.persist().catch(() => false);
       for (const file of files) {
+        const extension = "." + (file.name.split(".").pop() || "").toLowerCase();
+        if (!ALLOWED_EXTENSIONS.has(extension)) throw new Error(file.name + ": unsupported media extension.");
         if (!file.size || file.size > 256 * 1024 * 1024) throw new Error(file.name + ": file must be 1 byte to 256 MiB.");
         const id = crypto.randomUUID();
         await putItem({
