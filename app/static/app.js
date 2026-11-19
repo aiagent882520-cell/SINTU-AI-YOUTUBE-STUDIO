@@ -74,7 +74,9 @@ function queueTimelineAsset(kind,id,sceneText){const rows=timelineRows();if(rows
 $("timelineEditor").addEventListener("click",event=>{
  const b=event.target.closest("button[data-action]");if(!b)return;
  const rows=timelineRows(),i=Number(b.dataset.index),action=b.dataset.action;
- const subtitleField=$("renderSubtitles"),subtitleRows=subtitleField.value.replace(/\\r/g,"").split("\\n");
+ const subtitleField=$("renderSubtitles"),subtitleText=subtitleField.value.replace(/\\r/g,"");
+ const subtitleRows=subtitleText.trim()?subtitleText.split("\\n"):[];
+ while(subtitleRows.length&&!subtitleRows[subtitleRows.length-1].trim())subtitleRows.pop();
  const subtitlesAligned=subtitleRows.length===rows.length;
  if(action==="remove"){rows.splice(i,1);if(subtitlesAligned)subtitleRows.splice(i,1);}
  if(action==="up"&&i>0){[rows[i-1],rows[i]]=[rows[i],rows[i-1]];if(subtitlesAligned)[subtitleRows[i-1],subtitleRows[i]]=[subtitleRows[i],subtitleRows[i-1]];}
