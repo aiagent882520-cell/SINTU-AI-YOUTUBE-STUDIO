@@ -61,7 +61,7 @@
    document.getElementById("studioMemoryList").innerHTML=(memory.memory||[]).map(x=>'<div class="agent-pair"><b>'+esc(x.key)+'</b><span>'+esc(x.value)+'</span></div>').join("")||'<p class="muted">No saved project memory.</p>';
    document.getElementById("studioAssetList").innerHTML=(assets.assets||[]).map(x=>'<div class="agent-pair"><b>'+esc(x.name)+'</b><span>'+esc(x.kind)+' · '+esc(x.uri)+'</span><button type="button" class="secondary" data-delete-studio-asset="'+esc(x.id)+'">Delete metadata</button></div>').join("")||'<p class="muted">No project assets yet.</p>';
    document.getElementById("studioVersionList").innerHTML=(versions.versions||[]).map(x=>'<div class="agent-pair"><b>Version '+x.version+'</b><span>'+esc(x.created_at)+'</span></div>').join("")||'<p class="muted">No saved versions.</p>';
-   document.getElementById("studioRenderQueueList").innerHTML=(queue.queue||[]).map(x=>'<div class="agent-pair"><b>'+esc(x.id)+'</b><span>'+esc(x.status)+'</span></div>').join("")||'<p class="muted">Render queue empty.</p>';
+   document.getElementById("studioRenderQueueList").innerHTML=(queue.queue||[]).map(x=>'<div class="agent-pair"><b>'+esc(x.id)+'</b><span>'+esc(x.status)+(x.result?.error?' · '+esc(x.result.error):'')+'</span><div class="actions">'+(x.status==="queued"?'<button type="button" class="secondary" data-render-execute="'+esc(x.id)+'">Render</button><button type="button" class="secondary" data-render-cancel="'+esc(x.id)+'">Cancel</button>':'')+(x.status==="failed"?'<button type="button" class="secondary" data-render-retry="'+esc(x.id)+'">Retry</button>':'')+'</div></div>').join("")||'<p class="muted">Render queue empty.</p>';
    notice.textContent="Project tools refreshed · "+(memory.memory||[]).length+" memory items · "+(assets.assets||[]).length+" assets · "+(versions.versions||[]).length+" versions · "+(queue.queue||[]).length+" render jobs.";
   }catch(err){notice.textContent=err.message;}
  }
@@ -146,7 +146,15 @@
    try{const project=await saveCurrentProject();const r=await fetch("/api/studio/assets",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({project_id:project.id,kind:document.getElementById("studioAssetKind").value,name:document.getElementById("studioAssetName").value,uri:document.getElementById("studioAssetUri").value,metadata:{}})});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Asset save failed");await refreshProjectTools();}
    catch(err){document.getElementById("studioToolsNotice").textContent=err.message;}
   });
-  document.getElementById("studioAssetList").addEventListener("click",async(e)=>{
+  document.getElementById("studioRenderQueueList").addEventListener("click",async(e)=>{
+    const button=e.target.closest("[data-render-execute],[data-render-cancel],[data-render-retry]");if(!button)return;
+    const id=button.dataset.renderExecute||button.dataset.renderCancel||button.dataset.renderRetry;
+    const action=button.dataset.renderExecute?"execute":button.dataset.renderCancel?"cancel":"retry";
+    const notice=document.getElementById("studioToolsNotice");button.disabled=true;
+    try{const response=await fetch("/api/studio/render-queue/"+encodeURIComponent(id)+"/"+action,{method:"POST",credentials:"same-origin"});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.detail||"Render queue action failed.");notice.textContent=action==="execute"?"Render started in background. Refresh status to track completion.":action==="retry"?"Failed render re-queued.":"Queued render cancelled.";await refreshProjectTools();}
+    catch(error){notice.textContent=error.message;button.disabled=false;}
+   });
+   document.getElementById("studioAssetList").addEventListener("click",async(e)=>{
    const b=e.target.closest("[data-delete-studio-asset]");if(!b)return;
    try{const r=await fetch("/api/studio/assets/"+encodeURIComponent(b.dataset.deleteStudioAsset),{method:"DELETE",credentials:"same-origin"});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Asset delete failed");await refreshProjectTools();}
    catch(err){document.getElementById("studioToolsNotice").textContent=err.message;}
