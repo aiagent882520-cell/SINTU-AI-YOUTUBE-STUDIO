@@ -71,7 +71,17 @@ $("flowClipImportButton")?.addEventListener("click", async () => {
  }finally{button.disabled=false;}
 });
 function queueTimelineAsset(kind,id,sceneText){const rows=timelineRows();if(rows.some(x=>x.kind===kind&&x.id===id))return;rows.push({kind,id,duration:kind==="image"?Number($("sceneSeconds").value||4):0,trimStart:0,trimEnd:null,audioVolume:.25,transition:$("renderTransition").value||"fade",scene:sceneText||"Generated "+kind+" scene"});syncTimelineFields(rows);}
-$("timelineEditor").addEventListener("click",event=>{const b=event.target.closest("button[data-action]");if(!b)return;const rows=timelineRows(),i=Number(b.dataset.index);if(b.dataset.action==="remove")rows.splice(i,1);if(b.dataset.action==="up"&&i>0)[rows[i-1],rows[i]]=[rows[i],rows[i-1]];if(b.dataset.action==="down"&&i<rows.length-1)[rows[i+1],rows[i]]=[rows[i],rows[i+1]];syncTimelineFields(rows);});
+$("timelineEditor").addEventListener("click",event=>{
+ const b=event.target.closest("button[data-action]");if(!b)return;
+ const rows=timelineRows(),i=Number(b.dataset.index),action=b.dataset.action;
+ const subtitleField=$("renderSubtitles"),subtitleRows=subtitleField.value.replace(/\\r/g,"").split("\\n");
+ const subtitlesAligned=subtitleRows.length===rows.length;
+ if(action==="remove"){rows.splice(i,1);if(subtitlesAligned)subtitleRows.splice(i,1);}
+ if(action==="up"&&i>0){[rows[i-1],rows[i]]=[rows[i],rows[i-1]];if(subtitlesAligned)[subtitleRows[i-1],subtitleRows[i]]=[subtitleRows[i],subtitleRows[i-1]];}
+ if(action==="down"&&i<rows.length-1){[rows[i+1],rows[i]]=[rows[i],rows[i+1]];if(subtitlesAligned)[subtitleRows[i+1],subtitleRows[i]]=[subtitleRows[i],subtitleRows[i+1]];}
+ if(subtitlesAligned)subtitleField.value=subtitleRows.join("\\n");
+ syncTimelineFields(rows);
+});
 $("timelineEditor").addEventListener("input",event=>{
  if(event.target.dataset.field!=="audioVolume")return;
  const i=Number(event.target.dataset.index),label=$("timelineEditor").querySelector('[data-volume-label="'+i+'"]');
