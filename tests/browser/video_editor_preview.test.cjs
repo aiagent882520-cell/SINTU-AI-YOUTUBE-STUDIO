@@ -123,18 +123,16 @@ async function openStudio() {
   const context = await browser.newContext({ serviceWorkers: "block" });
   const page = await context.newPage();
   await page.addInitScript(() => {
-    const attach = () => {
-      const video = document.querySelector("#timelinePreviewStage video");
-      if (video && !video.dataset.sintuPlayProbe) {
-        video.dataset.sintuPlayProbe = "1";
-        window.__sintuMediaEvents = [];
-        for (const name of ["loadedmetadata", "seeking", "seeked", "play", "playing", "timeupdate", "error", "stalled", "waiting"]) {
-          video.addEventListener(name, () => window.__sintuMediaEvents.push({ name, currentTime: video.currentTime, readyState: video.readyState, networkState: video.networkState, error: video.error?.code || null }));
-        }
-        video.addEventListener("play", () => { window.__sintuPlayTime = video.currentTime; }, { once: true });
+    // Capture the exact trim position at the application's play() call. A
+    // MutationObserver can run after a short media element has already emitted
+    // its play event, making the assertion flaky and testing observer timing.
+    const nativePlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function () {
+      if (this.closest("#timelinePreviewStage")) {
+        window.__sintuPlayTime = this.currentTime;
       }
+      return nativePlay.call(this);
     };
-    new MutationObserver(attach).observe(document.documentElement, { childList: true, subtree: true });
   });
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => typeof window.playTimelinePreview === "function");
@@ -187,7 +185,7 @@ test("real Chromium seeks to trim-start before video playback and stops at trim-
     await setTimeline(page, "video:" + "c".repeat(32) + ":0.25:0.8:0.25:cut");
     await page.locator("#timelinePreviewPlay").click({ force: true });
     await page.waitForFunction(() => Number.isFinite(window.__sintuPlayTime), null, { timeout: 12000 }).catch(async error => {
-      const state = await page.evaluate(() => ({ notice: document.getElementById("timelinePreviewNotice").textContent, events: window.__sintuMediaEvents || [], video: (() => { const v = document.querySelector("#timelinePreviewStage video"); return v ? { currentTime: v.currentTime, duration: v.duration, readyState: v.readyState, networkState: v.networkState, error: v.error?.code || null, seeking: v.seeking } : null; })() }));
+      const state = await page.evaluate(() => ({ notice: document.getElementById("timelinePreviewNotice").textContent, playTime: window.__sintuPlayTime ?? null, video: (() => { const v = document.querySelector("#timelinePreviewStage video"); return v ? { currentTime: v.currentTime, duration: v.duration, readyState: v.readyState, networkState: v.networkState, error: v.error?.code || null, seeking: v.seeking } : null; })() }));
       throw new Error(error.message + " Media diagnostics: " + JSON.stringify(state) + " Range requests: " + JSON.stringify(videoRangeRequests));
     });
     const playStart = await page.evaluate(() => window.__sintuPlayTime);
