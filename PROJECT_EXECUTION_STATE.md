@@ -1110,3 +1110,42 @@ The following PRs remain open and unmerged: #213, #209, #207, #206, #205, #204, 
 - YouTube OAuth/channel identity/live upload remain BLOCKED pending owner credentials and consent; no public upload performed.
 - 60 individual formats and 15 modules remain unverified beyond inventory/catalog registration.
 - Full website journeys, multi-track editor workflows, durable distributed worker recovery and actual Android editor playback remain incomplete.
+
+
+## Main merge reconciliation — 2026-11-19 11:46 UTC
+
+### Changes merged into main during this continuation
+- PR #220 merged (squash) at 11126bad707b6943e9c822e1178c4c5f74f81dcb. CI offline E2E dependency installation now refreshes apt indexes once, retries downloads, allows a 15-minute install and a 30-minute job ceiling.
+- PR #221 merged (squash) at 4c151ff0d24552edcaa9b848d6480d8d0c0a079c. Persistent studio render queue state transitions now acquire SQLite BEGIN IMMEDIATE and conditionally update the previously observed status; concurrent claims are serialized. Exact PR run 44514872178 passed 7/7.
+- PR #218 merged (squash) at ea2f65b9102ae3f80b753be78b1a679e6812b28f. Adds the real Chromium Video Editor browser acceptance workflow and tests plus FastAPI media byte-range tests (206 normal/suffix, 416 unsatisfiable). Exact-head run 44516131123 passed 8/8: Python 3.11–3.14, dependency audit, Docker, Chromium 6/6 and offline 32-second renderer smoke.
+- Main CI for latest main SHA ea2f65b9102ae3f80b753be78b1a679e6812b28f is run 44517322339. Python 3.11–3.14 and dependency audit PASS; Chromium 6/6 PASS; Docker health check and offline E2E were still running at checkpoint time.
+
+### PR #219 — current checkpoint refresh
+- PR #219 branch head remains 9a6028551b0014918ea86858f444f9fe2229f086 before this update; run 44515758341 passed 7/7.
+- This commit appends the main merges and current state; a new exact-head CI run is expected. PR #219 remains OPEN and unmerged.
+
+### PR #222 — 60-second Hindi subtitle acceptance
+- Latest branch head before this checkpoint: 7eb9c09ab87a01ef62c5ede46d3c8e4114f4863f; run 44517162187 was still IN_PROGRESS. Python 3.11, 3.12 and 3.13 plus dependency audit passed; Python 3.14 remained in progress.
+- Earlier exact-head run 44515483070 failed on Python 3.13 after 630.16 seconds: 698 passed and one pre-existing mixed-timeline FFmpeg integration test hit its 600-second render timeout. The 60-second acceptance test itself was not reached. This is a runner/render-test timeout, not proof that the 60-second output passed or failed.
+- Test coverage now asserts 15 scene inputs × 4 seconds, 15 timed subtitle cues, 60-second music duration and burned-in subtitle output. The script creates a 60-second MP4 only in the offline E2E job; no 60-second output artifact has been verified yet.
+- PR #222 is OPEN and unmerged.
+
+### PR #223 — YouTube OAuth test coverage
+- Latest branch head f1814eb292a0628e2ada717935e96b85dcde143a; exact run 44517490834 in progress at checkpoint time.
+- Python 3.11–3.14 and dependency audit PASS. Docker, Chromium and offline E2E still running.
+- Previous run 44515907410 passed Python and Docker but failed before generation because it used the old 300-second apt install step. The current run is after the CI dependency fix.
+- Tests simulate OAuth code exchange/channel lookup, session-bound one-time state/replay rejection, encrypted token storage, secret-free status responses, and refresh-token preservation. They do not establish live Google consent, actual channel ownership or a real upload.
+- PR #223 is OPEN and unmerged.
+
+### PR #224 — reduce slow mixed-timeline test cost
+- New PR: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/224
+- Latest head 3b19e2476c37bdcc9737f8cbdf3652b526b42a94; exact CI run 44517701642 pending at checkpoint time.
+- The mixed image/video/source-audio/voice/music/subtitle FFmpeg integration test previously exceeded 600 seconds on one Python 3.13 CI runner. This test now uses a test-only 160x284 profile (source-native size) while preserving the same filter graph and stream/subtitle assertions. Production 720x1280 rendering remains covered by the offline E2E/motion audit. No production output profile was changed.
+- PR #224 is OPEN and unmerged.
+
+### Other open PRs / release gate
+- PRs #206/#207/#209 remain open and stacked. BackgroundTasks durability, process-local FFmpeg registry, single-worker assumptions and non-durable recovery limitations remain. Do not merge these as a durable multi-worker queue without further design and tests.
+- PR #192 is an older checkpoint PR; reconcile its unique content with this checkpoint before any closure.
+- Current main SHA: ea2f65b9102ae3f80b753be78b1a679e6812b28f.
+- No 60-second topic video, real AI image inference, physical Android install, three historical black-MP4 provenance mappings, live YouTube OAuth/upload, complete website journeys or individual 60-format/15-module acceptance has been verified.
+- The 32.04-second PR #218 smoke output is procedural art + eSpeak NG + procedural music, not AI imagery; it contains no burned subtitles. Preserve this distinction.
