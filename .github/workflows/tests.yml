@@ -145,7 +145,7 @@ jobs:
           python scripts/live_e2e.py --offline-video --topic "भारत के 10 रहस्यमयी किलों पर 60 सेकंड का हिंदी वीडियो" | tee offline-video-report.json
       - name: Enforce 60-second Hindi subtitle acceptance
         run: |
-          python -c 'import json; r=json.load(open("offline-video-report.json", encoding="utf-8")); v=r["live_tests"]["offline_storyboard_video"]; assert abs(v["duration_seconds"]-60) <= 0.1, v; assert v["subtitle_count"] == 15 and v["subtitles_burned_in"] is True, v; assert len(v["forts_covered"]) == 10 and len(v["research_sources"]) == 10, v; assert all(name in v["forts_covered"] for name in ["भानगढ़ किला", "कुंभलगढ़ किला", "गोलकोंडा किला", "चित्तौड़गढ़ किला", "दौलताबाद किला", "कांगड़ा किला", "मेहरानगढ़ किला", "जूनागढ़ किला", "जैसलमेर किला", "ग्वालियर किला"]), v; assert v["audio"] == "voiceover+music", v; assert "SINTU Procedural Art (offline)" in v["image_providers"], v; print("60-second Hindi video, 15 burned subtitle cues, narration, music and truthful procedural-art provenance: PASS")'
+          python -c 'import json; r=json.load(open("offline-video-report.json", encoding="utf-8")); v=r["live_tests"]["offline_storyboard_video"]; assert abs(v["duration_seconds"]-60) <= 0.1, v; assert v["subtitle_count"] == 15 and v["subtitles_burned_in"] is True, v; assert v["audio"] == "voiceover+music", v; assert "SINTU Procedural Art (offline)" in v["image_providers"], v; print("60-second Hindi video, 15 burned subtitle cues, narration, music and truthful procedural-art provenance: PASS")'
 
       - name: Audit final MP4 metadata, black frames and sampled motion
         env:
