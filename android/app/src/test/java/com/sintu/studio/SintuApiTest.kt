@@ -163,4 +163,37 @@ class SintuApiTest {
         assertEquals("standard", request.quality)
         assertEquals(true, request.burn_subtitles)
     }
+
+    @Test
+    fun cookieJarClearsCookieWhenHostChanges() {
+        val store = FakeSessionCookieStore()
+        val jar = PersistentSessionCookieJar(store)
+        val original = "https://studio.example.com/".toHttpUrl()
+        val cookie = okhttp3.Cookie.parse(
+            original, "sintu_admin_session=secret; Path=/; HttpOnly"
+        )!!
+        jar.saveFromResponse(original, listOf(cookie))
+
+        assertEquals(emptyList<okhttp3.Cookie>(), jar.loadForRequest(
+            "https://attacker.example/".toHttpUrl()
+        ))
+        assertEquals(1, store.clearCount)
+    }
+
+    @Test
+    fun cookieJarClearsPersistedValueWhenRedirectTargetChangesOrigin() {
+        val store = FakeSessionCookieStore()
+        val jar = PersistentSessionCookieJar(store)
+        val original = "https://studio.example.com/".toHttpUrl()
+        val cookie = okhttp3.Cookie.parse(
+            original, "sintu_admin_session=secret; Path=/; HttpOnly"
+        )!!
+        jar.saveFromResponse(original, listOf(cookie))
+
+        assertEquals(emptyList<okhttp3.Cookie>(), jar.loadForRequest(
+            "https://evil.example/".toHttpUrl()
+        ))
+        assertEquals(null, store.value)
+        assertEquals(null, store.origin)
+    }
 }
