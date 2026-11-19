@@ -116,11 +116,11 @@ def recover_expired_leases(*, now: datetime | None = None) -> dict:
     return {"requeued": queued, "dead_lettered": dead}
 
 
-def claim_next(worker_id: str, *, lease_seconds: int = 900, owner: str | None = None) -> dict | None:
+def claim_next(worker_id: str, *, lease_seconds: int = 900, owner: str | None = None, now: datetime | None = None) -> dict | None:
     ensure_schema()
     if not worker_id or len(worker_id) > 200 or not 15 <= int(lease_seconds) <= 86400:
         raise ValueError("worker_id or lease_seconds is invalid")
-    now = _now()
+    now = now or _now()
     now_s, expiry = _stamp(now), _stamp(now + timedelta(seconds=lease_seconds))
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
