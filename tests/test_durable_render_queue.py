@@ -73,3 +73,34 @@ def test_owner_scope_and_invalid_worker_settings(tmp_path, monkeypatch):
         queue.claim_next("", lease_seconds=60)
     with pytest.raises(ValueError):
         queue.claim_next("worker", lease_seconds=1)
+
+
+def test_schema_migrates_existing_studio_queue_without_losing_rows(tmp_path, monkeypatch):
+    import sqlite3
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    path = tmp_path / "sintu_studio.db"
+    with sqlite3.connect(path) as conn:
+        conn.execute("""CREATE TABLE studio_render_queue (
+            id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT NOT NULL,
+            status TEXT NOT NULL, payload_json TEXT NOT NULL, result_json TEXT,
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        )""")
+        conn.execute(
+            "INSERT INTO studio_render_queue VALUES(?,?,?,?,?,?,?,?)",
+            ("legacy-id", "owner", "project", "queued", '{"title":"legacy"}', None, "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+        )
+    queue.ensure_schema()
+    columns = {row["name"] for row in queue._connect().execute("PRAGMA table_info(studio_render_queue)")}
+    assert {"lease_owner", "lease_token", "lease_expires_at", "heartbeat_at", "available_at", "attempts", "max_attempts", "last_error"} <= columns
+    claimed = queue.claim_next("migration-worker", lease_seconds=60)
+    assert claimed["id"] == "legacy-id"
+    assert claimed["payload"] == {"title": "legacy"}
+
+
+def test_expired_lease_at_retry_limit_moves_to_dead_letter(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    item = queue.enqueue("owner", "project", {"title": "exhausted"}, max_attempts=1)
+    queue.claim_next("worker-crash", lease_seconds=60)
+    expired = datetime.now(timezone.utc) + timedelta(seconds=61)
+    assert queue.recover_expired_leases(now=expired) == {"requeued": 0, "dead_lettered": 1}
+    assert queue.get_item("owner", item["id"])["status"] == "dead_letter"
