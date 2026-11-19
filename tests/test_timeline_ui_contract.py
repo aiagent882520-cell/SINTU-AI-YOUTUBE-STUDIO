@@ -57,3 +57,17 @@ def test_video_preview_metadata_is_initialized_once():
 
     assert "metadataHandled=false" in preview
     assert "if(metadataHandled||settled)return;" in preview
+
+
+def test_invalid_trim_edits_do_not_mutate_previous_value():
+    source = (ROOT / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    start = source.index("function updateTimelineTrim(item,field,rawValue)")
+    end = source.index('\n$("timelineEditor").addEventListener("change"', start)
+    helper = source[start:end]
+
+    assert "const previous=item[field];" in helper
+    assert "item.trimEnd<=next" in helper
+    assert "next<=item.trimStart" in helper
+    assert "item[field]=next;" in helper
+    assert helper.index("item.trimEnd<=next") < helper.index("item[field]=next;")
+    assert helper.index("next<=item.trimStart") < helper.index("item[field]=next;")
