@@ -23,3 +23,7 @@
 - A percentage describes the active final encoding stage, not an aggregate estimate of all pre-processing work.
 - This implementation does not make FastAPI BackgroundTasks a durable external worker.
 - Android physical-device validation is still required.
+
+## Operational safeguard
+
+Until cancellation is moved to a cross-process worker/lease design, production deployment must run exactly one Uvicorn worker and one application instance for this in-memory process registry. The queue database remains durable, but the live process handle itself is not shared between workers.
