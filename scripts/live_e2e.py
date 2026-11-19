@@ -162,12 +162,11 @@ def _live_video(prompt: str | list[str]) -> dict:
 
 
 def _offline_storyboard_e2e(topic: str) -> dict:
-    """Build a multi-scene local Hindi film-style MP4 with real visuals and soundtrack."""
+    """Build a 60-second local Hindi short with visuals, narration, music and timed subtitles."""
     clean_topic = topic.strip()
     if not clean_topic or len(clean_topic) > 300:
         raise ValueError("Offline video test topic must contain 1 to 300 characters.")
 
-    # Distinct establishing, detail, movement and closing compositions.
     shot_specs = [
         "wide aerial establishing shot at golden hour",
         "slow cinematic push toward the ancient stone architecture",
@@ -176,6 +175,8 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "side-angle view with atmospheric mist and layered depth",
         "interior passage with shafts of warm light and deep shadows",
         "dramatic sunset silhouette, cinematic contrast",
+        "hidden underground passage and mysterious stone doorway",
+        "distant watchtower above a rugged mountain ridge",
         "wide closing shot, atmospheric light fading into dusk",
     ]
     scenes = [f"{clean_topic}, {shot}" for shot in shot_specs]
@@ -186,22 +187,38 @@ def _offline_storyboard_e2e(topic: str) -> dict:
             raise RuntimeError(f"Local scene image {index} was not saved.")
 
     narration = (
-        "भारत की धरती पर ऐसे किले मौजूद हैं, जिनकी दीवारों में सदियों का इतिहास छिपा है। "
-        "ऊँची प्राचीरें, विशाल दरवाज़े और पत्थरों पर उकेरी गई कहानियाँ हमें उस दौर में ले जाती हैं, "
-        "जब हर किला साहस, रणनीति और शाही वैभव का प्रतीक हुआ करता था। "
-        "इन गलियारों में कदम रखते ही इतिहास मानो फिर से जीवित हो उठता है। "
-        "यह सिर्फ पत्थरों की इमारत नहीं, बल्कि हमारी विरासत की अमर पहचान है।"
+        "भारत के रहस्यमयी किले केवल पत्थरों की इमारतें नहीं, बल्कि इतिहास के अनकहे अध्याय हैं। "
+        "कभी इनकी ऊँची दीवारों ने राजाओं और सेनाओं की रक्षा की, तो कभी इनके गुप्त रास्तों ने "
+        "युद्धों और खज़ानों के रहस्य छिपाए। राजस्थान के रेगिस्तान से लेकर दक्कन की पहाड़ियों तक, "
+        "हर किले की अपनी कहानी है। कहीं विशाल दरवाज़े दुश्मनों को रोकते थे, कहीं पानी के कुंड "
+        "लंबी घेराबंदी में जीवन बचाते थे। पुराने महल, अंधेरी सुरंगें और पहरेदार मीनारें आज भी "
+        "बीते युग की गवाही देती हैं। इन किलों की वास्तुकला में साहस, विज्ञान और कला का अद्भुत "
+        "मेल दिखाई देता है। कुछ किलों के बारे में लोककथाएँ आज भी लोगों को चकित करती हैं। "
+        "इन रहस्यमयी धरोहरों को जानना भारत के अतीत से मिलने जैसा है।"
     )
+    subtitles = [
+        "भारत के रहस्यमयी किले इतिहास के अनकहे अध्याय हैं।",
+        "ऊँची दीवारें कभी राजाओं और सेनाओं की रक्षा करती थीं।",
+        "गुप्त रास्तों में युद्धों और खज़ानों के रहस्य छिपे थे।",
+        "हर किले की अपनी अनोखी कहानी और पहचान है।",
+        "विशाल दरवाज़े दुश्मनों को रोकने के लिए बनाए गए थे।",
+        "पानी के कुंड लंबी घेराबंदी में जीवन बचाते थे।",
+        "पुराने महल और अंधेरी सुरंगें आज भी रहस्य समेटे हैं।",
+        "पहरेदार मीनारें बीते युग की गवाही देती हैं।",
+        "वास्तुकला में साहस, विज्ञान और कला का मेल है।",
+        "इन धरोहरों को जानना भारत के अतीत से मिलना है।",
+    ]
     voice = generate_voiceover(narration)
     audio_path = AUDIO_DIR / voice["filename"]
     if not audio_path.is_file() or audio_path.stat().st_size <= 0:
         raise RuntimeError("Local Hindi voiceover was not saved.")
 
-    duration = len(scenes) * 4
+    seconds_per_scene = 6
+    target_duration = len(scenes) * seconds_per_scene
     music = generate_music(
         f"cinematic Indian historical documentary background score, orchestral atmosphere, "
         f"subtle suspense, warm strings and deep percussion, topic: {clean_topic}",
-        duration=duration,
+        duration=target_duration,
     )
     music_path = MUSIC_DIR / (music["music_id"] + ".wav")
     if not music_path.is_file() or music_path.stat().st_size <= 0:
@@ -210,9 +227,10 @@ def _offline_storyboard_e2e(topic: str) -> dict:
     rendered = render_storyboard(
         title=clean_topic,
         scenes=scenes,
-        seconds_per_scene=4,
+        seconds_per_scene=seconds_per_scene,
         image_paths=image_paths,
         audio_path=audio_path,
+        subtitles=subtitles,
         music_path=music_path,
         music_volume=0.12,
         transition="fade",
@@ -226,10 +244,12 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         raise RuntimeError("Offline storyboard MP4 was not created.")
     if rendered.get("brand_watermark") != "SINTU AI YOUTUBE STUDIO":
         raise RuntimeError("Offline storyboard MP4 is missing the mandatory SINTU watermark.")
-    if rendered.get("subtitles_burned_in") is not False:
-        raise RuntimeError("Offline storyboard MP4 unexpectedly contains burned-in subtitles.")
+    if rendered.get("subtitles_burned_in") is not True:
+        raise RuntimeError("60-second Hindi acceptance MP4 must contain burned-in subtitles.")
     if rendered.get("audio") != "voiceover+music":
         raise RuntimeError("Offline storyboard MP4 must contain Hindi narration and background music.")
+    if abs(float(rendered.get("duration_seconds", 0)) - target_duration) > 0.1:
+        raise RuntimeError("Offline storyboard MP4 duration does not match the 60-second acceptance target.")
 
     return {
         "scene_count": len(scenes),
@@ -237,6 +257,8 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "voice_engine": voice.get("voice"),
         "voice_format": voice.get("format"),
         "music_provider": music.get("provider"),
+        "subtitle_count": len(subtitles),
+        "target_duration_seconds": target_duration,
         "final_render_id": rendered["video_id"],
         "final_render_path": str(final_path),
         "final_render_bytes": final_path.stat().st_size,
