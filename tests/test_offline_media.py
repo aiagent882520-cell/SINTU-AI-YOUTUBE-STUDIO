@@ -174,3 +174,37 @@ def test_resumable_upload_rejects_wrong_final_sha256(tmp_path, monkeypatch):
     assert chunk.status_code == 200
     complete = client.post(f"/api/offline-media/uploads/{upload_id}/complete")
     assert complete.status_code == 400
+
+
+def test_resumable_upload_serializes_concurrent_chunk_writes(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from app.resumable_media_upload import (
+        ResumableUploadError, append_upload_chunk, create_upload,
+    )
+    first = b"first-chunk"
+    second = b"other-chunk"
+    create = create_upload(
+        data_dir=tmp_path, filename="clip.mp4",
+        size_bytes=len(first) + len(second),
+        sha256=hashlib.sha256(first + second).hexdigest(),
+    )
+    upload_id = create["upload_id"]
+
+    def append(payload):
+        try:
+            return append_upload_chunk(
+                data_dir=tmp_path, upload_id=upload_id, offset=0,
+                chunk=payload, chunk_sha256=hashlib.sha256(payload).hexdigest(),
+            )
+        except ResumableUploadError as exc:
+            return str(exc)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(append, (first, second)))
+    successes = [item for item in results if isinstance(item, dict)]
+    conflicts = [item for item in results if isinstance(item, str)]
+    assert len(successes) == 1
+    assert len(conflicts) == 1
+    assert "Offset conflict" in conflicts[0]
+    from app.resumable_media_upload import get_upload
+    assert get_upload(data_dir=tmp_path, upload_id=upload_id)["offset"] == len(first) or get_upload(data_dir=tmp_path, upload_id=upload_id)["offset"] == len(second)
