@@ -128,7 +128,7 @@ def append_upload_chunk(*, data_dir: Path, upload_id: str, offset: int,
 
 def complete_upload(*, data_dir: Path, upload_id: str,
                     content_type: str = "application/octet-stream") -> dict[str, Any]:
-    with _lock(upload_id):
+    with _session_lock(data_dir, upload_id):
         metadata_path, payload_path = _paths(data_dir, upload_id)
         if not metadata_path.is_file() or metadata_path.is_symlink() or payload_path.is_symlink():
             raise ResumableUploadError("Upload session not found or unsafe.")
