@@ -78,14 +78,14 @@ def safe_remux(source: Path, destination: Path, *,
         raise ValueError("Source must be an existing regular file, not a symlink.")
     if source.suffix.lower() != ".mp4" or destination.suffix.lower() != ".mp4":
         raise ValueError("Source and destination must use the .mp4 extension.")
-    if destination.exists() or destination.is_symlink():
-        raise FileExistsError("Destination already exists; refusing to overwrite.")
     if not destination.parent.is_dir():
         raise ValueError("Destination directory must already exist.")
     source_real = source.resolve(strict=True)
     destination_real = destination.parent.resolve(strict=True) / destination.name
     if source_real == destination_real:
         raise ValueError("Source and destination must be different files.")
+    if destination.exists() or destination.is_symlink():
+        raise FileExistsError("Destination already exists; refusing to overwrite.")
     if source.stat().st_size <= 0:
         raise ValueError("Source file is empty.")
     ffmpeg = ffmpeg or shutil.which("ffmpeg")
