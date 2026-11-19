@@ -164,7 +164,7 @@ def test_flow_pending_queue_is_acknowledged_only_after_successful_render(tmp_pat
     importer.scan_once()
     assert importer.flush_pending(force=True) == {"video_id": "rendered"}
     assert importer.pending == []
-    assert (data / "flow_auto_pending.json").read_text("utf-8") == "[]"
+    assert (data / "flow_auto_pending.json").read_text("utf-8").strip() == "[]"
 
 
 def test_flow_auto_import_deduplicates_identical_content_across_download_paths(tmp_path):
