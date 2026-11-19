@@ -162,29 +162,56 @@ def _live_video(prompt: str | list[str]) -> dict:
 
 
 def _offline_storyboard_e2e(topic: str) -> dict:
-    """Build a 60-second local Hindi short with 15 four-second scenes, narration, music and timed subtitles."""
+    """Render a researched 60-second Hindi short covering ten named Indian forts."""
     clean_topic = topic.strip()
     if not clean_topic or len(clean_topic) > 300:
         raise ValueError("Offline video test topic must contain 1 to 300 characters.")
 
-    shot_specs = [
-        "wide aerial establishing shot at golden hour",
-        "slow cinematic push toward the ancient stone architecture",
-        "low-angle dramatic view showing monumental scale",
-        "close detail shot of weathered stone carvings and textures",
-        "side-angle view with atmospheric mist and layered depth",
-        "interior passage with shafts of warm light and deep shadows",
-        "dramatic sunset silhouette, cinematic contrast",
-        "hidden underground passage and mysterious stone doorway",
-        "moonlit fort ramparts above a silent desert",
-        "massive iron-studded gate with ancient defensive architecture",
-        "secret water reservoir hidden beneath a stone courtyard",
-        "narrow stairway winding through an old fortress wall",
-        "ancient cannon platform overlooking a winding mountain road",
-        "forgotten palace courtyard with carved pillars and stone arches",
-        "wide closing shot, atmospheric light fading into dusk",
+    forts = [
+        "भानगढ़ किला",
+        "कुंभलगढ़ किला",
+        "गोलकोंडा किला",
+        "चित्तौड़गढ़ किला",
+        "दौलताबाद किला",
+        "कांगड़ा किला",
+        "मेहरानगढ़ किला",
+        "जूनागढ़ किला",
+        "जैसलमेर किला",
+        "ग्वालियर किला",
     ]
-    scenes = [f"{clean_topic}, {shot}" for shot in shot_specs]
+    research_sources = [
+        {"fort": "Bhangarh Fort", "url": "https://www.tourism.rajasthan.gov.in/bhangarh-fort.html"},
+        {"fort": "Kumbhalgarh Fort", "url": "https://www.tourism.rajasthan.gov.in/kumbhalgarh-fort.html"},
+        {"fort": "Golconda Fort", "url": "https://www.incredibleindia.gov.in/en/telangana/hyderabad/golconda-fort"},
+        {"fort": "Chittorgarh Fort", "url": "https://www.incredibleindia.gov.in/en/rajasthan/chittorgarh/chittorgarh-fort"},
+        {"fort": "Daulatabad Fort", "url": "https://www.prod.incredibleindia.gov.in/content/incredible-india-v2/en/blogs/2020/indias-unique-forts.html"},
+        {"fort": "Kangra Fort", "url": "https://www.incredibleindia.gov.in/en/himachal-pradesh/dharamshala/kangra-fort"},
+        {"fort": "Mehrangarh Fort", "url": "https://www.incredibleindia.gov.in/en/rajasthan/jodhpur/mehrangarh-fort"},
+        {"fort": "Junagarh Fort", "url": "https://www.incredibleindia.gov.in/en/rajasthan/bikaner/junagarh-fort"},
+        {"fort": "Jaisalmer Fort", "url": "https://www.prod.incredibleindia.gov.in/content/incredible-india-v2/en/experiences/heritage/forts-and-palaces.html"},
+        {"fort": "Gwalior Fort", "url": "https://www.prod.incredibleindia.gov.in/content/incredible-india-v2/en/experiences/heritage/forts-and-palaces.html"},
+    ]
+    shot_specs = [
+        "Bhangarh Fort in the Aravalli foothills, abandoned bazaar lanes and temple ruins, daylight cinematic wide shot",
+        "Bhangarh Fort palace and Gopinath temple ruins, atmospheric folklore mood, no supernatural figures",
+        "Kumbhalgarh Fort's long stone wall following the Aravalli mountain ridge, sweeping aerial view",
+        "Kumbhalgarh ramparts and Badal Mahal above rugged hills, golden-hour documentary shot",
+        "Golconda Fort Fateh Darwaza, acoustic gateway and distant hilltop pavilion, detailed architectural view",
+        "Chittorgarh Fort with Vijay Stambh and monumental gates, vast hilltop fortress panorama",
+        "Daulatabad Fort on its steep rocky hill, moat and shadowed rock-cut defensive passage",
+        "Kangra Fort above the Himalayan valley, layered stone walls and distant Dhauladhar mountains",
+        "Mehrangarh Fort's seven gates above the blue city of Jodhpur, dramatic high-angle view",
+        "Junagarh Fort in Bikaner, red sandstone ramparts and ornate desert palace courtyards",
+        "Jaisalmer's golden living fort on Trikuta Hill, sandstone homes and inhabited lanes at sunset",
+        "Gwalior Fort stretching along a high plateau, palace facades and ancient temples",
+        "Ancient Indian fort water tanks and stepwells, practical engineering for long sieges",
+        "Massive bastions, iron-studded gates and winding defensive passages, historical architectural detail",
+        "Cinematic closing montage of India's ten forts at dusk, heritage documentary atmosphere",
+    ]
+    scenes = [
+        f"{clean_topic}. Historical scene: {shot}"
+        for shot in shot_specs
+    ]
     image_results = [generate_image(prompt, kind="scene", aspect="portrait") for prompt in scenes]
     image_paths = [IMAGE_DIR / f"{item['image_id']}.jpg" for item in image_results]
     for index, path in enumerate(image_paths, start=1):
@@ -192,31 +219,32 @@ def _offline_storyboard_e2e(topic: str) -> dict:
             raise RuntimeError(f"Local scene image {index} was not saved.")
 
     narration = (
-        "भारत के रहस्यमयी किले केवल पत्थरों की इमारतें नहीं, बल्कि इतिहास के अनकहे अध्याय हैं। "
-        "कभी इनकी ऊँची दीवारों ने राजाओं और सेनाओं की रक्षा की, तो कभी इनके गुप्त रास्तों ने "
-        "युद्धों और खज़ानों के रहस्य छिपाए। राजस्थान के रेगिस्तान से लेकर दक्कन की पहाड़ियों तक, "
-        "हर किले की अपनी कहानी है। कहीं विशाल दरवाज़े दुश्मनों को रोकते थे, कहीं पानी के कुंड "
-        "लंबी घेराबंदी में जीवन बचाते थे। पुराने महल, अंधेरी सुरंगें और पहरेदार मीनारें आज भी "
-        "बीते युग की गवाही देती हैं। इन किलों की वास्तुकला में साहस, विज्ञान और कला का अद्भुत "
-        "मेल दिखाई देता है। कुछ किलों के बारे में लोककथाएँ आज भी लोगों को चकित करती हैं। "
-        "इन रहस्यमयी धरोहरों को जानना भारत के अतीत से मिलने जैसा है।"
+        "आज की यात्रा में दस ऐसे किले, जिनकी कहानियों में इतिहास और लोककथा साथ चलते हैं। "
+        "राजस्थान का भानगढ़ सत्रहवीं सदी का नगर था; उसके श्राप की बातें लोककथाएँ हैं, "
+        "प्रमाणित अलौकिक घटना नहीं। कुंभलगढ़ की लगभग छत्तीस किलोमीटर दीवार अरावली पर फैली है। "
+        "गोलकोंडा के फाटक पर ताली की गूँज पहाड़ी मंडप तक सुनाई देती है। चित्तौड़गढ़ के सात द्वार "
+        "और विजय स्तंभ वीरता की स्मृति हैं। दौलताबाद में चट्टान काटकर बना रास्ता और खाई रक्षा का "
+        "हिस्सा थे। हिमाचल का कांगड़ा किला उन्नीस सौ पाँच के भूकंप से क्षतिग्रस्त हुआ। "
+        "जोधपुर का मेहरानगढ़ सात द्वारों से ऊपर उठता है। बीकानेर का जूनागढ़ सोलहवीं सदी में "
+        "नया रूप लेकर बना। जैसलमेर का पीले पत्थर का किला आज भी आबाद है। ग्वालियर का किला "
+        "ऊँचे पठार पर फैला है। इनका असली रहस्य है इंजीनियरिंग, इतिहास और लोककथाओं का मेल।"
     )
     subtitles = [
-        "भारत के रहस्यमयी किले इतिहास के अनकहे अध्याय हैं।",
-        "ऊँची दीवारें कभी राजाओं और सेनाओं की रक्षा करती थीं।",
-        "गुप्त रास्तों में युद्धों और खज़ानों के रहस्य छिपे थे।",
-        "हर किले की अपनी अनोखी कहानी और पहचान है।",
-        "विशाल दरवाज़े दुश्मनों को रोकने के लिए बनाए गए थे।",
-        "पानी के कुंड लंबी घेराबंदी में जीवन बचाते थे।",
-        "पुराने महल और अंधेरी सुरंगें आज भी रहस्य समेटे हैं।",
-        "पहरेदार मीनारें बीते युग की गवाही देती हैं।",
-        "चाँदनी में इनकी प्राचीरें रहस्यमयी दिखाई देती हैं।",
-        "लोहे से जड़े विशाल दरवाज़े सुरक्षा की मिसाल हैं।",
-        "भूमिगत जलाशय कठिन समय में जीवन बचाते थे।",
-        "घुमावदार सीढ़ियाँ किले की रक्षा व्यवस्था दिखाती हैं।",
-        "तोपों के पुराने मंच रणनीतिक निगरानी की कहानी कहते हैं।",
-        "नक्काशीदार महल कला और शाही जीवन की झलक देते हैं।",
-        "इन धरोहरों को जानना भारत के अतीत से मिलना है।",
+        "दस किले—इतिहास, वास्तुकला और लोककथाओं का संगम।",
+        "भानगढ़: सत्रहवीं सदी का नगर; श्राप की कहानी लोककथा है।",
+        "कुंभलगढ़: अरावली पर लगभग 36 किलोमीटर लंबी दीवार।",
+        "गोलकोंडा: फाटक की ताली की गूँज दूर मंडप तक।",
+        "चित्तौड़गढ़: सात द्वार, विजय स्तंभ और वीरता की गाथाएँ।",
+        "दौलताबाद: चट्टान काटकर बना घुमावदार रक्षा-पथ।",
+        "कांगड़ा: हिमालयी दुर्ग, 1905 के भूकंप से क्षतिग्रस्त।",
+        "मेहरानगढ़: जोधपुर के ऊपर सात विशाल द्वार।",
+        "जूनागढ़: बीकानेर का किला, 1589 में नया स्वरूप।",
+        "जैसलमेर: पीले बलुआ पत्थर का आज भी आबाद दुर्ग।",
+        "ग्वालियर: ऊँचे पठार पर फैला प्राचीन किला।",
+        "खाइयाँ और जलाशय घेराबंदी में सहारा बने।",
+        "बुर्ज और मीनारें दूर तक निगरानी रखते थे।",
+        "किंवदंतियों को प्रमाणित इतिहास से अलग पहचानें।",
+        "असली रहस्य—इंजीनियरिंग, साहस और समय।",
     ]
     voice = generate_voiceover(narration)
     audio_path = AUDIO_DIR / voice["filename"]
@@ -262,6 +290,9 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         raise RuntimeError("Offline storyboard MP4 duration does not match the 60-second acceptance target.")
 
     return {
+        "topic": clean_topic,
+        "forts_covered": forts,
+        "research_sources": research_sources,
         "scene_count": len(scenes),
         "image_providers": sorted({item.get("provider", "unknown") for item in image_results}),
         "voice_engine": voice.get("voice"),
