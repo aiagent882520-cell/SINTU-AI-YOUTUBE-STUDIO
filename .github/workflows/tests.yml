@@ -64,6 +64,8 @@ jobs:
           node --check app/static/earnings.js
           node --check app/static/login.js
           node --check app/static/register-sw.js
+      - name: Run browser timeline preview lifecycle tests
+        run: node --test tests/*.test.cjs
       - name: Run test suite
         run: python -m pytest -q
 

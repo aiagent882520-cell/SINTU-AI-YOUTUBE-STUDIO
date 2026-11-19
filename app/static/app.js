@@ -40,15 +40,15 @@ function structuredTimelineItems(rows=timelineRows()){
 }
 function syncTimelineFields(rows){
  $("renderTimeline").value=rows.map(x=>x.kind==="image"?"image:"+x.id+":"+x.duration+":"+x.transition:"video:"+x.id+":"+(x.trimStart||0)+":"+(x.trimEnd??"")+":"+(x.audioVolume??.25)+":"+x.transition).join("\n");
- $("renderScenes").value=rows.map(x=>x.scene||"").join("\n");$("renderSubtitles").value="";
+ $("renderScenes").value=rows.map(x=>x.scene||"").join("\n");
  $("renderImageIds").value=rows.filter(x=>x.kind==="image").map(x=>x.id).join(", ");$("renderVideoIds").value=rows.filter(x=>x.kind==="video").map(x=>x.id).join(", ");renderTimelineEditor(rows);
 }
 function renderTimelineEditor(rows=timelineRows()){
  const e=$("timelineEditor");if(!rows.length){e.innerHTML='<p class="muted">Abhi timeline khaali hai. AI image ya AI video generate karein.</p>';return;}
  e.innerHTML=rows.map((x,i)=>{
   const preview=x.kind==="image"?'<img src="/api/images/'+x.id+'" alt="Scene '+(i+1)+' preview" loading="lazy" style="width:100%;max-height:170px;object-fit:contain;background:#111;border-radius:8px">':'<video src="/api/ai-videos/'+x.id+'" controls playsinline preload="metadata" style="width:100%;max-height:170px;background:#111"></video>';
-  const edit=x.kind==="image"?'<label>Duration (seconds, 2–12)</label><input type="number" min="2" max="12" data-field="duration" data-index="'+i+'" value="'+x.duration+'">':'<div class="actions"><label>Start (sec)<input type="number" min="0" step="0.1" data-field="trimStart" data-index="'+i+'" value="'+(x.trimStart||0)+'"></label><label>End (sec; blank = full end)<input type="number" min="0.1" step="0.1" data-field="trimEnd" data-index="'+i+'" value="'+(x.trimEnd??"")+'"></label></div><label>Original clip audio: <span data-volume-label="'+i+'">'+Math.round((x.audioVolume??.25)*100)+'%</span></label><input type="range" min="0" max="200" step="5" data-field="audioVolume" data-index="'+i+'" value="'+Math.round((x.audioVolume??.25)*100)+'"><p class="muted">0% = mute, 100% = normal, 200% = double gain. Voiceover/music separately mix honge.</p>';
-  return '<article class="panel timeline-row" style="margin:10px 0;padding:12px"><div class="actions"><strong>Scene '+(i+1)+' · '+x.kind.toUpperCase()+'</strong><button type="button" data-action="up" data-index="'+i+'" '+(i===0?'disabled':'')+'>↑</button><button type="button" data-action="down" data-index="'+i+'" '+(i===rows.length-1?'disabled':'')+'>↓</button><button type="button" data-action="remove" data-index="'+i+'">Remove</button></div>'+preview+'<label>Scene description</label><input data-field="scene" data-index="'+i+'" maxlength="1000" value="'+escapeHtml(x.scene||"")+'">'+edit+'<label>Transition after this scene</label><select data-field="transition" data-index="'+i+'"><option value="cut" '+(x.transition==="cut"?"selected":"")+'>Cut</option><option value="fade" '+(x.transition==="fade"?"selected":"")+'>Fade to/from black</option></select></article>';
+  const edit=x.kind==="image"?'<label>Duration (seconds, 2–12)</label><input type="number" min="2" max="12" data-field="duration" data-index="'+i+'" value="'+x.duration+'">':'<div class="actions"><label>Start (sec)<input type="number" min="0" max="600" step="0.1" data-field="trimStart" data-index="'+i+'" value="'+(x.trimStart||0)+'"></label><label>End (sec; blank = full end)<input type="number" min="0.1" max="600" step="0.1" data-field="trimEnd" data-index="'+i+'" value="'+(x.trimEnd??"")+'"></label></div><label>Original clip audio: <span data-volume-label="'+i+'">'+Math.round((x.audioVolume??.25)*100)+'%</span></label><input type="range" min="0" max="200" step="5" data-field="audioVolume" data-index="'+i+'" value="'+Math.round((x.audioVolume??.25)*100)+'"><p class="muted">0% = mute, 100% = normal, 200% = double gain. Voiceover/music separately mix honge.</p>';
+  return '<article class="panel timeline-row" style="margin:10px 0;padding:12px"><div class="actions"><strong>Scene '+(i+1)+' · '+x.kind.toUpperCase()+'</strong><button type="button" data-action="up" data-index="'+i+'" '+(i===0?'disabled':'')+'>↑</button><button type="button" data-action="down" data-index="'+i+'" '+(i===rows.length-1?'disabled':'')+'>↓</button><button type="button" data-action="remove" data-index="'+i+'">Remove</button></div>'+preview+'<label>Scene description</label><input data-field="scene" data-index="'+i+'" maxlength="500" value="'+escapeHtml(x.scene||"")+'">'+edit+'<label>Transition after this scene</label><select data-field="transition" data-index="'+i+'"><option value="cut" '+(x.transition==="cut"?"selected":"")+'>Cut</option><option value="fade" '+(x.transition==="fade"?"selected":"")+'>Fade to/from black</option></select></article>';
  }).join("");
 }
 $("flowClipImportButton")?.addEventListener("click", async () => {
@@ -71,28 +71,155 @@ $("flowClipImportButton")?.addEventListener("click", async () => {
  }finally{button.disabled=false;}
 });
 function queueTimelineAsset(kind,id,sceneText){const rows=timelineRows();if(rows.some(x=>x.kind===kind&&x.id===id))return;rows.push({kind,id,duration:kind==="image"?Number($("sceneSeconds").value||4):0,trimStart:0,trimEnd:null,audioVolume:.25,transition:$("renderTransition").value||"fade",scene:sceneText||"Generated "+kind+" scene"});syncTimelineFields(rows);}
-$("timelineEditor").addEventListener("click",event=>{const b=event.target.closest("button[data-action]");if(!b)return;const rows=timelineRows(),i=Number(b.dataset.index);if(b.dataset.action==="remove")rows.splice(i,1);if(b.dataset.action==="up"&&i>0)[rows[i-1],rows[i]]=[rows[i],rows[i-1]];if(b.dataset.action==="down"&&i<rows.length-1)[rows[i+1],rows[i]]=[rows[i],rows[i+1]];syncTimelineFields(rows);});
+$("timelineEditor").addEventListener("click",event=>{
+ const b=event.target.closest("button[data-action]");if(!b)return;
+ const rows=timelineRows(),i=Number(b.dataset.index),action=b.dataset.action;
+ const subtitleField=$("renderSubtitles"),subtitleText=subtitleField.value.replace(/\r/g,"");
+ const subtitleRows=subtitleText.trim()?subtitleText.split("\n"):[];
+ while(subtitleRows.length&&!subtitleRows[subtitleRows.length-1].trim())subtitleRows.pop();
+ const subtitlesAligned=subtitleRows.length===rows.length;
+ if(action==="remove"){rows.splice(i,1);if(subtitlesAligned)subtitleRows.splice(i,1);}
+ if(action==="up"&&i>0){[rows[i-1],rows[i]]=[rows[i],rows[i-1]];if(subtitlesAligned)[subtitleRows[i-1],subtitleRows[i]]=[subtitleRows[i],subtitleRows[i-1]];}
+ if(action==="down"&&i<rows.length-1){[rows[i+1],rows[i]]=[rows[i],rows[i+1]];if(subtitlesAligned)[subtitleRows[i+1],subtitleRows[i]]=[subtitleRows[i],subtitleRows[i+1]];}
+ if(subtitlesAligned)subtitleField.value=subtitleRows.join("\n");
+ syncTimelineFields(rows);
+});
 $("timelineEditor").addEventListener("input",event=>{
  if(event.target.dataset.field!=="audioVolume")return;
  const i=Number(event.target.dataset.index),label=$("timelineEditor").querySelector('[data-volume-label="'+i+'"]');
  if(label)label.textContent=event.target.value+"%";
  const video=event.target.closest(".timeline-row")?.querySelector("video");if(video)video.volume=Math.min(1,Number(event.target.value)/100);
 });
+function updateTimelineTrim(item,field,rawValue){
+ const previous=item[field];
+ const next=rawValue===""&&field==="trimEnd"?null:Number(rawValue);
+ if((field!=="trimStart"&&field!=="trimEnd")||(next!==null&&(!Number.isFinite(next)||next<0||next>600)))return {valid:false,value:previous};
+ if(field==="trimStart"&&item.trimEnd!==null&&item.trimEnd<=next)return {valid:false,value:previous??0};
+ if(field==="trimEnd"&&next!==null&&next<=item.trimStart)return {valid:false,value:previous??""};
+ item[field]=next;
+ return {valid:true,value:next};
+}
 $("timelineEditor").addEventListener("change",event=>{
  const field=event.target.dataset.field;if(!field)return;const rows=timelineRows(),x=rows[Number(event.target.dataset.index)];if(!x)return;
  if(field==="duration"){const n=Number(event.target.value);if(!Number.isInteger(n)||n<2||n>12){event.target.value=x.duration;return;}x.duration=n;}
- else if(field==="trimStart"||field==="trimEnd"){const n=event.target.value===""&&field==="trimEnd"?null:Number(event.target.value);if(n!==null&&(!Number.isFinite(n)||n<0)){event.target.value=x[field]??"";return;}if(field==="trimStart")x.trimStart=n;else x.trimEnd=n;if(x.trimEnd!==null&&x.trimEnd<=x.trimStart){event.target.value=x[field]??"";return;}}
+ else if(field==="trimStart"||field==="trimEnd"){const result=updateTimelineTrim(x,field,event.target.value);if(!result.valid){event.target.value=result.value;return;}}
  else if(field==="audioVolume")x.audioVolume=Number(event.target.value)/100;
  else x[field]=event.target.value;syncTimelineFields(rows);
 });
-function playTimelinePreview(){
- const rows=timelineRows(),stage=$("timelinePreviewStage"),notice=$("timelinePreviewNotice");if(!rows.length){notice.textContent="Preview ke liye scenes add karein.";return;}let i=0,timer=null;
- const stop=()=>{if(timer)clearTimeout(timer);const v=stage.querySelector("video");if(v)v.pause();};
- $("timelinePreviewStop").onclick=()=>{stop();notice.textContent="Preview stopped.";};
- const next=()=>{stop();if(i>=rows.length){notice.textContent="Sequence preview complete.";return;}const x=rows[i];notice.textContent="Preview scene "+(i+1)+" / "+rows.length;
-  if(x.kind==="image"){stage.innerHTML='<img alt="Timeline scene" style="width:100%;max-height:420px;object-fit:contain" src="/api/images/'+x.id+'">';timer=setTimeout(()=>{i++;next();},x.duration*1000);}
-  else{stage.innerHTML='<video controls autoplay playsinline style="width:100%;max-height:420px" src="/api/ai-videos/'+x.id+'"></video>';const v=stage.querySelector("video");v.volume=Math.min(1,x.audioVolume??.25);v.addEventListener("loadedmetadata",()=>{v.currentTime=x.trimStart||0;});v.addEventListener("timeupdate",()=>{if(x.trimEnd!==null&&v.currentTime>=x.trimEnd){v.pause();i++;next();}});v.addEventListener("ended",()=>{i++;next();});}
- };next();
+let activeTimelinePreview = null;
+function stopActiveTimelinePreview(message="Preview stopped."){
+ if(!activeTimelinePreview)return;
+ const current=activeTimelinePreview;
+ activeTimelinePreview=null;
+ current.stop();
+ const notice=$("timelinePreviewNotice");
+ if(notice)notice.textContent=message;
+}
+async function playTimelinePreview(){
+ stopActiveTimelinePreview("Restarting timeline preview…");
+ const rows=timelineRows(),stage=$("timelinePreviewStage"),notice=$("timelinePreviewNotice");
+ if(!rows.length){notice.textContent="Preview ke liye scenes add karein.";return;}
+ let cancelled=false,finishCurrent=null;
+ const session={stop:()=>{cancelled=true;if(finishCurrent)finishCurrent(false);}};
+ activeTimelinePreview=session;
+ $("timelinePreviewStop").onclick=()=>stopActiveTimelinePreview();
+ const waitForImage=(item,durationMs)=>{
+  stage.innerHTML='<img alt="Timeline scene" style="width:100%;max-height:420px;object-fit:contain" src="/api/images/'+item.id+'">';
+  const image=stage.querySelector("img");
+  return new Promise((resolve,reject)=>{
+   let settled=false,timer=null,loadTimer=setTimeout(()=>onError(),30000);
+   const cleanup=()=>{
+    if(timer!==null)clearTimeout(timer);
+    if(loadTimer!==null)clearTimeout(loadTimer);
+    image.removeEventListener("load",onLoad);
+    image.removeEventListener("error",onError);
+   };
+   const finish=keepGoing=>{if(settled)return;settled=true;cleanup();finishCurrent=null;resolve(keepGoing);};
+   const onLoad=()=>{
+    if(settled)return;
+    if(loadTimer!==null){clearTimeout(loadTimer);loadTimer=null;}
+    timer=setTimeout(()=>finish(true),durationMs);
+   };
+   const onError=()=>{
+    if(settled)return;
+    settled=true;cleanup();finishCurrent=null;
+    reject(new Error("Timeline image preview load failed."));
+   };
+   image.addEventListener("load",onLoad,{once:true});
+   image.addEventListener("error",onError,{once:true});
+   finishCurrent=keepGoing=>finish(keepGoing);
+   if(image.complete){if(image.naturalWidth>0)onLoad();else onError();}
+  });
+ };
+ const waitForVideo=(item)=>{
+  stage.innerHTML='<video controls playsinline style="width:100%;max-height:420px" src="/api/ai-videos/'+item.id+'"></video>';
+  const video=stage.querySelector("video");
+  const requestedVolume=Number(item.audioVolume??.25);
+  video.volume=Number.isFinite(requestedVolume)?Math.max(0,Math.min(1,requestedVolume)):.25;
+  return new Promise((resolve,reject)=>{
+   let settled=false,metadataHandled=false,playbackStarted=false,seekTimer=null,loadTimer=setTimeout(()=>onError(),30000);
+   const cleanup=()=>{
+    if(seekTimer!==null)clearTimeout(seekTimer);
+    if(loadTimer!==null)clearTimeout(loadTimer);
+    video.removeEventListener("loadedmetadata",onMetadata);
+    video.removeEventListener("seeked",onSeeked);
+    video.removeEventListener("timeupdate",onTimeUpdate);
+    video.removeEventListener("ended",onEnded);
+    video.removeEventListener("error",onError);
+    video.pause();
+   };
+   const finish=(keepGoing)=>{if(settled)return;settled=true;cleanup();finishCurrent=null;resolve(keepGoing);};
+   const fail=message=>{if(settled)return;settled=true;cleanup();finishCurrent=null;reject(new Error(message));};
+   const startPlayback=()=>{
+    if(settled||playbackStarted)return;
+    playbackStarted=true;
+    try{
+     const playback=video.play();
+     if(playback&&typeof playback.catch==="function")playback.catch(error=>{if(!cancelled){settled=true;cleanup();finishCurrent=null;reject(error);}});
+    }catch(error){onError();}
+   };
+   const onSeeked=()=>{if(seekTimer!==null){clearTimeout(seekTimer);seekTimer=null;}startPlayback();};
+   const onMetadata=()=>{
+    if(metadataHandled||settled)return;
+    metadataHandled=true;
+    if(loadTimer!==null){clearTimeout(loadTimer);loadTimer=null;}
+    const trimStart=Number(item.trimStart)||0;
+    const trimEnd=item.trimEnd==null?null:Number(item.trimEnd);
+    if(!Number.isFinite(video.duration)||!Number.isFinite(trimStart)||trimStart<0||trimStart>600||trimStart>=video.duration||(trimEnd!==null&&(!Number.isFinite(trimEnd)||trimEnd<=trimStart||trimEnd>600||trimEnd>video.duration+0.05||trimEnd-trimStart<0.25))){fail("Video trim range source clip ki duration ke andar aur kam se kam 0.25 seconds hona chahiye.");return;}
+    try{
+     if(trimStart>0.05&&Math.abs(video.currentTime-trimStart)>0.05){
+      video.addEventListener("seeked",onSeeked,{once:true});
+      seekTimer=setTimeout(()=>onError(),30000);
+      video.currentTime=trimStart;
+      return;
+     }
+    }catch(error){onError();return;}
+    startPlayback();
+   };
+   const onTimeUpdate=()=>{if(item.trimEnd!=null&&video.currentTime>=item.trimEnd)finish(true);};
+   const onEnded=()=>finish(true);
+   const onError=()=>{if(settled)return;settled=true;cleanup();finishCurrent=null;reject(new Error("Timeline video preview load/playback failed."));};
+   video.addEventListener("loadedmetadata",onMetadata,{once:true});
+   video.addEventListener("timeupdate",onTimeUpdate);
+   video.addEventListener("ended",onEnded,{once:true});
+   video.addEventListener("error",onError,{once:true});
+   finishCurrent=keepGoing=>finish(keepGoing);
+   if(video.readyState>=1)onMetadata();
+  });
+ };
+ try{
+  for(let index=0;index<rows.length&&!cancelled;index++){
+   const item=rows[index];
+   notice.textContent="Preview scene "+(index+1)+" / "+rows.length;
+   const keepGoing=item.kind==="image"
+    ?await waitForImage(item,item.duration*1000)
+    :await waitForVideo(item);
+   if(!keepGoing||cancelled)break;
+  }
+  if(activeTimelinePreview===session){activeTimelinePreview=null;notice.textContent=cancelled?"Preview stopped.":"Sequence preview complete.";}
+ }catch(error){
+  if(activeTimelinePreview===session){activeTimelinePreview=null;notice.textContent=error.message||"Timeline preview failed.";}
+ }
 }
 $("timelinePreviewPlay").addEventListener("click",playTimelinePreview);
 
@@ -820,10 +947,26 @@ async function checkRenderer() {
 }
 $("renderButton").addEventListener("click", async () => {
   const title = $("renderTitle").value.trim();
-  const scenes = $("renderScenes").value.split("\n").map(x => x.trim()).filter(Boolean);
+  const rawSceneLines = $("renderScenes").value.replace(/\r/g,"").split("\n").map(x => x.trim());
+  const rawTimelineLines = $("renderTimeline").value.split("\n").map(x => x.trim()).filter(Boolean);
+  const rows = timelineRows();
+  const scenes = rawSceneLines.filter(Boolean);
+  const subtitles = subtitleLines();
   const seconds = Number($("sceneSeconds").value || 4);
   if (!title || !scenes.length) {
     $("renderNotice").textContent = "Title aur kam se kam ek scene likhein.";
+    return;
+  }
+  if (rawTimelineLines.length && rows.length !== rawTimelineLines.length) {
+    $("renderNotice").textContent = "Timeline mein invalid ya unsupported item hai. Har image/video row ko sahi format mein dobara add karein.";
+    return;
+  }
+  if (rows.length && (rawSceneLines.length !== rows.length || rawSceneLines.some(line => !line))) {
+    $("renderNotice").textContent = "Timeline ke har item ke liye alag, non-empty scene description zaroori hai. Blank lines bhi count hoti hain.";
+    return;
+  }
+  if (rows.length && subtitles.length && subtitles.length !== rows.length) {
+    $("renderNotice").textContent = "Subtitles ki lines timeline items ke barabar honi chahiye, ya subtitles field khaali rakhein.";
     return;
   }
   $("renderButton").disabled = true;
@@ -834,9 +977,9 @@ $("renderButton").addEventListener("click", async () => {
       method: "POST",
       body: JSON.stringify({
         title, scenes, seconds_per_scene: seconds,
-        timeline_items: structuredTimelineItems(),
-        image_ids: timelineRows().length ? [] : $("renderImageIds").value.split(",").map(x => x.trim()).filter(Boolean),
-        video_ids: timelineRows().length ? [] : $("renderVideoIds").value.split(",").map(x => x.trim()).filter(Boolean),
+        timeline_items: structuredTimelineItems(rows),
+        image_ids: rows.length ? [] : $("renderImageIds").value.split(",").map(x => x.trim()).filter(Boolean),
+        video_ids: rows.length ? [] : $("renderVideoIds").value.split(",").map(x => x.trim()).filter(Boolean),
         audio_id: $("renderAudioId").value.trim() || null,
         music_id: $("renderMusicId").value.trim() || null,
         music_volume: Number($("musicVolume").value || 0.18),
@@ -845,7 +988,7 @@ $("renderButton").addEventListener("click", async () => {
         quality: $("renderQuality").value,
         transition: $("renderTransition").value,
         motion: $("renderTimeline").value.trim() || $("renderVideoIds").value.trim() ? "none" : $("renderMotion").value,
-        subtitles: subtitleLines(),
+        subtitles,
         sound_effects_enabled: $("renderSoundEffects").checked,
         sound_effects_volume: Number($("renderSfxVolume").value)
       })
