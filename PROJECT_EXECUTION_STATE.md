@@ -900,3 +900,65 @@ The following PRs remain open and unmerged: #213, #209, #207, #206, #205, #204, 
 5. Run read-only forensic scanner on the actual phone for the three target MP4s. Require exact manifest/job/log/DB source mapping. Do not repair or overwrite originals; if provenance is missing, report UNKNOWN and keep publishing blocked.
 6. Keep AI image generation, live YouTube upload, physical Android acceptance, and browser walkthrough marked BLOCKED until their actual external runtime evidence is supplied.
 7. Update this checkpoint after each verified merge/test result. Keep public deployment and public publishing disabled.
+
+
+# Verified main-branch execution update — 2026-11-19 10:15 UTC
+
+## Current repository baseline
+- Main SHA: \`60bf552f95564b896c6f751cfffcf11c1fef7ac8\`.
+- Main push CI run \`44503252018\`: Python 3.11/3.12/3.13/3.14, dependency security audit, and production Docker build passed; offline branded-video E2E/motion audit was still in progress at this checkpoint.
+- Do not call this a final release candidate. Exact physical-device, AI model, OAuth, historical media provenance and full product acceptance remain open.
+
+## Merged engineering work
+- PR #194 — ComfyUI Android resource gate; merged at \`7948ea7619a6d949e8255388254c9ebe473363fb\`; exact CI \`44342524162\` 7/7.
+- PR #196 — Native Android client, secure session/API foundation and WorkManager offline media queue; merged. Exact SINTU CI and Android build were successful on the PR head.
+- PR #198 and #199 — reject black AI/source MP4 inputs with decoded-pixel validation; exact-head CI passed.
+- PR #200 — correct forensic black-frame threshold metadata; exact-head CI passed.
+- PR #201 — read-only source-asset forensic correlation, generated-music/WAV support, SQLite/log scanning and Termux instructions; merged at \`2dcce2907bba58573bf126e4be8e65b5cb71e014\`; exact CI passed.
+- PR #202 — 60-format / 15-module acceptance matrix, with unverified scope kept distinct from completed functionality; merged.
+- PR #203 — reject symlinked/empty render audio inputs; merged after exact-head CI.
+- PR #204 and #205 — consistent AI/mixed-timeline FFmpeg stage timeouts; merged after exact-head CI.
+- PR #213 — timeline preview lifecycle and subtitle preservation; merged at \`0764ba3aaf244cc92ebca6f0b1d602fa21a0c2d3\`; exact CI \`44490770754\` 7/7, including Node simulated lifecycle tests.
+- PR #214 — authoritative checkpoint refresh; merged.
+- PR #215 — content-addressed render provenance, exact-output publishing quality gate, public approval binding, Instagram remote-URL fail-closed gate and safe non-overwriting remux; merged at \`9c75d079371887cefe0f60769a92e78941a64154\`; exact CI \`44501034530\` 7/7.
+- PR #216 — resumable Android offline media upload, 4 MiB chunks, SHA-256 reconciliation, server-side flock serialization and unknown-session/symlink path hardening; merged at \`851ad8b0e582c29739bb462b334238a141586333\`; exact SINTU CI \`44501511511\` 7/7 and Android build \`44501511362\` passed.
+- PR #217 — IndexedDB browser offline-media queue, service-worker integration, honest ComfyUI availability detection, local-model readiness preflight, eSpeak NG Termux fallback and content-hash Flow auto-import; merged at \`60bf552f95564b896c6f751cfffcf11c1fef7ac8\`; exact CI \`44502057339\` 7/7.
+
+## Superseded pull requests
+- PR #190 closed as superseded by #196 (the native Android client plus WorkManager).
+- PR #191 closed as superseded by #201 (expanded forensic source correlation).
+- Original PR #193 closed as superseded by current-main port #215.
+- Original PR #195 closed as superseded by current-main port #217.
+- Original stacked PR #197 closed as superseded by current-main port #216.
+- Keep the exact merged replacement PRs as the source of truth; do not reopen the stale branches.
+
+## Real browser acceptance in progress
+- PR #218 \`test/real-browser-video-editor-e2e\`, head \`3236ccaee69728dccbe2e5d2194c7ab91147584b\`, is open and mergeable.
+- Run \`44502730377\`: Python 3.11–3.14, dependency audit, offline branded-video E2E/motion audit and Docker build all passed. The separate real Chromium job was still installing Chromium/browser dependencies; the Playwright browser tests had not yet run at checkpoint time.
+- The browser test suite loads the actual \`app/static/index.html\` and \`app/static/app.js\` in Chromium and covers image load/timer/error, video seek-to-trim-start/trim-end, invalid trim rejection, stop cancellation and subtitle reorder alignment.
+- Do not call browser acceptance PASS until the Playwright test step itself succeeds.
+
+## Remaining open PRs and dependencies
+- PR #218 — real Chromium Video Editor tests; awaiting browser job result.
+- PR #206/#207/#209 — render queue, FFmpeg cancellation/progress and combined UI/API work. They remain unmerged because the current BackgroundTasks/process-local registry is not a durable multi-worker queue; progress is primarily the final FFmpeg encode stage, not an aggregate ETA.
+- PR #192 — older execution checkpoint; reconcile its unique historical details with this current checkpoint before closing or merging it.
+- Any stacked child PR must be retargeted/rebased and exact-head CI rerun after its parent is merged.
+
+## Device and production blockers — still NOT verified
+- Issue #212 Android \`automation_self_test\` remains open with \`sintu-command-queued\`; there are zero execution comments/results. No physical phone test has passed.
+- Android Native app is in main and Android CI APK build passed, but no APK has been installed/launched on the user's phone. CI build is not physical-device acceptance.
+- The three confirmed historical black MP4 files still have UNKNOWN exact source-to-render-job mapping. PR #201 scanner is now merged; it must be run on the actual Termux device against local MP4/log/SQLite data. Do not overwrite originals or declare root cause from timestamp proximity alone.
+- AI Image Studio still has no demonstrated model load, diffusion inference or actual model-generated image on the target phone. The phone's earlier probe showed about 1.16 GiB available RAM and no installed GGUF/diffusion model. PR #194 blocks ComfyUI on Termux and requires a separate host with at least 8 GiB available RAM and 20 GiB free disk. Procedural graphics and eSpeak are not AI image/audio model generation.
+- YouTube OAuth, channel identity, refresh-token storage and live upload remain unverified because client credentials/token/channel access are not configured. No upload/public publishing was performed. Public deployment and publishing remain disabled.
+- The browser PWA offline queue is merged, but full website user journeys and accessibility acceptance remain incomplete.
+- The 60 formats and 15 modules remain a catalog inventory; each needs actual input/output, API/UI, Android/browser and regression acceptance evidence.
+- No full topic-to-final-MP4 workflow using genuine research, local/remote AI visuals, neural voice, editor, forensic playback and authorized YouTube upload has been demonstrated.
+
+## Next executable steps
+1. Finish PR #218 Chromium job; fix any real-browser failures, then merge only if the exact-head browser test and all other checks pass.
+2. Update this checkpoint with PR #218's final result and the latest main SHA/CI run.
+3. Reconcile PR #192's historical checkpoint additions; close it only after relevant unique facts are preserved.
+4. Continue reviewing PR #206/#207/#209; do not merge as production-durable until worker lease/recovery and multi-worker cancellation semantics are solved and tested.
+5. Run Termux issue #212 and the PR #201 forensic scanner on the actual phone; preserve reports and original media hashes.
+6. Require an actual compatible external AI inference host/model, physical Android install report and YouTube OAuth credentials before marking those gates complete.
+7. Keep production release, public deployment and public YouTube publishing blocked until all acceptance gates pass.
