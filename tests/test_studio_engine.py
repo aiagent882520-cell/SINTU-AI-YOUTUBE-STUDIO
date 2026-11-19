@@ -95,3 +95,18 @@ def test_running_render_can_transition_to_cancelled_and_cannot_complete_afterwar
     assert cancelled["status"] == "cancelled"
     with pytest.raises(ValueError):
         studio_engine.update_render_item("owner", item["id"], "completed", {"filename": "late.mp4"})
+
+
+
+def test_render_progress_is_owner_scoped_monotonic_and_capped(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    item = studio_engine.enqueue_render("owner", "project-1", {"title": "progress"})
+    studio_engine.update_render_item("owner", item["id"], "running")
+    assert studio_engine.update_render_progress("other", item["id"], 40) is None
+    assert studio_engine.update_render_progress("owner", item["id"], 40)["percent"] == 40
+    assert studio_engine.update_render_progress("owner", item["id"], 15)["percent"] == 40
+    assert studio_engine.update_render_progress("owner", item["id"], 140)["percent"] == 99
+    stored = next(x for x in studio_engine.list_render_queue("owner") if x["id"] == item["id"])
+    assert stored["progress"]["percent"] == 99
+    studio_engine.update_render_item("owner", item["id"], "completed", {"filename": "ok.mp4"})
+    assert studio_engine.update_render_progress("owner", item["id"], 99) is None
