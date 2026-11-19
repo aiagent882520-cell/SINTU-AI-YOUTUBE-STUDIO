@@ -41,9 +41,10 @@ def run_worker(*, once: bool = False, poll_seconds: float = 2.0,
 
         lease_token = item["lease_token"]
         lease_lost = threading.Event()
+        heartbeat_stop = threading.Event()
 
         def renew():
-            while not stopping.wait(min(30, max(5, lease_seconds // 3))):
+            while not heartbeat_stop.wait(min(30, max(5, lease_seconds // 3))):
                 if not durable_render_queue.heartbeat(item["id"], lease_token, lease_seconds=lease_seconds):
                     lease_lost.set()
                     return
@@ -61,9 +62,9 @@ def run_worker(*, once: bool = False, poll_seconds: float = 2.0,
             status = durable_render_queue.fail(item["id"], lease_token, type(exc).__name__)
             print(f"FAILED job={item['id']} retry_state={status or 'lease-lost'} error={type(exc).__name__}", flush=True)
         finally:
-            # Do not interrupt an active FFmpeg render on graceful shutdown; it
-            # finishes or its lease expires and another worker recovers it.
-            stopping.clear() if stopping.is_set() else None
+            # Keep renewing while a render is active, even after shutdown is
+            # requested; exit only after this job reaches a durable terminal/retry state.
+            heartbeat_stop.set()
             heartbeat.join(timeout=2)
         if once:
             break
