@@ -4283,7 +4283,7 @@ def _render_video(payload: RenderInput, progress_callback=None):
                                          sound_effects_enabled=payload.sound_effects_enabled,
                                          sound_effects_volume=payload.sound_effects_volume,
                                          resolution=resolution, fps=payload.fps, quality=payload.quality,
-                                         progress_callback=progress_callback)
+                                         **({"progress_callback": progress_callback} if progress_callback else {}))
         if payload.format_id in {"2d-cartoon", "story-animation"} and not image_paths and not video_paths and not timeline_entries and not payload.auto_generate_images:
             from .animation_2d import render_2d_animation_clips
             try:
@@ -4299,7 +4299,7 @@ def _render_video(payload: RenderInput, progress_callback=None):
                         sound_effects_enabled=payload.sound_effects_enabled,
                         sound_effects_volume=payload.sound_effects_volume,
                         resolution=resolution, fps=payload.fps, quality=payload.quality,
-                        progress_callback=progress_callback,
+                        **({"progress_callback": progress_callback} if progress_callback else {}),
                     )
                 rendered["animation_mode"] = "2D character animation"
                 rendered["animation_provider"] = "SINTU Procedural 2D Animation (local)"
@@ -4315,7 +4315,7 @@ def _render_video(payload: RenderInput, progress_callback=None):
                                    sound_effects_volume=payload.sound_effects_volume,
                                    transition=payload.transition, resolution=resolution,
                                    fps=payload.fps, quality=payload.quality,
-                                   progress_callback=progress_callback)
+                                   **({"progress_callback": progress_callback} if progress_callback else {}))
         rendered = render_storyboard(title, scenes, payload.seconds_per_scene,
                                       image_paths=image_paths, audio_path=audio_path,
                                       subtitles=payload.subtitles, music_path=music_path,
@@ -4323,7 +4323,7 @@ def _render_video(payload: RenderInput, progress_callback=None):
                                       sound_effects_enabled=payload.sound_effects_enabled,
                                       sound_effects_volume=payload.sound_effects_volume,
                                       resolution=resolution, fps=payload.fps, quality=payload.quality,
-                                      progress_callback=progress_callback)
+                                      **({"progress_callback": progress_callback} if progress_callback else {}))
         if generated_scene_images:
             rendered["scene_images"] = [
                 {"image_id": item["image_id"], "provider": item["provider"], "url": item["url"]}
