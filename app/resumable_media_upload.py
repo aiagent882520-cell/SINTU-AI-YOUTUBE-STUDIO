@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import hashlib
+import fcntl
 import json
 import os
 import re
 import secrets
 import shutil
-import threading
+from contextlib import contextmanager
 import time
 from pathlib import Path
 from typing import Any
@@ -17,8 +18,6 @@ from .offline_media import MAX_MEDIA_BYTES, OfflineMediaError, import_media_file
 _CHUNK_BYTES = 4 * 1024 * 1024
 _SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{32,64}$")
 _SHA = re.compile(r"^[a-f0-9]{64}$")
-_LOCKS: dict[str, threading.Lock] = {}
-_LOCKS_GUARD = threading.Lock()
 
 
 class ResumableUploadError(ValueError):
@@ -35,9 +34,19 @@ def _root(data_dir: Path) -> Path:
     return root
 
 
-def _lock(upload_id: str) -> threading.Lock:
-    with _LOCKS_GUARD:
-        return _LOCKS.setdefault(upload_id, threading.Lock())
+@contextmanager
+def _session_lock(data_dir: Path, upload_id: str):
+    """Serialize a session across threads AND separate server worker processes."""
+    metadata_path, _ = _paths(data_dir, upload_id)
+    lock_path = metadata_path.parent / ".session.lock"
+    if lock_path.is_symlink():
+        raise ResumableUploadError("Upload session lock path is unsafe.")
+    with lock_path.open("a+b") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
 def _write_metadata(path: Path, metadata: dict[str, Any]) -> None:
     temporary = path.with_name(path.name + "." + secrets.token_hex(8) + ".tmp")
@@ -94,7 +103,7 @@ def append_upload_chunk(*, data_dir: Path, upload_id: str, offset: int,
         raise ResumableUploadError("Chunk must be between 1 byte and 4 MiB.")
     if not _SHA.fullmatch(chunk_sha256) or hashlib.sha256(chunk).hexdigest() != chunk_sha256:
         raise ResumableUploadError("Chunk SHA-256 verification failed.")
-    with _lock(upload_id):
+    with _session_lock(data_dir, upload_id):
         metadata_path, payload_path = _paths(data_dir, upload_id)
         if not metadata_path.is_file() or metadata_path.is_symlink() or payload_path.is_symlink():
             raise ResumableUploadError("Upload session not found or unsafe.")
