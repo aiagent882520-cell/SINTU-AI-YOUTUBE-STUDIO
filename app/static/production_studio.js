@@ -65,6 +65,20 @@
    notice.textContent="Project tools refreshed · "+(memory.memory||[]).length+" memory items · "+(assets.assets||[]).length+" assets · "+(versions.versions||[]).length+" versions · "+(queue.queue||[]).length+" render jobs.";
   }catch(err){notice.textContent=err.message;}
  }
+ let renderQueuePollInFlight=false;
+ async function pollRenderQueue(projectId){
+  if(renderQueuePollInFlight||document.hidden)return;
+  renderQueuePollInFlight=true;
+  try{
+   const response=await fetch("/api/studio/render-queue?project_id="+encodeURIComponent(projectId),{credentials:"same-origin"});
+   const data=await response.json().catch(()=>({}));
+   if(!response.ok)throw new Error(data.detail||"Render queue status unavailable");
+   const queue=data.queue||[];
+   document.getElementById("studioRenderQueueList").innerHTML=queue.map(x=>'<div class="agent-pair"><b>'+esc(x.id)+'</b><span>'+esc(x.status)+(x.result?.error?' · '+esc(x.result.error):'')+'</span><div class="actions">'+(x.status==="queued"?'<button type="button" class="secondary" data-render-execute="'+esc(x.id)+'">Render</button><button type="button" class="secondary" data-render-cancel="'+esc(x.id)+'">Cancel</button>':'')+(x.status==="failed"?'<button type="button" class="secondary" data-render-retry="'+esc(x.id)+'">Retry</button>':'')+'</div></div>').join("")||'<p class="muted">Render queue empty.</p>';
+   if(queue.some(x=>x.status==="running"))document.getElementById("studioToolsNotice").textContent="Render abhi chal raha hai · status auto-refresh ho raha hai.";
+  }catch(err){document.getElementById("studioToolsNotice").textContent=err.message;}
+  finally{renderQueuePollInFlight=false;}
+ }
  function renderDrafts(){
   const el=document.getElementById("localDrafts");if(!el)return;
   const remote=state.projects.map(d=>'<article class="local-draft"><b>'+esc(d.name)+'</b><small>Server saved · '+esc(d.format_id)+(d.last_task_status?' · AI: '+esc(d.last_task_status):'')+' · '+new Date(d.updated_at).toLocaleString()+'</small><p>'+esc(d.brief.slice(0,220))+'</p><div class="actions"><button type="button" class="secondary" data-open-project="'+esc(d.id)+'">Open</button>'+(d.last_task_id?'<button type="button" class="secondary" data-view-project-output="'+esc(d.id)+'">View output #'+esc(d.last_task_id)+'</button>':'')+'<a class="secondary" href="/api/projects/'+esc(d.id)+'/export">Export JSON</a><button type="button" class="secondary" data-delete-project="'+esc(d.id)+'">Delete</button></div></article>').join("");
@@ -138,6 +152,7 @@
    finally{button.disabled=false;}
   });
   document.getElementById("refreshStudioTools").addEventListener("click",refreshProjectTools);
+  window.setInterval(()=>{const projectId=window.SINTU_ACTIVE_PROJECT_ID||state.editingProjectId;if(projectId)pollRenderQueue(projectId);},3000);
   document.getElementById("saveStudioMemory").addEventListener("click",async()=>{
    try{const project=await saveCurrentProject();const r=await fetch("/api/studio/memory",{method:"PUT",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({project_id:project.id,key:document.getElementById("studioMemoryKey").value,value:document.getElementById("studioMemoryValue").value})});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.detail||"Memory save failed");await refreshProjectTools();}
    catch(err){document.getElementById("studioToolsNotice").textContent=err.message;}
