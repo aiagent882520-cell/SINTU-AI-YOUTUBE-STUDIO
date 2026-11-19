@@ -1149,3 +1149,35 @@ The following PRs remain open and unmerged: #213, #209, #207, #206, #205, #204, 
 - Current main SHA: ea2f65b9102ae3f80b753be78b1a679e6812b28f.
 - No 60-second topic video, real AI image inference, physical Android install, three historical black-MP4 provenance mappings, live YouTube OAuth/upload, complete website journeys or individual 60-format/15-module acceptance has been verified.
 - The 32.04-second PR #218 smoke output is procedural art + eSpeak NG + procedural music, not AI imagery; it contains no burned subtitles. Preserve this distinction.
+
+
+## Latest reconciliation — PR #223 merged and next acceptance gates — 2026-11-19 11:50 UTC
+
+### PR #223 — YouTube OAuth security/refresh integration tests merged
+- Merged into main by squash at 82403b8a6133ff96c0b33a4180c3b3f843a57a75.
+- Exact-head run 44517490834: **SUCCESS 8/8** — Python 3.11–3.14, dependency security audit, production Docker, real Chromium browser tests, and offline branded-video E2E/motion audit.
+- Adds three simulated integration tests: authorization-code exchange + channel lookup; state replay and different-browser session rejection; encrypted access/refresh token storage and status response secret redaction; expired-token refresh with refresh-token preservation.
+- This validates the existing OAuth implementation under mocked Google responses only. Live Google consent, real channel ownership, token refresh against Google and resumable upload remain unverified; no live upload was performed.
+
+### Current main and post-merge verification
+- Main SHA: 82403b8a6133ff96c0b33a4180c3b3f843a57a75.
+- Main run after PR #218 and #223 merges was triggered; latest known run 44517322339 on parent main ea2f65... had Python 3.11–3.14, dependency audit, Chromium 6/6 and Docker PASS; offline E2E was still in apt install at last poll. A new main run for 82403... must complete before calling main regression green.
+- PR #220, #221, #218 and #223 are merged. PR #219, #222, #224 remain open.
+
+### PR #222 — 60-second Hindi subtitled render acceptance
+- Current head 7eb9c09ab87a01ef62c5ede46d3c8e4114f4863f; run 44517162187 still IN_PROGRESS at last poll. Python 3.11–3.13 and security audit passed; Python 3.14 remained running.
+- Earlier run 44515483070 failed after 630.16s on the pre-existing mixed-timeline FFmpeg integration test timeout (698 passed, one failure); it never reached offline 60-second rendering.
+- The current 60-second script has 15 scenes × 4 seconds, 15 Hindi subtitle cues, 60-second music and explicit unit assertions for render inputs. No 60-second MP4 output has been verified.
+- PR #222 base is now main at 82403...; exact-head CI must be rerun/confirmed against current main after the base update.
+
+### PR #224 — reduce mixed-timeline test runtime
+- Current head 3b19e2476c37bdcc9737f8cbdf3652b526b42a94; run 44517701642 was pending at last poll.
+- Changes only the slow mixed-timeline integration test to use a test-only 160x284 output profile, while retaining image+video timeline, source audio, voice, music, subtitles, FFprobe stream checks and explicit output-dimension assertions. Production output profiles are unchanged.
+- This is intended to stop a 600-second test timeout under constrained CI runners. It must pass exact-head tests before merge.
+
+### PR #219 — checkpoint refresh
+- Current branch head 8abdc5edbe05f2718f265ae9cd7b915b94d6f73c before this update; exact run 44517856302 had Python 3.11–3.14, security audit, Chromium and Docker PASS, offline E2E still in progress.
+- This commit adds the PR #223 merge and latest main/acceptance status. A new exact-head run is expected. PR #219 remains open/unmerged.
+
+### Historical PR #192
+- PR #192 remains open/draft and conflicts with current main because it also appends to PROJECT_EXECUTION_STATE.md. Its 573-line historical appendix contains unique older status records for PRs #190–#202 and forensic chronology. Do not auto-merge or close until its unique history is reconciled into the authoritative checkpoint. Current PR #219 checkpoint is the active update path.
