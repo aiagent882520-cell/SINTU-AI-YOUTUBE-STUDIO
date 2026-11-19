@@ -962,3 +962,15 @@ The following PRs remain open and unmerged: #213, #209, #207, #206, #205, #204, 
 5. Run Termux issue #212 and the PR #201 forensic scanner on the actual phone; preserve reports and original media hashes.
 6. Require an actual compatible external AI inference host/model, physical Android install report and YouTube OAuth credentials before marking those gates complete.
 7. Keep production release, public deployment and public YouTube publishing blocked until all acceptance gates pass.
+
+
+## Execution continuation — 2026-11-19 (UTC)
+
+- Main baseline observed during this continuation: `60bf552f95564b896c6f751cfffcf11c1fef7ac8`.
+- PR #219 checkpoint branch is still separate from main; its exact-head CI was observed passing all seven jobs (Python 3.11–3.14, dependency audit, Docker, offline branded-video E2E).
+- PR #218 browser acceptance was run on Chromium. Five of six tests passed; the video trim-start/seek test failed because the mocked media endpoint did not implement HTTP byte-range responses required by Chromium seeking.
+- Regression fixture correction committed to PR #218 branch: `d738184baf43b844043534f0ff96e921ec3e1b70`. The fixture now handles valid byte ranges with HTTP 206 and Content-Range/Accept-Ranges/Content-Length, and rejects invalid/out-of-range requests with 416.
+- This correction has **not yet received a recorded CI run**. PR #218 remains open and unmerged; do not claim browser suite green until the new head's Chromium job passes.
+- Current PR #218 head: `d738184baf43b844043534f0ff96e921ec3e1b70`; mergeable reported true, but CI evidence is pending.
+- No physical Android test, real AI model inference, historical black-MP4 source attribution, or live YouTube OAuth/upload is newly verified by this continuation.
+- Preserve the three confirmed black MP4 originals. The Termux forensic scanner and Android self-test still require device-side execution and evidence.
