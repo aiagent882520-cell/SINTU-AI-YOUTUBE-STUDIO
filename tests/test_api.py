@@ -16,6 +16,7 @@ def client_for_test(tmp_path, monkeypatch):
     monkeypatch.setenv("SINTU_PRODUCTION_ENABLED", "true")
     monkeypatch.setenv("SINTU_EXTERNAL_PUBLISHING_ENABLED", "true")
     monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(main, "DATA_DIR", tmp_path)
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "test.sqlite3")
     main._LOGIN_LIMITER.reset()
     main._FIREWALL_LIMITER.reset()
