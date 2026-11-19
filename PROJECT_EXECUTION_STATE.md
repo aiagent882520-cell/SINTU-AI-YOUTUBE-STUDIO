@@ -1226,3 +1226,10 @@ No PR merged, no deployment or publishing, and no original media modified.
 - This update changes the checkpoint and requires a fresh exact-head CI run.
 
 No PR merged; no publishing, deployment, paid service or original-media modification performed. Physical Android-device validation remains pending.
+
+
+## Offline queue CI failure analysis — 2026-11-19
+- PR #195 run `44444598305` failed at test collection because `app/offline_media.py` used `@contextmanager` and `time.time()` without importing `contextmanager` and `time`. Python 3.11–3.14 all reported the same import-time NameError; dependency audit passed. This was corrected in `1441efcfd52f697b186d162f621b6b6ae801a8d8`.
+- A test fixture was then tightened to make the corrupt file exactly the same byte length as the expected content, so hash mismatch rather than file size is the distinguishing signal. Latest PR #195 head is `8e90cdc4de5df1d87f05c78cf84703fda56f1bf6`.
+- Exact-head CI run `44444831718` is IN_PROGRESS. Previous run `44444763804` was cancelled when the newer exact-head commit arrived. No offline queue CI PASS is claimed yet.
+- Browser queue stores blobs and status in IndexedDB; sync is foreground/manual/on-network-restored only. Native Android WorkManager and resumable chunk uploads remain separate outstanding work.
