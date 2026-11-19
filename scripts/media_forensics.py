@@ -31,7 +31,7 @@ TARGETS = (
     "afa4c87e3c1e42a197b7092e0e24040d.mp4",
 )
 LOG_DIRS = ("logs", "data", ".sintu", "production_runs", "runs")
-ASSET_DIRS = ("generated_images", "generated_audio", "generated_assets", "assets")
+ASSET_DIRS = ("generated_images", "generated_audio", "generated_music", "generated_assets", "assets")
 TEXT_SUFFIXES = {".log", ".txt", ".json", ".jsonl"}
 SECRET_TERMS = ("token", "secret", "password", "credential", "authorization", "api_key", "oauth", "session_uri")
 
@@ -245,6 +245,21 @@ def inspect_asset(path: Path) -> dict:
                              "near_black": stats.mean[0] < 12 and stats.stddev[0] < 8})
         except (OSError, ValueError):
             item["image_error"] = "unreadable"
+    elif path.suffix.lower() == ".wav":
+        import wave
+        try:
+            with wave.open(str(path), "rb") as audio:
+                frames = audio.getnframes()
+                rate = audio.getframerate()
+                item.update({
+                    "audio_duration_seconds": round(frames / rate, 3) if rate else None,
+                    "audio_sample_rate": rate,
+                    "audio_channels": audio.getnchannels(),
+                    "audio_sample_width_bytes": audio.getsampwidth(),
+                    "audio_frames": frames,
+                })
+        except (OSError, EOFError, wave.Error):
+            item["audio_error"] = "unreadable_wav"
     return item
 
 
