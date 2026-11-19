@@ -104,3 +104,66 @@ def test_expired_lease_at_retry_limit_moves_to_dead_letter(tmp_path, monkeypatch
     expired = datetime.now(timezone.utc) + timedelta(seconds=61)
     assert queue.recover_expired_leases(now=expired) == {"requeued": 0, "dead_lettered": 1}
     assert queue.get_item("owner", item["id"])["status"] == "dead_letter"
+
+
+def _process_claim(db_dir, worker_id, barrier, sender):
+    import os
+    os.environ["SINTU_DATA_DIR"] = str(db_dir)
+    from app import durable_render_queue
+    barrier.wait(timeout=10)
+    item = durable_render_queue.claim_next(worker_id, lease_seconds=60)
+    sender.send(item["id"] if item else None)
+    sender.close()
+
+
+def _claim_then_crash(db_dir, sender):
+    import os
+    os.environ["SINTU_DATA_DIR"] = str(db_dir)
+    from app import durable_render_queue
+    item = durable_render_queue.claim_next("worker-that-crashes", lease_seconds=15)
+    sender.send(item["lease_token"] if item else "")
+    sender.close()
+    os._exit(0)
+
+
+def test_atomic_claim_is_safe_across_separate_worker_processes(tmp_path, monkeypatch):
+    import multiprocessing
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    item = queue.enqueue("owner", "project", {"title": "multi-process"})
+    context = multiprocessing.get_context("fork")
+    barrier = context.Barrier(2)
+    receivers = []
+    processes = []
+    for worker_id in ("process-a", "process-b"):
+        receiver, sender = context.Pipe(duplex=False)
+        process = context.Process(target=_process_claim, args=(tmp_path, worker_id, barrier, sender))
+        process.start()
+        sender.close()
+        receivers.append(receiver)
+        processes.append(process)
+    results = [receiver.recv() for receiver in receivers]
+    for process in processes:
+        process.join(timeout=10)
+        assert process.exitcode == 0
+    assert results.count(item["id"]) == 1
+    assert results.count(None) == 1
+
+
+def test_actual_worker_process_exit_recovers_after_lease_expiry(tmp_path, monkeypatch):
+    import multiprocessing
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    item = queue.enqueue("owner", "project", {"title": "process-crash"})
+    context = multiprocessing.get_context("fork")
+    receiver, sender = context.Pipe(duplex=False)
+    process = context.Process(target=_claim_then_crash, args=(tmp_path, sender))
+    process.start()
+    sender.close()
+    old_token = receiver.recv()
+    process.join(timeout=10)
+    assert process.exitcode == 0
+    assert old_token
+    expired = datetime.now(timezone.utc) + timedelta(seconds=16)
+    assert queue.recover_expired_leases(now=expired) == {"requeued": 1, "dead_lettered": 0}
+    replacement = queue.claim_next("replacement-after-crash", lease_seconds=60, now=expired)
+    assert replacement["id"] == item["id"]
+    assert replacement["lease_token"] != old_token
