@@ -24,6 +24,12 @@ MAX_SCENE_IMAGE_PIXELS = 16_777_216
 
 MAX_SOURCE_VIDEO_BYTES = 100 * 1024 * 1024
 
+# Keep FFmpeg's filter graph and codec thread pools bounded on Termux and CI runners.
+try:
+    FFMPEG_THREAD_COUNT = max(1, min(8, int(os.getenv("SINTU_FFMPEG_THREADS", "2"))))
+except ValueError:
+    FFMPEG_THREAD_COUNT = 2
+
 # Mobile Termux devices need more time for portrait H.264 encoding with two audio tracks.
 try:
     RENDER_TIMEOUT_SECONDS = max(60, min(900, int(os.getenv("SINTU_RENDER_TIMEOUT_SECONDS", "600"))))
@@ -871,7 +877,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                     work / "sintu-sound-effects.wav",
                     1.0,
                 )
-            command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
+            command = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-filter_complex_threads", "1"]
             brand_path = work / "sintu-watermark.png"
             _make_watermark_image(width=max(180, int(width * 0.22)), height=max(44, int(width * 0.05))).save(brand_path, format="PNG")
             subtitle_file, subtitle_filter = _create_subtitle_track(
@@ -964,7 +970,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,apad,atrim=duration={total_duration:.3f}[aout]")
 
             command += ["-filter_complex", ";".join(filters), "-map", video_map, "-map", "[aout]",
-                        "-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
+                        "-c:v", "libx264", "-threads", str(FFMPEG_THREAD_COUNT), "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
                         "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", "-t", f"{total_duration:.3f}",
                         "-movflags", "+faststart", str(temporary_output_path)]
             completed = subprocess.run(command, capture_output=True, text=True, timeout=RENDER_TIMEOUT_SECONDS, check=False)
