@@ -54,9 +54,12 @@
         if (field.type === "checkbox") field.checked = value === true;
         else if (typeof value === "string") field.value = value;
       }
+      for (const field of fields()) {
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      }
       if (typeof window.timelineRows === "function" &&
-          typeof window.syncTimelineFields === "function") {
-        window.syncTimelineFields(window.timelineRows());
+          typeof window.renderTimelineEditor === "function") {
+        window.renderTimelineEditor(window.timelineRows());
       }
     } finally {
       restoring = false;
