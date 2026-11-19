@@ -907,6 +907,7 @@ def test_source_asset_needles_include_bounded_path_filename_and_stem():
     assert "session-track-123456" in needles
     assert "generated_images/session-track-123456.png" in needles
     assert "short.mp3" not in needles
+    assert "generated_audio/short.mp3" not in needles
 
 
 def test_text_log_scan_reports_matching_asset_tokens(tmp_path, monkeypatch):
