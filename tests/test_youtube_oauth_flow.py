@@ -121,3 +121,21 @@ def test_youtube_access_token_refresh_preserves_refresh_token(tmp_path, monkeypa
     assert refreshed["access_token"] == "fresh-access-token"
     assert refreshed["refresh_token"] == "long-lived-refresh"
     assert row["token_expiry"] > int(time.time())
+
+
+
+def test_youtube_oauth_state_is_bound_to_the_starting_browser_session(tmp_path, monkeypatch):
+    configure_youtube_test(tmp_path, monkeypatch)
+    client = TestClient(main.app, follow_redirects=False)
+    started = client.post("/api/admin/youtube/oauth/start")
+    assert started.status_code == 200
+    query = urllib.parse.parse_qs(urllib.parse.urlsplit(started.json()["authorization_url"]).query)
+    state = query["state"][0]
+
+    other_browser = TestClient(main.app, follow_redirects=False)
+    other_browser.cookies.set(main.SESSION_COOKIE, "different-browser-session")
+    rejected = other_browser.get(
+        "/api/admin/youtube/oauth/callback",
+        params={"code": "must-not-be-exchanged", "state": state},
+    )
+    assert rejected.status_code == 400
