@@ -82,7 +82,7 @@ class OfflineMediaUploadWorker(appContext: Context, params: WorkerParameters) : 
             var uploadId = sessionPrefs.getString(sessionKey, null)
             var status: Map<String, Any?>? = null
             if (uploadId != null) {
-                try { status = api.offlineMediaUploadStatus(activeUploadId) }
+                try { status = api.offlineMediaUploadStatus(uploadId) }
                 catch (error: HttpException) {
                     if (error.code() == 404) { uploadId = null } else throw error
                 }
@@ -113,7 +113,7 @@ class OfflineMediaUploadWorker(appContext: Context, params: WorkerParameters) : 
                             ?: throw IllegalStateException("Server did not confirm the chunk offset.")
                     } catch (conflict: HttpException) {
                         if (conflict.code() != 409) throw conflict
-                        val refreshed = api.offlineMediaUploadStatus(uploadId)
+                        val refreshed = api.offlineMediaUploadStatus(activeUploadId)
                         val serverOffset = refreshed["offset"].asLongOrNull()
                             ?: throw IllegalStateException("Server did not return a resume offset.")
                         if (serverOffset == offset) throw conflict
