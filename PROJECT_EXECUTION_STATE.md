@@ -1072,3 +1072,43 @@ Evidence: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/commit/c
 4. Implement a real offline media catalog/import/duplicate/interrupted-operation queue/sync path with durable state and tests; current PR #195 is not that implementation.
 5. Add a safe repair command that requires an explicit destination distinct from original, verifies source hash before/after, writes a new file, and validates the new output. Do not run it on historical media without owner approval.
 6. Prove upload/publishing gates consume forensic failure status before any future release/publishing consideration.
+
+
+## Latest verified CI checkpoint — 2026-11-19
+
+### PR #190 — Android native client
+- Exact source head `cfb4f64a85944934ef2ad39ab42ae2e2b9abcf5f`.
+- SINTU CI `44436896803`: **SUCCESS (7/7)**. Python 3.11, 3.12, 3.13 and 3.14 each report **622 passed, 5 warnings**; dependency audit PASS; offline Hindi MP4 E2E + black-frame/motion audit PASS; production Docker build and health PASS.
+- Android Native App run `44436896739`: Android SDK/JDK/Gradle setup passed; Gradle unit-test + debug/release APK build task still in progress at checkpoint. Do not report Android build PASS until job completes and artifact upload succeeds.
+- Added `scripts/android_device_diagnostic.py` and `tests/test_android_device_diagnostic.py`; read-only device diagnostics cover Android release/ABI, RAM/storage, app package presence, FFmpeg/FFprobe/TTS availability and backend health. It does not submit credentials or modify media.
+- Cookie tests now also cover host mismatch and redirect target origin isolation. Actual Android Keystore persistence/redirect exchange still needs device verification.
+
+### PR #193 — forensic provenance + generated music
+- Exact head `fcc4bc39552896f14e37540b1554f99ad77c871b`.
+- SINTU CI `44437074570`: **SUCCESS (7/7)**. Python 3.11, 3.12, 3.13 and 3.14 each report **629 passed, 5 warnings**; dependency audit PASS; offline branded-video E2E/motion audit PASS; production Docker build and health PASS.
+- The prior generated-music test failure at `7d9a9ae...` was a fixture bug: escaped text bytes created 8 bytes per PCM sample. Commit `fcc4bc3...` now writes exact PCM byte length with `bytes(2 * 22_050 * 6)`; the successful exact-head CI verifies the correction.
+- Generated-music integration commits: `4161ef8e420598799c2dc8c87e22d8be0c19e300` adds WAV asset discovery/metadata; `7d9a9ae862a0e17b5e8387a8b961c33ecf8a9afb` added the fixture regression; `fcc4bc39552896f14e37540b1554f99ad77c871b` corrected the fixture.
+
+### PR #192 — checkpoint CI
+- Latest checkpoint commit before this update: `9595c501f8c612619153e0b79ef3f4429f7b76ef`.
+- SINTU CI `44436996018`: four Python test jobs and dependency audit PASS; Docker build/health PASS; offline E2E remains in progress at the voice/font installation stage. This is not yet 7/7.
+- This document update will create a new head and requires a fresh exact-head CI run.
+
+### PR #195 and integration boundary
+- PR #195 exact head `909e86368b819e9638b3bd4214bc741af4c379a7`, SINTU CI `44347762212` SUCCESS (7/7). Its implementation is procedural image fallback labeling, Termux eSpeak NG discovery, local-LLM preflight and offline-engine documentation.
+- PR #195 does not implement durable offline project/media import, indexing, duplicate detection, interrupted operation recovery, offline queue/retry or network-restoration sync.
+- PR #193 provenance scanner includes current MP4/pre-repair backup hash matching and source asset verification; now scans generated_music WAV assets. Historical black MP4s without matching manifests remain unattributed.
+- No single E2E proves offline storage -> Android media library -> backend job -> final MP4 -> forensic rejection -> upload/publishing fail-closed. Cross-PR integration remains PARTIAL.
+- Historical three black MP4 hashes and backup hashes remain recorded from prior phone-side diagnostics; this session did not access or re-hash those phone-local files. Original media remains untouched.
+- Dependency audits passed on PR #190 run `44436896803`, PR #193 run `44437074570`, PR #195 run `44347762212` and PR #192 run `44436996018`. These are dependency audits, not complete application security certification.
+
+### Current remaining blockers
+1. Finish PR #190 Android Gradle test/build/artifact job `44436896739`; then physical install/login/backend/media workflow remains pending.
+2. Finish PR #192 offline E2E run `44436996018`; validate this latest checkpoint commit after its update.
+3. Execute `python scripts/android_device_diagnostic.py --base-url http://127.0.0.1:8000` on the actual Termux phone and preserve its JSON report.
+4. Implement and test durable offline media import/index/queue/retry/sync, plus Android media library/background recovery and notification flows.
+5. Add a safe repair-to-new-output workflow only after source provenance is established; do not attempt to recreate missing visual content from audio timestamps.
+6. Verify every upload/publishing path rejects outputs with failed/missing forensic quality status. Keep publishing disabled until that is proven.
+7. Continue historical black MP4 source attribution using actual phone files/logs/manifests; do not infer a root cause from temporal correlation alone.
+
+No PR merged; no public deployment/publishing; no model download or paid API; no original-media modification.
