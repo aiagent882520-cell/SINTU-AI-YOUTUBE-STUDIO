@@ -934,3 +934,31 @@ def test_forensics_ignores_manifest_path_traversal_and_symlinked_sources(tmp_pat
     assert matches[0]["inputs"][0]["exists"] is False
     assert matches[0]["inputs"][0]["hash_match"] is False
     assert matches[0]["inputs"][0]["error"] == "unsafe manifest path"
+
+
+def test_forensics_discovers_generated_music_and_reports_wav_metadata(tmp_path, monkeypatch):
+    import wave
+    import os
+
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    music_dir = tmp_path / "generated_music"
+    music_dir.mkdir()
+    wav_path = music_dir / "candidate.wav"
+    with wave.open(str(wav_path), "wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(22_050)
+        audio.writeframes(b"\\x00\\x00" * 22_050 * 6)
+
+    timestamp = 1_800_000_000
+    os.utime(wav_path, (timestamp, timestamp))
+    matches = media_forensics.nearby_assets(timestamp)
+
+    assert len(matches) == 1
+    assert matches[0]["path"] == "generated_music/candidate.wav"
+    assert matches[0]["size_bytes"] == 44 + 22_050 * 6 * 2
+    assert matches[0]["audio_duration_seconds"] == 6.0
+    assert matches[0]["audio_sample_rate"] == 22_050
+    assert matches[0]["audio_channels"] == 1
+    assert matches[0]["audio_sample_width_bytes"] == 2
+    assert matches[0]["audio_frames"] == 22_050 * 6
