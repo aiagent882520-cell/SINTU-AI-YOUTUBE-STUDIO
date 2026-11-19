@@ -30,10 +30,14 @@ def test_timeline_preview_has_single_cancellable_session():
     assert "activeTimelinePreview=session" in preview
     assert "finishCurrent(false)" in preview
     assert 'video.removeEventListener("loadedmetadata",onMetadata)' in preview
+    assert 'video.removeEventListener("seeked",onSeeked)' in preview
+    assert 'video.addEventListener("seeked",onSeeked,{once:true})' in preview
+    assert "playbackStarted=false" in preview
+    assert "if(!Number.isFinite(video.duration)||trimStart>=video.duration)" in preview
     assert 'video.removeEventListener("timeupdate",onTimeUpdate)' in preview
     assert 'video.removeEventListener("ended",onEnded)' in preview
     assert "video.pause()" in preview
-    assert "item.trimEnd!==null&&video.currentTime>=item.trimEnd" in preview
+    assert "item.trimEnd!=null&&video.currentTime>=item.trimEnd" in preview
     assert "playback.catch" in preview
 
 
@@ -46,7 +50,9 @@ def test_timeline_preview_uses_current_image_item_without_stale_index():
     assert "const waitForImage=(item,durationMs)=>" in preview
     assert '"/api/images/' in preview and "item.id" in preview
     assert "rows[index].id" not in preview
-    assert "try{\n     const playback=video.play();" in preview
+    assert "const startPlayback=()=>" in preview
+    assert "const onSeeked=()=>startPlayback();" in preview
+    assert "try{\n     const playback=video.play();" not in preview
 
 
 def test_video_preview_metadata_is_initialized_once():
