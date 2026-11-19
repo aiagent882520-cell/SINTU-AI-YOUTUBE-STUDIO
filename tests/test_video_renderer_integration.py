@@ -1,4 +1,5 @@
 import shutil
+from pathlib import Path
 import subprocess
 
 import pytest
@@ -128,6 +129,39 @@ def test_mixed_timeline_rejects_non_finite_trim_values(tmp_path, monkeypatch, tr
     item = {"kind": "video", "path": source, **trim}
     with pytest.raises(ValueError, match="finite"):
         video_renderer.render_mixed_timeline([item], "test", ["scene"])
+
+
+def test_mixed_timeline_preprocessing_honors_mobile_render_timeout(tmp_path, monkeypatch):
+    ffmpeg, _ = _ffmpeg_tools()
+    source = _make_source_clip(tmp_path / "timeout-mixed-source.mp4")
+    still = tmp_path / "timeout-mixed-still.png"
+    Image.new("RGB", (160, 284), (180, 80, 30)).save(still)
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path / "out")
+    monkeypatch.setattr(video_renderer, "RENDER_TIMEOUT_SECONDS", 60)
+    real_run = subprocess.run
+    captured = {}
+
+    def recording_run(command, **kwargs):
+        command_text = [str(part) for part in command]
+        if command_text and command_text[0] == ffmpeg:
+            output_name = command_text[-1]
+            if output_name.endswith("trimmed-002.mp4") or output_name.endswith("still-001.mp4"):
+                captured[Path(output_name).name] = kwargs.get("timeout")
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(video_renderer.subprocess, "run", recording_run)
+    result = video_renderer.render_mixed_timeline(
+        [
+            {"kind": "image", "path": still, "duration": 2},
+            {"kind": "video", "path": source, "trim_start": 0, "trim_end": 1},
+        ],
+        "Timeout policy test", ["Still", "Clip"], resolution="720x1280",
+        fps=24, quality="standard", transition="cut",
+    )
+
+    assert captured == {"still-001.mp4": 60, "trimmed-002.mp4": 60}
+    assert (tmp_path / "out" / result["filename"]).is_file()
+
 
 def test_mixed_timeline_renders_ordered_still_and_video_items(tmp_path, monkeypatch):
     _ffmpeg_tools()
