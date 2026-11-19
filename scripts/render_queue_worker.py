@@ -15,6 +15,7 @@ import time
 import uuid
 
 from app import durable_render_queue
+from app.policy import production_actions_allowed
 from app.main import RenderInput, render_video
 
 
@@ -32,6 +33,13 @@ def run_worker(*, once: bool = False, poll_seconds: float = 2.0,
     durable_render_queue.recover_expired_leases()
     processed = 0
     while not stopping.is_set():
+        # A separately supervised process must obey the same fail-closed
+        # production gate as the HTTP API; queued jobs are not implicit consent.
+        if not production_actions_allowed():
+            if once:
+                break
+            stopping.wait(poll_seconds)
+            continue
         item = durable_render_queue.claim_next(worker_id, lease_seconds=lease_seconds)
         if item is None:
             if once:
