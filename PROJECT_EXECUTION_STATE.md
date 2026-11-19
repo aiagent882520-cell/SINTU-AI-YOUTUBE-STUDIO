@@ -1233,3 +1233,20 @@ No PR merged; no publishing, deployment, paid service or original-media modifica
 - A test fixture was then tightened to make the corrupt file exactly the same byte length as the expected content, so hash mismatch rather than file size is the distinguishing signal. Latest PR #195 head is `8e90cdc4de5df1d87f05c78cf84703fda56f1bf6`.
 - Exact-head CI run `44444831718` is IN_PROGRESS. Previous run `44444763804` was cancelled when the newer exact-head commit arrived. No offline queue CI PASS is claimed yet.
 - Browser queue stores blobs and status in IndexedDB; sync is foreground/manual/on-network-restored only. Native Android WorkManager and resumable chunk uploads remain separate outstanding work.
+
+
+## Native Android background media queue — 2026-11-19
+
+### PR #196
+- Draft PR: `https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/196`.
+- Latest code head: `b8b572212315707d2b7b9a85d406c72ee5cd5f39`.
+- Adds WorkManager 2.10.0, a network-constrained CoroutineWorker with exponential retry, Android multi-document picker, persisted read-URI permissions, native queue status, cancellation, and authenticated upload through the existing offline-media API.
+- Files are streamed via a temporary cache file, bounded at 256 MiB, then uploaded to the server's content-addressed SHA-256 index. Retry policy: timeout/rate-limit/5xx retry; authentication/validation errors fail and require user action.
+- WorkManager preserves job scheduling across app/process restarts, but each retry re-sends the whole file. Chunked byte-range resume is NOT implemented. Cancel stops the current worker; a new transfer requires selecting the original document again.
+- Exact latest-head Android build run `44445615638` and SINTU CI run `44445615644` are IN_PROGRESS. No Android build or exact-head CI PASS is claimed yet. Physical-device installation, persisted URI grants, process-death behavior and real backend transfer remain unverified.
+
+### PR #195 offline media CI correction
+- Updated stale service-worker cache assertion from v14 to v15 in commit `df0c6bb190c98109f4fa9dc638a0fb6c3326268d`.
+- Exact-head run `44445160753`: Python 3.11–3.14 all SUCCESS, security audit SUCCESS, production Docker build SUCCESS; offline branded video E2E/motion audit remains IN_PROGRESS. Therefore the complete run is not yet marked PASS.
+
+No merge, public deployment, external publishing, paid service or original-media modification.
