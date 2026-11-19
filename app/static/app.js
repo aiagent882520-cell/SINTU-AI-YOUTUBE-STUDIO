@@ -123,25 +123,40 @@ async function playTimelinePreview(){
   const video=stage.querySelector("video");
   video.volume=Math.min(1,item.audioVolume??.25);
   return new Promise((resolve,reject)=>{
-   let settled=false,metadataHandled=false;
+   let settled=false,metadataHandled=false,playbackStarted=false;
    const cleanup=()=>{
     video.removeEventListener("loadedmetadata",onMetadata);
+    video.removeEventListener("seeked",onSeeked);
     video.removeEventListener("timeupdate",onTimeUpdate);
     video.removeEventListener("ended",onEnded);
     video.removeEventListener("error",onError);
     video.pause();
    };
    const finish=(keepGoing)=>{if(settled)return;settled=true;cleanup();finishCurrent=null;resolve(keepGoing);};
-   const onMetadata=()=>{
-    if(metadataHandled||settled)return;
-    metadataHandled=true;
-    try{video.currentTime=item.trimStart||0;}catch(error){onError();return;}
+   const startPlayback=()=>{
+    if(settled||playbackStarted)return;
+    playbackStarted=true;
     try{
      const playback=video.play();
      if(playback&&typeof playback.catch==="function")playback.catch(error=>{if(!cancelled){settled=true;cleanup();finishCurrent=null;reject(error);}});
     }catch(error){onError();}
    };
-   const onTimeUpdate=()=>{if(item.trimEnd!==null&&video.currentTime>=item.trimEnd)finish(true);};
+   const onSeeked=()=>startPlayback();
+   const onMetadata=()=>{
+    if(metadataHandled||settled)return;
+    metadataHandled=true;
+    const trimStart=Number(item.trimStart)||0;
+    if(!Number.isFinite(video.duration)||trimStart>=video.duration){onError();return;}
+    try{
+     if(trimStart>0.05&&Math.abs(video.currentTime-trimStart)>0.05){
+      video.addEventListener("seeked",onSeeked,{once:true});
+      video.currentTime=trimStart;
+      return;
+     }
+    }catch(error){onError();return;}
+    startPlayback();
+   };
+   const onTimeUpdate=()=>{if(item.trimEnd!=null&&video.currentTime>=item.trimEnd)finish(true);};
    const onEnded=()=>finish(true);
    const onError=()=>{if(settled)return;settled=true;cleanup();finishCurrent=null;reject(new Error("Timeline video preview load/playback failed."));};
    video.addEventListener("loadedmetadata",onMetadata,{once:true});
