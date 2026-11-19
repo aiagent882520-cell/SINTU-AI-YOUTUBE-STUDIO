@@ -58,3 +58,17 @@ Run the normal Termux self-test and project health/forensic audits on the
 actual phone after updating. CI on a hosted Linux runner is useful regression
 evidence, but it is not a substitute for a real on-device render, thermal,
 storage, memory, and recovery test.
+
+
+## Persistent offline media library
+
+The browser/PWA media library now has a device-local IndexedDB queue and a server-side content-addressed media index:
+
+- Import image, audio or video files into IndexedDB while offline. The file Blob and queue state survive page reloads; browser storage quota and eviction policies still apply.
+- When online, the client retries queued uploads in the foreground and when the browser reports network restoration. A manual sync button can force a retry. This does **not** claim Android OS background execution or guaranteed upload while the browser is closed.
+- Server import is streamed to a temporary file, limited to 256 MiB per item, hashed with SHA-256 and atomically linked into `SINTU_DATA_DIR/offline_media`. The SQLite index makes repeated uploads of identical bytes idempotent, including renamed duplicates.
+- Downloads verify the indexed SHA-256 before serving. Unsafe symlinks, unsupported extensions, empty/oversized files and tampered stored content are rejected. Stale partial upload files older than 24 hours are cleaned; recent `.part` files are preserved.
+- The server stores the original media bytes; it does not claim that an imported file is valid/renderable until a dedicated media probe is run.
+- Queue status `SYNCED` means the server accepted and indexed the exact bytes; it does not mean the file was decoded, rendered or published.
+
+Remaining work: Android native WorkManager/background retry, cancellation and resume of interrupted large uploads, authenticated device testing, and end-to-end media decode validation remain separate tasks.
