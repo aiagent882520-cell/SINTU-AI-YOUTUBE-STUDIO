@@ -59,3 +59,12 @@ Live YouTube verification remains pending until owner-managed OAuth credentials,
 The public approval API creates no approval automatically and no approval is created by scheduled/background workers.
 
 Duplicate protection is channel-wide for an exact MP4 SHA-256, not just per calendar item. A different calendar item cannot upload the same file to the same channel while any prior job is active, failed, expired or completed; a prior job must be explicitly cancelled first. The cancelled calendar record itself remains terminal. The duplicate check runs before OAuth or Google network access.
+
+
+### Upload history list
+
+- GET /api/admin/youtube/uploads?limit=50 returns the newest upload jobs first; limit is bounded to 1–200.
+- Add status=COMPLETED, status=PAUSED, status=UPLOADING, etc. to filter by a valid upload state.
+- Each item includes calendar/video IDs, title, privacy status, acknowledged bytes, progress percentage, YouTube video ID, processing status and timestamps.
+- The list intentionally excludes the encrypted Google resumable session URI, source MP4 SHA-256, description hash and public-approval token/digest.
+- The admin YouTube panel renders the list and provides a manual refresh control. No upload or publishing action is triggered by viewing history.
