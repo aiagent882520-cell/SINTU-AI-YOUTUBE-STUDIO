@@ -5,7 +5,6 @@ import android.content.Intent
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.activity.ComponentActivity
@@ -240,7 +239,7 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
     var mediaNotice by remember { mutableStateOf("Select files to queue uploads. WorkManager retries when connectivity returns.") }
     val mediaWork = remember(context) {
         WorkManager.getInstance(context).getWorkInfosByTagLiveData(OfflineMediaUploadWorker.TAG)
-    }.observeAsState(initial = emptyList())
+    }.collectAsState(initial = emptyList())
     val mediaPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
