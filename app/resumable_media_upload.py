@@ -25,19 +25,27 @@ class ResumableUploadError(ValueError):
 
 
 def _root(data_dir: Path) -> Path:
-    root = Path(data_dir).expanduser().resolve() / "offline_media" / ".resumable"
+    base = Path(data_dir).expanduser().resolve()
+    media_root = base / "offline_media"
+    if media_root.is_symlink():
+        raise ResumableUploadError("Offline media directory must not be a symlink.")
+    media_root.mkdir(parents=True, exist_ok=True)
+    resolved_media_root = media_root.resolve()
+    if not resolved_media_root.is_relative_to(base):
+        raise ResumableUploadError("Offline media storage escaped its data directory.")
+    root = media_root / ".resumable"
     if root.is_symlink():
         raise ResumableUploadError("Resumable upload storage is unsafe.")
     root.mkdir(parents=True, exist_ok=True)
-    if not root.resolve().is_relative_to((Path(data_dir).expanduser().resolve() / "offline_media").resolve()):
+    if not root.resolve().is_relative_to(resolved_media_root):
         raise ResumableUploadError("Resumable upload storage escaped its data directory.")
     return root
 
 
 @contextmanager
 def _session_lock(data_dir: Path, upload_id: str):
-    """Serialize a session across threads AND separate server worker processes."""
-    metadata_path, _ = _paths(data_dir, upload_id)
+    """Serialize an existing session across threads AND separate server processes."""
+    metadata_path, _ = _paths(data_dir, upload_id, create=False)
     lock_path = metadata_path.parent / ".session.lock"
     if lock_path.is_symlink():
         raise ResumableUploadError("Upload session lock path is unsafe.")
@@ -57,14 +65,19 @@ def _write_metadata(path: Path, metadata: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
-def _paths(data_dir: Path, upload_id: str) -> tuple[Path, Path]:
-    if not _SESSION_ID.fullmatch(upload_id):
+def _paths(data_dir: Path, upload_id: str, *, create: bool = False) -> tuple[Path, Path]:
+    if not isinstance(upload_id, str) or not _SESSION_ID.fullmatch(upload_id):
         raise ResumableUploadError("Invalid upload session ID.")
     root = _root(data_dir)
     directory = root / upload_id
     if directory.is_symlink():
         raise ResumableUploadError("Upload session path is unsafe.")
-    directory.mkdir(exist_ok=True)
+    if create:
+        directory.mkdir(exist_ok=True)
+    elif not directory.is_dir():
+        raise ResumableUploadError("Upload session not found.")
+    if not directory.resolve().is_relative_to(root.resolve()):
+        raise ResumableUploadError("Upload session path escaped its storage directory.")
     return directory / "session.json", directory / "payload.part"
 
 
@@ -77,7 +90,7 @@ def create_upload(*, data_dir: Path, filename: str, size_bytes: int, sha256: str
     if not _SHA.fullmatch(sha256):
         raise ResumableUploadError("Invalid expected SHA-256.")
     upload_id = secrets.token_urlsafe(32)
-    metadata_path, payload_path = _paths(data_dir, upload_id)
+    metadata_path, payload_path = _paths(data_dir, upload_id, create=True)
     metadata = {"id": upload_id, "filename": safe_name, "size_bytes": size_bytes,
                 "sha256": sha256, "offset": 0, "created_at": int(time.time()),
                 "status": "uploading"}
@@ -87,7 +100,7 @@ def create_upload(*, data_dir: Path, filename: str, size_bytes: int, sha256: str
 
 
 def get_upload(*, data_dir: Path, upload_id: str) -> dict[str, Any]:
-    metadata_path, payload_path = _paths(data_dir, upload_id)
+    metadata_path, payload_path = _paths(data_dir, upload_id, create=False)
     if not metadata_path.is_file() or metadata_path.is_symlink():
         raise ResumableUploadError("Upload session not found.")
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -104,7 +117,7 @@ def append_upload_chunk(*, data_dir: Path, upload_id: str, offset: int,
     if not _SHA.fullmatch(chunk_sha256) or hashlib.sha256(chunk).hexdigest() != chunk_sha256:
         raise ResumableUploadError("Chunk SHA-256 verification failed.")
     with _session_lock(data_dir, upload_id):
-        metadata_path, payload_path = _paths(data_dir, upload_id)
+        metadata_path, payload_path = _paths(data_dir, upload_id, create=False)
         if not metadata_path.is_file() or metadata_path.is_symlink() or payload_path.is_symlink():
             raise ResumableUploadError("Upload session not found or unsafe.")
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
