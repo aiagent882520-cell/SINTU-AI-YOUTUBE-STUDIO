@@ -105,15 +105,15 @@ def import_media_file(
     destination = media_dir / stored_name
     created = False
     if destination.exists():
-        if destination.is_symlink() or not destination.is_file() or destination.stat().st_size != size:
-            raise OfflineMediaError("Existing content-addressed media file is unsafe.")
+        if destination.is_symlink() or not destination.is_file() or destination.stat().st_size != size or _sha256_file(destination) != sha256:
+            raise OfflineMediaError("Existing content-addressed media file is unsafe or has a hash mismatch.")
     else:
         try:
             os.link(source, destination)
             created = True
         except FileExistsError:
-            if destination.is_symlink() or not destination.is_file() or destination.stat().st_size != size:
-                raise OfflineMediaError("Concurrent media import produced an unsafe destination.") from None
+            if destination.is_symlink() or not destination.is_file() or destination.stat().st_size != size or _sha256_file(destination) != sha256:
+                raise OfflineMediaError("Concurrent media import produced an unsafe or mismatched destination.") from None
     if created:
         source.unlink(missing_ok=True)
     import datetime
