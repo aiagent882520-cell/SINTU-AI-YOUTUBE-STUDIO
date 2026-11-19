@@ -24,7 +24,12 @@ def test_validate_video_accepts_probe_verified_mp4(monkeypatch):
         "streams": [{"codec_type": "video", "codec_name": "h264", "width": 1080, "height": 1920}],
         "format": {"format_name": "mov,mp4,m4a,3gp,3g2,mj2", "duration": "8.0"},
     }
-    monkeypatch.setattr("app.video_generator.subprocess.run", lambda *a, **k: _probe_result(metadata))
+    def fake_run(command, *args, **kwargs):
+        if command[0] == "ffprobe":
+            return _probe_result(metadata)
+        return SimpleNamespace(returncode=0, stdout=bytes([80, 120, 160]) * (32 * 32 * 8), stderr=b"")
+    monkeypatch.setattr("app.video_generator.subprocess.run", fake_run)
+    monkeypatch.setattr("app.video_generator.shutil.which", lambda name: f"/usr/bin/{name}")
     raw = VALID_MP4_HEADER
     assert _validate_video(raw) is raw
 
@@ -66,7 +71,7 @@ def test_validate_video_rejects_invalid_mp4_header():
 
 
 
-def test_validate_video_accepts_real_ffmpeg_mp4(tmp_path):
+def test_validate_video_accepts_real_nonblack_ffmpeg_mp4(tmp_path):
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg or not shutil.which("ffprobe"):
         pytest.skip("FFmpeg and FFprobe are required for the real MP4 integration test")
@@ -74,7 +79,7 @@ def test_validate_video_accepts_real_ffmpeg_mp4(tmp_path):
     result = subprocess.run(
         [
             ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
-            "-f", "lavfi", "-i", "color=c=black:s=160x284:r=12:d=1",
+            "-f", "lavfi", "-i", "testsrc2=s=160x284:r=12:d=1",
             "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-movflags", "+faststart", str(candidate),
         ],
@@ -84,6 +89,21 @@ def test_validate_video_accepts_real_ffmpeg_mp4(tmp_path):
     video_bytes = candidate.read_bytes()
     assert _validate_video(video_bytes) == video_bytes
 
+
+def test_validate_video_rejects_real_all_black_mp4(tmp_path):
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg or not shutil.which("ffprobe"):
+        pytest.skip("FFmpeg and FFprobe are required for the real MP4 integration test")
+    candidate = tmp_path / "black-source.mp4"
+    result = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
+         "-i", "color=c=black:s=160x284:r=12:d=1", "-an", "-c:v", "libx264",
+         "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(candidate)],
+        capture_output=True, check=False, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
+    with pytest.raises(VideoGenerationFailed, match="visual check"):
+        _validate_video(candidate.read_bytes())
 
 def test_validate_video_rejects_truncated_real_mp4(tmp_path):
     ffmpeg = shutil.which("ffmpeg")
