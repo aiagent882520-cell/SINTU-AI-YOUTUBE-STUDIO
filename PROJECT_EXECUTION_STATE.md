@@ -1264,3 +1264,8 @@ No merge, public deployment, external publishing, paid service or original-media
 - Exact latest-head Android build run `44446166768` and SINTU CI run `44446166762` are IN_PROGRESS at checkpoint update. No latest-head build/CI PASS claimed yet.
 - Earlier exact-head SINTU CI run `44445615644` (head `b8b5722...`) passed all Python 3.11–3.14, dependency audit, offline branded-video E2E/motion audit and Docker build; its paired Android build was cancelled before completion.
 - WorkManager retains and retries jobs across process restarts/network return, but it re-sends the entire file on retry. Chunked/resumable byte-range transfer remains unimplemented. Physical-device URI permission, process-death and real upload tests remain outstanding.
+
+
+### PR #196 latest-head CI result update — 2026-11-19
+- SINTU CI run `44446166762` for exact head `c60722aa1502e3a53c193bb39659253f900a1171` completed SUCCESS: Python 3.11, 3.12, 3.13, 3.14; dependency security audit; offline branded-video E2E/motion audit; production Docker build.
+- Native Android build run `44446166768` for the same exact head remains IN_PROGRESS; no APK/build PASS claimed. Android build log retrieval was not yet available while the job is running.
