@@ -35,3 +35,15 @@ def test_timeline_preview_has_single_cancellable_session():
     assert "video.pause()" in preview
     assert "item.trimEnd!==null&&video.currentTime>=item.trimEnd" in preview
     assert "playback.catch" in preview
+
+
+def test_timeline_preview_uses_current_image_item_without_stale_index():
+    source = (ROOT / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    start = source.index("let activeTimelinePreview = null;")
+    end = source.index('\n$("timelinePreviewPlay").addEventListener', start)
+    preview = source[start:end]
+
+    assert "const waitForImage=(item,durationMs)=>" in preview
+    assert 'src="/api/images/"+item.id' in preview
+    assert "rows[index].id" not in preview
+    assert "try{\n     const playback=video.play();" in preview
