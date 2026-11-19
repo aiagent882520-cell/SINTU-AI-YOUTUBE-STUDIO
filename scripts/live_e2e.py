@@ -181,6 +181,8 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "massive iron-studded gate with ancient defensive architecture",
         "secret water reservoir hidden beneath a stone courtyard",
         "narrow stairway winding through an old fortress wall",
+        "ancient cannon platform overlooking a winding mountain road",
+        "forgotten palace courtyard with carved pillars and stone arches",
         "wide closing shot, atmospheric light fading into dusk",
     ]
     scenes = [f"{clean_topic}, {shot}" for shot in shot_specs]
@@ -213,6 +215,8 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "लोहे से जड़े विशाल दरवाज़े सुरक्षा की मिसाल हैं।",
         "भूमिगत जलाशय कठिन समय में जीवन बचाते थे।",
         "घुमावदार सीढ़ियाँ किले की रक्षा व्यवस्था दिखाती हैं।",
+        "तोपों के पुराने मंच रणनीतिक निगरानी की कहानी कहते हैं।",
+        "नक्काशीदार महल कला और शाही जीवन की झलक देते हैं।",
         "इन धरोहरों को जानना भारत के अतीत से मिलना है।",
     ]
     voice = generate_voiceover(narration)
