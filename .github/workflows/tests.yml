@@ -119,7 +119,7 @@ jobs:
             -e 's|https://us-east-2.ec2.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
             -e 's|http://security.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
             -e 's|https://security.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' {} +
-                    font_family="$(fc-match -f '%{family}' 'Noto Sans Devanagari' 2>/dev/null | cut -d, -f1 || true)"
+          font_family="$(fc-match -f '%{family}' 'Noto Sans Devanagari' 2>/dev/null | cut -d, -f1 || true)"
           if ! command -v espeak-ng >/dev/null 2>&1 || [[ "$font_family" != "Noto Sans Devanagari" ]]; then
             # GitHub's Ubuntu image often already has a usable apt package index.
             # Reuse it when both packages are indexed; only contact slow mirrors
