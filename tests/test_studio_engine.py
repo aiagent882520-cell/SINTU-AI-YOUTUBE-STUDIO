@@ -70,6 +70,7 @@ def test_render_queue_transition_is_owner_scoped_and_single_claim(tmp_path, monk
         results = list(pool.map(lambda _: claim(), range(2)))
 
     assert sum(result is not None for result in results) == 1
+    assert studio_engine.list_render_queue("owner")[0]["status"] == "running"
     assert studio_engine.update_render_item("owner", item["id"], "completed", {"video_id": "safe"})["status"] == "completed"
     assert studio_engine.update_render_item("other", item["id"], "failed") is None
     with pytest.raises(ValueError, match="Invalid render queue status transition"):
