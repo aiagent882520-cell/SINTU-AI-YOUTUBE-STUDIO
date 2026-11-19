@@ -94,6 +94,9 @@ class OfflineMediaUploadWorker(appContext: Context, params: WorkerParameters) : 
                 sessionPrefs.edit().putString(sessionKey, uploadId).apply()
                 status = api.offlineMediaUploadStatus(uploadId)
             }
+            if (status?.get("sha256")?.toString() != fileSha) {
+                throw IllegalStateException("Saved upload session belongs to different media content.")
+            }
             if (status?.get("size_bytes").asLongOrNull() != temp.length()) {
                 throw IllegalStateException("Saved upload session does not match the selected media size.")
             }
@@ -116,7 +119,7 @@ class OfflineMediaUploadWorker(appContext: Context, params: WorkerParameters) : 
                         val refreshed = api.offlineMediaUploadStatus(activeUploadId)
                         val serverOffset = refreshed["offset"].asLongOrNull()
                             ?: throw IllegalStateException("Server did not return a resume offset.")
-                        if (serverOffset == offset) throw conflict
+                        if (serverOffset == offset) throw IllegalStateException("Upload offset conflict could not be reconciled.")
                         offset = serverOffset
                     }
                     if (offset !in 0..temp.length()) throw IllegalStateException("Server returned an invalid upload offset.")
