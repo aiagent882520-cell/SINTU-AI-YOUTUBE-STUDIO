@@ -1112,3 +1112,23 @@ Evidence: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/commit/c
 7. Continue historical black MP4 source attribution using actual phone files/logs/manifests; do not infer a root cause from temporal correlation alone.
 
 No PR merged; no public deployment/publishing; no model download or paid API; no original-media modification.
+
+
+## Android build completion — 2026-11-19 — exact-head update
+
+### PR #190
+- Latest head remains `cfb4f64a85944934ef2ad39ab42ae2e2b9abcf5f`.
+- Native Android App run `44436896739` is now **SUCCESS**: JDK 17, Android SDK, Gradle 8.9, `testDebugUnitTest`, `assembleDebug`, `assembleRelease` and artifact upload all completed successfully.
+- Artifact `sintu-android-apks`, ID `14488443945`: 17,855,588 bytes; SHA-256 `aea82599ef523f6992fb927667e2c765aedd44c824cc863226a1476d33ed8608`. Includes debug APK and unsigned release APK. It is not a signed production package and does not prove physical installation.
+- SINTU CI `44436896803` also SUCCESS (7/7): Python 3.11–3.14 each 622 passed, 5 warnings; dependency audit, offline E2E/motion and Docker health passed.
+- The app remains OPEN + DRAFT; no merge. Physical install/login/session, real backend calls, MP4 gallery download, offline queue, background recovery, thermal/storage/accessibility and notification tests remain pending.
+
+### PR #193
+- Latest head `fcc4bc39552896f14e37540b1554f99ad77c871b`; SINTU CI `44437074570` SUCCESS (7/7). Python 3.11–3.14 each 629 passed, 5 warnings; dependency audit, offline E2E/motion and Docker health all passed.
+- Generated-music WAV metadata discovery and its exact-size PCM regression fixture are now CI-verified.
+
+### PR #192 checkpoint
+- Previous latest checkpoint head `ff4f50391d90be46f979abd4824f6db166506818`.
+- Fresh exact-head SINTU CI run `44437440732` has been created and is currently QUEUED. This checkpoint update will supersede that head and require a new exact-head run.
+
+No PR merged. No original media modified. No YouTube upload, public publishing or deployment performed. Device verification remains pending.
