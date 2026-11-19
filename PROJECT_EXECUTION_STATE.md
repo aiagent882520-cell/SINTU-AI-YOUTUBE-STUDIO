@@ -1403,3 +1403,29 @@ Thus the older renderer defect is temporally plausible, not ruled out. This timi
 - No completed 60-format individual render matrix; no proof that all 15 modules have end-to-end backend/engine integrations.
 - YouTube OAuth credentials/channel identity/live upload and production website deployment remain unverified.
 - No PR merged, deployment performed, media modified, public upload or publishing performed.
+
+
+## Follow-up execution — Termux forensic handoff and CI closure — 2026-11-19
+
+### PR #201 latest head and Termux handoff
+- PR #201 branch `feature/forensic-source-asset-reference-tracing`, latest commit `1466f5c41cf4caa9e5f3a9434f8d9c63d340363c`.
+- Added `docs/TERMUX_BLACK_MP4_FORENSIC_RUN.md`: exact read-only Termux command to fetch this branch's forensic scanner, run it against the phone's SINTU data directory, and save `~/sintu-forensics-report.txt`.
+- PR #201 remains draft/open/unmerged. Its earlier scanner code commit `e8f9a5a...` exact-head CI run `44457679211` passed 7/7. The later docs-only commit has not yet been independently CI-verified.
+- The scanner reads `$SINTU_DATA_DIR/generated_videos`, logs, SQLite and source asset directories. It does not modify media. User must run it on the phone and share the report for historical source mapping.
+
+### PR #202 — acceptance matrix exact-head CI
+- Commit `7d372dcd711c5149916f37ee75872762ed2e9713`.
+- Run `44458651702`: **SUCCESS 7/7** — Python 3.11–3.14, dependency security audit, production Docker build, offline branded video E2E/motion audit.
+- Matrix covers all 60 catalog formats and 15 registered modules. Every row intentionally remains **UNVERIFIED** until its own real acceptance test and artifact evidence exists.
+- PR #202 remains draft/open/unmerged.
+
+### PR #192 — checkpoint exact-head CI
+- Commit `4777a0608a6631d4292e4d1c1e76e655bfd0e355`.
+- Run `44458703349`: **SUCCESS 7/7** — Python 3.11–3.14, dependency security audit, production Docker build, offline branded video E2E/motion audit.
+- PR #192 remains draft/open/unmerged.
+
+### Unchanged blockers
+- Three confirmed full-black historical MP4s still lack proven source/job/render-command mapping. Do not infer root cause from timestamp proximity alone.
+- Await the actual Termux report; no access to the user's private phone media/logs/database from GitHub.
+- No physical Android installation/feature test, genuine local AI image generation acceptance, complete 60-second production render, live OAuth/upload, or full website/device E2E has been evidenced.
+- No PR merged, no deployment, no media modified, no public upload/publishing.
