@@ -907,10 +907,26 @@ async function checkRenderer() {
 }
 $("renderButton").addEventListener("click", async () => {
   const title = $("renderTitle").value.trim();
-  const scenes = $("renderScenes").value.split("\n").map(x => x.trim()).filter(Boolean);
+  const rawSceneLines = $("renderScenes").value.replace(/\r/g,"").split("\n").map(x => x.trim());
+  const rawTimelineLines = $("renderTimeline").value.split("\n").map(x => x.trim()).filter(Boolean);
+  const rows = timelineRows();
+  const scenes = rawSceneLines.filter(Boolean);
+  const subtitles = subtitleLines();
   const seconds = Number($("sceneSeconds").value || 4);
   if (!title || !scenes.length) {
     $("renderNotice").textContent = "Title aur kam se kam ek scene likhein.";
+    return;
+  }
+  if (rawTimelineLines.length && rows.length !== rawTimelineLines.length) {
+    $("renderNotice").textContent = "Timeline mein invalid ya unsupported item hai. Har image/video row ko sahi format mein dobara add karein.";
+    return;
+  }
+  if (rows.length && (rawSceneLines.length !== rows.length || rawSceneLines.some(line => !line))) {
+    $("renderNotice").textContent = "Timeline ke har item ke liye alag, non-empty scene description zaroori hai. Blank lines bhi count hoti hain.";
+    return;
+  }
+  if (rows.length && subtitles.length && subtitles.length !== rows.length) {
+    $("renderNotice").textContent = "Subtitles ki lines timeline items ke barabar honi chahiye, ya subtitles field khaali rakhein.";
     return;
   }
   $("renderButton").disabled = true;
@@ -921,9 +937,9 @@ $("renderButton").addEventListener("click", async () => {
       method: "POST",
       body: JSON.stringify({
         title, scenes, seconds_per_scene: seconds,
-        timeline_items: structuredTimelineItems(),
-        image_ids: timelineRows().length ? [] : $("renderImageIds").value.split(",").map(x => x.trim()).filter(Boolean),
-        video_ids: timelineRows().length ? [] : $("renderVideoIds").value.split(",").map(x => x.trim()).filter(Boolean),
+        timeline_items: structuredTimelineItems(rows),
+        image_ids: rows.length ? [] : $("renderImageIds").value.split(",").map(x => x.trim()).filter(Boolean),
+        video_ids: rows.length ? [] : $("renderVideoIds").value.split(",").map(x => x.trim()).filter(Boolean),
         audio_id: $("renderAudioId").value.trim() || null,
         music_id: $("renderMusicId").value.trim() || null,
         music_volume: Number($("musicVolume").value || 0.18),
@@ -932,7 +948,7 @@ $("renderButton").addEventListener("click", async () => {
         quality: $("renderQuality").value,
         transition: $("renderTransition").value,
         motion: $("renderTimeline").value.trim() || $("renderVideoIds").value.trim() ? "none" : $("renderMotion").value,
-        subtitles: subtitleLines(),
+        subtitles,
         sound_effects_enabled: $("renderSoundEffects").checked,
         sound_effects_volume: Number($("renderSfxVolume").value)
       })
