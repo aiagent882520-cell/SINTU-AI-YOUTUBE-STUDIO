@@ -82,22 +82,25 @@ after(async () => {
 async function openStudio() {
   const context = await browser.newContext({ serviceWorkers: "block" });
   const page = await context.newPage();
-  await page.route("**/api/**", route => route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({
-      tasks: [], items: [], projects: [], media: [],
-      providers: { local: { model_available: false } },
-    }),
-  }));
-  await page.route("**/api/images/**", route => {
-    const id = route.request().url().split("/").pop();
-    if (id.startsWith("b")) return route.fulfill({ status: 404, body: "missing image" });
-    return route.fulfill({ status: 200, contentType: "image/png", body: PNG });
-  });
-  await page.route("**/api/ai-videos/**", async route => {
-    await new Promise(resolve => setTimeout(resolve, 150));
-    return route.fulfill({ status: 200, contentType: "video/webm", body: webm });
+  await page.route("**/api/**", async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.startsWith("/api/images/")) {
+      const id = url.pathname.split("/").pop();
+      if (id.startsWith("b")) return route.fulfill({ status: 404, body: "missing image" });
+      return route.fulfill({ status: 200, contentType: "image/png", body: PNG });
+    }
+    if (url.pathname.startsWith("/api/ai-videos/")) {
+      await new Promise(resolve => setTimeout(resolve, 150));
+      return route.fulfill({ status: 200, contentType: "video/webm", body: webm });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        tasks: [], items: [], projects: [], media: [],
+        providers: { local: { model_available: false } },
+      }),
+    });
   });
   await page.addInitScript(() => {
     const attach = () => {
