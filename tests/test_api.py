@@ -4209,3 +4209,79 @@ def test_owner_can_explicitly_enable_production_and_publishing_gates(tmp_path, m
         "/api/admin/youtube/publish/1",
         params={"video_id": "c" * 32, "title": "Test"},
     ).status_code != 503
+
+
+def _create_approved_social_calendar_item(client, platform):
+    from datetime import datetime, timedelta, timezone
+    created = client.post("/api/calendar", json={
+        "title": "Quality gate route test", "platform": platform,
+        "prompt": "Must block before any external upload", 
+        "scheduled_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+    })
+    assert created.status_code == 200, created.text
+    calendar_id = created.json()["id"]
+    with main.db() as conn:
+        conn.execute("UPDATE content_calendar SET status='Approved' WHERE id=?", (calendar_id,))
+    return calendar_id
+
+
+def test_youtube_upload_route_blocks_mp4_without_persisted_quality_pass(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    calendar_id = _create_approved_social_calendar_item(client, "youtube")
+    video_id = "a" * 32
+    output_dir = tmp_path / "renders"
+    output_dir.mkdir()
+    (output_dir / (video_id + ".mp4")).write_bytes(b"valid-looking-but-unmanifested-mp4")
+    monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(main, "verify_publishable_mp4", lambda path: {"verified": True})
+    monkeypatch.setattr(main, "_youtube_connection", lambda: pytest.fail("quality gate must run before OAuth access"))
+    response = client.post(
+        f"/api/admin/youtube/publish/{calendar_id}?video_id={video_id}&title=Gate%20test"
+    )
+    assert response.status_code == 409
+    assert "matching pass provenance" in response.json()["detail"].lower()
+
+
+def test_facebook_upload_route_blocks_mp4_without_persisted_quality_pass(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    calendar_id = _create_approved_social_calendar_item(client, "facebook")
+    video_id = "d" * 32
+    output_dir = tmp_path / "renders"
+    output_dir.mkdir()
+    (output_dir / (video_id + ".mp4")).write_bytes(b"valid-looking-but-unmanifested-mp4")
+    monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(main, "verify_publishable_mp4", lambda path: {"verified": True})
+    monkeypatch.setattr(main, "_meta_connection", lambda: pytest.fail("quality gate must run before Meta OAuth access"))
+    response = client.post(
+        f"/api/admin/meta/facebook/publish/{calendar_id}?video_id={video_id}&title=Gate%20test"
+    )
+    assert response.status_code == 409
+    assert "matching pass provenance" in response.json()["detail"].lower()
+
+
+def test_tiktok_upload_route_blocks_mp4_without_persisted_quality_pass(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    calendar_id = _create_approved_social_calendar_item(client, "tiktok")
+    video_id = "e" * 32
+    output_dir = tmp_path / "renders"
+    output_dir.mkdir()
+    (output_dir / (video_id + ".mp4")).write_bytes(b"valid-looking-but-unmanifested-mp4")
+    monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(main, "verify_publishable_mp4", lambda path: {"verified": True})
+    monkeypatch.setattr(main, "_tiktok_tokens", lambda: pytest.fail("quality gate must run before TikTok OAuth access"))
+    response = client.post(
+        f"/api/admin/tiktok/publish/{calendar_id}?video_id={video_id}&title=Gate%20test"
+    )
+    assert response.status_code == 409
+    assert "matching pass provenance" in response.json()["detail"].lower()
+
+
+def test_instagram_remote_url_route_is_fail_closed(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    calendar_id = _create_approved_social_calendar_item(client, "instagram")
+    monkeypatch.setattr(main, "_meta_connection", lambda: pytest.fail("remote URL route must remain blocked"))
+    response = client.post(
+        f"/api/admin/meta/instagram/publish/{calendar_id}?video_url=https%3A%2F%2Fcdn.example.test%2Fclip.mp4"
+    )
+    assert response.status_code == 409
+    assert "blocked" in response.json()["detail"].lower()
