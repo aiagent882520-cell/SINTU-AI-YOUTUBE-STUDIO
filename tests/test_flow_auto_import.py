@@ -164,4 +164,45 @@ def test_flow_pending_queue_is_acknowledged_only_after_successful_render(tmp_pat
     importer.scan_once()
     assert importer.flush_pending(force=True) == {"video_id": "rendered"}
     assert importer.pending == []
-    assert (data / "flow_auto_pending.json").read_text("utf-8") == "[]"
+    assert (data / "flow_auto_pending.json").read_text("utf-8").strip() == "[]"
+
+
+def test_flow_auto_import_deduplicates_identical_content_across_download_paths(tmp_path):
+    import json
+
+    downloads = tmp_path / "Download"
+    downloads.mkdir()
+    (downloads / "first.mp4").write_bytes(b"same verified payload")
+    (downloads / "second.mp4").write_bytes(b"same verified payload")
+    importer = FlowAutoImporter(
+        tmp_path / "data", tmp_path / "videos", [downloads],
+        validator=lambda _path: {"duration": 4},
+    )
+    assert importer.scan_once() == 0
+    assert importer.scan_once() == 1
+    assert len(list((tmp_path / "videos").glob("*.mp4"))) == 1
+    assert importer.imported == 1
+    assert importer.skipped == 1
+    ledger = json.loads((tmp_path / "data" / "flow_auto_imported.json").read_text("utf-8"))
+    records = list(ledger.values())
+    assert sum(1 for record in records if isinstance(record, dict) and record.get("video_id")) == 1
+    assert sum(1 for record in records if isinstance(record, dict) and record.get("duplicate_of")) == 1
+    assert all(len(record["sha256"]) == 64 for record in records if isinstance(record, dict))
+
+
+def test_flow_auto_import_reimports_changed_source_content(tmp_path):
+    downloads = tmp_path / "Download"
+    downloads.mkdir()
+    source = downloads / "clip.mp4"
+    source.write_bytes(b"first video")
+    importer = FlowAutoImporter(
+        tmp_path / "data", tmp_path / "videos", [downloads],
+        validator=lambda _path: {"duration": 4},
+    )
+    importer.scan_once()
+    assert importer.scan_once() == 1
+    source.write_bytes(b"second and different video")
+    assert importer.scan_once() == 0
+    assert importer.scan_once() == 1
+    assert len(list((tmp_path / "videos").glob("*.mp4"))) == 2
+    assert len(importer.pending) == 2
