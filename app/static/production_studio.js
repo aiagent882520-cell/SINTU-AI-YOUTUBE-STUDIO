@@ -166,7 +166,7 @@
     const id=button.dataset.renderExecute||button.dataset.renderCancel||button.dataset.renderRetry;
     const action=button.dataset.renderExecute?"execute":button.dataset.renderCancel?"cancel":"retry";
     const notice=document.getElementById("studioToolsNotice");button.disabled=true;
-    try{const response=await fetch("/api/studio/render-queue/"+encodeURIComponent(id)+"/"+action,{method:"POST",credentials:"same-origin"});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.detail||"Render queue action failed.");notice.textContent=action==="execute"?"Render started in background. Refresh status to track completion.":action==="retry"?"Failed render re-queued.":"Queued render cancelled.";await refreshProjectTools();}
+    try{const response=await fetch("/api/studio/render-queue/"+encodeURIComponent(id)+"/"+action,{method:"POST",credentials:"same-origin"});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.detail||"Render queue action failed.");notice.textContent=action==="execute"?"Render started in background. Refresh status to track completion.":action==="retry"?"Failed render re-queued.":data.cancellation_requested?"Running render cancellation requested. Wait for cancelled status.":"Queued render cancelled.";await refreshProjectTools();}
     catch(error){notice.textContent=error.message;button.disabled=false;}
    });
    document.getElementById("studioAssetList").addEventListener("click",async(e)=>{
