@@ -195,7 +195,7 @@ def test_offline_storyboard_e2e_creates_verified_local_video(monkeypatch, tmp_pa
     audio_dir.mkdir()
     music_dir.mkdir()
     output_dir.mkdir()
-    for index in range(1, 11):
+    for index in range(1, 16):
         (image_dir / f"image-{index}.jpg").write_bytes(b"image")
     (audio_dir / "voice.wav").write_bytes(b"audio")
     (music_dir / "music.wav").write_bytes(b"music")
@@ -222,10 +222,10 @@ def test_offline_storyboard_e2e_creates_verified_local_video(monkeypatch, tmp_pa
     })
 
     result = live_e2e._offline_storyboard_e2e("भारत के किले")
-    assert len(calls) == 10
-    assert result["scene_count"] == 10
+    assert len(calls) == 15
+    assert result["scene_count"] == 15
     assert result["duration_seconds"] == 60
-    assert result["subtitle_count"] == 10
+    assert result["subtitle_count"] == 15
     assert result["target_duration_seconds"] == 60
     assert result["subtitles_burned_in"] is True
     assert result["voice_engine"] == "eSpeak NG Hindi"
