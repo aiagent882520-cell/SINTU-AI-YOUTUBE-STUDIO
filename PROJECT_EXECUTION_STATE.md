@@ -981,3 +981,39 @@ The following PRs remain open and unmerged: #213, #209, #207, #206, #205, #204, 
 - Follow-up inspection found an escaping defect in the first byte-range fixture fix: the JavaScript regex contained literal escaped backslashes and therefore did not match numeric Range headers.
 - Corrected regex committed on PR #218 head: `7c075ff7c3f0a87687b327c7996e3805e75fa56c`; exact expression is `/^bytes=(\d+)-(\d*)$/`.
 - This is the current PR #218 head. The CI run for this exact head is not yet visible in the commit-run query; do not infer a pass. PR #218 remains unmerged pending exact-head CI and browser test results.
+
+
+## Autonomous continuation — 2026-11-19 11:15 UTC
+
+### PR #218 — real Chromium Video Editor acceptance
+- Exact-head run 44510605947 on 7c075ff7c3f0a87687b327c7996e3805e75fa56c completed with Python 3.11–3.14 PASS, dependency audit PASS, Docker PASS and offline video E2E PASS; Chromium failed 1/6 at the video play-position assertion.
+- Failure log: page.waitForFunction timed out waiting for window.__sintuPlayTime; video itself had readyState=4, duration 2s, no media error and preview notice reached "Sequence preview complete." The MutationObserver test probe did not attach before the short clip played. This is a flaky/invalid test probe, not evidence that video playback failed.
+- Fixture server changed from Playwright route fulfillment to a real local HTTP server implementing byte-range responses (206, Content-Range, Accept-Ranges, Content-Length, 416 invalid range), including suffix ranges. Commit a7a9270dcda41d579d6e62c227c2e206396a31ee.
+- Fixture regex corrected to one escaped digit token. Commit f2418a5ebd3209a5be742e183d2f0df9853b73fa.
+- Replaced timing-sensitive MutationObserver probe with deterministic HTMLMediaElement.prototype.play() wrapper that captures currentTime at the exact application play call. Current PR #218 head: 5b7d3a58ec6092d133bdc7010043d25896fcb9d0.
+- Exact-head CI run 44513017475 was pending/in progress at this checkpoint; Python matrix was running and Chromium job had not yet started. Do not claim seek/play PASS until exact-head Chromium succeeds.
+- PR #218 remains OPEN and unmerged.
+
+### PR #219 — checkpoint CI
+- Exact-head run 44510628622 on 69f0abb3c4dd3ef03190132cf0571c86d205ffdf: Python 3.11–3.14 PASS, dependency audit PASS, Docker PASS; offline branded video E2E FAILED before generation.
+- Failure was runner package provisioning: Ubuntu mirror downloads were slow and apt-get install espeak-ng fonts-noto-core hit the 300-second timeout (exit 124). No video report or MP4 artifact was produced; this is not a render-quality failure.
+- PR #219 remains OPEN and unmerged; do not claim CI green.
+
+### PR #220 — CI dependency provisioning resilience
+- New PR: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/220
+- Branch ci/reliable-offline-e2e-tool-install, head cb8476b71ea1e43ec1a1b1a0d07688fa0b0921d0.
+- Offline-video E2E job now refreshes apt indexes once, uses bounded retries/timeouts, allows up to 15 minutes for package installation, and raises only that job timeout to 30 minutes. No acceptance checks are skipped or weakened.
+- Exact-head run 44512589628 was in progress; Python matrix and security audit passed, Docker passed, offline job was still installing eSpeak/fonts. PR #220 is OPEN and unmerged.
+
+### PR #221 — persistent studio queue atomic claim
+- New PR: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/221
+- Branch fix/atomic-studio-render-queue-claims, head 33c8be9e6f1e4528a2a832a406c1452ea2a23de5.
+- studio_engine.update_render_item() now starts a SQLite BEGIN IMMEDIATE transaction before reading queue state and conditionally updates against the previously observed status. This prevents two workers sharing the SQLite DB from both claiming the same queued item.
+- Added a two-thread simultaneous-claim regression test, completion transition and owner-isolation checks in tests/test_studio_engine.py.
+- Exact-head CI run 44512808855 was in progress; all four Python test jobs and dependency audit had passed, Docker was still running, and offline E2E was still installing dependencies.
+- This hardens studio render-queue claims only. It does not make FastAPI BackgroundTasks durable or the separate async render worker multi-host safe. PR #221 is OPEN and unmerged.
+
+### Current execution gates
+- Do not merge #218, #219, #220 or #221 automatically; exact-head CI and diff review remain required. No merge has been performed.
+- Three historical black MP4 source/project/job mappings remain UNKNOWN until the Termux forensic scanner output is supplied. Originals/backups remain untouched.
+- Real AI image inference, physical Android acceptance, complete website walkthrough, 60-format individual acceptance, 15-module acceptance, live OAuth/channel verification and public publishing remain unverified or externally blocked.
