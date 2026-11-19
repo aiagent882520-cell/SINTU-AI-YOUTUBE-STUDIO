@@ -1324,3 +1324,19 @@ No PR merged and no deployment or public publishing performed.
 - Updated atomic-render and mocked timeline tests to stub `_validate_source_video` where source-pixel validation is not under test. Dedicated source-security tests still exercise the new gate, including real FFmpeg-generated all-black H.264 rejection.
 - PR #199 latest head is now `da04542f1cfc3637073f261df363072f313f2450`; exact-head CI run `44455947418` is QUEUED. No pass claimed until it completes.
 - PR #198 and #199 remain draft/open/unmerged. No historical media touched; no merge, deployment or publishing performed.
+
+
+## Verified CI completion and historical-root-cause correction — 2026-11-19
+
+### Exact-head CI
+- PR #198 head `147e9e40af0a66eddaa575167a3b8012533df2eb`, run `44455132568`: **SUCCESS 7/7** (Python 3.11–3.14, dependency audit, Docker build, offline branded-video E2E/motion audit).
+- PR #199 head `da04542f1cfc3637073f261df363072f313f2450`, run `44455947418`: **SUCCESS 7/7** (Python 3.11–3.14, dependency audit, Docker build, offline branded-video E2E/motion audit). Earlier failed run `44455725441` was due to legacy mocked renderer tests not isolating the new source-pixel validator; test fixtures were corrected, and latest exact-head run is fully green.
+- PR #192 checkpoint head `96a9c807a8a3c4cf0f774f30f5843138d4993e6c`, run `44456000458`: **SUCCESS 7/7**.
+- All three PRs remain draft/open/unmerged. CI success is not a physical Android validation and does not authorize merge or release.
+
+### Important historical black-MP4 root-cause correction
+- Re-read the complete forensic history in issue #95. The five affected files have Nov 17 timestamps, while the old storyboard concat/fade defect was fixed in commit `5310879` on Nov 15. Therefore that older fade defect **cannot be asserted as the cause of these five later files**. Earlier reproduction of the old defect is valid as a historical regression finding, but not as attribution for these five files.
+- Latest reliable Android forensic consensus in issue #171: exactly three files are fully black (3f4c..., 59430..., 8cfe...), each with 30/30 blackframe samples and 5/5 decoded timestamp samples near-black. The other two (adf926... and afa4...) pass calibrated black classification with 0/30 blackframe samples; they are low-luma but not confirmed full-black. Do not label all five black.
+- Production logs/SQLite provenance did not match target MP4 names. Exact source/request/render-stage attribution for the three confirmed black files remains **UNKNOWN**. Audio repair copied the video stream and did not create the visual defect.
+- PRs #198/#199 add preventive validation for new provider/source clips only. They do not repair, inspect, or explain the historical files.
+- Preserve all originals/backups. No repair, regeneration, quarantine, deletion, upload, or publishing performed. Production media gate remains blocked for the three confirmed black files.
