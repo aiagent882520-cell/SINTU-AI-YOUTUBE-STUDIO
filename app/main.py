@@ -60,7 +60,7 @@ from .security import RequestRateLimiter, client_address_allowed, same_origin_re
 from .backup_restore import verify_backup, BackupValidationError, snapshot_database
 from .flow_auto_import import start_flow_auto_import, stop_flow_auto_import, flow_auto_import_status
 from .termux_bridge import router as termux_bridge_router
-from .youtube_upload import transfer_resumable_upload, sha256_file as youtube_sha256_file, validate_session_uri, validate_state_transition, UploadProtocolError
+from .youtube_upload import transfer_resumable_upload, sha256_file as youtube_sha256_file, validate_session_uri, validate_state_transition, UploadProtocolError, UPLOAD_STATES
 from .offline_media import (OfflineMediaError, MAX_MEDIA_BYTES, import_media_file, list_offline_media, get_offline_media_path)
 from .resumable_media_upload import (ResumableUploadError, create_upload, get_upload, append_upload_chunk, complete_upload)
 
@@ -2258,6 +2258,36 @@ def youtube_public_approval_revoke(payload: YouTubePublicApprovalRevokeInput, re
                           "Owner revoked the one-time public approval.")
     return {"revoked": True, "public_visibility_already_applied": row["applied_at"] is not None,
             "note": "Revocation blocks any pending or resumed public visibility action. An already-applied public video is not automatically changed."}
+
+
+@app.get("/api/admin/youtube/uploads")
+def youtube_upload_history(
+    limit: int = Query(default=50, ge=1, le=200),
+    status: str | None = Query(default=None, max_length=20),
+):
+    if status is not None and status not in UPLOAD_STATES:
+        raise HTTPException(status_code=400, detail="Invalid YouTube upload status filter.")
+    query = """SELECT calendar_id,video_id,title,privacy_status,file_size,
+        acknowledged_offset,status,youtube_video_id,processing_status,created_at,updated_at
+        FROM youtube_uploads"""
+    parameters = []
+    if status is not None:
+        query += " WHERE status=?"
+        parameters.append(status)
+    query += " ORDER BY updated_at DESC,calendar_id DESC LIMIT ?"
+    parameters.append(limit)
+    with db() as conn:
+        rows = conn.execute(query, parameters).fetchall()
+    uploads = []
+    for row in rows:
+        item = dict(row)
+        size = item["file_size"]
+        item["progress_percent"] = (
+            round(min(100.0, max(0.0, item["acknowledged_offset"]) / size * 100), 2)
+            if size else 0.0
+        )
+        uploads.append(item)
+    return {"uploads": uploads, "count": len(uploads), "limit": limit, "status_filter": status}
 
 
 @app.get("/api/admin/youtube/uploads/{calendar_id}")
