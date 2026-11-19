@@ -1814,13 +1814,20 @@ def studio_enqueue_render(payload: StudioRenderInput, request: Request):
 
 @app.patch("/api/studio/render-queue/{item_id}")
 def studio_update_render_queue(item_id: str, payload: StudioRenderUpdateInput, request: Request):
-    try:
-        item = studio_engine.update_render_item(_studio_owner(request), item_id, payload.status, payload.result)
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
-    if not item:
+    # Job state is worker-owned. Allowing browser clients to PATCH "completed"
+    # would bypass the lease token and publish unverified render results.
+    raise HTTPException(status_code=409, detail="Render status is worker-managed; use the execute endpoint or cancel an unclaimed job.")
+
+@app.delete("/api/studio/render-queue/{item_id}")
+def studio_cancel_render_queue(item_id: str, request: Request):
+    owner = _studio_owner(request)
+    item = durable_render_queue.cancel_queued(owner, item_id)
+    if item:
+        return {"item": item, "cancelled": True}
+    existing = durable_render_queue.get_item(owner, item_id)
+    if not existing:
         raise HTTPException(status_code=404, detail="Render queue item not found.")
-    return {"item": item}
+    raise HTTPException(status_code=409, detail="Only queued, unclaimed render jobs can be cancelled.")
 
 
 @app.get("/api/agents")
