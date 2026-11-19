@@ -153,3 +153,16 @@ def test_timeline_subtitle_reorder_ignores_trailing_blank_lines():
     assert 'const subtitleRows=subtitleText.trim()?subtitleText.split("\\n"):[];' in handler
     assert 'while(subtitleRows.length&&!subtitleRows[subtitleRows.length-1].trim())subtitleRows.pop();' in handler
     assert "const subtitlesAligned=subtitleRows.length===rows.length;" in handler
+
+
+def test_timeline_preview_times_out_stalled_image_and_video_loads():
+    source = (ROOT / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    start = source.index("let activeTimelinePreview = null;")
+    end = source.index('\n$("timelinePreviewPlay").addEventListener', start)
+    preview = source[start:end]
+
+    assert "loadTimer=setTimeout(()=>onError(),30000)" in preview
+    assert "if(loadTimer!==null){clearTimeout(loadTimer);loadTimer=null;}" in preview
+    assert "seekTimer=setTimeout(()=>onError(),30000)" in preview
+    assert "if(seekTimer!==null)clearTimeout(seekTimer)" in preview
+    assert "if(loadTimer!==null)clearTimeout(loadTimer)" in preview
