@@ -869,3 +869,60 @@ def test_forensics_reports_generated_wav_duration_and_format(tmp_path, monkeypat
     assert report["audio_channels"] == 1
     assert report["audio_sample_width_bytes"] == 2
 
+
+
+
+def test_nearby_assets_are_ranked_by_timestamp_distance_and_labeled_as_candidates(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    images = tmp_path / "generated_images"
+    images.mkdir()
+    farther = images / "farther-image-001.png"
+    closer = images / "closer-image-002.png"
+    farther.write_bytes(b"not-an-image")
+    closer.write_bytes(b"not-an-image")
+    reference = 1_700_000_000
+    os.utime(farther, (reference + 120, reference + 120))
+    os.utime(closer, (reference - 15, reference - 15))
+
+    results = media_forensics.nearby_assets(reference)
+    assert [item["path"] for item in results] == [
+        "generated_images/closer-image-002.png",
+        "generated_images/farther-image-001.png",
+    ]
+    assert results[0]["reference_time_delta_seconds"] == 15
+    assert results[0]["mtime_offset_from_reference_seconds"] == -15
+    assert results[0]["correlation_basis"] == "mtime_proximity_only_not_proof"
+
+
+def test_source_asset_needles_include_bounded_path_filename_and_stem():
+    needles = media_forensics.source_asset_needles([
+        {"path": "generated_music/session-track-123456.wav"},
+        {"path": "generated_images/session-track-123456.png"},
+        {"path": "generated_audio/short.mp3"},
+    ])
+    assert "generated_music/session-track-123456.wav" in needles
+    assert "session-track-123456.wav" in needles
+    assert "session-track-123456" in needles
+    assert "generated_images/session-track-123456.png" in needles
+    assert "short.mp3" not in needles
+
+
+def test_text_log_scan_reports_matching_asset_tokens(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "render.log").write_text(
+        "render used generated_music/session-track-123456.wav\n",
+        encoding="utf-8",
+    )
+    result = media_forensics.scan_text_logs((
+        "generated_music/session-track-123456.wav",
+        "session-track-123456",
+    ))
+    assert len(result) == 1
+    assert result[0]["matched_terms"] == [
+        "generated_music/session-track-123456.wav",
+        "session-track-123456",
+    ]
