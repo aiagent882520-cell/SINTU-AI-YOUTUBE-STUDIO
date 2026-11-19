@@ -974,3 +974,10 @@ The following PRs remain open and unmerged: #213, #209, #207, #206, #205, #204, 
 - Current PR #218 head: `d738184baf43b844043534f0ff96e921ec3e1b70`; mergeable reported true, but CI evidence is pending.
 - No physical Android test, real AI model inference, historical black-MP4 source attribution, or live YouTube OAuth/upload is newly verified by this continuation.
 - Preserve the three confirmed black MP4 originals. The Termux forensic scanner and Android self-test still require device-side execution and evidence.
+
+
+### Chromium byte-range fixture follow-up
+
+- Follow-up inspection found an escaping defect in the first byte-range fixture fix: the JavaScript regex contained literal escaped backslashes and therefore did not match numeric Range headers.
+- Corrected regex committed on PR #218 head: `7c075ff7c3f0a87687b327c7996e3805e75fa56c`; exact expression is `/^bytes=(\d+)-(\d*)$/`.
+- This is the current PR #218 head. The CI run for this exact head is not yet visible in the commit-run query; do not infer a pass. PR #218 remains unmerged pending exact-head CI and browser test results.
