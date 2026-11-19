@@ -166,3 +166,16 @@ def test_timeline_preview_times_out_stalled_image_and_video_loads():
     assert "seekTimer=setTimeout(()=>onError(),30000)" in preview
     assert "if(seekTimer!==null)clearTimeout(seekTimer)" in preview
     assert "if(loadTimer!==null)clearTimeout(loadTimer)" in preview
+
+
+def test_video_timeline_preview_validates_trim_and_clamps_native_volume():
+    source = (ROOT / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    start = source.index(" const waitForVideo=(item)=>")
+    end = source.index("\n };\n try{", start)
+    preview = source[start:end]
+
+    assert "Number.isFinite(requestedVolume)?Math.max(0,Math.min(1,requestedVolume)):.25" in preview
+    assert "trimEnd<=trimStart" in preview
+    assert "trimEnd>video.duration+0.05" in preview
+    assert "trimEnd-trimStart<0.25" in preview
+    assert 'fail("Video trim range source clip ki duration ke andar aur kam se kam 0.25 seconds hona chahiye.")' in preview
