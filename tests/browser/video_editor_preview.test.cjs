@@ -252,3 +252,34 @@ test("real Chromium keeps subtitles aligned when timeline clips are reordered", 
     await context.close();
   }
 });
+
+
+test("editor draft survives browser refresh and can be restored or cleared", async () => {
+  const { context, page } = await openStudio();
+  try {
+    await page.locator("#renderTitle").fill("Browser recovery draft");
+    await page.locator("#renderScenes").fill("First scene\nSecond scene");
+    await page.locator("#renderSubtitles").fill("पहला दृश्य\nदूसरा दृश्य");
+    await page.locator("#renderTimeline").evaluate(el => {
+      el.value = "image:" + "a".repeat(32) + ":3:cut";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.waitForFunction(() => {
+      const raw = localStorage.getItem("sintu.video-editor-draft.v1");
+      return raw && JSON.parse(raw).values.renderTitle === "Browser recovery draft";
+    });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.locator("#restoreEditorDraft").waitFor({ state: "visible" });
+    assert.equal(await page.locator("#restoreEditorDraft").isEnabled(), true);
+    await page.locator("#restoreEditorDraft").click();
+    assert.equal(await page.locator("#renderTitle").inputValue(), "Browser recovery draft");
+    assert.equal(await page.locator("#renderScenes").inputValue(), "First scene\nSecond scene");
+    assert.equal(await page.locator("#renderSubtitles").inputValue(), "पहला दृश्य\nदूसरा दृश्य");
+    assert.match(await page.locator("#renderTimeline").inputValue(), /^image:a{32}:3:cut$/);
+    await page.locator("#clearEditorDraft").click();
+    assert.equal(await page.evaluate(() => localStorage.getItem("sintu.video-editor-draft.v1")), null);
+    assert.equal(await page.locator("#restoreEditorDraft").isEnabled(), false);
+  } finally {
+    await context.close();
+  }
+});
