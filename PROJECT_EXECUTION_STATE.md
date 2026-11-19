@@ -1357,3 +1357,10 @@ A timestamp comparison corrects the earlier note that the old renderer defect co
 - `59430f1fb7fd4bdf80cf8b7d9f456098.mp4`: `2026-11-15T09:30:22.142058Z` (before the commit).
 - `8cfe9da88d5c43d184f3572e371ff4a6.mp4`: `2026-11-13T02:42:36.833838Z` (before the commit).
 Thus the older renderer defect is temporally plausible, not ruled out. This timing alone does not prove that those renders used the affected path. Android forensic scan found no exact filename/stem matches in production logs or SQLite; nearby generated images/audio are only temporal candidates. Root cause remains **UNPROVEN**. Issue #95 has been updated with this correction. No media changed.
+
+
+## PR #200 CI completion — 2026-11-19
+
+- PR #200 head `f3a613a77b0deb85b242eb91aa38bb081aed2376`, workflow run `44456525639`: **SUCCESS 7/7**. Python 3.11–3.14, dependency security audit, production Docker build, and offline branded-video E2E/motion audit all passed.
+- The change only corrects the forensic report's `black_pixel_threshold` metadata to match the actual FFmpeg `blackframe` threshold of 17 and adds populated/empty-summary regression assertions. It does not change classification behavior or modify media.
+- PR #200 remains open/draft/unmerged.
