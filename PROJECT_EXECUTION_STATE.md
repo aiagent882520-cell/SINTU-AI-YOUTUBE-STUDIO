@@ -1348,3 +1348,12 @@ No PR merged and no deployment or public publishing performed.
 - PR #200 opened as draft: `https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/200`, head `f3a613a77b0deb85b242eb91aa38bb081aed2376`. Fixes forensic report metadata only: `blackframe_luma_threshold` was 17 in the actual FFmpeg invocation, but summary metadata incorrectly reported 16 for empty samples and 32 for populated samples. Regression assertions added for both cases. Classification behavior and media assets are unchanged.
 - PR #200 exact-head workflow run `44456525639`: security audit passed; Python 3.11–3.14 jobs were still running at the time of this checkpoint. No claim of full PR #200 CI pass until all jobs complete.
 - Historical black MP4 provenance remains unknown. Keep the three pixel-confirmed full-black assets blocked; do not infer their creation stage from the older storyboard fade regression. No originals/backups changed; no media repair, regeneration, upload, publishing, merge, or deployment performed.
+
+
+## Forensic chronology correction — 2026-11-19
+
+A timestamp comparison corrects the earlier note that the old renderer defect could not have caused the three black MP4s. Commit `5310879ccdc57250ebd3798be1268a6b6bd277bf` was committed at `2026-11-15T13:58:34Z`. The Termux report's pre-repair backup reference times are:
+- `3f4c2151e8e640109f464b2c2e9b7569.mp4`: `2026-11-15T13:19:29.963368Z` (before the commit).
+- `59430f1fb7fd4bdf80cf8b7d9f456098.mp4`: `2026-11-15T09:30:22.142058Z` (before the commit).
+- `8cfe9da88d5c43d184f3572e371ff4a6.mp4`: `2026-11-13T02:42:36.833838Z` (before the commit).
+Thus the older renderer defect is temporally plausible, not ruled out. This timing alone does not prove that those renders used the affected path. Android forensic scan found no exact filename/stem matches in production logs or SQLite; nearby generated images/audio are only temporal candidates. Root cause remains **UNPROVEN**. Issue #95 has been updated with this correction. No media changed.
