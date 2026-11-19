@@ -102,9 +102,14 @@ def _local_tts_engines() -> tuple[str | None, str | None, str | None]:
     if piper_executable and piper_model and Path(piper_model).is_file():
         return "Piper TTS", piper_executable, piper_model
 
-    espeak_name = os.getenv("ESPEAK_EXECUTABLE") or "espeak"
-    espeak_executable = _find_executable(espeak_name)
-    if espeak_executable:
+    configured_espeak = os.getenv("ESPEAK_EXECUTABLE")
+    # Termux and many Linux packages expose the executable as espeak-ng;
+    # Debian-compatible hosts may also provide the espeak compatibility name.
+    espeak_names = [configured_espeak] if configured_espeak else ["espeak-ng", "espeak"]
+    for espeak_name in espeak_names:
+        espeak_executable = _find_executable(espeak_name)
+        if not espeak_executable:
+            continue
         try:
             voices = subprocess.run(
                 [espeak_executable, "--voices=hi"],
@@ -116,7 +121,7 @@ def _local_tts_engines() -> tuple[str | None, str | None, str | None]:
             ):
                 return "eSpeak NG Hindi", espeak_executable, None
         except (OSError, subprocess.TimeoutExpired):
-            pass
+            continue
     return None, None, None
 
 
