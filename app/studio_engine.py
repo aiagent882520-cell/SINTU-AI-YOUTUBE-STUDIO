@@ -304,14 +304,25 @@ def update_render_item(owner, item_id, status, result=None):
         raise ValueError("Render status must be running, completed, or failed.")
     now = _now()
     with _db() as conn:
+        # Acquire the SQLite write reservation before reading the current state.
+        # A deferred read-then-write transaction lets two API workers both observe
+        # "queued" and start the same render. BEGIN IMMEDIATE serializes the claim.
+        conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT status FROM studio_render_queue WHERE id=? AND owner=?", (item_id, owner)).fetchone()
         if not row:
             return None
+        previous = row["status"]
         allowed = {"queued":{"running"}, "running":{"completed","failed"}}
-        if status not in allowed.get(row["status"], set()):
+        if status not in allowed.get(previous, set()):
             raise ValueError("Invalid render queue status transition.")
-        conn.execute("UPDATE studio_render_queue SET status=?,result_json=?,updated_at=? WHERE id=? AND owner=?",
-                     (status, json.dumps(result, ensure_ascii=False) if result is not None else None, now, item_id, owner))
+        cursor = conn.execute(
+            "UPDATE studio_render_queue SET status=?,result_json=?,updated_at=? "
+            "WHERE id=? AND owner=? AND status=?",
+            (status, json.dumps(result, ensure_ascii=False) if result is not None else None,
+             now, item_id, owner, previous),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError("Render queue item was claimed or changed by another worker.")
     return next((item for item in list_render_queue(owner) if item["id"] == item_id), None)
 
 
