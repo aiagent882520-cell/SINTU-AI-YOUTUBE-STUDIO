@@ -983,3 +983,50 @@ Evidence: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/commit/c
 - The website and Android UI both now fail early with a clear explanation when the local text model is absent. No model/runtime was downloaded or installed, because the phone has limited free RAM and model selection requires separate size/license/device review.
 - The procedural media fallback can create visuals/audio/MP4 only when the necessary local TTS and FFmpeg tools are present and production gates are enabled. It does not prove generative-AI image creation or full autonomous topic-to-script generation.
 - No PR merged, no original media changed, no deployment, no paid API, no YouTube upload or public publishing.
+
+
+## Engineering checkpoint — 2026-11-19 — four-PR reinspection and CI recovery
+
+### PR #190 — Android native client / backend CI failure investigation
+- Branch: `feature/native-android-client`.
+- Reviewed changed-file inventory (15 files), including Android app screens/API, encrypted session storage, manifest/network security, Gradle build, tests and SINTU CI workflow. No PR review submissions or inline review threads were present at inspection.
+- Exact earlier head `3595a3eab46627ccc90db9241ffd4316ceba03b9`: Android build/unit-test run `44348488246` SUCCESS; SINTU CI run `44348488124` FAILURE.
+- Failure root cause is environmental CI dependency installation, not a Python test assertion: Python 3.12 and 3.14 jobs timed out with exit 124 while Ubuntu apt was downloading FFmpeg and 87 dependency packages from the Ubuntu mirror. Python 3.11 and 3.13 tests plus dependency audit passed; Docker and offline E2E were skipped because the test matrix failed.
+- Corrective commits pushed to the same PR branch:
+  - `5770b91d10acf9205565fe1ac685e31b48be3ca2` — restore the previously pinned FFmpeg setup action in both CI jobs instead of slow distro apt installation.
+  - `86dc3b6d47304a5d911bd474eb33526d2cac03e1` — remove the now-unused apt installer script.
+- These corrective commits are pushed, but no workflow run was returned for their exact new commit at checkpoint time. Treat updated SINTU CI as **pending/unverified**, not PASS. Android build run `44348488246` validates the immediately prior Android source head `3595a3e...`; the two CI-only commits do not change Android source, but a fresh exact-head run is still required for full PR evidence.
+- Session security review: persisted cookie value is AES-GCM encrypted using Android Keystore and stored with an issuing origin string composed from scheme, host and effective port. Cookie jar clears on origin mismatch, malformed parse and expiry, and only reloads against the matching origin. Unit tests cover reload, scheme mismatch, port mismatch, expired cookie and malformed cookie. **Gap:** the tests use a fake store and do not exercise actual Android Keystore persistence or a real HTTP redirect/network exchange on a device.
+- Android CI run `44348488246` proves Gradle unit tests and APK assembly only. Physical install/login, backend connectivity, real chat/project/video endpoints, gallery download, rotation/background recovery, notification, permissions, accessibility, crash/thermal/low-storage testing remain unverified. Timeline editor, media library manager, offline project queue and resumable/background upload/download are incomplete. Release APK is unsigned.
+
+### PR #195 — offline media scope
+- Exact head `909e86368b819e9638b3bd4214bc741af4c379a7`; CI run `44347762212` SUCCESS, 7/7 jobs: Python 3.11–3.14, dependency audit, Docker/health, offline branded-video E2E/motion audit.
+- Reinspection confirms the actual changes address ComfyUI detection fallback, procedural Pillow image fallback labeling, Termux eSpeak NG discovery, and website local-LLM preflight.
+- This is **partial offline media-engine support**, not a complete offline media filesystem/workspace implementation. The PR does not establish durable offline project access, local import/index/catalog, duplicate detection, interrupted copy recovery, offline queue/retry, sync conflict handling or network-restoration synchronization. Those acceptance stages remain unimplemented/unverified; do not claim complete offline workflow.
+- CI E2E exercises a real offline MP4 using procedural imagery/local TTS/music and FFmpeg; it is not generative-AI image evidence and not a physical-phone run.
+
+### PR #193 — forensic provenance / integration review
+- Exact head `dbc52705110ae9dc53fa4a12edbaff87b8217ddf`; CI run `44347593067` SUCCESS, 7/7 jobs: four Python versions, dependency audit, Docker/health and offline video E2E.
+- Reinspection confirms scanner can match current MP4 or pre-repair backup hashes to bounded provenance manifests and verify source-asset hashes. It does not retroactively identify historical runs where no matching manifest exists.
+- Cross-PR integration gap found: the scanner's current `ASSET_DIRS` list does not include `generated_music`, while the separate PR #191 adds generated-music discovery/WAV metadata. Because neither change is merged, a combined mainline integration test is still required; avoid claiming full cross-PR integration.
+- The previously reported three black MP4s remain confirmed full-black based on prior device-side forensic evidence; historical generation invocation/source is still unproven. The timestamp-correlated WAV is not proof of visual causation. No original MP4, backup or WAV was modified.
+
+### PR #192 — checkpoint itself
+- Exact-head SINTU CI run `44348416478` completed SUCCESS: Python 3.11–3.14, dependency security audit, offline branded-video E2E/motion audit and Docker build/health check.
+- This run validates the documentation branch's repository-wide automated gates, not every PR's branch or physical-device workflows.
+- This checkpoint update records current evidence and the corrective PR #190 commits. A follow-up exact-head run after this documentation commit must be checked before calling the updated checkpoint CI green.
+
+### Cross-PR and security status
+- PR #195 offline media and PR #193 forensic provenance have green individual exact-head CI; PR #190 Android build is green on prior Android source head but backend CI had apt timeout; CI-only correction commits are pushed and await a fresh exact-head run; PR #192 prior exact-head CI is green.
+- No end-to-end test has yet demonstrated offline import/storage/queue/sync -> Android media library -> backend job -> final MP4 -> forensic rejection gate as one connected workflow.
+- No evidence yet establishes that every upload/publishing path consumes forensic failure status as a mandatory fail-closed gate. Keep production/publishing disabled.
+- Security audit evidence: `pip-audit -r requirements-dev.txt` passed in PR #195 run `44347762212`, PR #193 run `44347593067`, and PR #192 run `44348416478`; PR #190 run `44348488124` dependency-audit job also passed despite its overall CI failure. These are dependency audits, not a complete application security assessment.
+- No PR merged; no public publishing/deployment; no paid service or model download; no original-media changes.
+
+### Next executable tasks
+1. Verify PR #190's new head and obtain fresh SINTU CI evidence after the pinned FFmpeg workflow correction; if CI is not automatically triggered, use the repository's authorized GitHub Actions workflow UI to run the SINTU CI workflow on `feature/native-android-client`.
+2. Add a read-only Android/Termux diagnostic script for actual install, server reachability, login/session, local storage, MediaStore download and FFmpeg/voice capability; do not report device PASS until the user returns its output.
+3. Implement durable offline media import/index/integrity/duplicate/interrupted-operation queue and sync behavior, with tests; keep it separate from PR #195's already-tested engine fallback scope.
+4. Integrate generated-music asset discovery into the provenance scanner branch and add cross-PR tests for MP4 + image + audio + narration manifest verification.
+5. Extend forensic validation for decoder/frame timestamp coverage, variable frame rate, truncated/zero-byte files and tool failures; non-zero exit on scanner failure must be explicitly tested.
+6. Build a single integration regression proving a failed/black MP4 cannot be marked upload/publish eligible; keep gates closed until that evidence and physical-device evidence exist.
