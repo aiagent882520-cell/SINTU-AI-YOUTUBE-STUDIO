@@ -1235,3 +1235,41 @@ The following PRs remain open and unmerged: #213, #209, #207, #206, #205, #204, 
 
 ### Required device-side evidence
 Run the read-only forensic scanner and Android diagnostic on the actual Termux phone. The exact five-file forensic command and safety notes are in docs/TERMUX_BLACK_MP4_FORENSIC_RUN.md. Attach only the generated report; never send .env, OAuth tokens, private keys or model files. Do not overwrite or repair original MP4s.
+
+
+## PR #236 exact-head verification and current execution — 2026-11-19 13:25 UTC
+
+### Current Git baseline
+- Current main SHA at checkpoint: `9e7db12f8716ff86a077617c74ff51555d50a9ef` (main has advanced beyond the older `60bf552f...` checkpoint).
+- PR #236 head: `d5decc39695e1f150ecac52ab8d7dba7d4fd0516`, branch `feat/video-editor-undo-redo-rebased`; PR remains OPEN and UNMERGED.
+- PR #236 currently has 19 commits ahead and 1 commit behind main; GitHub reports mergeable=true / mergeable_state=clean, but the branch is not at the current main base.
+- PR #236 has no submitted reviews, no review threads and no review comments in the GitHub review endpoints. Do not merge until required independent review/approval conditions are satisfied and exact-head checks are current against the updated base.
+
+### Exact-head CI evidence for PR #236
+- SINTU CI run `44531566929`: SUCCESS, 8/8 jobs — dependency security audit; Python 3.11, 3.12, 3.13, 3.14; production Docker build + health; offline branded-video E2E + motion audit; real Chromium Video Editor browser tests.
+- Offline E2E job ID `135586719376`: SUCCESS. Free local voice/font tools installation completed; actual Hindi MP4 generation, 60-second acceptance, metadata/black-frame/motion audit, camera-motion enforcement and artifact upload all completed.
+- Generated artifact: `sintu-offline-video-e2e`, artifact ID `14535235542`, run URL https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44531566929/artifacts/14535235542. Artifact ZIP SHA-256: `047d9ed887edce34bfe13a314b1f079be6b7e469dd99b91376d0da6a83a57f6b`. Retention is 7 days; download and inspect before expiry.
+- MP4 render ID `f45374ade33540c895ae2b25b31d15d7`; 5,062,668 bytes; 60.04 seconds; 720x1280; H.264/yuv420p + AAC 48 kHz stereo; 15 timed Hindi subtitles burned in; eSpeak NG Hindi WAV narration + local procedural music; SINTU watermark.
+- Audit: zero black intervals; 60 sampled frames; 54/59 moving transitions; motion ratio 0.915; mean frame delta 9.462; project/media audit PASS (2 checks, 0 warnings, 0 failures). Paid services=false; publishing_performed=false.
+- Provenance is explicitly SINTU Procedural Art (offline), not generative-AI image inference. The 10-fort fixture records 10 curated official-source records; this is reproducible offline acceptance, not proof of live web research at runtime.
+- Android workflow run `44531566887`: `android-build` SUCCESS, including unit tests and APK build/artifact upload. This is CI build evidence only, not physical-device installation evidence.
+
+### Current main regression baseline
+- Main SINTU CI run `44530421155` for exact main SHA `9e7db12f8716ff86a077617c74ff51555d50a9ef`: SUCCESS, 8/8 jobs — Python 3.11–3.14, security audit, Docker/health, Chromium and offline branded-video E2E/motion audit.
+- Main now includes the reproducible ten-fort Hindi video acceptance fixture at `docs/OFFLINE_TEN_FORT_VIDEO_ACCEPTANCE.md`; it explicitly labels procedural illustrations as non-generative AI and Bhangarh supernatural claims as folklore.
+
+### Remaining gates — do not overstate
+- PR #236 merge remains BLOCKED pending independent review and a fresh exact-head run against current main after branch synchronization. No review approval is recorded.
+- Physical Android install/login/editor/media-storage/lifecycle tests remain UNVERIFIED; Android CI APK build is not a device PASS.
+- Three historical black MP4 provenance mappings remain UNKNOWN pending the read-only Termux report described in `docs/TERMUX_BLACK_MP4_FORENSIC_RUN.md`. Preserve original MP4s/backups; repair only to separate output paths.
+- Real ComfyUI inference remains BLOCKED/UNVERIFIED until a reachable host, valid workflow and compatible open-source model are configured. Current offline generation is procedural art, not AI inference.
+- Durable multi-worker video render lifecycle remains PARTIAL/BLOCKED: SQLite atomic studio-queue claims do not make FastAPI BackgroundTasks or process-local FFmpeg cancellation durable across worker crashes/restarts.
+- YouTube live OAuth/channel verification/upload remains BLOCKED pending owner credentials, consent and explicit authorization. No upload/public publishing occurred.
+- All 60 format and 15 module catalog entries remain individually UNVERIFIED until each has its own real output/integration acceptance evidence.
+- Full website user journeys/accessibility, physical Android-to-backend media workflows and crash-recovery acceptance remain incomplete.
+
+### Next executable work
+1. Keep PR #236 open pending independent review; synchronize its branch to current main and rerun exact-head CI before merge.
+2. Continue the durable render-worker/lease/recovery design rather than merging stale stacked PRs #206/#207/#209 without multi-worker crash tests.
+3. Run physical Termux diagnostics/forensic scanner when the device-side report is available; no hardware result may be inferred from CI.
+4. Implement and test ComfyUI host/workflow/model readiness with explicit model/license and CPU/GPU resource checks; retain procedural fallback as a clearly labelled fallback.
