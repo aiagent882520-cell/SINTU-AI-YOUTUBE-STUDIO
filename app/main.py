@@ -2113,8 +2113,8 @@ def youtube_public_approval_create(payload: YouTubePublicApprovalInput, request:
     if size <= 0 or size > 512 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Rendered MP4 must be between 1 byte and 512 MiB.")
     try:
-        require_publishable_provenance(data_dir=DATA_DIR, output_path=path)
         verify_publishable_mp4(path)
+        require_publishable_provenance(data_dir=DATA_DIR, output_path=path)
         file_hash = youtube_sha256_file(path)
     except PublishingQualityError:
         raise HTTPException(status_code=409, detail="Public approval blocked: matching PASS provenance and quality status are required.") from None
@@ -2221,8 +2221,8 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
     if size <= 0 or size > 512 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="MP4 size 1 byte se 512 MB ke beech honi chahiye.")
     try:
-        require_publishable_provenance(data_dir=DATA_DIR, output_path=path)
         verify_publishable_mp4(path)
+        require_publishable_provenance(data_dir=DATA_DIR, output_path=path)
         file_hash = youtube_sha256_file(path)
     except PublishingQualityError:
         raise HTTPException(status_code=409, detail="Publishing blocked: matching PASS provenance and quality status are required.") from None
@@ -2614,8 +2614,8 @@ def meta_facebook_publish(calendar_id:int, video_id:str=Query(...,min_length=32,
     if path.stat().st_size<=0 or path.stat().st_size>512*1024*1024:
         raise HTTPException(status_code=413,detail="MP4 size 1 byte se 512 MB ke beech honi chahiye.")
     try:
-        require_publishable_provenance(data_dir=DATA_DIR, output_path=path)
         verify_publishable_mp4(path)
+        require_publishable_provenance(data_dir=DATA_DIR, output_path=path)
     except PublishingQualityError:
         raise HTTPException(status_code=409,detail="Publishing blocked: matching PASS provenance and quality status are required.") from None
     except RendererUnavailable as exc:
@@ -2855,8 +2855,8 @@ def tiktok_publish(calendar_id:int,video_id:str=Query(...,min_length=32,max_leng
     if path.stat().st_size<=0 or path.stat().st_size>512*1024*1024:
         raise HTTPException(status_code=413,detail="MP4 size 1 byte se 512 MB ke beech honi chahiye.")
     try:
-        require_publishable_provenance(data_dir=DATA_DIR, output_path=path)
         verify_publishable_mp4(path)
+        require_publishable_provenance(data_dir=DATA_DIR, output_path=path)
     except PublishingQualityError:
         raise HTTPException(status_code=409,detail="Publishing blocked: matching PASS provenance and quality status are required.") from None
     except RendererUnavailable as exc:
@@ -4778,7 +4778,9 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 fps=payload.fps, quality=payload.quality,
             )
         try:
-            quality_report = verify_publishable_mp4(OUTPUT_DIR / rendered["filename"])
+            quality_report = rendered.get("quality_report") if isinstance(rendered, dict) else None
+            if not isinstance(quality_report, dict) or quality_report.get("verified") is not True:
+                raise RenderFailed("Renderer did not return a verified quality report; provenance PASS withheld.")
             manifest = write_render_manifest(
                 data_dir=DATA_DIR,
                 run_id=run_id,
@@ -4879,7 +4881,9 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput, 
         if music_matches:
             asset_paths.append(music_matches[0])
     try:
-        quality_report = verify_publishable_mp4(OUTPUT_DIR / render_data["filename"])
+        quality_report = render_data.get("quality_report") if isinstance(render_data, dict) else None
+        if not isinstance(quality_report, dict) or quality_report.get("verified") is not True:
+            raise RenderFailed("Renderer did not return a verified quality report; provenance PASS withheld.")
         manifest = write_render_manifest(
             data_dir=DATA_DIR,
             run_id=run_id,
