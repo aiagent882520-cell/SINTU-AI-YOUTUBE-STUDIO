@@ -329,14 +329,14 @@ def retry_failed_render(owner, item_id):
 
 def update_render_item(owner, item_id, status, result=None):
     ensure_schema()
-    if status not in {"running", "completed", "failed"}:
+    if status not in {"running", "completed", "failed", "cancelled"}:
         raise ValueError("Render status must be running, completed, or failed.")
     now = _now()
     with _db() as conn:
         row = conn.execute("SELECT status FROM studio_render_queue WHERE id=? AND owner=?", (item_id, owner)).fetchone()
         if not row:
             return None
-        allowed = {"queued":{"running"}, "running":{"completed","failed"}}
+        allowed = {"queued":{"running"}, "running":{"completed","failed","cancelled"}}
         if status not in allowed.get(row["status"], set()):
             raise ValueError("Invalid render queue status transition.")
         conn.execute("UPDATE studio_render_queue SET status=?,result_json=?,updated_at=? WHERE id=? AND owner=?",
