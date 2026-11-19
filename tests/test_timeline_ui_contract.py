@@ -113,3 +113,16 @@ def test_render_preflight_rejects_timeline_scene_and_subtitle_misalignment():
     assert "subtitles.length !== rows.length" in handler
     assert "timeline_items: structuredTimelineItems(rows)" in handler
     assert "subtitles," in handler
+
+
+def test_timeline_reorder_and_remove_keep_aligned_subtitle_rows():
+    source = (ROOT / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    start = source.index('$("timelineEditor").addEventListener("click"')
+    end = source.index('\n$("timelineEditor").addEventListener("input"', start)
+    handler = source[start:end]
+
+    assert "const subtitlesAligned=subtitleRows.length===rows.length" in handler
+    assert "subtitleRows.splice(i,1)" in handler
+    assert "[subtitleRows[i-1],subtitleRows[i]]=[subtitleRows[i],subtitleRows[i-1]]" in handler
+    assert "[subtitleRows[i+1],subtitleRows[i]]=[subtitleRows[i],subtitleRows[i+1]]" in handler
+    assert 'subtitleField.value=subtitleRows.join("\\n")' in handler
