@@ -298,6 +298,22 @@ def delete_asset(owner, asset_id):
         cur = conn.execute("DELETE FROM studio_assets WHERE owner=? AND id=?", (owner, asset_id))
     return cur.rowcount > 0
 
+def cancel_queued_render(owner, item_id):
+    ensure_schema()
+    now = _now()
+    with _db() as conn:
+        cur = conn.execute("UPDATE studio_render_queue SET status='cancelled',updated_at=? WHERE id=? AND owner=? AND status='queued'", (now, item_id, owner))
+    return next((item for item in list_render_queue(owner) if item["id"] == item_id), None) if cur.rowcount else None
+
+
+def retry_failed_render(owner, item_id):
+    ensure_schema()
+    now = _now()
+    with _db() as conn:
+        cur = conn.execute("UPDATE studio_render_queue SET status='queued',result_json=NULL,updated_at=? WHERE id=? AND owner=? AND status='failed'", (now, item_id, owner))
+    return next((item for item in list_render_queue(owner) if item["id"] == item_id), None) if cur.rowcount else None
+
+
 def update_render_item(owner, item_id, status, result=None):
     ensure_schema()
     if status not in {"running", "completed", "failed"}:
