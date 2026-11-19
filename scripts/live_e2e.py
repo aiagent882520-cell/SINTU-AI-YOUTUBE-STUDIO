@@ -202,7 +202,7 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "Kangra Fort above the Himalayan valley, layered stone walls and distant Dhauladhar mountains",
         "Mehrangarh Fort's seven gates above the blue city of Jodhpur, dramatic high-angle view",
         "Junagarh Fort in Bikaner, red sandstone ramparts and ornate desert palace courtyards",
-        "Jaisalmer's golden living fort on Trikuta Hill, sandstone homes and inhabited lanes at sunset",
+        "Jaisalmer's golden sandstone fort on Trikuta Hill, ornate havelis and narrow lanes at sunset",
         "Gwalior Fort stretching along a high plateau, palace facades and ancient temples",
         "Ancient Indian fort water tanks and stepwells, practical engineering for long sieges",
         "Massive bastions, iron-studded gates and winding defensive passages, historical architectural detail",
@@ -226,7 +226,7 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "और विजय स्तंभ वीरता की स्मृति हैं। दौलताबाद में चट्टान काटकर बना रास्ता और खाई रक्षा का "
         "हिस्सा थे। हिमाचल का कांगड़ा किला उन्नीस सौ पाँच के भूकंप से क्षतिग्रस्त हुआ। "
         "जोधपुर का मेहरानगढ़ सात द्वारों से ऊपर उठता है। बीकानेर का जूनागढ़ सोलहवीं सदी में "
-        "नया रूप लेकर बना। जैसलमेर का पीले पत्थर का किला आज भी आबाद है। ग्वालियर का किला "
+        "नया रूप लेकर बना। जैसलमेर का सुनहरा किला त्रिकूट पहाड़ी पर चमकता है। ग्वालियर का किला "
         "ऊँचे पठार पर फैला है। इनका असली रहस्य है इंजीनियरिंग, इतिहास और लोककथाओं का मेल।"
     )
     subtitles = [
@@ -239,7 +239,7 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "कांगड़ा: हिमालयी दुर्ग, 1905 के भूकंप से क्षतिग्रस्त।",
         "मेहरानगढ़: जोधपुर के ऊपर सात विशाल द्वार।",
         "जूनागढ़: बीकानेर का किला, 1589 में नया स्वरूप।",
-        "जैसलमेर: पीले बलुआ पत्थर का आज भी आबाद दुर्ग।",
+        "जैसलमेर: त्रिकूट पहाड़ी पर सुनहरे बलुआ पत्थर का दुर्ग।",
         "ग्वालियर: ऊँचे पठार पर फैला प्राचीन किला।",
         "खाइयाँ और जलाशय घेराबंदी में सहारा बने।",
         "बुर्ज और मीनारें दूर तक निगरानी रखते थे।",
