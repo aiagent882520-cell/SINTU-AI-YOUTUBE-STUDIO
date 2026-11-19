@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compact, read-only forensic report for the five known black MP4s."""
+"""Compact, read-only forensic report for known target MP4 assets."""
 from __future__ import annotations
 
 import argparse
