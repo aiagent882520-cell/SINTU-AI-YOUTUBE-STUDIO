@@ -465,6 +465,11 @@ def test_mixed_timeline_mixes_source_voice_music_and_burns_subtitles(tmp_path, m
     if not video_renderer._ffmpeg_supports_subtitles(ffmpeg):
         pytest.skip("FFmpeg libass subtitles filter is unavailable")
     monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
+    # Keep this full FFmpeg graph test CPU-bounded; production portrait dimensions
+    # are exercised by the offline end-to-end render job.
+    test_profiles = dict(video_renderer.OUTPUT_PROFILES)
+    test_profiles["160x284"] = (160, 284)
+    monkeypatch.setattr(video_renderer, "OUTPUT_PROFILES", test_profiles)
 
     source = tmp_path / "source-with-audio.mp4"
     generated = subprocess.run(
@@ -503,7 +508,7 @@ def test_mixed_timeline_mixes_source_voice_music_and_burns_subtitles(tmp_path, m
         music_volume=0.12,
         subtitles=["पहला दृश्य", "दूसरा दृश्य"],
         transitions=["cut", "fade"],
-        resolution="720x1280",
+        resolution="160x284",
         fps=24,
         quality="standard",
     )
@@ -516,14 +521,16 @@ def test_mixed_timeline_mixes_source_voice_music_and_burns_subtitles(tmp_path, m
     assert result["audio"] == "source+voiceover+music"
     metadata = subprocess.run(
         [ffprobe, "-v", "error", "-show_entries",
-         "stream=codec_type,codec_name,sample_rate,channels",
+         "stream=codec_type,codec_name,sample_rate,channels,width,height",
          "-of", "json", str(output)],
         capture_output=True, text=True, timeout=30, check=False,
     )
     assert metadata.returncode == 0, metadata.stderr
     import json
     streams = json.loads(metadata.stdout)["streams"]
-    assert sum(stream["codec_type"] == "video" for stream in streams) == 1
+    video_streams = [stream for stream in streams if stream["codec_type"] == "video"]
+    assert len(video_streams) == 1
+    assert (video_streams[0]["width"], video_streams[0]["height"]) == (160, 284)
     audio_streams = [stream for stream in streams if stream["codec_type"] == "audio"]
     assert len(audio_streams) == 1
     assert audio_streams[0]["codec_name"] == "aac"
