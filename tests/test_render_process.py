@@ -47,3 +47,25 @@ def test_render_process_can_be_cancelled_from_another_thread():
 
 def test_cancel_unknown_or_finished_job_is_noop():
     assert render_process.cancel_render_process("missing-job") is False
+
+
+
+def test_ffmpeg_progress_is_parsed_and_bounded_below_completion():
+    progress = []
+    result = render_process.run_render_process(
+        ["python", "-c", "import time; print('out_time_ms=5000000', flush=True); time.sleep(0.15)", "fake-output.mp4"],
+        timeout=3,
+        total_duration=10,
+        progress_callback=progress.append,
+    )
+    assert result.returncode == 0
+    assert 50 in progress
+    assert max(progress) <= 99
+
+
+def test_progress_callback_is_optional_and_does_not_change_plain_process_result():
+    result = render_process.run_render_process(
+        ["python", "-c", "print('plain')"], timeout=3, capture_output=True
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == "plain"
