@@ -1132,3 +1132,32 @@ No PR merged; no public deployment/publishing; no model download or paid API; no
 - Fresh exact-head SINTU CI run `44437440732` has been created and is currently QUEUED. This checkpoint update will supersede that head and require a new exact-head run.
 
 No PR merged. No original media modified. No YouTube upload, public publishing or deployment performed. Device verification remains pending.
+
+
+## Follow-up engineering — safe new-output MP4 remux — 2026-11-19
+
+### PR #193 changes
+- Added `scripts/safe_media_remux.py` on branch `feature/production-media-provenance`.
+- Added `tests/test_safe_media_remux.py` for:
+  - successful remux to a distinct new output and unchanged source SHA-256;
+  - refusing an existing destination without overwriting it;
+  - refusing source==destination;
+  - refusing symlinked source;
+  - discarding output when stream layout changes.
+- Remux uses FFmpeg stream copy, validates FFprobe stream signature and duration, decodes the new video stream, verifies source SHA-256 before/after and atomically publishes via a no-overwrite hard link.
+- Strict limitation: this is a container remux only. It cannot recreate black/missing frames, recover absent scene images, or repair damaged encoded visual content. Never run it on the three historical black files expecting black pixels to become visible.
+- Commits: `245f4f214f2a5c29d4c8fe6a84325b55057b9e37`, `d358b1eeca69d75107be9af2551c07b56e1d1b7b`, `03c012fccaff4d734bdf34fcebcdd695b292cb35`.
+- Latest PR #193 head: `03c012fccaff4d734bdf34fcebcdd695b292cb35`. Exact-head SINTU CI `44438333607` was in progress; Python matrix/security jobs were starting. New remux tests are not yet counted as PASS.
+
+### Checkpoint validation
+- Prior checkpoint head `d1b0b4cd2cb8ecfe9cf2b76d0a62258ddaa7740e`: exact-head SINTU CI `44437517889` is now **SUCCESS (7/7)** — Python 3.11–3.14, dependency audit, production Docker/health and offline branded-video E2E/motion audit.
+- This update changes the checkpoint again; a fresh exact-head CI run is required.
+
+### Current next tasks
+1. Complete PR #193 exact-head CI `44438333607`; fix any remux test or implementation failure based on logs.
+2. Add a fail-closed forensic status gate to every media upload/publishing entry point, with regression tests; keep all publishing disabled.
+3. Implement durable offline media import/index/queue/retry/sync and native Android media-library/background recovery.
+4. Run Android APK on the physical phone; diagnostic command is `python scripts/android_device_diagnostic.py --base-url http://127.0.0.1:8000`. The diagnostic is read-only and does not test login/gallery.
+5. Historical black MP4 root cause remains unproven; re-hash and correlate original phone-side files only when actual device files/reports are available.
+
+No PR merged, no deployment or publishing, and no original media modified.
