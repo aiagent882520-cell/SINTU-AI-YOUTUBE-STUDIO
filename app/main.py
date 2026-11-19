@@ -60,7 +60,7 @@ from .security import RequestRateLimiter, client_address_allowed, same_origin_re
 from .backup_restore import verify_backup, BackupValidationError, snapshot_database
 from .flow_auto_import import start_flow_auto_import, stop_flow_auto_import, flow_auto_import_status
 from .termux_bridge import router as termux_bridge_router
-from .youtube_upload import transfer_resumable_upload, sha256_file as youtube_sha256_file, validate_session_uri, validate_state_transition, UploadProtocolError
+from .youtube_upload import transfer_resumable_upload, sha256_file as youtube_sha256_file, validate_session_uri, validate_state_transition, UploadProtocolError, UPLOAD_STATES
 from .offline_media import (OfflineMediaError, MAX_MEDIA_BYTES, import_media_file, list_offline_media, get_offline_media_path)
 from .resumable_media_upload import (ResumableUploadError, create_upload, get_upload, append_upload_chunk, complete_upload)
 
