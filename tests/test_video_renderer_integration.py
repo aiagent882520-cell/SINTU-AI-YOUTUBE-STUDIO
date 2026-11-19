@@ -177,7 +177,7 @@ def test_mixed_timeline_renders_ordered_still_and_video_items(tmp_path, monkeypa
         ],
         "Mixed timeline",
         ["Still scene", "Video scene"],
-        resolution="160x284",
+        resolution="720x1280",
         fps=24,
         quality="standard",
         transition="cut",
@@ -508,7 +508,7 @@ def test_mixed_timeline_mixes_source_voice_music_and_burns_subtitles(tmp_path, m
         music_volume=0.12,
         subtitles=["पहला दृश्य", "दूसरा दृश्य"],
         transitions=["cut", "fade"],
-        resolution="720x1280",
+        resolution="160x284",
         fps=24,
         quality="standard",
     )
