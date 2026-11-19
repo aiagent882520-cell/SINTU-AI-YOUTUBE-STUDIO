@@ -1,10 +1,11 @@
-const CACHE_NAME = "sintu-studio-shell-v14";
+const CACHE_NAME = "sintu-studio-shell-v15";
 const APP_SHELL = [
   "/login",
   "/static/manifest.json",
   "/static/style.css",
   "/static/app.js",
   "/static/production_studio.js",
+  "/static/offline_media.js",
   "/static/production_studio.css",
   "/static/offline.html",
   "/static/icon.svg"
