@@ -7,7 +7,6 @@ def test_ai_video_endpoint_serves_single_byte_ranges(tmp_path, monkeypatch):
     video_id = "a" * 32
     payload = bytes(range(256)) * 4
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "false")
-    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "false")
     monkeypatch.setattr(main, "AI_VIDEO_DIR", tmp_path)
     (tmp_path / f"{video_id}.mp4").write_bytes(payload)
     client = TestClient(main.app)
