@@ -177,7 +177,7 @@ def test_mixed_timeline_renders_ordered_still_and_video_items(tmp_path, monkeypa
         ],
         "Mixed timeline",
         ["Still scene", "Video scene"],
-        resolution="720x1280",
+        resolution="160x284",
         fps=24,
         quality="standard",
         transition="cut",
@@ -465,6 +465,11 @@ def test_mixed_timeline_mixes_source_voice_music_and_burns_subtitles(tmp_path, m
     if not video_renderer._ffmpeg_supports_subtitles(ffmpeg):
         pytest.skip("FFmpeg libass subtitles filter is unavailable")
     monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
+    # Keep this full FFmpeg graph test CPU-bounded; production portrait dimensions
+    # are exercised by the offline end-to-end render job.
+    test_profiles = dict(video_renderer.OUTPUT_PROFILES)
+    test_profiles["160x284"] = (160, 284)
+    monkeypatch.setattr(video_renderer, "OUTPUT_PROFILES", test_profiles)
 
     source = tmp_path / "source-with-audio.mp4"
     generated = subprocess.run(
@@ -516,7 +521,7 @@ def test_mixed_timeline_mixes_source_voice_music_and_burns_subtitles(tmp_path, m
     assert result["audio"] == "source+voiceover+music"
     metadata = subprocess.run(
         [ffprobe, "-v", "error", "-show_entries",
-         "stream=codec_type,codec_name,sample_rate,channels",
+         "stream=codec_type,codec_name,sample_rate,channels,width,height",
          "-of", "json", str(output)],
         capture_output=True, text=True, timeout=30, check=False,
     )
