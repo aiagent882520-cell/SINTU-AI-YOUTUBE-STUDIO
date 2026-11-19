@@ -68,3 +68,17 @@ def test_render_queue_cancel_retry_and_running_safety(tmp_path, monkeypatch):
     studio_engine.update_render_item("owner", running["id"], "running")
     assert studio_engine.cancel_queued_render("owner", running["id"]) is None
     assert studio_engine.list_render_queue("owner")[0]["status"] == "running"
+
+
+def test_recover_interrupted_render_queue_marks_only_running_jobs_failed(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    queued = studio_engine.enqueue_render("owner", "project-1", {"title": "queued"})
+    running = studio_engine.enqueue_render("owner", "project-1", {"title": "interrupted"})
+    studio_engine.update_render_item("owner", running["id"], "running")
+    recovered = studio_engine.recover_interrupted_render_queue()
+    assert recovered == 1
+    items = {item["id"]: item for item in studio_engine.list_render_queue("owner")}
+    assert items[queued["id"]]["status"] == "queued"
+    assert items[running["id"]]["status"] == "failed"
+    assert items[running["id"]]["result"]["error_type"] == "server_restart"
+    assert items[running["id"]]["result"]["retryable"] is True
