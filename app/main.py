@@ -1670,8 +1670,16 @@ def _execute_studio_render_queue(owner: str, item_id: str):
         return
     try:
         with render_process.render_job(item_id):
-            result = render_video(RenderInput(**item["payload"]))
+            studio_engine.update_render_progress(owner, item_id, 0, "starting")
+            result = render_video(
+                RenderInput(**item["payload"]),
+                progress_callback=lambda percent: studio_engine.update_render_progress(owner, item_id, percent),
+            )
+        studio_engine.update_render_progress(owner, item_id, 99, "verifying")
         studio_engine.update_render_item(owner, item_id, "completed", result)
+        with studio_engine._db() as conn:
+            conn.execute("UPDATE studio_render_queue SET progress_json=? WHERE id=? AND owner=?",
+                         (json.dumps({"percent": 100, "stage": "completed", "updated_at": studio_engine._now()}), item_id, owner))
     except render_process.RenderProcessCancelled:
         try: studio_engine.update_render_item(owner, item_id, "cancelled", {"error": "Render cancelled by user."})
         except ValueError: pass
