@@ -49,3 +49,28 @@ def test_full_run_requires_every_checker_and_final_human_approval(tmp_path, monk
     assert run["status"] == "awaiting_human_approval"
     completed = studio_engine.approve_run("tester", run["id"], True, "Final review passed.")
     assert completed["status"] == "completed"
+
+
+def test_render_queue_transition_is_owner_scoped_and_single_claim(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    item = studio_engine.enqueue_render("owner", "project-1", {"scenes": ["one"]})
+    barrier = Barrier(2)
+
+    def claim():
+        barrier.wait(timeout=5)
+        try:
+            return studio_engine.update_render_item("owner", item["id"], "running")
+        except ValueError:
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: claim(), range(2)))
+
+    assert sum(result is not None for result in results) == 1
+    assert studio_engine.update_render_item("owner", item["id"], "completed", {"video_id": "safe"})["status"] == "completed"
+    assert studio_engine.update_render_item("other", item["id"], "failed") is None
+    with pytest.raises(ValueError, match="Invalid render queue status transition"):
+        studio_engine.update_render_item("owner", item["id"], "failed")
