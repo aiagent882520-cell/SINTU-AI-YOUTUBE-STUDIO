@@ -97,3 +97,34 @@ def test_offline_media_rejects_zero_and_over_limit_files(tmp_path, monkeypatch):
     monkeypatch.setattr(offline_media, "MAX_MEDIA_BYTES", 4)
     with pytest.raises(OfflineMediaError, match="size"):
         import_media_file(data_dir=tmp_path, source_path=source, filename="large.mp4")
+
+
+def test_offline_media_cleans_only_stale_interrupted_upload_parts(tmp_path):
+    import os
+    import time
+    from app.offline_media import list_offline_media
+    incoming = tmp_path / "offline_media" / ".incoming"
+    incoming.mkdir(parents=True)
+    stale = incoming / "old-upload.part"
+    stale.write_bytes(b"partial")
+    os.utime(stale, (time.time() - 90000, time.time() - 90000))
+    recent = incoming / "active-upload.part"
+    recent.write_bytes(b"still-active")
+    list_offline_media(data_dir=tmp_path)
+    assert not stale.exists()
+    assert recent.exists()
+
+
+def test_offline_media_ui_and_service_worker_include_persistent_queue(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    page = client.get("/")
+    assert page.status_code == 200
+    assert 'id="offlineMediaFiles"' in page.text
+    assert "/static/offline_media.js" in page.text
+    script = client.get("/static/offline_media.js")
+    assert script.status_code == 200
+    assert "indexedDB.open" in script.text
+    assert "/api/offline-media/import" in script.text
+    worker = client.get("/static/sw.js")
+    assert worker.status_code == 200
+    assert "/static/offline_media.js" in worker.text
