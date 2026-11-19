@@ -16,11 +16,22 @@ def client_for_test(tmp_path, monkeypatch):
     monkeypatch.setenv("SINTU_PRODUCTION_ENABLED", "true")
     monkeypatch.setenv("SINTU_EXTERNAL_PUBLISHING_ENABLED", "true")
     monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(main, "DATA_DIR", tmp_path)
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "test.sqlite3")
     main._LOGIN_LIMITER.reset()
     main._FIREWALL_LIMITER.reset()
     main.init_db()
     return TestClient(main.app)
+
+
+def write_test_quality_manifest(tmp_path, output_path):
+    import hashlib
+    run_id = hashlib.sha256(str(output_path).encode("utf-8")).hexdigest()[:32]
+    return main.write_render_manifest(
+        data_dir=tmp_path, run_id=run_id, format_id="test-format", topic="test",
+        output_path=output_path, asset_paths=[], quality_report={"verified": True},
+    )
+
 
 def test_health_and_catalog(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
@@ -1717,6 +1728,7 @@ def test_youtube_publish_completes_resumable_upload_and_records_history(tmp_path
     output_dir.mkdir()
     video_bytes = b"mock rendered mp4 bytes"
     (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
+    write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(main, "verify_publishable_mp4", lambda path: {"verified": True})
     monkeypatch.setattr(main, "_youtube_access_token", lambda *args, **kwargs: "mock-youtube-access-token")
@@ -1796,6 +1808,7 @@ def test_youtube_publish_resumes_persisted_session_after_process_restart(tmp_pat
     video_bytes = b"restart-resume-test-bytes"
     path = output_dir / (video_id + ".mp4")
     path.write_bytes(video_bytes)
+    write_test_quality_manifest(tmp_path, path)
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(main, "verify_publishable_mp4", lambda _: {"verified": True})
     monkeypatch.setattr(main, "_youtube_access_token", lambda *args, **kwargs: "refreshed-access-token")
@@ -1899,6 +1912,7 @@ def test_public_visibility_requires_one_time_bound_owner_approval(tmp_path, monk
     output_dir.mkdir()
     video_bytes = b"public-approval-test-video"
     (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
+    write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(main, "verify_publishable_mp4", lambda _: {"verified": True})
     monkeypatch.setattr(main, "_youtube_connection", lambda: {
@@ -2018,6 +2032,7 @@ def test_public_approval_revocation_and_expiry_block_upload_before_oauth(tmp_pat
     output_dir = tmp_path / "approval-revoke-renders"
     output_dir.mkdir()
     (output_dir / (video_id + ".mp4")).write_bytes(b"approval-revoke-test")
+    write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(main, "verify_publishable_mp4", lambda _: {"verified": True})
     monkeypatch.setattr(main, "_youtube_connection", lambda: {
@@ -2078,6 +2093,7 @@ def test_youtube_publish_blocks_same_file_across_different_calendar_items(tmp_pa
     output_dir.mkdir()
     video_bytes = b"same-content-across-calendar-items"
     (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
+    write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(main, "verify_publishable_mp4", lambda _: {"verified": True})
     monkeypatch.setattr(main, "_youtube_connection", lambda: {
@@ -3267,12 +3283,14 @@ def test_production_run_render_requires_approved_matching_format(tmp_path, monke
     state = {"status": "paused", "format_id": "youtube-shorts"}
     monkeypatch.setattr(main, "get_production_run", lambda value, owner=None: state if value == run_id and owner == "local" else None)
     monkeypatch.setattr(main, "render_video", lambda payload: {
-        "video_id": "b" * 32, "url": "/api/videos/" + "b" * 32,
-        "format": "MP4 / H.264"
+        "video_id": "b" * 32, "filename": "b" * 32 + ".mp4",
+        "url": "/api/videos/" + "b" * 32, "format": "MP4 / H.264",
+        "quality_report": {"verified": True}
     })
     monkeypatch.setattr(main, "attach_render_result", lambda value, result, owner=None: {
         "status": "completed", "result": {"video_rendered": True}
     })
+    monkeypatch.setattr(main, "write_render_manifest", lambda **kwargs: {"manifest_path": "production_manifests/test.json"})
     payload = {"title": "Hindi short", "scenes": ["Opening"], "format_id": "youtube-shorts", "image_ids": ["d" * 32]}
     assert client.post(f"/api/production/runs/{run_id}/render", json=payload).status_code == 409
     state["status"] = "completed"
@@ -3284,6 +3302,7 @@ def test_production_run_render_requires_approved_matching_format(tmp_path, monke
     response = client.post(f"/api/production/runs/{run_id}/render", json=payload)
     assert response.status_code == 200
     assert response.json()["render"]["video_id"] == "b" * 32
+    assert response.json()["render"]["provenance_manifest"] == "production_manifests/test.json"
     assert response.json()["published"] is False
 
 
@@ -3462,6 +3481,7 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
             "video_id": "d" * 32, "filename": "d" * 32 + ".mp4",
             "url": "/api/videos/" + "d" * 32, "resolution": kwargs["resolution"],
             "brand_watermark": "SINTU AI YOUTUBE STUDIO",
+            "quality_report": {"verified": True},
             "subtitles_burned_in": bool(kwargs.get("subtitles")),
             "sound_effects": bool(kwargs.get("sound_effects_enabled")),
             "sound_effect_cue_count": max(0, len(scenes) - 1)
@@ -3480,6 +3500,7 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
     monkeypatch.setattr(main, "IMAGE_DIR", image_dir)
     monkeypatch.setattr(main, "AUDIO_DIR", audio_dir)
     monkeypatch.setattr(main, "MUSIC_DIR", music_dir)
+    monkeypatch.setattr(main, "write_render_manifest", lambda **kwargs: {"manifest_path": "production_manifests/test.json"})
 
     response = client.post(f"/api/production/runs/{run_id}/produce-media", json={
         "scene_prompts": ["पुराने किले का सिनेमाई दृश्य", "रहस्यमयी जंगल का दृश्य"],
@@ -3487,6 +3508,7 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
     })
     assert response.status_code == 200, response.text
     body = response.json()
+    assert body["render"]["provenance_manifest"] == "production_manifests/test.json"
     assert body["video_rendered"] is True and body["published"] is False
     assert len(body["generated_images"]) == 2
     assert body["render"]["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
@@ -3540,6 +3562,7 @@ def test_production_media_pipeline_uses_approved_storyboard_when_scene_prompts_o
             "video_id": "d" * 32, "filename": "d" * 32 + ".mp4",
             "url": "/api/videos/" + "d" * 32, "resolution": kwargs["resolution"],
             "brand_watermark": "SINTU AI YOUTUBE STUDIO",
+            "quality_report": {"verified": True},
             "subtitles_burned_in": bool(kwargs.get("subtitles"))
         }
     monkeypatch.setattr(main, "render_storyboard", fake_render)
@@ -3553,6 +3576,7 @@ def test_production_media_pipeline_uses_approved_storyboard_when_scene_prompts_o
         (image_dir / (str(i).zfill(32) + ".jpg")).write_bytes(b"image")
     (audio_dir / ("b" * 32 + ".wav")).write_bytes(b"audio")
     (music_dir / ("c" * 32 + ".wav")).write_bytes(b"music")
+    monkeypatch.setattr(main, "write_render_manifest", lambda **kwargs: {"manifest_path": "production_manifests/test.json"})
 
     response = client.post(f"/api/production/runs/{run_id}/produce-media", json={})
     assert response.status_code == 200, response.text
@@ -3561,6 +3585,7 @@ def test_production_media_pipeline_uses_approved_storyboard_when_scene_prompts_o
         "घने जंगल में रहस्यमयी रास्ता, पेड़ों से छनती रोशनी, लो-एंगल कैमरा",
     ]
     assert response.json()["video_rendered"] is True
+    assert response.json()["render"]["provenance_manifest"] == "production_manifests/test.json"
     assert response.json()["published"] is False
     assert response.json()["render"]["subtitles_burned_in"] is True
     assert len(response.json()["subtitles"]) == 2
@@ -3761,6 +3786,7 @@ def test_youtube_publish_requires_approved_calendar_and_records_success(tmp_path
     video_id = "a" * 32
     video_bytes = b"fake-mp4-content"
     (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
+    write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
     future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
     created = client.post("/api/calendar", json={
         "title": "Approved upload test", "platform": "youtube_shorts",
@@ -4183,3 +4209,79 @@ def test_owner_can_explicitly_enable_production_and_publishing_gates(tmp_path, m
         "/api/admin/youtube/publish/1",
         params={"video_id": "c" * 32, "title": "Test"},
     ).status_code != 503
+
+
+def _create_approved_social_calendar_item(client, platform):
+    from datetime import datetime, timedelta, timezone
+    created = client.post("/api/calendar", json={
+        "title": "Quality gate route test", "platform": platform,
+        "prompt": "Must block before any external upload", 
+        "scheduled_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+    })
+    assert created.status_code == 200, created.text
+    calendar_id = created.json()["id"]
+    with main.db() as conn:
+        conn.execute("UPDATE content_calendar SET status='Approved' WHERE id=?", (calendar_id,))
+    return calendar_id
+
+
+def test_youtube_upload_route_blocks_mp4_without_persisted_quality_pass(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    calendar_id = _create_approved_social_calendar_item(client, "youtube")
+    video_id = "a" * 32
+    output_dir = tmp_path / "renders"
+    output_dir.mkdir()
+    (output_dir / (video_id + ".mp4")).write_bytes(b"valid-looking-but-unmanifested-mp4")
+    monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(main, "verify_publishable_mp4", lambda path: {"verified": True})
+    monkeypatch.setattr(main, "_youtube_connection", lambda: pytest.fail("quality gate must run before OAuth access"))
+    response = client.post(
+        f"/api/admin/youtube/publish/{calendar_id}?video_id={video_id}&title=Gate%20test"
+    )
+    assert response.status_code == 409
+    assert "matching pass provenance" in response.json()["detail"].lower()
+
+
+def test_facebook_upload_route_blocks_mp4_without_persisted_quality_pass(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    calendar_id = _create_approved_social_calendar_item(client, "facebook")
+    video_id = "d" * 32
+    output_dir = tmp_path / "renders"
+    output_dir.mkdir()
+    (output_dir / (video_id + ".mp4")).write_bytes(b"valid-looking-but-unmanifested-mp4")
+    monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(main, "verify_publishable_mp4", lambda path: {"verified": True})
+    monkeypatch.setattr(main, "_meta_connection", lambda: pytest.fail("quality gate must run before Meta OAuth access"))
+    response = client.post(
+        f"/api/admin/meta/facebook/publish/{calendar_id}?video_id={video_id}&title=Gate%20test"
+    )
+    assert response.status_code == 409
+    assert "matching pass provenance" in response.json()["detail"].lower()
+
+
+def test_tiktok_upload_route_blocks_mp4_without_persisted_quality_pass(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    calendar_id = _create_approved_social_calendar_item(client, "tiktok")
+    video_id = "e" * 32
+    output_dir = tmp_path / "renders"
+    output_dir.mkdir()
+    (output_dir / (video_id + ".mp4")).write_bytes(b"valid-looking-but-unmanifested-mp4")
+    monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
+    monkeypatch.setattr(main, "verify_publishable_mp4", lambda path: {"verified": True})
+    monkeypatch.setattr(main, "_tiktok_tokens", lambda: pytest.fail("quality gate must run before TikTok OAuth access"))
+    response = client.post(
+        f"/api/admin/tiktok/publish/{calendar_id}?video_id={video_id}&title=Gate%20test"
+    )
+    assert response.status_code == 409
+    assert "matching pass provenance" in response.json()["detail"].lower()
+
+
+def test_instagram_remote_url_route_is_fail_closed(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    calendar_id = _create_approved_social_calendar_item(client, "instagram")
+    monkeypatch.setattr(main, "_meta_connection", lambda: pytest.fail("remote URL route must remain blocked"))
+    response = client.post(
+        f"/api/admin/meta/instagram/publish/{calendar_id}?video_url=https%3A%2F%2Fcdn.example.test%2Fclip.mp4"
+    )
+    assert response.status_code == 409
+    assert "blocked" in response.json()["detail"].lower()

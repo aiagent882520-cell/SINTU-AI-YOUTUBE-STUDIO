@@ -52,6 +52,8 @@ from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable,
 from .image_generator import generate_image, image_status, ImageUnavailable, ImageGenerationFailed, IMAGE_DIR
 from .music_generator import generate_music, music_status, MusicUnavailable, MusicGenerationFailed
 from .video_generator import generate_video, video_status, VideoUnavailable, VideoGenerationFailed, AI_VIDEO_DIR
+from .media_provenance import write_render_manifest
+from .publishing_quality_gate import PublishingQualityError, require_publishable_provenance
 from .production_runtime import create_run as create_production_run, get_run as get_production_run, list_runs as list_production_runs, execute_run as execute_production_run, attach_render_result, recover_interrupted_runs
 from .earning_system import router as earning_router, sync_youtube_estimate
 from .security import RequestRateLimiter, client_address_allowed, same_origin_request
@@ -2167,7 +2169,10 @@ def youtube_public_approval_create(payload: YouTubePublicApprovalInput, request:
         raise HTTPException(status_code=413, detail="Rendered MP4 must be between 1 byte and 512 MiB.")
     try:
         verify_publishable_mp4(path)
+        require_publishable_provenance(data_dir=DATA_DIR, output_path=path)
         file_hash = youtube_sha256_file(path)
+    except PublishingQualityError:
+        raise HTTPException(status_code=409, detail="Public approval blocked: matching PASS provenance and quality status are required.") from None
     except RendererUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
     except RenderFailed:
@@ -2272,7 +2277,10 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
         raise HTTPException(status_code=413, detail="MP4 size 1 byte se 512 MB ke beech honi chahiye.")
     try:
         verify_publishable_mp4(path)
+        require_publishable_provenance(data_dir=DATA_DIR, output_path=path)
         file_hash = youtube_sha256_file(path)
+    except PublishingQualityError:
+        raise HTTPException(status_code=409, detail="Publishing blocked: matching PASS provenance and quality status are required.") from None
     except RendererUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
     except RenderFailed:
@@ -2662,6 +2670,9 @@ def meta_facebook_publish(calendar_id:int, video_id:str=Query(...,min_length=32,
         raise HTTPException(status_code=413,detail="MP4 size 1 byte se 512 MB ke beech honi chahiye.")
     try:
         verify_publishable_mp4(path)
+        require_publishable_provenance(data_dir=DATA_DIR, output_path=path)
+    except PublishingQualityError:
+        raise HTTPException(status_code=409,detail="Publishing blocked: matching PASS provenance and quality status are required.") from None
     except RendererUnavailable as exc:
         raise HTTPException(status_code=503,detail=str(exc)) from None
     except RenderFailed:
@@ -2703,6 +2714,7 @@ def meta_instagram_publish(calendar_id:int,video_url:str=Query(...,min_length=12
         item=conn.execute("SELECT id,status,platform FROM content_calendar WHERE id=?",(calendar_id,)).fetchone()
     if not item or item["status"]!="Approved" or item["platform"]!="instagram":
         raise HTTPException(status_code=409,detail="Instagram calendar item approved hona chahiye.")
+    raise HTTPException(status_code=409, detail="Instagram remote-URL publishing is blocked until the source can be matched to a SINTU PASS provenance and quality record.")
     connection=_meta_connection()
     if not connection or not connection["instagram_user_id"]:
         raise HTTPException(status_code=409,detail="Linked Instagram Professional (Business/Creator) account nahi mila.")
@@ -2899,6 +2911,9 @@ def tiktok_publish(calendar_id:int,video_id:str=Query(...,min_length=32,max_leng
         raise HTTPException(status_code=413,detail="MP4 size 1 byte se 512 MB ke beech honi chahiye.")
     try:
         verify_publishable_mp4(path)
+        require_publishable_provenance(data_dir=DATA_DIR, output_path=path)
+    except PublishingQualityError:
+        raise HTTPException(status_code=409,detail="Publishing blocked: matching PASS provenance and quality status are required.") from None
     except RendererUnavailable as exc:
         raise HTTPException(status_code=503,detail=str(exc)) from None
     except RenderFailed:
@@ -4817,6 +4832,37 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 sound_effects_volume=payload.sound_effects_volume,
                 fps=payload.fps, quality=payload.quality,
             )
+        try:
+            quality_report = rendered.get("quality_report") if isinstance(rendered, dict) else None
+            if not isinstance(quality_report, dict) or quality_report.get("verified") is not True:
+                raise RenderFailed("Renderer did not return a verified quality report; provenance PASS withheld.")
+            manifest = write_render_manifest(
+                data_dir=DATA_DIR,
+                run_id=run_id,
+                format_id=run["format_id"],
+                topic=run.get("topic", ""),
+                output_path=OUTPUT_DIR / rendered["filename"],
+                asset_paths=[*image_paths, audio_path, music_matches[0]],
+                settings={
+                    "resolution": resolution,
+                    "fps": payload.fps,
+                    "quality": payload.quality,
+                    "seconds_per_scene": payload.seconds_per_scene,
+                    "scene_count": len(scene_prompts),
+                    "subtitles_burned_in": bool(subtitle_lines),
+                },
+                engines={
+                    "image": str((image_result.get("provider") if not use_procedural_2d else "SINTU Procedural 2D Animation") or "local"),
+                    "voice": str(voice_result.get("provider") or "local"),
+                    "music": str(music_result.get("provider") or "local"),
+                    "renderer": "FFmpeg",
+                },
+                quality_report=quality_report,
+            )
+        except Exception as exc:
+            (OUTPUT_DIR / rendered["filename"]).unlink(missing_ok=True)
+            raise RenderFailed("Could not persist the render provenance manifest; the MP4 result is withheld.") from exc
+        rendered["provenance_manifest"] = manifest["manifest_path"]
         updated = attach_render_result(run_id, rendered, owner)
         return {
             "run_id": run_id, "status": updated["status"],
@@ -4860,12 +4906,72 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput, 
     if not payload.image_ids and not payload.video_ids and not payload.timeline and not payload.timeline_items:
         raise HTTPException(status_code=400, detail="Final production render requires supplied scene images, AI video clips or a mixed media timeline; scene descriptions alone are not visuals.")
     rendered = render_video(payload)
+    render_data = rendered.get("render", rendered) if isinstance(rendered, dict) else rendered
+    asset_paths = []
+    for image_id in payload.image_ids:
+        asset_paths.append(IMAGE_DIR / f"{image_id}.jpg")
+    for video_id in payload.video_ids:
+        asset_paths.append(AI_VIDEO_DIR / f"{video_id}.mp4")
+    for item in payload.timeline_items:
+        asset_paths.append(
+            (IMAGE_DIR / f"{item.asset_id}.jpg") if item.kind == "image"
+            else (AI_VIDEO_DIR / f"{item.asset_id}.mp4")
+        )
+    for entry in payload.timeline:
+        image_match = re.fullmatch(r"image:([a-f0-9]{32}):\\d{1,2}:(?:cut|fade)", entry.strip())
+        video_match = re.fullmatch(r"video:([a-f0-9]{32}):.*", entry.strip())
+        if image_match:
+            asset_paths.append(IMAGE_DIR / f"{image_match.group(1)}.jpg")
+        elif video_match:
+            asset_paths.append(AI_VIDEO_DIR / f"{video_match.group(1)}.mp4")
+    for item in (rendered.get("scene_images") or []):
+        image_id = item.get("image_id") if isinstance(item, dict) else None
+        if isinstance(image_id, str) and re.fullmatch(r"[a-f0-9]{32}", image_id):
+            asset_paths.append(IMAGE_DIR / f"{image_id}.jpg")
+    if payload.audio_id:
+        audio_mp3 = AUDIO_DIR / f"{payload.audio_id}.mp3"
+        asset_paths.append(audio_mp3 if audio_mp3.is_file() else AUDIO_DIR / f"{payload.audio_id}.wav")
+    if payload.music_id:
+        music_matches = list(MUSIC_DIR.glob(payload.music_id + ".*"))
+        if music_matches:
+            asset_paths.append(music_matches[0])
+    try:
+        quality_report = render_data.get("quality_report") if isinstance(render_data, dict) else None
+        if not isinstance(quality_report, dict) or quality_report.get("verified") is not True:
+            raise RenderFailed("Renderer did not return a verified quality report; provenance PASS withheld.")
+        manifest = write_render_manifest(
+            data_dir=DATA_DIR,
+            run_id=run_id,
+            format_id=run["format_id"],
+            topic=run.get("topic", ""),
+            output_path=OUTPUT_DIR / render_data["filename"],
+            asset_paths=asset_paths,
+            settings={
+                "resolution": payload.resolution or "format-default",
+                "fps": payload.fps,
+                "quality": payload.quality,
+                "seconds_per_scene": payload.seconds_per_scene,
+                "scene_count": len(payload.scenes),
+                "transition": payload.transition,
+                "motion": payload.motion,
+                "auto_generate_images": payload.auto_generate_images,
+            },
+            engines={"renderer": "FFmpeg", "image": "ComfyUI/local-or-procedural-if-requested",
+                     "video": "supplied-local-clips-or-procedural-2D-if-requested"},
+            quality_report=quality_report,
+        )
+    except Exception as exc:
+        filename = render_data.get("filename") if isinstance(render_data, dict) else None
+        if isinstance(filename, str) and filename and Path(filename).name == filename:
+            (OUTPUT_DIR / filename).unlink(missing_ok=True)
+        raise HTTPException(status_code=502, detail="Render provenance could not be saved; MP4 result is withheld.") from exc
+    render_data["provenance_manifest"] = manifest["manifest_path"]
     try:
         updated = attach_render_result(run_id, rendered, owner)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return {"run_id": run_id, "status": updated["status"], "render": rendered,
-            "published": False, "detail": "Final MP4 rendered and attached. YouTube publishing still requires separate approval."}
+            "published": False, "detail": "Final MP4 rendered, provenance recorded and attached. YouTube publishing still requires separate approval."}
 
 
 @app.get("/api/production/runs/{run_id}")

@@ -332,6 +332,94 @@ def find_backups(path: Path) -> list[dict]:
     return sorted(found, key=lambda item: item["pre_repair_mtime_utc"], reverse=True)
 
 
+def _safe_data_path(relative: str) -> Path | None:
+    """Resolve a manifest-relative path without allowing absolute or traversal paths."""
+    if not isinstance(relative, str) or not relative or chr(92) in relative:
+        return None
+    candidate = Path(relative)
+    if candidate.is_absolute() or any(part in {"", ".", ".."} for part in candidate.parts):
+        return None
+    root = DATA_DIR.resolve()
+    resolved = (root / candidate).resolve()
+    if not resolved.is_relative_to(root):
+        return None
+    return resolved
+
+
+def _verify_manifest_input(record: dict) -> dict:
+    relative = record.get("path")
+    candidate = _safe_data_path(relative)
+    result = {
+        "path": relative if isinstance(relative, str) else "",
+        "expected_sha256": record.get("sha256"),
+        "actual_sha256": None,
+        "exists": False,
+        "hash_match": False,
+    }
+    if candidate is None:
+        result["error"] = "unsafe manifest path"
+        return result
+    original = DATA_DIR / relative
+    if original.is_symlink() or not candidate.is_file():
+        result["error"] = "source asset missing or unsafe"
+        return result
+    try:
+        actual = sha256_file(candidate)
+        result.update({
+            "exists": True,
+            "actual_sha256": actual,
+            "hash_match": actual == record.get("sha256"),
+            "size_bytes": candidate.stat().st_size,
+        })
+    except OSError:
+        result["error"] = "source asset could not be read"
+    return result
+
+
+def find_render_manifests(path: Path, known_hashes: set[str] | None = None) -> list[dict]:
+    """Find only provenance manifests whose output hash matches this MP4 or a backup."""
+    manifest_dir = DATA_DIR / "production_manifests"
+    if manifest_dir.is_symlink() or not manifest_dir.is_dir():
+        return []
+    current_hash = sha256_file(path)
+    hashes = known_hashes or {current_hash}
+    matches = []
+    for manifest_path in sorted(manifest_dir.glob("*.json"))[:1000]:
+        if manifest_path.is_symlink() or not manifest_path.is_file():
+            continue
+        try:
+            if manifest_path.stat().st_size > 1_000_000:
+                continue
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            continue
+        output = manifest.get("output") if isinstance(manifest, dict) else None
+        if not isinstance(output, dict):
+            continue
+        output_path = output.get("path")
+        safe_output = _safe_data_path(output_path) if isinstance(output_path, str) else None
+        output_hash = output.get("sha256")
+        if (safe_output is None or Path(output_path).name != path.name
+                or not output_path.startswith("generated_videos/")
+                or not isinstance(output_hash, str) or output_hash not in hashes):
+            continue
+        inputs = manifest.get("inputs", [])
+        if not isinstance(inputs, list):
+            inputs = []
+        matches.append({
+            "manifest_path": str(manifest_path.relative_to(DATA_DIR)),
+            "created_at": manifest.get("created_at"),
+            "run_id": manifest.get("run_id"),
+            "format_id": manifest.get("format_id"),
+            "matched_output_sha256": output_hash,
+            "matched_copy": "current-file" if output_hash == current_hash else "pre-repair-backup",
+            "engines": manifest.get("engines", {}) if isinstance(manifest.get("engines"), dict) else {},
+            "settings": manifest.get("settings", {}) if isinstance(manifest.get("settings"), dict) else {},
+            "inputs": [_verify_manifest_input(item) for item in inputs if isinstance(item, dict)],
+        })
+    return matches
+
+
 def parse_creation_time(value: str | None) -> float | None:
     if not value:
         return None
@@ -634,7 +722,10 @@ def inspect_video(path: Path) -> dict:
         and pixel_summary.get("near_black_sample_count", 0) == 5
     )
 
+    file_sha256 = sha256_file(path)
     backups = find_backups(path)
+    known_hashes = {file_sha256, *(item.get("sha256") for item in backups if item.get("sha256"))}
+    render_provenance = find_render_manifests(path, known_hashes)
     creation_epoch = parse_creation_time(info.get("container_creation_time"))
     if creation_epoch is not None:
         reference_epoch = creation_epoch
@@ -650,9 +741,10 @@ def inspect_video(path: Path) -> dict:
         "readable": os.access(path, os.R_OK),
         "permissions_octal": oct(stat.st_mode & 0o777),
         "size_bytes": stat.st_size,
-        "sha256": sha256_file(path),
+        "sha256": file_sha256,
         "modified_utc": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
         "pre_repair_backups": backups,
+        "render_provenance": render_provenance,
         "asset_reference_time_utc": datetime.fromtimestamp(reference_epoch, timezone.utc).isoformat() if reference_epoch else None,
         "asset_reference_time_source": reference_source,
         "ffprobe_exit": probe["returncode"], "metadata": info,
@@ -753,6 +845,18 @@ def compact_forensic_summary(report: dict) -> dict:
                 for backup in item.get("pre_repair_backups", [])
             ],
             "reference_time": item.get("asset_reference_time_utc"),
+            "provenance": [
+                {
+                    "manifest": match.get("manifest_path"),
+                    "run_id": match.get("run_id"),
+                    "format_id": match.get("format_id"),
+                    "matched_copy": match.get("matched_copy"),
+                    "engines": match.get("engines"),
+                    "input_hashes_match": bool(match.get("inputs")) and all(asset.get("hash_match") for asset in match.get("inputs", [])),
+                    "input_count": len(match.get("inputs", [])),
+                }
+                for match in item.get("render_provenance", [])
+            ],
         })
     environment = report.get("environment") or {}
     ffmpeg = environment.get("ffmpeg") or {}

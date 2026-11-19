@@ -362,7 +362,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         raise RenderFailed(
             f"Visual quality check failed: {visible}/{len(sampled)} sampled frames contain visible image content."
         )
-    verified = {"duration_seconds": duration, "video_duration_seconds": video_duration,
+    verified = {"verified": True, "duration_seconds": duration, "video_duration_seconds": video_duration,
                 "frame_count": frame_count, "fps": actual_fps,
                 "resolution": f"{width}x{height}", "video_codec": codec, "audio": has_audio,
                 "black_intervals": black_intervals,
@@ -777,6 +777,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         "motion": motion,
         "scene_images": len(image_paths),
         "motion_audit": (verified or {}).get("motion_audit"),
+        "quality_report": verified,
         "subtitles_burned_in": bool(subtitle_file),
         "brand_watermark": "SINTU AI YOUTUBE STUDIO",
         "format": "MP4 / H.264",
