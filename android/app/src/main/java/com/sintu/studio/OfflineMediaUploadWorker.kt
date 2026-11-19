@@ -15,6 +15,8 @@ import androidx.work.workDataOf
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.RandomAccessFile
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -24,16 +26,24 @@ import retrofit2.HttpException
 internal fun isRetryableOfflineUploadHttpStatus(code: Int): Boolean =
     code == 408 || code == 429 || code in 500..599
 
-/**
- * Resumable across process death at the job level: WorkManager persists the request and retries
- * the whole file transfer when connectivity returns. Individual uploads are streamed from a
- * temporary file; chunk-level resume is intentionally not claimed.
- */
-class OfflineMediaUploadWorker(
-    appContext: Context,
-    params: WorkerParameters
-) : CoroutineWorker(appContext, params) {
+internal fun sha256Hex(bytes: ByteArray): String =
+    MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
+internal fun sha256File(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().buffered().use { input ->
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            digest.update(buffer, 0, count)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
+/** WorkManager persists the job and the server session ID; each retry resumes from its verified offset. */
+class OfflineMediaUploadWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val rawUri = inputData.getString(KEY_URI) ?: return@withContext Result.failure(failureData("Missing media URI."))
         val filename = inputData.getString(KEY_FILENAME)?.takeIf { it.isNotBlank() }
@@ -45,9 +55,10 @@ class OfflineMediaUploadWorker(
         if (uri.scheme != "content") return@withContext Result.failure(failureData("Only Android document-provider URIs are accepted."))
 
         val baseUrl = applicationContext.getSharedPreferences("sintu_app", Context.MODE_PRIVATE)
-            .getString("api_base_url", "http://127.0.0.1:8000/")
-            ?: "http://127.0.0.1:8000/"
+            .getString("api_base_url", "http://127.0.0.1:8000/") ?: "http://127.0.0.1:8000/"
         val temp = File(applicationContext.cacheDir, "offline-media-$id.part")
+        val sessionPrefs = applicationContext.getSharedPreferences("sintu_upload_sessions", Context.MODE_PRIVATE)
+        val sessionKey = "upload_$id"
         try {
             applicationContext.contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(temp).use { output ->
@@ -58,33 +69,71 @@ class OfflineMediaUploadWorker(
                         val count = input.read(buffer)
                         if (count < 0) break
                         total += count
-                        if (total > MAX_BYTES) {
-                            return@withContext Result.failure(failureData("Media exceeds the 256 MiB upload limit."))
-                        }
+                        if (total > MAX_BYTES) return@withContext Result.failure(failureData("Media exceeds the 256 MiB upload limit."))
                         output.write(buffer, 0, count)
                     }
                     output.fd.sync()
                 }
             } ?: return@withContext Result.failure(failureData("Android cannot read the selected media URI. Re-select the file."))
-            if (!temp.isFile || temp.length() <= 0L) {
-                return@withContext Result.failure(failureData("Selected media file is empty."))
-            }
+            if (!temp.isFile || temp.length() <= 0L) return@withContext Result.failure(failureData("Selected media file is empty."))
 
             val api = SintuApi(applicationContext, baseUrl)
-            val response = api.importOfflineMedia(temp, filename, mimeType)
-            val media = response["media"] as? Map<*, *>
-            val sha = media?.get("sha256")?.toString().orEmpty()
-            Result.success(workDataOf(
-                "sha256" to sha,
-                "duplicate" to (response["duplicate"] as? Boolean ?: false),
-                "filename" to filename
-            ))
-        } catch (error: HttpException) {
-            if (isRetryableOfflineUploadHttpStatus(error.code())) {
-                Result.retry()
-            } else {
-                Result.failure(failureData(error.message().take(300)))
+            val fileSha = sha256File(temp)
+            var uploadId = sessionPrefs.getString(sessionKey, null)
+            var status: Map<String, Any?>? = null
+            if (uploadId != null) {
+                try { status = api.offlineMediaUploadStatus(uploadId) }
+                catch (error: HttpException) {
+                    if (error.code() == 404) { uploadId = null } else throw error
+                }
             }
+            if (uploadId == null) {
+                val created = api.createOfflineMediaUpload(filename, temp.length(), fileSha)
+                uploadId = created["upload_id"]?.toString()
+                    ?: throw IllegalStateException("Server did not return an upload session ID.")
+                sessionPrefs.edit().putString(sessionKey, uploadId).apply()
+                status = api.offlineMediaUploadStatus(uploadId)
+            }
+            if (status?.get("sha256")?.toString() != fileSha) {
+                throw IllegalStateException("Saved upload session belongs to different media content.")
+            }
+            if (status?.get("size_bytes").asLongOrNull() != temp.length()) {
+                throw IllegalStateException("Saved upload session does not match the selected media size.")
+            }
+            val activeUploadId = uploadId ?: throw IllegalStateException("Server did not provide an upload session ID.")
+            var offset = status?.get("offset").asLongOrNull() ?: 0L
+            if (offset !in 0..temp.length()) throw IllegalStateException("Server returned an invalid upload offset.")
+            RandomAccessFile(temp, "r").use { source ->
+                while (offset < temp.length()) {
+                    if (isStopped) return@withContext Result.retry()
+                    val count = minOf(CHUNK_BYTES.toLong(), temp.length() - offset).toInt()
+                    val bytes = ByteArray(count)
+                    source.seek(offset)
+                    source.readFully(bytes)
+                    try {
+                        val response = api.uploadOfflineMediaChunk(activeUploadId, offset, bytes, sha256Hex(bytes))
+                        offset = response["offset"].asLongOrNull()
+                            ?: throw IllegalStateException("Server did not confirm the chunk offset.")
+                    } catch (conflict: HttpException) {
+                        if (conflict.code() != 409) throw conflict
+                        val refreshed = api.offlineMediaUploadStatus(activeUploadId)
+                        val serverOffset = refreshed["offset"].asLongOrNull()
+                            ?: throw IllegalStateException("Server did not return a resume offset.")
+                        if (serverOffset == offset) throw IllegalStateException("Upload offset conflict could not be reconciled.")
+                        offset = serverOffset
+                    }
+                    if (offset !in 0..temp.length()) throw IllegalStateException("Server returned an invalid upload offset.")
+                }
+            }
+            val completed = api.completeOfflineMediaUpload(activeUploadId)
+            val media = completed["media"] as? Map<*, *>
+            val sha = media?.get("sha256")?.toString().orEmpty()
+            if (sha != fileSha) throw IllegalStateException("Server completed the upload with an unexpected SHA-256.")
+            sessionPrefs.edit().remove(sessionKey).apply()
+            Result.success(workDataOf("sha256" to sha, "duplicate" to (completed["duplicate"] as? Boolean ?: false), "filename" to filename))
+        } catch (error: HttpException) {
+            if (isRetryableOfflineUploadHttpStatus(error.code()) || error.code() == 409) Result.retry()
+            else Result.failure(failureData(error.message().take(300)))
         } catch (error: IOException) {
             Result.retry()
         } catch (error: SecurityException) {
@@ -96,6 +145,7 @@ class OfflineMediaUploadWorker(
         }
     }
 
+    private fun Any?.asLongOrNull(): Long? = (this as? Number)?.toLong() ?: this?.toString()?.toLongOrNull()
     private fun failureData(message: String) = workDataOf(KEY_ERROR to message.take(500))
 
     companion object {
@@ -105,22 +155,16 @@ class OfflineMediaUploadWorker(
         const val KEY_MIME = "mime_type"
         const val KEY_ERROR = "error"
         private const val MAX_BYTES = 256L * 1024L * 1024L
+        private const val CHUNK_BYTES = 4 * 1024 * 1024
 
         fun enqueue(context: Context, uri: Uri, filename: String, mimeType: String): UUID {
             require(uri.scheme == "content") { "Only Android document-provider URIs are supported." }
             require(filename.isNotBlank() && filename.length <= 180) { "Invalid media filename." }
             val request = OneTimeWorkRequestBuilder<OfflineMediaUploadWorker>()
-                .setInputData(Data.Builder()
-                    .putString(KEY_URI, uri.toString())
-                    .putString(KEY_FILENAME, filename)
-                    .putString(KEY_MIME, mimeType)
-                    .build())
-                .setConstraints(Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .build())
+                .setInputData(Data.Builder().putString(KEY_URI, uri.toString()).putString(KEY_FILENAME, filename).putString(KEY_MIME, mimeType).build())
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.SECONDS)
-                .addTag(TAG)
-                .build()
+                .addTag(TAG).build()
             WorkManager.getInstance(context.applicationContext)
                 .enqueueUniqueWork("sintu-offline-media-${request.id}", ExistingWorkPolicy.KEEP, request)
             return request.id
