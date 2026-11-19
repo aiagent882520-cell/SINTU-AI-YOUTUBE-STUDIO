@@ -247,6 +247,9 @@
       <div id="youtubeConnectionStatus" class="muted" role="status" aria-live="polite">Checking YouTube setup…</div>
       <div class="actions"><button id="youtubeConnect" type="button">Connect YouTube Channel</button><button id="youtubeDisconnect" class="secondary" type="button" hidden>Disconnect</button></div>
       <p class="foot">Connect karne ke liye Google Cloud Console mein YouTube Data API v3 enable karein, OAuth Web Client banayein aur server secrets set karein. Upload default Private rahega; public/unlisted sirf admin ke explicit selection par. YouTube quota limits apply.</p>
+      <div class="panel-head"><div><h3>Resumable Upload History</h3><p>Latest upload jobs, acknowledged progress and processing status.</p></div><button id="youtubeUploadHistoryRefresh" class="secondary" type="button">Refresh history</button></div>
+      <div id="youtubeUploadHistory" class="integration-cards" aria-live="polite"></div>
+      <p id="youtubeUploadHistoryNotice" class="muted" role="status" aria-live="polite">Loading upload history…</p>
     </section>
     <section class="panel" id="metaAdminPanel" hidden>
       <div class="panel-head"><div><h2>Instagram & Facebook Connection</h2><p>Meta OAuth, Facebook Page video aur Instagram Reels publishing.</p></div><button id="metaRefresh" class="secondary" type="button">Refresh</button></div>
