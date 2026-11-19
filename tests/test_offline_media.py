@@ -26,6 +26,19 @@ def _client(tmp_path, monkeypatch):
     return TestClient(main.app)
 
 
+
+def _append_resumable_chunk_in_process(args):
+    data_dir, upload_id, payload = args
+    from app.resumable_media_upload import ResumableUploadError, append_upload_chunk
+    try:
+        return append_upload_chunk(
+            data_dir=Path(data_dir), upload_id=upload_id, offset=0,
+            chunk=payload, chunk_sha256=hashlib.sha256(payload).hexdigest(),
+        )
+    except ResumableUploadError as exc:
+        return str(exc)
+
+
 def test_offline_media_api_imports_deduplicates_lists_and_downloads(tmp_path, monkeypatch):
     client = _client(tmp_path, monkeypatch)
     payload = b"offline-mp4-content"
@@ -129,3 +142,139 @@ def test_offline_media_refuses_same_size_corrupt_unindexed_destination(tmp_path)
     retry.write_bytes(b"expected-content")
     with pytest.raises(OfflineMediaError, match="hash mismatch"):
         import_media_file(data_dir=tmp_path, source_path=retry, filename="clip.mp4")
+
+def test_resumable_upload_accepts_ordered_verified_chunks_and_completes_idempotently(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    payload = b"resumable-video-payload"
+    digest = hashlib.sha256(payload).hexdigest()
+    created = client.post(f"/api/offline-media/uploads?filename=clip.mp4&size_bytes={len(payload)}&sha256={digest}")
+    assert created.status_code == 201, created.text
+    upload_id = created.json()["upload_id"]
+    split = 9
+    first = payload[:split]
+    response = client.put(f"/api/offline-media/uploads/{upload_id}/chunks?offset=0", content=first, headers={"X-Chunk-SHA256": hashlib.sha256(first).hexdigest()})
+    assert response.status_code == 200, response.text
+    assert response.json()["offset"] == split
+    conflict = client.put(f"/api/offline-media/uploads/{upload_id}/chunks?offset=0", content=first, headers={"X-Chunk-SHA256": hashlib.sha256(first).hexdigest()})
+    assert conflict.status_code == 409
+    rest = payload[split:]
+    appended = client.put(f"/api/offline-media/uploads/{upload_id}/chunks?offset={split}", content=rest, headers={"X-Chunk-SHA256": hashlib.sha256(rest).hexdigest()})
+    assert appended.status_code == 200
+    completed = client.post(f"/api/offline-media/uploads/{upload_id}/complete")
+    assert completed.status_code == 201, completed.text
+    assert completed.json()["media"]["sha256"] == digest
+    again = client.post(f"/api/offline-media/uploads/{upload_id}/complete")
+    assert again.status_code == 201
+    assert again.json()["media"]["sha256"] == digest
+
+def test_resumable_upload_rejects_bad_chunk_hash_and_incomplete_completion(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    payload = b"integrity-check"
+    digest = hashlib.sha256(payload).hexdigest()
+    created = client.post(f"/api/offline-media/uploads?filename=clip.mp4&size_bytes={len(payload)}&sha256={digest}")
+    upload_id = created.json()["upload_id"]
+    bad = client.put(f"/api/offline-media/uploads/{upload_id}/chunks?offset=0", content=payload, headers={"X-Chunk-SHA256": "0" * 64})
+    assert bad.status_code == 400
+    incomplete = client.post(f"/api/offline-media/uploads/{upload_id}/complete")
+    assert incomplete.status_code == 409
+
+def test_resumable_upload_rejects_wrong_final_sha256(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    payload = b"wrong-final-digest"
+    created = client.post(f"/api/offline-media/uploads?filename=clip.mp4&size_bytes={len(payload)}&sha256=" + "0" * 64)
+    upload_id = created.json()["upload_id"]
+    chunk = client.put(f"/api/offline-media/uploads/{upload_id}/chunks?offset=0", content=payload, headers={"X-Chunk-SHA256": hashlib.sha256(payload).hexdigest()})
+    assert chunk.status_code == 200
+    complete = client.post(f"/api/offline-media/uploads/{upload_id}/complete")
+    assert complete.status_code == 400
+
+
+def test_resumable_upload_serializes_concurrent_chunk_writes(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from app.resumable_media_upload import (
+        ResumableUploadError, append_upload_chunk, create_upload,
+    )
+    first = b"first-chunk"
+    second = b"other-chunk"
+    create = create_upload(
+        data_dir=tmp_path, filename="clip.mp4",
+        size_bytes=len(first) + len(second),
+        sha256=hashlib.sha256(first + second).hexdigest(),
+    )
+    upload_id = create["upload_id"]
+
+    def append(payload):
+        try:
+            return append_upload_chunk(
+                data_dir=tmp_path, upload_id=upload_id, offset=0,
+                chunk=payload, chunk_sha256=hashlib.sha256(payload).hexdigest(),
+            )
+        except ResumableUploadError as exc:
+            return str(exc)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(append, (first, second)))
+    successes = [item for item in results if isinstance(item, dict)]
+    conflicts = [item for item in results if isinstance(item, str)]
+    assert len(successes) == 1
+    assert len(conflicts) == 1
+    assert "Offset conflict" in conflicts[0]
+    from app.resumable_media_upload import get_upload
+    assert get_upload(data_dir=tmp_path, upload_id=upload_id)["offset"] == len(first) or get_upload(data_dir=tmp_path, upload_id=upload_id)["offset"] == len(second)
+
+
+def test_resumable_upload_serializes_concurrent_process_writes(tmp_path):
+    from concurrent.futures import ProcessPoolExecutor
+    from app.resumable_media_upload import create_upload, get_upload
+
+    first = b"process-one-chunk"
+    second = b"process-two-chunk"
+    created = create_upload(
+        data_dir=tmp_path, filename="clip.mp4",
+        size_bytes=len(first) + len(second),
+        sha256=hashlib.sha256(first + second).hexdigest(),
+    )
+    upload_id = created["upload_id"]
+    args = [(str(tmp_path), upload_id, first), (str(tmp_path), upload_id, second)]
+
+    # Independent Python processes must coordinate through the on-disk flock,
+    # not a process-local threading mutex.
+    with ProcessPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(_append_resumable_chunk_in_process, args))
+
+    successes = [item for item in results if isinstance(item, dict)]
+    conflicts = [item for item in results if isinstance(item, str)]
+    assert len(successes) == 1
+    assert len(conflicts) == 1
+    assert "Offset conflict" in conflicts[0]
+    assert get_upload(data_dir=tmp_path, upload_id=upload_id)["offset"] in {len(first), len(second)}
+
+
+def test_resumable_unknown_session_does_not_create_session_directories(tmp_path):
+    from app.resumable_media_upload import ResumableUploadError, get_upload
+
+    unknown_id = "A" * 32
+    with pytest.raises(ResumableUploadError, match="not found"):
+        get_upload(data_dir=tmp_path, upload_id=unknown_id)
+
+    root = tmp_path / "offline_media" / ".resumable"
+    assert root.is_dir()
+    assert not (root / unknown_id).exists()
+
+
+def test_resumable_upload_rejects_symlinked_offline_media_root(tmp_path):
+    from app.resumable_media_upload import ResumableUploadError, create_upload
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (tmp_path / "offline_media").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ResumableUploadError, match="must not be a symlink"):
+        create_upload(
+            data_dir=tmp_path,
+            filename="clip.mp4",
+            size_bytes=1,
+            sha256=hashlib.sha256(b"x").hexdigest(),
+        )
+
+    assert not (outside / ".resumable").exists()
