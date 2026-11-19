@@ -185,7 +185,7 @@ async function playTimelinePreview(){
     if(loadTimer!==null){clearTimeout(loadTimer);loadTimer=null;}
     const trimStart=Number(item.trimStart)||0;
     const trimEnd=item.trimEnd==null?null:Number(item.trimEnd);
-    if(!Number.isFinite(video.duration)||trimStart>=video.duration||(trimEnd!==null&&(!Number.isFinite(trimEnd)||trimEnd<=trimStart||trimEnd>video.duration+0.05||trimEnd-trimStart<0.25))){fail("Video trim range source clip ki duration ke andar aur kam se kam 0.25 seconds hona chahiye.");return;}
+    if(!Number.isFinite(video.duration)||!Number.isFinite(trimStart)||trimStart<0||trimStart>600||trimStart>=video.duration||(trimEnd!==null&&(!Number.isFinite(trimEnd)||trimEnd<=trimStart||trimEnd>600||trimEnd>video.duration+0.05||trimEnd-trimStart<0.25))){fail("Video trim range source clip ki duration ke andar aur kam se kam 0.25 seconds hona chahiye.");return;}
     try{
      if(trimStart>0.05&&Math.abs(video.currentTime-trimStart)>0.05){
       video.addEventListener("seeked",onSeeked,{once:true});
