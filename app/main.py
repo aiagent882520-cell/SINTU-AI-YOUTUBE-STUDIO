@@ -2116,6 +2116,8 @@ def youtube_public_approval_create(payload: YouTubePublicApprovalInput, request:
         require_publishable_provenance(data_dir=DATA_DIR, output_path=path)
         verify_publishable_mp4(path)
         file_hash = youtube_sha256_file(path)
+    except PublishingQualityError:
+        raise HTTPException(status_code=409, detail="Public approval blocked: matching PASS provenance and quality status are required.") from None
     except RendererUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
     except RenderFailed:
@@ -2219,6 +2221,7 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
     if size <= 0 or size > 512 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="MP4 size 1 byte se 512 MB ke beech honi chahiye.")
     try:
+        require_publishable_provenance(data_dir=DATA_DIR, output_path=path)
         verify_publishable_mp4(path)
         file_hash = youtube_sha256_file(path)
     except PublishingQualityError:
