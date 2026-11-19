@@ -91,7 +91,33 @@ async function openStudio() {
     }
     if (url.pathname.startsWith("/api/ai-videos/")) {
       await new Promise(resolve => setTimeout(resolve, 150));
-      return route.fulfill({ status: 200, contentType: "video/webm", body: webm });
+      const range = route.request().headers().range;
+      if (range) {
+        const match = /^bytes=(\\d+)-(\\d*)$/.exec(range);
+        if (!match) return route.fulfill({ status: 416, headers: { "Content-Range": "bytes */" + webm.length } });
+        const start = Number(match[1]);
+        const end = match[2] ? Math.min(Number(match[2]), webm.length - 1) : webm.length - 1;
+        if (start >= webm.length || end < start) {
+          return route.fulfill({ status: 416, headers: { "Content-Range": "bytes */" + webm.length } });
+        }
+        const chunk = webm.subarray(start, end + 1);
+        return route.fulfill({
+          status: 206,
+          contentType: "video/webm",
+          headers: {
+            "Accept-Ranges": "bytes",
+            "Content-Range": "bytes " + start + "-" + end + "/" + webm.length,
+            "Content-Length": String(chunk.length),
+          },
+          body: chunk,
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "video/webm",
+        headers: { "Accept-Ranges": "bytes", "Content-Length": String(webm.length) },
+        body: webm,
+      });
     }
     return route.fulfill({
       status: 200,
