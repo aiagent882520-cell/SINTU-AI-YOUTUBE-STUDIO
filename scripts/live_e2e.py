@@ -203,7 +203,7 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "Mehrangarh Fort's seven gates above the blue city of Jodhpur, dramatic high-angle view",
         "Junagarh Fort in Bikaner, red sandstone ramparts and ornate desert palace courtyards",
         "Jaisalmer's golden sandstone fort on Trikuta Hill, ornate havelis and narrow lanes at sunset",
-        "Gwalior Fort stretching along a high plateau, palace facades and ancient temples",
+        "Gwalior Fort on a steep sandstone hill, massive outer walls, palace facades and ancient temples",
         "Ancient Indian fort water tanks and stepwells, practical engineering for long sieges",
         "Massive bastions, iron-studded gates and winding defensive passages, historical architectural detail",
         "Cinematic closing montage of India's ten forts at dusk, heritage documentary atmosphere",
