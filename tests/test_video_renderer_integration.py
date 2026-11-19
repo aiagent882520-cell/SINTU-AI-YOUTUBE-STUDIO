@@ -471,7 +471,7 @@ def test_mixed_timeline_mixes_source_voice_music_and_burns_subtitles(tmp_path, m
     test_profiles = dict(video_renderer.OUTPUT_PROFILES)
     test_profiles["160x284"] = (160, 284)
     monkeypatch.setattr(video_renderer, "OUTPUT_PROFILES", test_profiles)
-    monkeypatch.setattr(video_renderer, "FFMPEG_THREAD_COUNT", 1)
+    monkeypatch.setenv("SINTU_FFMPEG_THREADS", "1")
     monkeypatch.setattr(
         video_renderer, "_render_settings",
         lambda resolution, fps, quality: (160, 284, 35, "ultrafast"),
