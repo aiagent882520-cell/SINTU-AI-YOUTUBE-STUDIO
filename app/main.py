@@ -59,6 +59,7 @@ from .backup_restore import verify_backup, BackupValidationError, snapshot_datab
 from .flow_auto_import import start_flow_auto_import, stop_flow_auto_import, flow_auto_import_status
 from .termux_bridge import router as termux_bridge_router
 from .youtube_upload import transfer_resumable_upload, sha256_file as youtube_sha256_file, validate_session_uri, validate_state_transition, UploadProtocolError
+from .offline_media import (OfflineMediaError, MAX_MEDIA_BYTES, import_media_file, list_offline_media, get_offline_media_path)
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT.parent))).expanduser().resolve()
@@ -1613,6 +1614,60 @@ def studio_approve_run(run_id: str, payload: StudioApprovalInput, request: Reque
     if not result:
         raise HTTPException(status_code=404, detail="Production run not found.")
     return {"run": result, "publishing_started": False, "note": "Human approval records workflow completion; it does not publish publicly."}
+
+@app.post("/api/offline-media/import", status_code=201)
+async def offline_media_import(request: Request, filename: str = Query(..., min_length=1, max_length=180)):
+    root = DATA_DIR / "offline_media"
+    incoming = root / ".incoming"
+    if root.is_symlink() or incoming.is_symlink():
+        raise HTTPException(status_code=409, detail="Offline media storage path is unsafe.")
+    incoming.mkdir(parents=True, exist_ok=True)
+    if not incoming.resolve().is_relative_to(root.resolve()):
+        raise HTTPException(status_code=409, detail="Offline media storage escaped SINTU_DATA_DIR.")
+    fd, temporary_name = tempfile.mkstemp(prefix=".upload-", suffix=".part", dir=incoming)
+    temporary_path = Path(temporary_name)
+    size = 0
+    try:
+        with os.fdopen(fd, "wb") as output:
+            async for chunk in request.stream():
+                if not chunk:
+                    continue
+                size += len(chunk)
+                if size > MAX_MEDIA_BYTES:
+                    raise HTTPException(status_code=413, detail="Offline media upload exceeds 256 MiB.")
+                output.write(chunk)
+            output.flush()
+            os.fsync(output.fileno())
+        if size <= 0:
+            raise HTTPException(status_code=400, detail="Offline media upload is empty.")
+        try:
+            record = import_media_file(
+                data_dir=DATA_DIR, source_path=temporary_path, filename=filename,
+                content_type=request.headers.get("content-type", "application/octet-stream"),
+            )
+        except OfflineMediaError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        return {"media": record, "duplicate": record["duplicate"]}
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+@app.get("/api/offline-media")
+def offline_media_list():
+    try:
+        return {"media": list_offline_media(data_dir=DATA_DIR)}
+    except OfflineMediaError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+
+
+@app.get("/api/offline-media/{sha256}/file")
+def offline_media_download(sha256: str):
+    try:
+        path, record = get_offline_media_path(data_dir=DATA_DIR, sha256=sha256)
+    except OfflineMediaError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    return FileResponse(path, media_type="application/octet-stream", filename=record["original_name"])
+
 
 @app.get("/api/studio/assets")
 def studio_list_assets(project_id: str, request: Request):
