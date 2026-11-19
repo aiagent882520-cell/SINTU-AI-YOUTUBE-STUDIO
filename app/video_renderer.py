@@ -1046,7 +1046,7 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                 if segment_duration<0.25: raise ValueError("Trimmed video kam se kam 0.25 seconds ka hona chahiye.")
                 segment=work/f"trimmed-{index:03d}.mp4"
                 command=[ffmpeg,"-y","-hide_banner","-loglevel","error","-ss",f"{trim_start:.3f}","-i",str(path),"-t",f"{segment_duration:.3f}","-map","0:v:0","-map","0:a?","-c:v","libx264","-preset","veryfast","-pix_fmt","yuv420p","-c:a","aac","-b:a","128k","-ar","48000","-ac","2","-movflags","+faststart",str(segment)]
-                completed=subprocess.run(command,capture_output=True,text=True,timeout=180,check=False)
+                completed=subprocess.run(command,capture_output=True,text=True,timeout=min(RENDER_TIMEOUT_SECONDS, 180),check=False)
                 if completed.returncode!=0 or not segment.is_file():
                     raise RenderFailed((completed.stderr or "Video trim failed")[-1200:])
                 clip_paths.append(segment)
@@ -1067,7 +1067,7 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                      "-t", str(image_duration), "-shortest",
                      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
                      "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2", "-movflags", "+faststart", str(segment)],
-                    capture_output=True, text=True, timeout=90, check=False
+                    capture_output=True, text=True, timeout=min(RENDER_TIMEOUT_SECONDS, 90), check=False
                 )
                 if completed.returncode != 0 or not segment.is_file():
                     raise RenderFailed((completed.stderr or "Still image clip creation failed")[-1200:])
