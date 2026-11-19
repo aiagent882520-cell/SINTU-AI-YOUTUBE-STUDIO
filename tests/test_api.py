@@ -3044,7 +3044,7 @@ def test_render_queue_executes_existing_ffmpeg_renderer(tmp_path, monkeypatch):
         "language":"Hindi","duration_seconds":15
     })
     project_id = project_response.json()["project"]["id"]
-    monkeypatch.setattr(main, "render_video", lambda payload: {
+    monkeypatch.setattr(main, "_render_video", lambda payload, progress_callback=None: {
         "video_id":"f"*32,"url":"/api/videos/"+"f"*32,"format":"MP4","duration_seconds":8
     })
     queued = client.post("/api/studio/render-queue", json={
