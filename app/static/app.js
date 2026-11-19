@@ -123,9 +123,28 @@ async function playTimelinePreview(){
  $("timelinePreviewStop").onclick=()=>stopActiveTimelinePreview();
  const waitForImage=(item,durationMs)=>{
   stage.innerHTML='<img alt="Timeline scene" style="width:100%;max-height:420px;object-fit:contain" src="/api/images/'+item.id+'">';
-  return new Promise(resolve=>{
-   const timer=setTimeout(()=>{finishCurrent=null;resolve(true);},durationMs);
-   finishCurrent=(keepGoing)=>{clearTimeout(timer);finishCurrent=null;resolve(keepGoing);};
+  const image=stage.querySelector("img");
+  return new Promise((resolve,reject)=>{
+   let settled=false,timer=null;
+   const cleanup=()=>{
+    if(timer!==null)clearTimeout(timer);
+    image.removeEventListener("load",onLoad);
+    image.removeEventListener("error",onError);
+   };
+   const finish=keepGoing=>{if(settled)return;settled=true;cleanup();finishCurrent=null;resolve(keepGoing);};
+   const onLoad=()=>{
+    if(settled)return;
+    timer=setTimeout(()=>finish(true),durationMs);
+   };
+   const onError=()=>{
+    if(settled)return;
+    settled=true;cleanup();finishCurrent=null;
+    reject(new Error("Timeline image preview load failed."));
+   };
+   image.addEventListener("load",onLoad,{once:true});
+   image.addEventListener("error",onError,{once:true});
+   finishCurrent=keepGoing=>finish(keepGoing);
+   if(image.complete){if(image.naturalWidth>0)onLoad();else onError();}
   });
  };
  const waitForVideo=(item)=>{
