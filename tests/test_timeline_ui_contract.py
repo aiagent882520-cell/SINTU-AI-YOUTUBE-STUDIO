@@ -81,3 +81,16 @@ def test_timeline_scene_description_limit_matches_render_api():
 
     assert 'maxlength="500"' in editor
     assert 'maxlength="1000"' not in editor
+
+
+def test_timeline_trim_limits_match_render_api():
+    source = (ROOT / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    start = source.index("function renderTimelineEditor(rows=timelineRows())")
+    end = source.index('\n$("flowClipImportButton")', start)
+    editor = source[start:end]
+
+    assert 'max="600" step="0.1" data-field="trimStart"' in editor
+    assert 'max="600" step="0.1" data-field="trimEnd"' in editor
+    helper_start = source.index("function updateTimelineTrim(item,field,rawValue)")
+    helper_end = source.index('\n$("timelineEditor").addEventListener("change"', helper_start)
+    assert "next>600" in source[helper_start:helper_end]
