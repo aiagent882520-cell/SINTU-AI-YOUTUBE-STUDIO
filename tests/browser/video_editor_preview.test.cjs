@@ -236,24 +236,6 @@ test("real Chromium stop control cancels an active image preview", async () => {
   }
 });
 
-test("real Chromium keeps subtitles aligned when timeline clips are reordered", async () => {
-  const { context, page } = await openStudio();
-  try {
-    await setTimeline(
-      page,
-      "image:" + "a".repeat(32) + ":2:cut\nimage:" + "f".repeat(32) + ":2:cut",
-      "First scene\nSecond scene",
-      "First subtitle\nSecond subtitle",
-    );
-    await page.locator('#timelineEditor button[data-action="down"]').first().click({ force: true });
-    assert.equal(await page.locator("#renderSubtitles").inputValue(), "Second subtitle\nFirst subtitle");
-    assert.match(await page.locator("#renderTimeline").inputValue(), /^image:f{32}:2:cut\nimage:a{32}:2:cut$/);
-  } finally {
-    await context.close();
-  }
-});
-
-
 test("real Chromium timeline undo and redo restore clip order and scene text", async () => {
   const { context, page } = await openStudio();
   try {
@@ -281,3 +263,23 @@ test("real Chromium timeline undo and redo restore clip order and scene text", a
     await context.close();
   }
 });
+
+test("real Chromium keeps subtitles aligned when timeline clips are reordered", async () => {
+  const { context, page } = await openStudio();
+  try {
+    await setTimeline(
+      page,
+      "image:" + "a".repeat(32) + ":2:cut\nimage:" + "f".repeat(32) + ":2:cut",
+      "First scene\nSecond scene",
+      "First subtitle\nSecond subtitle",
+    );
+    await page.locator('#timelineEditor button[data-action="down"]').first().click({ force: true });
+    assert.equal(await page.locator("#renderSubtitles").inputValue(), "Second subtitle\nFirst subtitle");
+    assert.match(await page.locator("#renderTimeline").inputValue(), /^image:f{32}:2:cut\nimage:a{32}:2:cut$/);
+  } finally {
+    await context.close();
+  }
+});
+
+
+
