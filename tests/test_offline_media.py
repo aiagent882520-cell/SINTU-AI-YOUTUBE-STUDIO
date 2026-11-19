@@ -26,6 +26,19 @@ def _client(tmp_path, monkeypatch):
     return TestClient(main.app)
 
 
+
+def _append_resumable_chunk_in_process(args):
+    data_dir, upload_id, payload = args
+    from app.resumable_media_upload import ResumableUploadError, append_upload_chunk
+    try:
+        return append_upload_chunk(
+            data_dir=Path(data_dir), upload_id=upload_id, offset=0,
+            chunk=payload, chunk_sha256=hashlib.sha256(payload).hexdigest(),
+        )
+    except ResumableUploadError as exc:
+        return str(exc)
+
+
 def test_offline_media_api_imports_deduplicates_lists_and_downloads(tmp_path, monkeypatch):
     client = _client(tmp_path, monkeypatch)
     payload = b"offline-mp4-content"
@@ -208,3 +221,30 @@ def test_resumable_upload_serializes_concurrent_chunk_writes(tmp_path):
     assert "Offset conflict" in conflicts[0]
     from app.resumable_media_upload import get_upload
     assert get_upload(data_dir=tmp_path, upload_id=upload_id)["offset"] == len(first) or get_upload(data_dir=tmp_path, upload_id=upload_id)["offset"] == len(second)
+
+
+def test_resumable_upload_serializes_concurrent_process_writes(tmp_path):
+    from concurrent.futures import ProcessPoolExecutor
+    from app.resumable_media_upload import create_upload, get_upload
+
+    first = b"process-one-chunk"
+    second = b"process-two-chunk"
+    created = create_upload(
+        data_dir=tmp_path, filename="clip.mp4",
+        size_bytes=len(first) + len(second),
+        sha256=hashlib.sha256(first + second).hexdigest(),
+    )
+    upload_id = created["upload_id"]
+    args = [(str(tmp_path), upload_id, first), (str(tmp_path), upload_id, second)]
+
+    # Independent Python processes must coordinate through the on-disk flock,
+    # not a process-local threading mutex.
+    with ProcessPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(_append_resumable_chunk_in_process, args))
+
+    successes = [item for item in results if isinstance(item, dict)]
+    conflicts = [item for item in results if isinstance(item, str)]
+    assert len(successes) == 1
+    assert len(conflicts) == 1
+    assert "Offset conflict" in conflicts[0]
+    assert get_upload(data_dir=tmp_path, upload_id=upload_id)["offset"] in {len(first), len(second)}
