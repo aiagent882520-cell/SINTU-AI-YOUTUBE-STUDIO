@@ -1191,3 +1191,47 @@ The following PRs remain open and unmerged: #213, #209, #207, #206, #205, #204, 
 - Main SHA is 160cf148b18d06cc1c36f8f31737172cfd6366f5. Main CI run 44518879015 is IN_PROGRESS; security audit passed and Python jobs were running.
 - PR #219 checkpoint branch has been retargeted to main 160cf...; its previous run 44518662615 was against the earlier base and is superseded by the next exact-head run after this checkpoint update.
 - PR #218, #220, #221, #223 and #224 are merged. PR #219, #222 remain open. PR #192 remains open/draft and conflicting on the same checkpoint file; its unique historical appendix still requires reconciliation.
+
+
+## Final 60-second offline Hindi render acceptance — 2026-11-19 12:05 UTC
+
+### PR #222 merged
+- PR #222 merged into main (squash) at 8a9776b217d20445f10126c26801b8833c3f8b7c.
+- Exact latest-head run 44519938159: **SUCCESS 8/8** — Python 3.11–3.14, dependency security audit, production Docker, real Chromium Video Editor tests, offline branded-video E2E and motion audit.
+- Real generated artifact ID 14527866336, URL https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44518946207/artifacts/14527866336.
+- Verified MP4:
+  - Duration 60.04 seconds; 720x1280; H.264 video; AAC audio, 48 kHz stereo.
+  - 15 storyboard scenes and 15 timed Hindi subtitle cues burned into the MP4.
+  - Hindi narration via eSpeak NG (WAV) plus local procedural music.
+  - SINTU AI YOUTUBE STUDIO watermark.
+  - Black intervals: 0.
+  - Motion audit: 60 sampled frames, 46/59 moving transitions, ratio 0.78 (acceptance minimum 0.60), mean frame delta 6.842.
+  - Project health/media audit: PASS, 2 checks, 0 warnings, 0 failures.
+  - Paid services used: false. Publishing performed: false.
+- Image provider is explicitly SINTU Procedural Art (offline). This is not generative AI inference. The video is an offline renderer acceptance, not the full research → AI image → neural voice → editor → publishing pipeline.
+
+### Current merged engineering PRs
+- #218 real Chromium Video Editor tests + FastAPI byte-range coverage.
+- #219 authoritative project execution checkpoint.
+- #220 reliable offline E2E apt dependency provisioning.
+- #221 atomic SQLite studio render-queue claims.
+- #222 60-second Hindi offline render + 15 burned subtitle cues.
+- #223 YouTube OAuth state/session/encrypted-token/refresh integration tests (mocked Google responses only).
+- #224 reduced mixed-timeline FFmpeg integration-test resource usage (test-only 160x284 profile; production output profiles unchanged).
+- Earlier merged PRs #194, #196, #198–205, #213–217 remain in the historical sections above.
+
+### Current main verification
+- Main SHA: 8a9776b217d20445f10126c26801b8833c3f8b7c.
+- A main-branch CI run after PR #222 merge is required; do not infer it from the PR run alone. Record its exact run and final job conclusions when available.
+
+### Remaining open PRs and external acceptance
+- PR #192 remains an old draft checkpoint that conflicts on PROJECT_EXECUTION_STATE.md. Its unique 573-line historical appendix for PRs #190–#202 still needs reconciliation; do not merge/close blindly.
+- PRs #206/#207/#209 remain open/stacked. FastAPI BackgroundTasks and process-local FFmpeg cancellation registry are not durable multi-worker infrastructure. The SQLite studio queue atomic claim is separate and does not solve this async render queue.
+- Physical Android APK installation, login, lifecycle, editor playback, upload/download and crash-recovery tests remain UNVERIFIED. Android CI build is not a physical-device PASS.
+- Three historical black MP4 source/project/job mappings remain UNKNOWN until the Termux scanner report is attached. Originals and backups must remain unchanged.
+- Real AI Image Studio inference remains BLOCKED/UNVERIFIED: CI uses procedural art; target phone resource constraints do not support a demonstrated local diffusion model. A compatible external open-source inference host/model and model license review are still required.
+- YouTube OAuth live consent/channel verification/upload remains BLOCKED. PR #223 only validates logic with mocked Google responses; no real token or upload exists. Public uploads/deployment remain disabled.
+- All 60 video formats and 15 modules remain individually UNVERIFIED beyond inventory/catalog. Full website journeys/accessibility and durable worker recovery remain incomplete.
+
+### Required device-side evidence
+Run the read-only forensic scanner and Android diagnostic on the actual Termux phone. The exact five-file forensic command and safety notes are in docs/TERMUX_BLACK_MP4_FORENSIC_RUN.md. Attach only the generated report; never send .env, OAuth tokens, private keys or model files. Do not overwrite or repair original MP4s.
