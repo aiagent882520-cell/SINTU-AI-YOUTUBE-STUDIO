@@ -195,7 +195,7 @@ def test_offline_storyboard_e2e_creates_verified_local_video(monkeypatch, tmp_pa
     audio_dir.mkdir()
     music_dir.mkdir()
     output_dir.mkdir()
-    for index in range(1, 9):
+    for index in range(1, 11):
         (image_dir / f"image-{index}.jpg").write_bytes(b"image")
     (audio_dir / "voice.wav").write_bytes(b"audio")
     (music_dir / "music.wav").write_bytes(b"music")
@@ -216,14 +216,18 @@ def test_offline_storyboard_e2e_creates_verified_local_video(monkeypatch, tmp_pa
         "filename": "voice.wav", "voice": "eSpeak NG Hindi", "format": "WAV"
     })
     monkeypatch.setattr(live_e2e, "render_storyboard", lambda **kwargs: {
-        "filename": "final.mp4", "video_id": "final-id", "duration_seconds": 9,
+        "filename": "final.mp4", "video_id": "final-id", "duration_seconds": 60,
         "resolution": "720x1280", "brand_watermark": "SINTU AI YOUTUBE STUDIO",
-        "subtitles_burned_in": False, "audio": "voiceover+music",
+        "subtitles_burned_in": True, "audio": "voiceover+music",
     })
 
     result = live_e2e._offline_storyboard_e2e("भारत के किले")
-    assert len(calls) == 8
-    assert result["scene_count"] == 8
+    assert len(calls) == 10
+    assert result["scene_count"] == 10
+    assert result["duration_seconds"] == 60
+    assert result["subtitle_count"] == 10
+    assert result["target_duration_seconds"] == 60
+    assert result["subtitles_burned_in"] is True
     assert result["voice_engine"] == "eSpeak NG Hindi"
     assert result["verified_by_renderer"] is True
     assert result["final_render_bytes"] == 2000
