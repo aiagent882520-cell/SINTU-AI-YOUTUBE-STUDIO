@@ -948,7 +948,7 @@ def test_forensics_discovers_generated_music_and_reports_wav_metadata(tmp_path, 
         audio.setnchannels(1)
         audio.setsampwidth(2)
         audio.setframerate(22_050)
-        audio.writeframes(b"\\x00\\x00" * 22_050 * 6)
+        audio.writeframes(bytes(2 * 22_050 * 6))
 
     timestamp = 1_800_000_000
     os.utime(wav_path, (timestamp, timestamp))
