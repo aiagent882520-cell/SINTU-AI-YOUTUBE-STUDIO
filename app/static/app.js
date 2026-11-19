@@ -114,7 +114,7 @@ async function playTimelinePreview(){
   const video=stage.querySelector("video");
   video.volume=Math.min(1,item.audioVolume??.25);
   return new Promise((resolve,reject)=>{
-   let settled=false;
+   let settled=false,metadataHandled=false;
    const cleanup=()=>{
     video.removeEventListener("loadedmetadata",onMetadata);
     video.removeEventListener("timeupdate",onTimeUpdate);
@@ -124,6 +124,8 @@ async function playTimelinePreview(){
    };
    const finish=(keepGoing)=>{if(settled)return;settled=true;cleanup();finishCurrent=null;resolve(keepGoing);};
    const onMetadata=()=>{
+    if(metadataHandled||settled)return;
+    metadataHandled=true;
     try{video.currentTime=item.trimStart||0;}catch(error){onError();return;}
     try{
      const playback=video.play();
