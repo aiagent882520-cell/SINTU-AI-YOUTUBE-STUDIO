@@ -44,6 +44,6 @@ def test_timeline_preview_uses_current_image_item_without_stale_index():
     preview = source[start:end]
 
     assert "const waitForImage=(item,durationMs)=>" in preview
-    assert 'src="/api/images/"+item.id' in preview
+    assert '/api/images/\' + item.id' in preview
     assert "rows[index].id" not in preview
     assert "try{\n     const playback=video.play();" in preview
