@@ -141,3 +141,14 @@ def test_image_timeline_preview_waits_for_load_and_cleans_up_on_cancel():
     assert "image.removeEventListener(\"load\",onLoad)" in preview
     assert "image.removeEventListener(\"error\",onError)" in preview
     assert "finishCurrent=keepGoing=>finish(keepGoing)" in preview
+
+
+def test_timeline_subtitle_reorder_ignores_trailing_blank_lines():
+    source = (ROOT / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    start = source.index('$("timelineEditor").addEventListener("click"')
+    end = source.index('$("timelineEditor").addEventListener("input"', start)
+    handler = source[start:end]
+
+    assert 'const subtitleRows=subtitleText.trim()?subtitleText.split("\\n"):[];' in handler
+    assert 'while(subtitleRows.length&&!subtitleRows[subtitleRows.length-1].trim())subtitleRows.pop();' in handler
+    assert "const subtitlesAligned=subtitleRows.length===rows.length;" in handler
