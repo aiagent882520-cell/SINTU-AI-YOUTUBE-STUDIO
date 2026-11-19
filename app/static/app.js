@@ -124,7 +124,7 @@ async function playTimelinePreview(){
    };
    const finish=(keepGoing)=>{if(settled)return;settled=true;cleanup();finishCurrent=null;resolve(keepGoing);};
    const onMetadata=()=>{
-    try{video.currentTime=item.trimStart||0;}catch(error){onError();}
+    try{video.currentTime=item.trimStart||0;}catch(error){onError();return;}
     try{
      const playback=video.play();
      if(playback&&typeof playback.catch==="function")playback.catch(error=>{if(!cancelled){settled=true;cleanup();finishCurrent=null;reject(error);}});
