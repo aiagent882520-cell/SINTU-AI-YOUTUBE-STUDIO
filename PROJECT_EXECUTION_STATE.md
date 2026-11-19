@@ -1161,3 +1161,28 @@ No PR merged. No original media modified. No YouTube upload, public publishing o
 5. Historical black MP4 root cause remains unproven; re-hash and correlate original phone-side files only when actual device files/reports are available.
 
 No PR merged, no deployment or publishing, and no original media modified.
+
+
+## Fail-closed publishing quality gate — 2026-11-19
+
+### PR #193 implementation
+- Latest PR #193 head: `fb70eef104252a3c9ef3e478d77775a69121e6ba` (branch `feature/production-media-provenance`).
+- Added `app/publishing_quality_gate.py`: publishing requires an exact matching manifest path, output byte size and SHA-256, plus `quality_check.status=PASS`, `verified=true`, and a persisted verified report. Missing manifests/status, changed output bytes, symlinked files and paths outside `SINTU_DATA_DIR` are rejected.
+- `app/media_provenance.py` now stores the actual FFprobe/FFmpeg quality report with the render manifest. Both approved production render routes re-run `verify_publishable_mp4` before writing a PASS record; failure withholds/deletes the MP4 result.
+- YouTube public-approval and upload, Facebook upload and TikTok upload require the matching persisted PASS record before making external requests. Instagram's arbitrary remote-URL route is blocked because SINTU cannot bind a remote URL to a locally audited file.
+- Added `tests/test_publishing_quality_gate.py` for missing status, valid PASS, changed MP4, symlink/outside-root and invalid quality report.
+- Existing older manifests and imported MP4s without this persisted PASS status are intentionally blocked from publishing. This is fail-closed behavior, not a claim that those older files are corrupted.
+- Exact-head CI for `fb70eef...` is pending/not yet returned. Do not mark this implementation CI-verified until its run completes.
+
+### CI checkpoint
+- PR #193 previous exact-head run `44438333607`: Python 3.11–3.14, dependency audit and Docker build passed; offline E2E/motion audit was still in progress at last poll.
+- PR #192 previous checkpoint head `4099844c4428be39b0c595296ca895495339416b`: exact-head CI `44438394857` SUCCESS (7/7).
+- This checkpoint update creates a new commit and needs its own exact-head CI.
+
+### Remaining tasks
+1. Finish exact-head PR #193 CI for `fb70eef...`; inspect/fix any failing Python, security, Docker or offline E2E job.
+2. Continue persistent offline media import/index/duplicate/recovery/queue/retry/network-sync implementation.
+3. Physical Android install/login/session/API/gallery/background tests remain unverified until the actual phone report is available.
+4. Historical black MP4 root cause remains unproven. Container remux cannot restore missing/black pixels.
+5. Keep publishing disabled; no PR merge, deployment or real external upload is authorized/performed.
+
