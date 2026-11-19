@@ -1017,3 +1017,49 @@ The following PRs remain open and unmerged: #213, #209, #207, #206, #205, #204, 
 - Do not merge #218, #219, #220 or #221 automatically; exact-head CI and diff review remain required. No merge has been performed.
 - Three historical black MP4 source/project/job mappings remain UNKNOWN until the Termux forensic scanner output is supplied. Originals/backups remain untouched.
 - Real AI image inference, physical Android acceptance, complete website walkthrough, 60-format individual acceptance, 15-module acceptance, live OAuth/channel verification and public publishing remain unverified or externally blocked.
+
+
+## Verified execution update — 2026-11-19 11:20 UTC
+
+### PR #218 — exact-head full CI PASS
+- Current head: 5b7d3a58ec6092d133bdc7010043d25896fcb9d0.
+- Exact workflow run 44513017475: all 8 jobs SUCCESS — Python 3.11/3.12/3.13/3.14, dependency security audit, Production Docker build, Real Chromium Video Editor browser tests, and Offline branded video E2E/motion audit.
+- Chromium log confirms 6/6 tests PASS: image load/timer, image load error, video trim-start seek before playback and trim-end stop, invalid trim rejection, stop cancellation, and subtitle alignment after clip reorder.
+- Browser fixture uses a local HTTP server with byte-range support; the play-position probe captures currentTime synchronously at the actual HTMLMediaElement.play() call.
+- Offline E2E artifact ID 14524442731, URL https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44513017475/artifacts/14524442731. It contains the generated MP4 and audit reports.
+- This offline smoke MP4 is 32.04 seconds, 720x1280 H.264/AAC, 8 scenes, SINTU watermark, eSpeak NG Hindi + procedural music, no burned subtitles, procedural art (not AI images), 0 black intervals, 32 sampled frames and motion ratio 0.742. This is NOT the requested 60-second topic E2E.
+- PR #218 remains OPEN and unmerged. Diff review found no review comments/approvals; do not merge until approval policy is satisfied.
+
+### PR #219 — exact-head checkpoint CI PASS
+- Current checkpoint head: dff806ebbefed20acb7b6c14a5c0c9ee844ca8cb.
+- Exact run 44513276655 completed SUCCESS 7/7: Python 3.11–3.14, dependency audit, offline branded video E2E/motion audit, and Production Docker build.
+- PR #219 remains OPEN and unmerged. It is a checkpoint/documentation PR; review API returned no review approvals/comments.
+
+### PR #220 — CI dependency provisioning resilience
+- Head cb8476b71ea1e43ec1a1b1a0d07688fa0b0921d0; run 44512589628 still IN_PROGRESS at last poll.
+- Python 3.11–3.14 and dependency audit PASS; Docker PASS. Offline E2E was still in the Ubuntu apt install step. No acceptance check was skipped or weakened.
+
+### PR #221 — atomic studio render-queue claim
+- Head 33c8be9e6f1e4528a2a832a406c1452ea2a23de5; run 44512808855 still IN_PROGRESS at last poll.
+- Python 3.11–3.14 and dependency audit PASS; Docker PASS. Offline E2E was still in the Ubuntu apt install step.
+- Atomic BEGIN IMMEDIATE + conditional state update and the two-thread simultaneous-claim regression test are included. Do not claim the PR fully green until the remaining job finishes.
+
+### PR #222 — real 60-second Hindi subtitled offline acceptance
+- New PR: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/222
+- Head 3a2708457bf002b84dce52136d7a3a4defff41fd; exact CI run 44513781828 IN_PROGRESS at checkpoint time.
+- Upgrades the offline acceptance from 8 scenes × 4 seconds (32 seconds) to 10 scenes × 6 seconds (60 seconds), longer Hindi narration, local music, 10 timed Hindi subtitle lines burned into MP4, and explicit workflow assertions for duration/audio/subtitles/procedural-art provenance.
+- It intentionally identifies image output as SINTU Procedural Art (offline), not AI inference. It is not a complete research-to-AI-image workflow.
+
+### Review / merge state
+- PR #218 and #219 metadata report mergeable=true, and exact-head CI is green. GitHub review endpoints returned empty reviews and review comments for both; no independent approval is recorded. No PR has been merged in this continuation.
+- PR #220, #221 and #222 remain open pending exact-head CI. Review and merge decisions must remain separate from CI success.
+
+### Product acceptance still blocked or partial
+- Video Editor browser subset: PASS for the 6 covered scenarios in Chromium CI. This is not full Video Editor acceptance, Android playback, real backend integration, project persistence, full multi-track editing, or physical phone verification.
+- Offline renderer smoke: PASS for 32.04s clip, motion, no-black-frame audit, voice/music. 60-second + subtitles acceptance is pending PR #222.
+- AI Image Studio: BLOCKED/UNVERIFIED for real model inference; current CI uses procedural art.
+- Android physical install/device lifecycle: BLOCKED pending user-phone/ADB/Termux evidence.
+- Three historical black MP4 provenance: UNKNOWN pending actual Termux scanner output. Preserve original MP4s/backups.
+- YouTube OAuth/channel/upload: BLOCKED pending owner credentials, OAuth consent and channel verification. No upload/public publish performed.
+- 60 formats / 15 modules: catalog scope exists; individual end-to-end acceptance remains UNVERIFIED.
+- Website full user-journey/accessibility walkthrough and durable multi-worker job execution remain incomplete.
