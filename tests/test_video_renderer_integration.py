@@ -397,3 +397,83 @@ def test_storyboard_renderer_rejects_missing_scene_images(tmp_path, monkeypatch)
             seconds_per_scene=2, image_paths=[], transition="fade", motion="none",
         )
     assert list(tmp_path.iterdir()) == []
+
+
+
+def test_mixed_timeline_mixes_source_voice_music_and_burns_subtitles(tmp_path, monkeypatch):
+    """Exercise the complete mixed image/video FFmpeg graph with all audio layers."""
+    ffmpeg, ffprobe = _ffmpeg_tools()
+    if not video_renderer._ffmpeg_supports_subtitles(ffmpeg):
+        pytest.skip("FFmpeg libass subtitles filter is unavailable")
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
+
+    source = tmp_path / "source-with-audio.mp4"
+    generated = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+         "-f", "lavfi", "-i", "testsrc2=size=160x284:rate=24:duration=1.5",
+         "-f", "lavfi", "-i", "sine=frequency=330:sample_rate=48000:duration=1.5",
+         "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+         "-c:a", "aac", "-ar", "48000", "-ac", "2", str(source)],
+        capture_output=True, check=False, timeout=45,
+    )
+    assert generated.returncode == 0, generated.stderr.decode("utf-8", "replace")
+
+    still = tmp_path / "still.png"
+    Image.new("RGB", (160, 284), (180, 80, 30)).save(still)
+    voice = tmp_path / "voice.wav"
+    music = tmp_path / "music.wav"
+    for destination, frequency in ((voice, 660), (music, 220)):
+        audio = subprocess.run(
+            [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+             "-f", "lavfi", "-i", f"sine=frequency={frequency}:sample_rate=48000:duration=4",
+             "-c:a", "pcm_s16le", str(destination)],
+            capture_output=True, check=False, timeout=30,
+        )
+        assert audio.returncode == 0, audio.stderr.decode("utf-8", "replace")
+
+    result = video_renderer.render_mixed_timeline(
+        [
+            {"kind": "image", "path": still, "duration": 2},
+            {"kind": "video", "path": source, "trim_start": 0.1, "trim_end": 1.4,
+             "audio_volume": 0.35},
+        ],
+        "Full mixed timeline",
+        ["Opening scene", "Moving scene"],
+        audio_path=voice,
+        music_path=music,
+        music_volume=0.12,
+        subtitles=["पहला दृश्य", "दूसरा दृश्य"],
+        transitions=["cut", "fade"],
+        resolution="720x1280",
+        fps=24,
+        quality="standard",
+    )
+
+    output = tmp_path / result["filename"]
+    assert output.is_file() and output.stat().st_size > 1000
+    assert result["timeline_order"] == ["image", "video"]
+    assert result["scene_durations"] == [2, 1.3]
+    assert result["subtitles_burned_in"] is True
+    assert result["audio"] == "source+voiceover+music"
+    metadata = subprocess.run(
+        [ffprobe, "-v", "error", "-show_entries",
+         "stream=codec_type,codec_name,sample_rate,channels",
+         "-of", "json", str(output)],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert metadata.returncode == 0, metadata.stderr
+    import json
+    streams = json.loads(metadata.stdout)["streams"]
+    assert sum(stream["codec_type"] == "video" for stream in streams) == 1
+    audio_streams = [stream for stream in streams if stream["codec_type"] == "audio"]
+    assert len(audio_streams) == 1
+    assert audio_streams[0]["codec_name"] == "aac"
+    assert audio_streams[0]["sample_rate"] == "48000"
+    assert audio_streams[0]["channels"] == 2
+
+    measured = subprocess.run(
+        [ffmpeg, "-hide_banner", "-i", str(output), "-af", "volumedetect", "-f", "null", "-"],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert measured.returncode == 0, measured.stderr
+    assert "mean_volume: -inf dB" not in measured.stderr
