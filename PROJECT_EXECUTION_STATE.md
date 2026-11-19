@@ -1340,3 +1340,11 @@ No PR merged and no deployment or public publishing performed.
 - Production logs/SQLite provenance did not match target MP4 names. Exact source/request/render-stage attribution for the three confirmed black files remains **UNKNOWN**. Audio repair copied the video stream and did not create the visual defect.
 - PRs #198/#199 add preventive validation for new provider/source clips only. They do not repair, inspect, or explain the historical files.
 - Preserve all originals/backups. No repair, regeneration, quarantine, deletion, upload, or publishing performed. Production media gate remains blocked for the three confirmed black files.
+
+
+## Follow-up CI verification — 2026-11-19 (latest)
+
+- Checkpoint PR #192 commit `70d22255c9d32e33637884dfffaef61b779e92cf`, workflow run `44456317914`: **SUCCESS 7/7**. Python 3.11–3.14, dependency security audit, offline branded-video E2E/motion audit, and production Docker build all completed successfully.
+- PR #200 opened as draft: `https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/200`, head `f3a613a77b0deb85b242eb91aa38bb081aed2376`. Fixes forensic report metadata only: `blackframe_luma_threshold` was 17 in the actual FFmpeg invocation, but summary metadata incorrectly reported 16 for empty samples and 32 for populated samples. Regression assertions added for both cases. Classification behavior and media assets are unchanged.
+- PR #200 exact-head workflow run `44456525639`: security audit passed; Python 3.11–3.14 jobs were still running at the time of this checkpoint. No claim of full PR #200 CI pass until all jobs complete.
+- Historical black MP4 provenance remains unknown. Keep the three pixel-confirmed full-black assets blocked; do not infer their creation stage from the older storyboard fade regression. No originals/backups changed; no media repair, regeneration, upload, publishing, merge, or deployment performed.
