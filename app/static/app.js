@@ -78,10 +78,19 @@ $("timelineEditor").addEventListener("input",event=>{
  if(label)label.textContent=event.target.value+"%";
  const video=event.target.closest(".timeline-row")?.querySelector("video");if(video)video.volume=Math.min(1,Number(event.target.value)/100);
 });
+function updateTimelineTrim(item,field,rawValue){
+ const previous=item[field];
+ const next=rawValue===""&&field==="trimEnd"?null:Number(rawValue);
+ if((field!=="trimStart"&&field!=="trimEnd")||(next!==null&&(!Number.isFinite(next)||next<0)))return {valid:false,value:previous};
+ if(field==="trimStart"&&item.trimEnd!==null&&item.trimEnd<=next)return {valid:false,value:previous??0};
+ if(field==="trimEnd"&&next!==null&&next<=item.trimStart)return {valid:false,value:previous??""};
+ item[field]=next;
+ return {valid:true,value:next};
+}
 $("timelineEditor").addEventListener("change",event=>{
  const field=event.target.dataset.field;if(!field)return;const rows=timelineRows(),x=rows[Number(event.target.dataset.index)];if(!x)return;
  if(field==="duration"){const n=Number(event.target.value);if(!Number.isInteger(n)||n<2||n>12){event.target.value=x.duration;return;}x.duration=n;}
- else if(field==="trimStart"||field==="trimEnd"){const n=event.target.value===""&&field==="trimEnd"?null:Number(event.target.value);if(n!==null&&(!Number.isFinite(n)||n<0)){event.target.value=x[field]??"";return;}if(field==="trimStart")x.trimStart=n;else x.trimEnd=n;if(x.trimEnd!==null&&x.trimEnd<=x.trimStart){event.target.value=x[field]??"";return;}}
+ else if(field==="trimStart"||field==="trimEnd"){const result=updateTimelineTrim(x,field,event.target.value);if(!result.valid){event.target.value=result.value;return;}}
  else if(field==="audioVolume")x.audioVolume=Number(event.target.value)/100;
  else x[field]=event.target.value;syncTimelineFields(rows);
 });
