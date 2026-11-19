@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -133,10 +134,10 @@ private fun StudioTabs(api: SintuApi) {
 private fun AssistantScreen(api: SintuApi, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     var chats by remember { mutableStateOf(emptyList<ConversationDto>()) }
-    var active by remember { mutableStateOf<Int?>(null) }
+    var active by rememberSaveable { mutableStateOf<Int?>(null) }
     var messages by remember { mutableStateOf(emptyList<MessageDto>()) }
-    var draft by remember { mutableStateOf("") }
-    var workflow by remember { mutableStateOf("content") }
+    var draft by rememberSaveable { mutableStateOf("") }
+    var workflow by rememberSaveable { mutableStateOf("content") }
     var busy by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf("Conversation history is private to your signed-in account.") }
 
@@ -227,15 +228,15 @@ private fun AssistantScreen(api: SintuApi, modifier: Modifier = Modifier) {
 private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    var formatId by remember { mutableStateOf("youtube-shorts") }
-    var topic by remember { mutableStateOf("") }
-    var resolution by remember { mutableStateOf("720x1280") }
-    var runId by remember { mutableStateOf("") }
-    var runStatus by remember { mutableStateOf("") }
-    var notice by remember { mutableStateOf("Create a format-specific production run. Final MP4 is enabled only after all production/reviewer gates pass.") }
-    var output by remember { mutableStateOf("") }
-    var videoId by remember { mutableStateOf("") }
-    var downloadedUri by remember { mutableStateOf("") }
+    var formatId by rememberSaveable { mutableStateOf("youtube-shorts") }
+    var topic by rememberSaveable { mutableStateOf("") }
+    var resolution by rememberSaveable { mutableStateOf("720x1280") }
+    var runId by rememberSaveable { mutableStateOf("") }
+    var runStatus by rememberSaveable { mutableStateOf("") }
+    var notice by rememberSaveable { mutableStateOf("Create a format-specific production run. Final MP4 is enabled only after all production/reviewer gates pass.") }
+    var output by rememberSaveable { mutableStateOf("") }
+    var videoId by rememberSaveable { mutableStateOf("") }
+    var downloadedUri by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var mediaNotice by remember { mutableStateOf("Select files to queue uploads. WorkManager retries when connectivity returns.") }
     val mediaWork = remember(context) {
