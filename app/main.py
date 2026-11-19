@@ -1671,7 +1671,7 @@ def _execute_studio_render_queue(owner: str, item_id: str):
     try:
         with render_process.render_job(item_id):
             studio_engine.update_render_progress(owner, item_id, 0, "starting")
-            result = render_video(
+            result = _render_video(
                 RenderInput(**item["payload"]),
                 progress_callback=lambda percent: studio_engine.update_render_progress(owner, item_id, percent),
             )
@@ -4118,7 +4118,11 @@ def upload_music(payload: MusicUploadInput, media_token: str = Header(default=""
 
 
 @app.post("/api/render")
-def render_video(payload: RenderInput, progress_callback=None):
+def render_video(payload: RenderInput):
+    return _render_video(payload)
+
+
+def _render_video(payload: RenderInput, progress_callback=None):
     title = payload.title.strip()
     scenes = [scene.strip() for scene in payload.scenes]
     if payload.timeline and payload.timeline_items:
