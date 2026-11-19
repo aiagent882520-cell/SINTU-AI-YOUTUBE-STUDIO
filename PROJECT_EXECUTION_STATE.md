@@ -859,3 +859,44 @@ Evidence: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/commit/c
 3. Continue PR #190 security edge-case tests and Android/backend API contract review.
 4. Investigate the 3 confirmed black clips using `scripts/media_forensics.py --json` on the real device; the script is read-only and correlates source assets, logs and DB records. Do not repair/overwrite originals.
 5. Continue actual implementation for pipeline, formats/modules, editor, website, workers and YouTube; maintain production/publishing gates closed.
+
+
+# Authoritative execution update — 2026-11-19 09:50 UTC
+
+## Exact repository state
+- Main before this checkpoint commit: `7948ea7619a6d949e8255388254c9ebe473363fb` (PR #194 squash merge).
+- PR #194 (Android-safe ComfyUI resource gate) was reviewed against its 4-file patch, had no outstanding review threads, and its exact-head CI run `44342524162` passed all 7 jobs. It was squash-merged as `7948ea7619a6d949e8255388254c9ebe473363fb`.
+- PR #213 exact head `76a1fd83ee0fbd8e66a37d074aea39457d0b3cb3`: CI run `44490770754` completed successfully, 7/7 jobs. This includes the Node simulated media-element lifecycle harness, Python 3.11–3.14, dependency audit, offline FFmpeg E2E/motion audit, and Docker build. It does not constitute real browser or physical Android playback verification.
+- PR #193 head updated with commit `dabb25adcb8cee6098d057ab1629c636b3d1b01b` to remove a duplicate `quality_report` dictionary key from `app/video_renderer.py`. New exact-head run `44499167920` was queued/in progress at checkpoint time; do not reuse the earlier run `44444061447` as evidence for this new head. Main advanced after #194 merge and #193 was reported non-mergeable at the last metadata read; reconcile its base/mergeability before any merge.
+
+## Open pull requests at checkpoint time
+The following PRs remain open and unmerged: #213, #209, #207, #206, #205, #204, #203, #202, #201, #200, #199, #198, #197, #196, #195, #193, #192, #191, #190. PR #194 is merged. Notable stacked bases: #207 targets #206; #197 targets #196. Do not merge stacked children before their parent/base dependency is integrated and revalidated. PR #191 changes the same forensic files and overlaps functionality already present in PR #193; reconcile duplicate scope before merging either path.
+
+## Current issue/device evidence
+- Issue #212 `automation_self_test` remains open with `sintu-command-queued`; no result comment is present. Android device self-test is NOT verified.
+- Issue #90 post-media-repair health audit is closed with `sintu-command-failed`; exit code 1. Five of fifteen MP4s were reported full-duration black in that audit. The three target black files remain un-attributed to exact render jobs/source records; no root cause is proven. Original media and backups must remain unchanged.
+- Issue #91 live preflight is closed with `sintu-command-done`; historical report confirmed no active Ollama/model, no configured ComfyUI workflow/server, eSpeak fallback rather than neural Piper, and missing YouTube OAuth credentials/token-encryption configuration/channel verification. Re-run a fresh device preflight before relying on this as current state.
+- The old checkpoint's Android hardware snapshot reports Android 15 ARM64, around 1.1 GiB available RAM at probe time, 29.7 GB free home storage; llama-server binary existed but no GGUF model. Do not install ComfyUI/PyTorch or download diffusion weights to this phone without a fresh resource probe and a compatible engine plan.
+
+## Verified scope versus actual functionality
+- `app/studio_scope.py` declares 60 video-format entries and 15 studio modules. These are catalog/scope registrations, not evidence that every format/module is implemented or accepted. The existing matrix in PR #202 labels unverified items as unverified; keep that distinction.
+- PR #213 is CI-tested but not real-browser or physical-device tested. Android APK CI builds from PR #190/#196/#197 are not physical installation evidence.
+- AI image generation on this Android phone remains blocked/unverified: no working diffusion engine, loaded model, inference run, or generated model image has been demonstrated. Procedural art must not be described as AI generation.
+- YouTube OAuth/channel/live upload remains blocked/unverified. Never perform a live upload without explicit permission; public visibility requires separate exact-content owner approval. No public deployment or publishing performed.
+- Website is a responsive PWA/backend foundation, not yet accepted as a complete fully functional production website. Browser walkthrough evidence is absent.
+- Worker queue/cancel/retry work has passing CI in prior PR runs but remains process-local/background-task based; multi-worker durable external queue semantics are not established.
+
+## PR #194 merge details
+- Scope: conservative ComfyUI resource readiness gate and documentation/tests; it blocks Termux and does not install packages or download models.
+- Exact CI run: `44342524162`, all 7 jobs successful.
+- Merge commit: `7948ea7619a6d949e8255388254c9ebe473363fb`.
+- Follow-up: run main-branch regression CI after merge and retain exact run ID in the next checkpoint update.
+
+## Next executable sequence
+1. Poll run `44499167920` for PR #193 exact head `dabb25adcb8cee6098d057ab1629c636b3d1b01b`; inspect all jobs/logs. Rebase/reconcile with the merged #194 main commit, rerun exact-head CI, then review all changed files and tests before considering merge.
+2. Review PR #191 overlap with #193; avoid duplicate merge or conflict. Check all 19 open PRs for exact-head CI, diff, review threads, and stacked dependencies.
+3. Reconcile #206/#207/#209 queue stack and #196/#197 Android upload stack. Keep them unmerged until parent-first validation and contract review complete.
+4. Refresh Termux issue #212 claim/result and request the user-run diagnostic report if the command remains queued; do not mark physical Android testing complete without the report.
+5. Run read-only forensic scanner on the actual phone for the three target MP4s. Require exact manifest/job/log/DB source mapping. Do not repair or overwrite originals; if provenance is missing, report UNKNOWN and keep publishing blocked.
+6. Keep AI image generation, live YouTube upload, physical Android acceptance, and browser walkthrough marked BLOCKED until their actual external runtime evidence is supplied.
+7. Update this checkpoint after each verified merge/test result. Keep public deployment and public publishing disabled.
