@@ -1728,8 +1728,6 @@ def test_youtube_publish_completes_resumable_upload_and_records_history(tmp_path
     video_bytes = b"mock rendered mp4 bytes"
     (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
     write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
-    write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
-    write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(main, "verify_publishable_mp4", lambda path: {"verified": True})
     monkeypatch.setattr(main, "_youtube_access_token", lambda *args, **kwargs: "mock-youtube-access-token")
@@ -1913,6 +1911,7 @@ def test_public_visibility_requires_one_time_bound_owner_approval(tmp_path, monk
     output_dir.mkdir()
     video_bytes = b"public-approval-test-video"
     (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
+    write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(main, "verify_publishable_mp4", lambda _: {"verified": True})
     monkeypatch.setattr(main, "_youtube_connection", lambda: {
@@ -2033,6 +2032,7 @@ def test_public_approval_revocation_and_expiry_block_upload_before_oauth(tmp_pat
     output_dir.mkdir()
     (output_dir / (video_id + ".mp4")).write_bytes(b"approval-revoke-test")
     write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
+    write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(main, "verify_publishable_mp4", lambda _: {"verified": True})
     monkeypatch.setattr(main, "_youtube_connection", lambda: {
@@ -2093,6 +2093,7 @@ def test_youtube_publish_blocks_same_file_across_different_calendar_items(tmp_pa
     output_dir.mkdir()
     video_bytes = b"same-content-across-calendar-items"
     (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
+    write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(main, "verify_publishable_mp4", lambda _: {"verified": True})
     monkeypatch.setattr(main, "_youtube_connection", lambda: {
