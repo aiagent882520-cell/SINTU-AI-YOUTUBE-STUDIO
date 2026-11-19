@@ -70,6 +70,7 @@ def test_ai_clip_renderer_rejects_non_finite_source_duration(tmp_path, monkeypat
     source = tmp_path / "source.mp4"
     source.write_bytes(b"not-probed-because-metadata-is-mocked")
     monkeypatch.setattr(video_renderer.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(video_renderer, "_validate_source_video", lambda path: None)
     monkeypatch.setattr(
         video_renderer.subprocess, "run",
         lambda *args, **kwargs: SimpleNamespace(
@@ -95,6 +96,7 @@ def test_mixed_timeline_rejects_non_finite_trim_values(tmp_path, monkeypatch, tr
     source = tmp_path / "source.mp4"
     source.write_bytes(b"source")
     monkeypatch.setattr(video_renderer.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(video_renderer, "_validate_source_video", lambda path: None)
     monkeypatch.setattr(
         video_renderer.subprocess, "run",
         lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="10.0", stderr=""),
