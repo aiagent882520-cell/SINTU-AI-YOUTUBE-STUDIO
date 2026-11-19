@@ -22,6 +22,16 @@ def client_for_test(tmp_path, monkeypatch):
     main.init_db()
     return TestClient(main.app)
 
+
+def write_test_quality_manifest(tmp_path, output_path):
+    import hashlib
+    run_id = hashlib.sha256(str(output_path).encode("utf-8")).hexdigest()[:32]
+    return main.write_render_manifest(
+        data_dir=tmp_path, run_id=run_id, format_id="test-format", topic="test",
+        output_path=output_path, asset_paths=[], quality_report={"verified": True},
+    )
+
+
 def test_health_and_catalog(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     assert client.get("/api/health").json()["status"] == "ok"
@@ -1717,6 +1727,9 @@ def test_youtube_publish_completes_resumable_upload_and_records_history(tmp_path
     output_dir.mkdir()
     video_bytes = b"mock rendered mp4 bytes"
     (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
+    write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
+    write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
+    write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(main, "verify_publishable_mp4", lambda path: {"verified": True})
     monkeypatch.setattr(main, "_youtube_access_token", lambda *args, **kwargs: "mock-youtube-access-token")
@@ -1796,6 +1809,7 @@ def test_youtube_publish_resumes_persisted_session_after_process_restart(tmp_pat
     video_bytes = b"restart-resume-test-bytes"
     path = output_dir / (video_id + ".mp4")
     path.write_bytes(video_bytes)
+    write_test_quality_manifest(tmp_path, path)
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(main, "verify_publishable_mp4", lambda _: {"verified": True})
     monkeypatch.setattr(main, "_youtube_access_token", lambda *args, **kwargs: "refreshed-access-token")
@@ -2018,6 +2032,7 @@ def test_public_approval_revocation_and_expiry_block_upload_before_oauth(tmp_pat
     output_dir = tmp_path / "approval-revoke-renders"
     output_dir.mkdir()
     (output_dir / (video_id + ".mp4")).write_bytes(b"approval-revoke-test")
+    write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(main, "verify_publishable_mp4", lambda _: {"verified": True})
     monkeypatch.setattr(main, "_youtube_connection", lambda: {
@@ -3268,7 +3283,8 @@ def test_production_run_render_requires_approved_matching_format(tmp_path, monke
     monkeypatch.setattr(main, "get_production_run", lambda value, owner=None: state if value == run_id and owner == "local" else None)
     monkeypatch.setattr(main, "render_video", lambda payload: {
         "video_id": "b" * 32, "filename": "b" * 32 + ".mp4",
-        "url": "/api/videos/" + "b" * 32, "format": "MP4 / H.264"
+        "url": "/api/videos/" + "b" * 32, "format": "MP4 / H.264",
+        "quality_report": {"verified": True}
     })
     monkeypatch.setattr(main, "attach_render_result", lambda value, result, owner=None: {
         "status": "completed", "result": {"video_rendered": True}
@@ -3464,6 +3480,7 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
             "video_id": "d" * 32, "filename": "d" * 32 + ".mp4",
             "url": "/api/videos/" + "d" * 32, "resolution": kwargs["resolution"],
             "brand_watermark": "SINTU AI YOUTUBE STUDIO",
+            "quality_report": {"verified": True},
             "subtitles_burned_in": bool(kwargs.get("subtitles")),
             "sound_effects": bool(kwargs.get("sound_effects_enabled")),
             "sound_effect_cue_count": max(0, len(scenes) - 1)
@@ -3544,6 +3561,7 @@ def test_production_media_pipeline_uses_approved_storyboard_when_scene_prompts_o
             "video_id": "d" * 32, "filename": "d" * 32 + ".mp4",
             "url": "/api/videos/" + "d" * 32, "resolution": kwargs["resolution"],
             "brand_watermark": "SINTU AI YOUTUBE STUDIO",
+            "quality_report": {"verified": True},
             "subtitles_burned_in": bool(kwargs.get("subtitles"))
         }
     monkeypatch.setattr(main, "render_storyboard", fake_render)
