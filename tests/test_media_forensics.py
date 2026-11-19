@@ -685,6 +685,138 @@ def test_real_nonblack_mp4_forensics_passes_with_decoded_samples(tmp_path, monke
     assert media_forensics.has_forensic_tool_failure(report) is False
 
 
+
+def test_forensics_matches_render_manifest_and_verifies_source_hashes(tmp_path, monkeypatch):
+    import hashlib
+
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    video_dir = tmp_path / "generated_videos"
+    image_dir = tmp_path / "generated_images"
+    manifest_dir = tmp_path / "production_manifests"
+    video_dir.mkdir()
+    image_dir.mkdir()
+    manifest_dir.mkdir()
+    video = video_dir / ("a" * 32 + ".mp4")
+    image = image_dir / ("b" * 32 + ".jpg")
+    video_bytes = b"black-video-fixture"
+    image_bytes = b"original-scene-fixture"
+    video.write_bytes(video_bytes)
+    image.write_bytes(image_bytes)
+
+    manifest = {
+        "schema_version": 1,
+        "created_at": "2026-11-18T00:00:00+00:00",
+        "run_id": "c" * 32,
+        "format_id": "youtube-shorts",
+        "output": {
+            "path": "generated_videos/" + video.name,
+            "sha256": hashlib.sha256(video_bytes).hexdigest(),
+            "size_bytes": len(video_bytes),
+        },
+        "inputs": [{
+            "path": "generated_images/" + image.name,
+            "sha256": hashlib.sha256(image_bytes).hexdigest(),
+            "size_bytes": len(image_bytes),
+        }],
+        "engines": {"image": "SINTU Procedural Art (offline)", "renderer": "FFmpeg"},
+        "settings": {"resolution": "720x1280", "fps": 30},
+    }
+    (manifest_dir / "render.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    matches = media_forensics.find_render_manifests(video)
+
+    assert len(matches) == 1
+    assert matches[0]["run_id"] == "c" * 32
+    assert matches[0]["matched_copy"] == "current-file"
+    assert matches[0]["engines"]["image"] == "SINTU Procedural Art (offline)"
+    assert matches[0]["inputs"][0]["exists"] is True
+    assert matches[0]["inputs"][0]["hash_match"] is True
+
+
+def test_forensics_matches_pre_repair_backup_hash_when_current_mp4_changed(tmp_path, monkeypatch):
+    import hashlib
+
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    video_dir = tmp_path / "generated_videos"
+    backup_dir = tmp_path / "media_backups" / "repair-1"
+    manifest_dir = tmp_path / "production_manifests"
+    video_dir.mkdir()
+    backup_dir.mkdir(parents=True)
+    manifest_dir.mkdir()
+    video = video_dir / ("d" * 32 + ".mp4")
+    backup = backup_dir / video.name
+    original_bytes = b"original-render-before-audio-repair"
+    video.write_bytes(b"repaired-file-with-different-hash")
+    backup.write_bytes(original_bytes)
+    manifest = {
+        "output": {
+            "path": "generated_videos/" + video.name,
+            "sha256": hashlib.sha256(original_bytes).hexdigest(),
+        },
+        "inputs": [],
+    }
+    (manifest_dir / "render.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    matches = media_forensics.find_render_manifests(
+        video, {media_forensics.sha256_file(video), media_forensics.sha256_file(backup)}
+    )
+
+    assert len(matches) == 1
+    assert matches[0]["matched_copy"] == "pre-repair-backup"
+
+
+def test_forensics_ignores_manifest_path_traversal_and_symlinked_sources(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    manifest_dir = tmp_path / "production_manifests"
+    video_dir = tmp_path / "generated_videos"
+    manifest_dir.mkdir()
+    video_dir.mkdir()
+    video = video_dir / ("e" * 32 + ".mp4")
+    video.write_bytes(b"render")
+    manifest = {
+        "output": {
+            "path": "generated_videos/" + video.name,
+            "sha256": media_forensics.sha256_file(video),
+        },
+        "inputs": [{"path": "../outside.jpg", "sha256": "0" * 64}],
+    }
+    (manifest_dir / "unsafe.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    matches = media_forensics.find_render_manifests(video)
+
+    assert len(matches) == 1
+    assert matches[0]["inputs"][0]["exists"] is False
+    assert matches[0]["inputs"][0]["hash_match"] is False
+    assert matches[0]["inputs"][0]["error"] == "unsafe manifest path"
+
+
+def test_forensics_discovers_generated_music_and_reports_wav_metadata(tmp_path, monkeypatch):
+    import wave
+    import os
+
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    music_dir = tmp_path / "generated_music"
+    music_dir.mkdir()
+    wav_path = music_dir / "candidate.wav"
+    with wave.open(str(wav_path), "wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(22_050)
+        audio.writeframes(bytes(2 * 22_050 * 6))
+
+    timestamp = 1_800_000_000
+    os.utime(wav_path, (timestamp, timestamp))
+    matches = media_forensics.nearby_assets(timestamp)
+
+    assert len(matches) == 1
+    assert matches[0]["path"] == "generated_music/candidate.wav"
+    assert matches[0]["size_bytes"] == 44 + 22_050 * 6 * 2
+    assert matches[0]["audio_duration_seconds"] == 6.0
+    assert matches[0]["audio_sample_rate"] == 22_050
+    assert matches[0]["audio_channels"] == 1
+    assert matches[0]["audio_sample_width_bytes"] == 2
+    assert matches[0]["audio_frames"] == 22_050 * 6
+
 def test_real_partial_black_mp4_is_not_misclassified_as_full_duration_black(tmp_path):
     import shutil
     import subprocess
