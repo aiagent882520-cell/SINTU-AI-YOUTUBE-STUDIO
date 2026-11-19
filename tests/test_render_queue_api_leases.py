@@ -62,3 +62,13 @@ def test_clients_cannot_forge_worker_completion_and_can_cancel_queued_jobs(tmp_p
     cancelled = main.studio_cancel_render_queue(item["id"], object())
     assert cancelled["cancelled"] is True
     assert cancelled["item"]["status"] == "cancelled"
+
+
+def test_external_worker_respects_production_pause(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    from scripts import render_queue_worker
+    monkeypatch.setattr(render_queue_worker, "production_actions_allowed", lambda: False)
+    monkeypatch.setattr(durable_render_queue, "ensure_schema", lambda: None)
+    monkeypatch.setattr(durable_render_queue, "recover_expired_leases", lambda: {"requeued": 0, "dead_lettered": 0})
+    monkeypatch.setattr(durable_render_queue, "claim_next", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("paused worker must not claim")))
+    assert render_queue_worker.run_worker(once=True) == 0
