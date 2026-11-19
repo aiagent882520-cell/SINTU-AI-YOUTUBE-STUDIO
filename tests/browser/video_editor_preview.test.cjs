@@ -252,3 +252,62 @@ test("real Chromium keeps subtitles aligned when timeline clips are reordered", 
     await context.close();
   }
 });
+
+
+test("real Chromium renders safe admin YouTube upload history and refreshes it", async () => {
+  const { context, page } = await openStudio();
+  let historyRequests = 0;
+  const upload = {
+    calendar_id: 77,
+    video_id: "a".repeat(32),
+    title: "<img src=x onerror=alert(1)>",
+    privacy_status: "private",
+    file_size: 1000,
+    acknowledged_offset: 750,
+    status: "UPLOADING",
+    youtube_video_id: "abc12345678",
+    processing_status: "processing",
+    created_at: "2026-11-19T10:00:00+00:00",
+    updated_at: "2026-11-19T10:05:00+00:00",
+    progress_percent: 75,
+    encrypted_session_uri: "SECRET_SESSION_URI_MUST_NOT_RENDER",
+  };
+  try {
+    await page.route("**/api/auth/session", route => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ authenticated: true, role: "admin" }),
+    }));
+    await page.route("**/api/admin/youtube/status", route => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ connected: false, oauth_configured: false, encryption_configured: false }),
+    }));
+    await page.route("**/api/admin/youtube/uploads*", route => {
+      historyRequests += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ uploads: [upload], count: 1, limit: 50, status_filter: null }),
+      });
+    });
+    await page.evaluate(() => loadYouTubeAdminPanel());
+    await page.waitForFunction(() => document.getElementById("youtubeAdminPanel").hidden === false);
+    await page.waitForFunction(() => document.getElementById("youtubeUploadHistory").textContent.includes("75.00%"));
+    const history = page.locator("#youtubeUploadHistory");
+    assert.equal(await history.locator("img").count(), 0);
+    assert.match(await history.textContent(), /<img src=x onerror=alert\(1\)>/);
+    assert.match(await history.textContent(), /UPLOADING/);
+    assert.match(await history.textContent(), /private/);
+    assert.match(await history.textContent(), /75.00%/);
+    assert.doesNotMatch(await history.textContent(), /SECRET_SESSION_URI_MUST_NOT_RENDER/);
+    assert.equal(await history.locator('a[href="https://www.youtube.com/watch?v=abc12345678"]').count(), 1);
+    await page.locator("#youtubeUploadHistoryRefresh").click();
+    await page.waitForFunction(() => window.__youtubeHistoryRefreshCount === 2, null, { timeout: 3000 }).catch(async () => {
+      assert.ok(historyRequests >= 2, "history refresh did not make a second request");
+    });
+    assert.ok(historyRequests >= 2);
+  } finally {
+    await context.close();
+  }
+});
