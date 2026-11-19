@@ -284,6 +284,9 @@ test("editor draft survives browser refresh and can be restored or cleared", asy
     await page.locator("#clearEditorDraft").click();
     assert.equal(await page.evaluate(() => localStorage.getItem("sintu.video-editor-draft.v1")), null);
     assert.equal(await page.locator("#restoreEditorDraft").isEnabled(), false);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    assert.equal(await page.locator("#restoreEditorDraft").isEnabled(), false);
+    assert.equal(await page.evaluate(() => localStorage.getItem("sintu.video-editor-draft.v1")), null);
   } finally {
     await context.close();
   }

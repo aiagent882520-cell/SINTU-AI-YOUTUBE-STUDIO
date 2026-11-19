@@ -41,6 +41,7 @@
   }
 
   function saveDraft() {
+    if (draftClearedUntilNextEdit) return;
     const values = {};
     for (const field of controls()) {
       values[field.id] = field.type === "checkbox" ? field.checked : field.value;
@@ -89,6 +90,8 @@
   }
 
   function clearDraft() {
+    draftClearedUntilNextEdit = true;
+    clearTimeout(saveTimer);
     try {
       localStorage.removeItem(STORAGE_KEY);
       updateButtons();
@@ -99,14 +102,17 @@
   }
 
   let saveTimer = null;
+  let draftClearedUntilNextEdit = false;
   document.addEventListener("input", event => {
     if (FIELD_IDS.includes(event.target?.id)) {
+      draftClearedUntilNextEdit = false;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(saveDraft, 300);
     }
   });
   document.addEventListener("change", event => {
     if (FIELD_IDS.includes(event.target?.id)) {
+      draftClearedUntilNextEdit = false;
       clearTimeout(saveTimer);
       saveDraft();
     }
