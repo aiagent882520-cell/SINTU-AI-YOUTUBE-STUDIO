@@ -926,3 +926,33 @@ def test_text_log_scan_reports_matching_asset_tokens(tmp_path, monkeypatch):
         "generated_music/session-track-123456.wav",
         "session-track-123456",
     ]
+
+
+
+def test_sqlite_scan_reports_candidate_source_asset_reference(tmp_path, monkeypatch):
+    import sqlite3
+
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    database = tmp_path / "production.sqlite"
+    connection = sqlite3.connect(database)
+    connection.execute(
+        "CREATE TABLE render_jobs (id INTEGER PRIMARY KEY, source_asset_path TEXT)"
+    )
+    connection.execute(
+        "INSERT INTO render_jobs (source_asset_path) VALUES (?)",
+        ("generated_music/session-track-123456.wav",),
+    )
+    connection.commit()
+    connection.close()
+
+    result = media_forensics.scan_database_records((
+        "generated_music/session-track-123456.wav",
+        "session-track-123456",
+    ))
+    assert len(result) == 2
+    assert all(item["table"] == "render_jobs" for item in result)
+    assert all(item["matched_terms"] for item in result)
+    assert all(
+        item["record"]["source_asset_path"] == "generated_music/session-track-123456.wav"
+        for item in result
+    )
