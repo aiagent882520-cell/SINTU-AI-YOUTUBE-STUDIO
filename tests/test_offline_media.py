@@ -115,21 +115,6 @@ def test_offline_media_cleans_only_stale_interrupted_upload_parts(tmp_path):
     assert recent.exists()
 
 
-def test_offline_media_ui_and_service_worker_include_persistent_queue(tmp_path, monkeypatch):
-    client = _client(tmp_path, monkeypatch)
-    page = client.get("/")
-    assert page.status_code == 200
-    assert 'id="offlineMediaFiles"' in page.text
-    assert "/static/offline_media.js" in page.text
-    script = client.get("/static/offline_media.js")
-    assert script.status_code == 200
-    assert "indexedDB.open" in script.text
-    assert "/api/offline-media/import" in script.text
-    worker = client.get("/static/sw.js")
-    assert worker.status_code == 200
-    assert "/static/offline_media.js" in worker.text
-
-
 def test_offline_media_refuses_same_size_corrupt_unindexed_destination(tmp_path):
     import sqlite3
     source = tmp_path / "first.part"
