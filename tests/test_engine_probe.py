@@ -39,3 +39,41 @@ def test_engine_probe_uses_conservative_tier_for_low_resources(monkeypatch):
     report = probe.build_report()
     assert report["recommendation"]["llama_model_tier"] == "no_safe_automatic_model_download"
     assert report["recommendation"]["image_model_tier"] == "no_safe_automatic_diffusion_model_download"
+
+
+def test_comfyui_setup_gate_blocks_android_termux_even_with_large_resources():
+    gate = probe._comfyui_setup_gate(
+        termux=True, available_ram_bytes=16 * 1024**3, free_disk_bytes=40 * 1024**3
+    )
+    assert gate["status"] == "blocked"
+    assert gate["eligible_for_manual_review"] is False
+    assert gate["auto_install_allowed"] is False
+    assert gate["install_performed"] is False
+    assert any("Termux" in reason for reason in gate["reasons"])
+
+
+def test_comfyui_setup_gate_blocks_low_ram_and_storage():
+    gate = probe._comfyui_setup_gate(
+        termux=False, available_ram_bytes=7 * 1024**3, free_disk_bytes=19 * 1024**3
+    )
+    assert gate["status"] == "blocked"
+    assert gate["eligible_for_manual_review"] is False
+    assert len(gate["reasons"]) == 2
+
+
+def test_comfyui_setup_gate_only_allows_manual_review_on_suitable_separate_host():
+    gate = probe._comfyui_setup_gate(
+        termux=False, available_ram_bytes=12 * 1024**3, free_disk_bytes=30 * 1024**3
+    )
+    assert gate["status"] == "eligible_for_manual_review"
+    assert gate["eligible_for_manual_review"] is True
+    assert gate["auto_install_allowed"] is False
+    assert gate["install_performed"] is False
+
+
+def test_comfyui_setup_gate_treats_unknown_storage_as_unsafe():
+    gate = probe._comfyui_setup_gate(
+        termux=False, available_ram_bytes=12 * 1024**3, free_disk_bytes=None
+    )
+    assert gate["status"] == "blocked"
+    assert gate["eligible_for_manual_review"] is False
