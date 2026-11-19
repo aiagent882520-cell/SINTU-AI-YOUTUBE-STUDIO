@@ -4572,7 +4572,9 @@ def get_video(video_id: str):
 
 @app.get("/api/images/capabilities")
 def image_capabilities():
-    return image_status()
+    status = image_status()
+    status["production_enabled"] = production_actions_allowed()
+    return status
 
 
 @app.post("/api/images")
