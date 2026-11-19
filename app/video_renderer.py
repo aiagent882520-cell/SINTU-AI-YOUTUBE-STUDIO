@@ -569,7 +569,8 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                       subtitles: list[str] | None = None, music_path: Path | None = None,
                       music_volume: float = 0.18, transition: str = "fade", motion: str = "slow-zoom-in",
                       resolution: str = "720x1280", fps: int = 30, quality: str = "high",
-                      sound_effects_enabled: bool = False, sound_effects_volume: float = 0.18) -> dict:
+                      sound_effects_enabled: bool = False, sound_effects_volume: float = 0.18,
+                    progress_callback=None) -> dict:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RendererUnavailable("FFmpeg server par installed nahi hai. Video rendering filhaal unavailable hai.")
@@ -710,7 +711,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             command += ["-t", f"{duration + (1 / fps):.6f}", "-c:v", "libx264", "-preset", preset,
                         "-crf", str(crf), "-pix_fmt", "yuv420p", "-r", str(fps),
                         "-movflags", "+faststart", "-threads", "2", str(temporary_output_path)]
-            completed = render_process.run_render_process(command, capture_output=True, text=True, timeout=RENDER_TIMEOUT_SECONDS, check=False)
+            completed = render_process.run_render_process(command, capture_output=True, text=True, timeout=RENDER_TIMEOUT_SECONDS, check=False, total_duration=duration, progress_callback=progress_callback)
             if completed.returncode != 0 or not temporary_output_path.is_file():
                 detail = (completed.stderr or "FFmpeg render failed")[-1200:]
                 raise RenderFailed(detail)
@@ -939,7 +940,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                         "-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
                         "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", "-t", f"{total_duration:.3f}",
                         "-movflags", "+faststart", str(temporary_output_path)]
-            completed = render_process.run_render_process(command, capture_output=True, text=True, timeout=900, check=False)
+            completed = render_process.run_render_process(command, capture_output=True, text=True, timeout=900, check=False, total_duration=total_duration, progress_callback=progress_callback)
             if completed.returncode != 0 or not temporary_output_path.is_file():
                 detail = (completed.stderr or "FFmpeg AI clip assembly failed")[-1600:]
                 raise RenderFailed(detail)
@@ -993,7 +994,7 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                           transitions: list[str] | None = None, resolution: str = "720x1280",
                           fps: int = 30, quality: str = "high",
                           sound_effects_enabled: bool = False,
-                          sound_effects_volume: float = 0.18) -> dict:
+                          sound_effects_volume: float = 0.18, progress_callback=None) -> dict:
     """Create one ordered timeline from generated still images and AI video clips."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
@@ -1048,7 +1049,7 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                 if segment_duration<0.25: raise ValueError("Trimmed video kam se kam 0.25 seconds ka hona chahiye.")
                 segment=work/f"trimmed-{index:03d}.mp4"
                 command=[ffmpeg,"-y","-hide_banner","-loglevel","error","-ss",f"{trim_start:.3f}","-i",str(path),"-t",f"{segment_duration:.3f}","-map","0:v:0","-map","0:a?","-c:v","libx264","-preset","veryfast","-pix_fmt","yuv420p","-c:a","aac","-b:a","128k","-ar","48000","-ac","2","-movflags","+faststart",str(segment)]
-                completed=render_process.run_render_process(command,capture_output=True,text=True,timeout=180,check=False)
+                completed=render_process.run_render_process(command,capture_output=True,text=True,timeout=180,check=False,total_duration=segment_duration,progress_callback=progress_callback)
                 if completed.returncode!=0 or not segment.is_file():
                     raise RenderFailed((completed.stderr or "Video trim failed")[-1200:])
                 clip_paths.append(segment)
@@ -1069,7 +1070,8 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                      "-t", str(image_duration), "-shortest",
                      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
                      "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2", "-movflags", "+faststart", str(segment)],
-                    capture_output=True, text=True, timeout=90, check=False
+                    capture_output=True, text=True, timeout=90, check=False,
+                    total_duration=float(image_duration), progress_callback=progress_callback
                 )
                 if completed.returncode != 0 or not segment.is_file():
                     raise RenderFailed((completed.stderr or "Still image clip creation failed")[-1200:])
@@ -1082,7 +1084,8 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
             clip_audio_volumes=[float(item.get("audio_volume", 0.25)) if item["kind"] == "video" else 0.0 for item in items],
             scene_descriptions=scenes, sound_effects_enabled=sound_effects_enabled,
             sound_effects_volume=sound_effects_volume,
-            resolution=resolution, fps=fps, quality=quality
+            resolution=resolution, fps=fps, quality=quality,
+            progress_callback=progress_callback
         )
         result["timeline_items"] = len(items)
         result["timeline_order"] = [item["kind"] for item in items]
