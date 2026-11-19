@@ -82,3 +82,16 @@ def test_recover_interrupted_render_queue_marks_only_running_jobs_failed(tmp_pat
     assert items[running["id"]]["status"] == "failed"
     assert items[running["id"]]["result"]["error_type"] == "server_restart"
     assert items[running["id"]]["result"]["retryable"] is True
+
+
+
+def test_running_render_can_transition_to_cancelled_and_cannot_complete_afterward(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    item = studio_engine.enqueue_render("owner", "project-1", {"title": "cancel me"})
+    studio_engine.update_render_item("owner", item["id"], "running")
+    cancelled = studio_engine.update_render_item(
+        "owner", item["id"], "cancelled", {"error": "Render cancelled by user."}
+    )
+    assert cancelled["status"] == "cancelled"
+    with pytest.raises(ValueError):
+        studio_engine.update_render_item("owner", item["id"], "completed", {"filename": "late.mp4"})
