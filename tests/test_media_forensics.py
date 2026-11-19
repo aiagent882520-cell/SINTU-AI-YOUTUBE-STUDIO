@@ -830,3 +830,130 @@ def test_real_dark_gray_mp4_is_not_misclassified_as_full_black(tmp_path):
                for sample in report["decoded_frame_samples"])
     assert media_forensics.has_forensic_tool_failure(report) is False
 
+
+def test_nearby_assets_includes_generated_music_directory(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    music_dir = tmp_path / "generated_music"
+    music_dir.mkdir()
+    music = music_dir / "nearby.wav"
+    music.write_bytes(b"RIFF" + b"\\x00" * 40)
+    reference_time = 1_700_000_000
+    os.utime(music, (reference_time, reference_time))
+
+    assets = media_forensics.nearby_assets(reference_time)
+
+    assert len(assets) == 1
+    assert assets[0]["path"] == "generated_music/nearby.wav"
+    assert assets[0]["size_bytes"] == music.stat().st_size
+
+
+def test_forensics_reports_generated_wav_duration_and_format(tmp_path, monkeypatch):
+    import wave
+
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    music_dir = tmp_path / "generated_music"
+    music_dir.mkdir()
+    music = music_dir / "six-seconds.wav"
+    with wave.open(str(music), "wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(22050)
+        audio.writeframes(bytes(22050 * 6 * 2))
+
+    report = media_forensics.inspect_asset(music)
+
+    assert report["audio_duration_seconds"] == 6.0
+    assert report["audio_sample_rate"] == 22050
+    assert report["audio_channels"] == 1
+    assert report["audio_sample_width_bytes"] == 2
+
+
+
+
+def test_nearby_assets_are_ranked_by_timestamp_distance_and_labeled_as_candidates(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    images = tmp_path / "generated_images"
+    images.mkdir()
+    farther = images / "farther-image-001.png"
+    closer = images / "closer-image-002.png"
+    farther.write_bytes(b"not-an-image")
+    closer.write_bytes(b"not-an-image")
+    reference = 1_700_000_000
+    os.utime(farther, (reference + 120, reference + 120))
+    os.utime(closer, (reference - 15, reference - 15))
+
+    results = media_forensics.nearby_assets(reference)
+    assert [item["path"] for item in results] == [
+        "generated_images/closer-image-002.png",
+        "generated_images/farther-image-001.png",
+    ]
+    assert results[0]["reference_time_delta_seconds"] == 15
+    assert results[0]["mtime_offset_from_reference_seconds"] == -15
+    assert results[0]["correlation_basis"] == "mtime_proximity_only_not_proof"
+
+
+def test_source_asset_needles_include_bounded_path_filename_and_stem():
+    needles = media_forensics.source_asset_needles([
+        {"path": "generated_music/session-track-123456.wav"},
+        {"path": "generated_images/session-track-123456.png"},
+        {"path": "generated_audio/short.mp3"},
+    ])
+    assert "generated_music/session-track-123456.wav" in needles
+    assert "session-track-123456.wav" in needles
+    assert "session-track-123456" in needles
+    assert "generated_images/session-track-123456.png" in needles
+    assert "short.mp3" not in needles
+    assert "generated_audio/short.mp3" not in needles
+
+
+def test_text_log_scan_reports_matching_asset_tokens(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "render.log").write_text(
+        "render used generated_music/session-track-123456.wav\n",
+        encoding="utf-8",
+    )
+    result = media_forensics.scan_text_logs((
+        "generated_music/session-track-123456.wav",
+        "session-track-123456",
+    ))
+    assert len(result) == 1
+    assert result[0]["matched_terms"] == [
+        "generated_music/session-track-123456.wav",
+        "session-track-123456",
+    ]
+
+
+
+def test_sqlite_scan_reports_candidate_source_asset_reference(tmp_path, monkeypatch):
+    import sqlite3
+
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    database = tmp_path / "production.sqlite"
+    connection = sqlite3.connect(database)
+    connection.execute(
+        "CREATE TABLE render_jobs (id INTEGER PRIMARY KEY, source_asset_path TEXT)"
+    )
+    connection.execute(
+        "INSERT INTO render_jobs (source_asset_path) VALUES (?)",
+        ("generated_music/session-track-123456.wav",),
+    )
+    connection.commit()
+    connection.close()
+
+    result = media_forensics.scan_database_records((
+        "generated_music/session-track-123456.wav",
+        "session-track-123456",
+    ))
+    assert len(result) == 2
+    assert all(item["table"] == "render_jobs" for item in result)
+    assert all(item["matched_terms"] for item in result)
+    assert all(
+        item["record"]["source_asset_path"] == "generated_music/session-track-123456.wav"
+        for item in result
+    )
