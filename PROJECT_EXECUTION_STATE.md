@@ -1186,3 +1186,20 @@ No PR merged, no deployment or publishing, and no original media modified.
 4. Historical black MP4 root cause remains unproven. Container remux cannot restore missing/black pixels.
 5. Keep publishing disabled; no PR merge, deployment or real external upload is authorized/performed.
 
+
+
+## Publishing gate CI correction — 2026-11-19
+
+### PR #193 current state
+- Latest PR #193 head: `97ec3c4bcef218a10e4d0ef7df4012a7180ca584`.
+- Added fail-closed exact-output provenance gate in `app/publishing_quality_gate.py`; quality report is persisted in `production_manifests` only when renderer verification returns `verified=true`.
+- Guarded YouTube public approval/upload, Facebook upload and TikTok upload. Instagram arbitrary remote-URL publishing is explicitly blocked until the URL can be tied to a local SINTU PASS record.
+- Regression tests cover missing quality status, matching PASS, changed MP4, symlink/outside-root and invalid quality report.
+- CI run `44439978069` FAILED on Python 3.11–3.13 because an existing exact-dictionary assertion did not include the already-added `verified: true` field in the renderer report. The new tests and remaining 638 tests passed in those jobs; this was a stale test expectation, not a production gate failure.
+- Corrected `tests/test_render_output_validation.py` to assert the explicit verified field. Exact-head rerun `44443793005` is QUEUED for head `97ec3c4...`; no CI PASS is claimed yet.
+- Safe remux and gate changes are not yet fully CI-verified together. No publishing/deployment/merge performed.
+
+### Next actions
+1. Wait for exact-head run `44443793005`; inspect and fix any remaining failures.
+2. Once PR #193 CI passes, run the same publishing gate against route-level API tests and confirm no alternate external upload path bypasses it.
+3. Continue persistent offline media import/index/queue/retry/sync and Android physical-device tests.
