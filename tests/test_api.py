@@ -3786,6 +3786,7 @@ def test_youtube_publish_requires_approved_calendar_and_records_success(tmp_path
     video_id = "a" * 32
     video_bytes = b"fake-mp4-content"
     (output_dir / (video_id + ".mp4")).write_bytes(video_bytes)
+    write_test_quality_manifest(tmp_path, output_dir / (video_id + ".mp4"))
     future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
     created = client.post("/api/calendar", json={
         "title": "Approved upload test", "platform": "youtube_shorts",
