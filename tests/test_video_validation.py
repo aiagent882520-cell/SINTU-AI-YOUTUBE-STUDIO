@@ -30,7 +30,8 @@ def test_validate_video_accepts_probe_verified_mp4(monkeypatch):
         return SimpleNamespace(returncode=0, stdout=bytes([80, 120, 160]) * (32 * 32 * 8), stderr=b"")
     monkeypatch.setattr("app.video_generator.subprocess.run", fake_run)
     monkeypatch.setattr("app.video_generator.shutil.which", lambda name: f"/usr/bin/{name}")
-    raw = VALID_MP4_HEADER    assert _validate_video(raw) is raw
+    raw = VALID_MP4_HEADER
+    assert _validate_video(raw) is raw
 
 
 @pytest.mark.parametrize("metadata", [
