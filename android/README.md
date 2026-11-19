@@ -28,3 +28,33 @@ This first native client tranche is not yet a complete parity release. Backgroun
 ## CI build evidence
 
 The GitHub Actions workflow `.github/workflows/android-app.yml` runs the URL-validation unit tests and assembles both `app-debug.apk` and `app-release-unsigned.apk`. The debug and unsigned release APKs are uploaded together as the `sintu-android-apks` workflow artifact. A successful CI build proves compilation/package creation, not installation or functional testing on a physical Android device.
+
+
+## Physical Android device acceptance
+
+CI APK compilation is not a physical-device test. Build a debug APK on a host with JDK 17 and Android SDK 35:
+
+```bash
+gradle -p android assembleDebug
+```
+
+Connect and authorize exactly one phone with USB debugging enabled, then run from the repository root:
+
+```bash
+bash scripts/android_physical_device_smoke.sh android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+The script installs/updates the debug package, launches it, checks that the process remains alive, records Android release/ABI/display and memory diagnostics, and scans fresh AndroidRuntime logs for a fatal crash. It writes android-device-acceptance.txt. If multiple phones are connected, set ANDROID_SERIAL. For a release APK use ANDROID_PACKAGE=com.sintu.studio.
+
+This is only an install/launch smoke test. Complete the following manual acceptance on the same physical device before marking the Android module complete:
+
+1. Configure the backend URL (same-device Termux can use http://127.0.0.1:8000/; remote backends must use HTTPS).
+2. Sign in with a real test account; verify session persistence and logout.
+3. Create/select a conversation, send a message, restart the app and verify history.
+4. Create a project and verify backend persistence.
+5. Import media using the document picker; verify WorkManager upload progress, retry after network loss, and no duplicate upload.
+6. Create a production run, verify approval gates, render a real MP4, download it to the gallery and play it.
+7. Force-stop/relaunch during a queued upload; verify recovery and permission handling.
+8. Repeat on small and large screen sizes; inspect TalkBack labels, keyboard navigation and memory/crash logs.
+
+Do not attach credentials, cookies, .env files, or private media to the report. A PASS from this script must be labelled PHYSICAL INSTALL/LAUNCH SMOKE PASS, not full Android acceptance.
