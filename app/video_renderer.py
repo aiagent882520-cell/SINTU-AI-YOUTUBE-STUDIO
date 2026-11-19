@@ -764,7 +764,8 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                     clip_audio_volumes: list[float] | None = None, resolution: str = "720x1280",
                     fps: int = 30, quality: str = "high",
                     scene_descriptions: list[str] | None = None,
-                    sound_effects_enabled: bool = False, sound_effects_volume: float = 0.18) -> dict:
+                    sound_effects_enabled: bool = False, sound_effects_volume: float = 0.18,
+                    progress_callback=None) -> dict:
     """Join AI MP4 clips, preserve audio, mix optional narration/music and add SINTU branding."""
     import json
 
@@ -1049,7 +1050,7 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                 if segment_duration<0.25: raise ValueError("Trimmed video kam se kam 0.25 seconds ka hona chahiye.")
                 segment=work/f"trimmed-{index:03d}.mp4"
                 command=[ffmpeg,"-y","-hide_banner","-loglevel","error","-ss",f"{trim_start:.3f}","-i",str(path),"-t",f"{segment_duration:.3f}","-map","0:v:0","-map","0:a?","-c:v","libx264","-preset","veryfast","-pix_fmt","yuv420p","-c:a","aac","-b:a","128k","-ar","48000","-ac","2","-movflags","+faststart",str(segment)]
-                completed=render_process.run_render_process(command,capture_output=True,text=True,timeout=180,check=False,total_duration=segment_duration,progress_callback=progress_callback)
+                completed=render_process.run_render_process(command,capture_output=True,text=True,timeout=180,check=False)
                 if completed.returncode!=0 or not segment.is_file():
                     raise RenderFailed((completed.stderr or "Video trim failed")[-1200:])
                 clip_paths.append(segment)
@@ -1071,7 +1072,7 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
                      "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2", "-movflags", "+faststart", str(segment)],
                     capture_output=True, text=True, timeout=90, check=False,
-                    total_duration=float(image_duration), progress_callback=progress_callback
+                    total_duration=float(image_duration)
                 )
                 if completed.returncode != 0 or not segment.is_file():
                     raise RenderFailed((completed.stderr or "Still image clip creation failed")[-1200:])
