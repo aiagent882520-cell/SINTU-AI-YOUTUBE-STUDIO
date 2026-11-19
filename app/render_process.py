@@ -61,6 +61,12 @@ def run_render_process(command, *, timeout: float, text: bool = True,
     job_id = getattr(_job, "job_id", None)
     ffmpeg_command = list(command)
     report_progress = bool(progress_callback and total_duration and total_duration > 0)
+    # Preserve the established subprocess.run contract for ordinary, non-queue renders.
+    # Queue jobs have a render_job context and use Popen so cancellation can terminate them.
+    if not job_id and not report_progress:
+        return subprocess.run(
+            command, capture_output=capture_output, text=text, timeout=timeout, check=check
+        )
     if report_progress and ffmpeg_command:
         ffmpeg_command[-1:-1] = ["-progress", "pipe:1", "-nostats"]
 
