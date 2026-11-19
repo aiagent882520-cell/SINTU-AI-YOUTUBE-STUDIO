@@ -1,4 +1,6 @@
-import pytest\n\nfrom app import main, durable_render_queue
+import pytest
+
+from app import main, durable_render_queue
 
 
 def test_render_queue_api_uses_durable_claim_and_completion(tmp_path, monkeypatch):
