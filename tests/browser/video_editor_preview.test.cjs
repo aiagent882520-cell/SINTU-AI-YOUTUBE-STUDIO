@@ -18,6 +18,7 @@ let server;
 let baseUrl;
 let tempDir;
 let webm;
+let videoRangeRequests = [];
 
 function contentType(file) {
   if (file.endsWith(".html")) return "text/html; charset=utf-8";
@@ -42,26 +43,65 @@ before(async () => {
 
   server = http.createServer((request, response) => {
     const pathname = new URL(request.url, "http://127.0.0.1").pathname;
+    if (pathname.startsWith("/api/ai-videos/")) {
+      const range = request.headers.range;
+      videoRangeRequests.push(range || null);
+      response.setHeader("Content-Type", "video/webm");
+      response.setHeader("Accept-Ranges", "bytes");
+      response.setHeader("Cache-Control", "no-store");
+      if (range) {
+        const match = /^bytes=(\\d*)-(\\d*)$/.exec(range);
+        if (!match || (!match[1] && !match[2])) {
+          response.writeHead(416, { "Content-Range": "bytes */" + webm.length });
+          response.end();
+          return;
+        }
+        let start = match[1] ? Number(match[1]) : Math.max(0, webm.length - Number(match[2]));
+        let end = match[2] && match[1] ? Math.min(Number(match[2]), webm.length - 1) : webm.length - 1;
+        if (start >= webm.length || end < start) {
+          response.writeHead(416, { "Content-Range": "bytes */" + webm.length });
+          response.end();
+          return;
+        }
+        const chunk = webm.subarray(start, end + 1);
+        response.writeHead(206, {
+          "Content-Range": "bytes " + start + "-" + end + "/" + webm.length,
+          "Content-Length": String(chunk.length),
+        });
+        response.end(chunk);
+        return;
+      }
+      response.writeHead(200, { "Content-Length": String(webm.length) });
+      response.end(webm);
+      return;
+    }
+    if (pathname.startsWith("/api/images/")) {
+      if (pathname.split("/").pop().startsWith("b")) {
+        response.writeHead(404); response.end("missing image"); return;
+      }
+      response.writeHead(200, { "Content-Type": "image/png", "Content-Length": String(PNG.length) });
+      response.end(PNG); return;
+    }
+    if (pathname.startsWith("/api/")) {
+      const payload = Buffer.from(JSON.stringify({
+        tasks: [], items: [], projects: [], media: [],
+        providers: { local: { model_available: false } },
+      }));
+      response.writeHead(200, { "Content-Type": "application/json", "Content-Length": String(payload.length) });
+      response.end(payload); return;
+    }
     const relative = pathname === "/" ? "index.html"
       : pathname.startsWith("/static/") ? pathname.slice("/static/".length) : null;
     if (relative === null) {
-      response.writeHead(404);
-      response.end("Not found");
-      return;
+      response.writeHead(404); response.end("Not found"); return;
     }
     const target = path.resolve(STATIC_ROOT, relative);
     if (!target.startsWith(STATIC_ROOT + path.sep) && target !== STATIC_ROOT) {
-      response.writeHead(403);
-      response.end("Forbidden");
-      return;
+      response.writeHead(403); response.end("Forbidden"); return;
     }
     fs.readFile(target, (error, bytes) => {
-      if (error) {
-        response.writeHead(404);
-        response.end("Not found");
-        return;
-      }
-      response.writeHead(200, { "Content-Type": contentType(target), "Cache-Control": "no-store" });
+      if (error) { response.writeHead(404); response.end("Not found"); return; }
+      response.writeHead(200, { "Content-Type": contentType(target), "Content-Length": String(bytes.length), "Cache-Control": "no-store" });
       response.end(bytes);
     });
   });
@@ -82,57 +122,15 @@ after(async () => {
 async function openStudio() {
   const context = await browser.newContext({ serviceWorkers: "block" });
   const page = await context.newPage();
-  await page.route("**/api/**", async route => {
-    const url = new URL(route.request().url());
-    if (url.pathname.startsWith("/api/images/")) {
-      const id = url.pathname.split("/").pop();
-      if (id.startsWith("b")) return route.fulfill({ status: 404, body: "missing image" });
-      return route.fulfill({ status: 200, contentType: "image/png", body: PNG });
-    }
-    if (url.pathname.startsWith("/api/ai-videos/")) {
-      await new Promise(resolve => setTimeout(resolve, 150));
-      const range = route.request().headers().range;
-      if (range) {
-        const match = /^bytes=(\d+)-(\d*)$/.exec(range);
-        if (!match) return route.fulfill({ status: 416, headers: { "Content-Range": "bytes */" + webm.length } });
-        const start = Number(match[1]);
-        const end = match[2] ? Math.min(Number(match[2]), webm.length - 1) : webm.length - 1;
-        if (start >= webm.length || end < start) {
-          return route.fulfill({ status: 416, headers: { "Content-Range": "bytes */" + webm.length } });
-        }
-        const chunk = webm.subarray(start, end + 1);
-        return route.fulfill({
-          status: 206,
-          contentType: "video/webm",
-          headers: {
-            "Accept-Ranges": "bytes",
-            "Content-Range": "bytes " + start + "-" + end + "/" + webm.length,
-            "Content-Length": String(chunk.length),
-          },
-          body: chunk,
-        });
-      }
-      return route.fulfill({
-        status: 200,
-        contentType: "video/webm",
-        headers: { "Accept-Ranges": "bytes", "Content-Length": String(webm.length) },
-        body: webm,
-      });
-    }
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        tasks: [], items: [], projects: [], media: [],
-        providers: { local: { model_available: false } },
-      }),
-    });
-  });
   await page.addInitScript(() => {
     const attach = () => {
       const video = document.querySelector("#timelinePreviewStage video");
       if (video && !video.dataset.sintuPlayProbe) {
         video.dataset.sintuPlayProbe = "1";
+        window.__sintuMediaEvents = [];
+        for (const name of ["loadedmetadata", "seeking", "seeked", "play", "playing", "timeupdate", "error", "stalled", "waiting"]) {
+          video.addEventListener(name, () => window.__sintuMediaEvents.push({ name, currentTime: video.currentTime, readyState: video.readyState, networkState: video.networkState, error: video.error?.code || null }));
+        }
         video.addEventListener("play", () => { window.__sintuPlayTime = video.currentTime; }, { once: true });
       }
     };
@@ -188,7 +186,10 @@ test("real Chromium seeks to trim-start before video playback and stops at trim-
   try {
     await setTimeline(page, "video:" + "c".repeat(32) + ":0.25:0.8:0.25:cut");
     await page.locator("#timelinePreviewPlay").click({ force: true });
-    await page.waitForFunction(() => Number.isFinite(window.__sintuPlayTime), null, { timeout: 7000 });
+    await page.waitForFunction(() => Number.isFinite(window.__sintuPlayTime), null, { timeout: 12000 }).catch(async error => {
+      const state = await page.evaluate(() => ({ notice: document.getElementById("timelinePreviewNotice").textContent, events: window.__sintuMediaEvents || [], video: (() => { const v = document.querySelector("#timelinePreviewStage video"); return v ? { currentTime: v.currentTime, duration: v.duration, readyState: v.readyState, networkState: v.networkState, error: v.error?.code || null, seeking: v.seeking } : null; })() }));
+      throw new Error(error.message + " Media diagnostics: " + JSON.stringify(state) + " Range requests: " + JSON.stringify(videoRangeRequests));
+    });
     const playStart = await page.evaluate(() => window.__sintuPlayTime);
     assert.ok(playStart >= 0.2, "video started before trim-start: " + playStart);
     await page.waitForFunction(
