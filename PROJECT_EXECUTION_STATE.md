@@ -1030,3 +1030,45 @@ Evidence: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/commit/c
 4. Integrate generated-music asset discovery into the provenance scanner branch and add cross-PR tests for MP4 + image + audio + narration manifest verification.
 5. Extend forensic validation for decoder/frame timestamp coverage, variable frame rate, truncated/zero-byte files and tool failures; non-zero exit on scanner failure must be explicitly tested.
 6. Build a single integration regression proving a failed/black MP4 cannot be marked upload/publish eligible; keep gates closed until that evidence and physical-device evidence exist.
+
+
+## Follow-up engineering checkpoint — 2026-11-19 — Android diagnostic and generated-music provenance
+
+### PR #190 — latest branch changes
+- Latest head: `cfb4f64a85944934ef2ad39ab42ae2e2b9abcf5f` on `feature/native-android-client`.
+- Added read-only `scripts/android_device_diagnostic.py` and `tests/test_android_device_diagnostic.py`. The script reports Android release/ABI, available RAM, home storage, native app package presence, FFmpeg/FFprobe/TTS binary availability and backend `/api/health`. It refuses remote plain HTTP and embedded credentials. It does not submit login credentials or alter media.
+- Cookie-origin regression additions are in `9f80c42205217b78248c73c6d7386c91df733d40`: host mismatch and redirect target mismatch clear the persisted cookie. Android Keystore itself and actual redirect behavior still require device/integration validation.
+- CI for the latest head is running: SINTU CI `44436896803` and Native Android App `44436896739`. Dependency audit has passed; Python 3.13 test job and Android build are still running; Python 3.14 has completed FFmpeg setup but tests remain pending; Python 3.11/3.12 jobs are still starting. Do not report exact-head PASS until all jobs complete.
+- The previous run on intermediate head `9f80c422...` was cancelled when newer commits arrived. Its FFmpeg setup had succeeded across the matrix and Python 3.13 tests passed, but E2E/Docker/Android build were cancelled; it is not final validation.
+- Previous Android build `44348488246` passed for older source head `3595a3e...`, not this latest diagnostic commit.
+- Physical phone remains untested. Run on-device diagnostic command after syncing:
+  `python scripts/android_device_diagnostic.py --base-url http://127.0.0.1:8000`
+  It reports capabilities only; it does not validate login, gallery download or background recovery.
+
+### PR #193 — generated-music integration
+- Latest head: `7d9a9ae862a0e17b5e8387a8b961c33ecf8a9afb` on `feature/production-media-provenance`.
+- Commit `4161ef8e420598799c2dc8c87e22d8be0c19e300` adds `generated_music` to forensic asset discovery and WAV metadata (duration, sample rate, channels, sample width and frame count).
+- Commit `7d9a9ae862a0e17b5e8387a8b961c33ecf8a9afb` adds a real six-second, mono 22,050-Hz WAV fixture test and asserts discovery/metadata.
+- Prior head `dbc52705110ae9dc53fa4a12edbaff87b8217ddf` had CI `44347593067` SUCCESS (7/7). The new generated-music integration head has not yet produced a returned exact-head workflow run; it is pushed but unverified.
+
+### PR #192 — checkpoint CI
+- The prior checkpoint update at `17d2fb930087c1d55fd51f2e108538d3e1d164aa` completed SINTU CI run `44436619862` SUCCESS (7/7): four Python test versions, dependency audit, offline branded-video E2E/motion audit and Docker/health all passed.
+- This success validates that checkpoint commit, not this new follow-up text. A fresh run must be checked for the latest checkpoint head.
+
+### Current four-PR status and boundaries
+- PR #195 exact head `909e86368b819e9638b3bd4214bc741af4c379a7`: CI `44347762212` SUCCESS (7/7). Scope remains procedural/local media fallback and local-LLM preflight, not complete offline file import/queue/sync.
+- PR #193 exact head `7d9a9ae...`: generated-music scanner integration pushed; exact-head CI not returned.
+- PR #190 exact head `cfb4f64...`: SINTU CI and Android build in progress at this checkpoint.
+- PR #192 previous checkpoint head `17d2fb9...`: CI `44436619862` SUCCESS (7/7); this follow-up update requires its own validation.
+- Forensic scanner has independent timestamp sampling, frame pixel checks, blackdetect/blackframe, FFprobe metadata, decode errors, A/V stream-timeline comparison, backup SHA-256 and manifest source hash matching. Tests include VFR timestamps, inaccurate seek fallback, missing/corrupt/audio-only files, partial-black and dark-gray clips, black/visible pixel verification, and non-zero exit on tool failure.
+- Remaining forensic gaps: no dedicated safe repair-to-new-output implementation in this PR; frame coverage is sampled at five timestamps plus 30 blackframe samples rather than a full per-frame pixel audit; historical production invocation for the three confirmed black clips remains unproven.
+- The three confirmed black MP4s and two false positives are based on earlier phone-side evidence. This session cannot re-hash phone-local originals. Do not claim fresh checksum verification until the phone diagnostic/report is supplied.
+- No PR merged, no production deployment, no YouTube upload/public publishing, no paid provider/model download, and no original media modification.
+
+### Next executable work
+1. Complete exact-head PR #190 SINTU/Android CI; inspect any failed test/build logs and fix only evidence-backed issues.
+2. Obtain fresh exact-head CI for PR #193 generated-music integration; add manifest matching regression for WAV source assets if missing.
+3. Run `scripts/android_device_diagnostic.py` on the Android phone and retain its JSON output; separately test install/login, session persistence, API workflows and MP4 gallery download.
+4. Implement a real offline media catalog/import/duplicate/interrupted-operation queue/sync path with durable state and tests; current PR #195 is not that implementation.
+5. Add a safe repair command that requires an explicit destination distinct from original, verifies source hash before/after, writes a new file, and validates the new output. Do not run it on historical media without owner approval.
+6. Prove upload/publishing gates consume forensic failure status before any future release/publishing consideration.
