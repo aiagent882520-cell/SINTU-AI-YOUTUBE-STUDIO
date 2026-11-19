@@ -176,7 +176,6 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "interior passage with shafts of warm light and deep shadows",
         "dramatic sunset silhouette, cinematic contrast",
         "hidden underground passage and mysterious stone doorway",
-        "distant watchtower above a rugged mountain ridge",
         "moonlit fort ramparts above a silent desert",
         "massive iron-studded gate with ancient defensive architecture",
         "secret water reservoir hidden beneath a stone courtyard",
