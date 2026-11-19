@@ -33,7 +33,9 @@ def test_timeline_preview_has_single_cancellable_session():
     assert 'video.removeEventListener("seeked",onSeeked)' in preview
     assert 'video.addEventListener("seeked",onSeeked,{once:true})' in preview
     assert "playbackStarted=false" in preview
-    assert "if(!Number.isFinite(video.duration)||trimStart>=video.duration)" in preview
+    assert "if(!Number.isFinite(video.duration)" in preview
+    assert "trimStart<0||trimStart>600||trimStart>=video.duration" in preview
+    assert "trimEnd>600" in preview
     assert 'video.removeEventListener("timeupdate",onTimeUpdate)' in preview
     assert 'video.removeEventListener("ended",onEnded)' in preview
     assert "video.pause()" in preview
