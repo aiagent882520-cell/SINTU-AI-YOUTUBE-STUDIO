@@ -77,6 +77,7 @@ app.include_router(termux_bridge_router)
 def start_google_flow_auto_import():
     """Recover interrupted production jobs, then watch Android Downloads."""
     recover_interrupted_runs()
+    studio_engine.recover_interrupted_render_queue()
     start_flow_auto_import(DATA_DIR, AI_VIDEO_DIR)
 
 
