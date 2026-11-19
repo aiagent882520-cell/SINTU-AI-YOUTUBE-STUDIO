@@ -261,7 +261,7 @@ test("editor draft survives browser refresh and can be restored or cleared", asy
     await page.locator("#renderScenes").fill("First scene\nSecond scene");
     await page.locator("#renderSubtitles").fill("पहला दृश्य\nदूसरा दृश्य");
     await page.locator("#renderTimeline").evaluate(el => {
-      el.value = "image:" + "a".repeat(32) + ":3:cut";
+      el.value = "image:" + "a".repeat(32) + ":3:cut\nimage:" + "b".repeat(32) + ":3:cut";
       el.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await page.waitForFunction(() => {
@@ -275,7 +275,12 @@ test("editor draft survives browser refresh and can be restored or cleared", asy
     assert.equal(await page.locator("#renderTitle").inputValue(), "Browser recovery draft");
     assert.equal(await page.locator("#renderScenes").inputValue(), "First scene\nSecond scene");
     assert.equal(await page.locator("#renderSubtitles").inputValue(), "पहला दृश्य\nदूसरा दृश्य");
-    assert.match(await page.locator("#renderTimeline").inputValue(), /^image:a{32}:3:cut$/);
+    assert.match(await page.locator("#renderTimeline").inputValue(), /^image:a{32}:3:cut\nimage:b{32}:3:cut$/);
+    await page.locator('#timelineEditor button[data-action="down"]').first().click({ force: true });
+    await page.waitForFunction(() => {
+      const draft = JSON.parse(localStorage.getItem("sintu.video-editor-draft.v1") || "{}");
+      return draft.values?.renderTimeline === "image:" + "b".repeat(32) + ":3:cut\nimage:" + "a".repeat(32) + ":3:cut";
+    });
     await page.locator("#clearEditorDraft").click();
     assert.equal(await page.evaluate(() => localStorage.getItem("sintu.video-editor-draft.v1")), null);
     assert.equal(await page.locator("#restoreEditorDraft").isEnabled(), false);
