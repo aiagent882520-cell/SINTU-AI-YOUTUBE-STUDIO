@@ -53,6 +53,7 @@ from .image_generator import generate_image, image_status, ImageUnavailable, Ima
 from .music_generator import generate_music, music_status, MusicUnavailable, MusicGenerationFailed
 from .video_generator import generate_video, video_status, VideoUnavailable, VideoGenerationFailed, AI_VIDEO_DIR
 from .media_provenance import write_render_manifest
+from .publishing_quality_gate import PublishingQualityError, require_publishable_provenance
 from .production_runtime import create_run as create_production_run, get_run as get_production_run, list_runs as list_production_runs, execute_run as execute_production_run, attach_render_result, recover_interrupted_runs
 from .earning_system import router as earning_router, sync_youtube_estimate
 from .security import RequestRateLimiter, client_address_allowed, same_origin_request
@@ -2112,6 +2113,7 @@ def youtube_public_approval_create(payload: YouTubePublicApprovalInput, request:
     if size <= 0 or size > 512 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Rendered MP4 must be between 1 byte and 512 MiB.")
     try:
+        require_publishable_provenance(data_dir=DATA_DIR, output_path=path)
         verify_publishable_mp4(path)
         file_hash = youtube_sha256_file(path)
     except RendererUnavailable as exc:
@@ -2219,6 +2221,8 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
     try:
         verify_publishable_mp4(path)
         file_hash = youtube_sha256_file(path)
+    except PublishingQualityError:
+        raise HTTPException(status_code=409, detail="Publishing blocked: matching PASS provenance and quality status are required.") from None
     except RendererUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
     except RenderFailed:
@@ -2607,7 +2611,10 @@ def meta_facebook_publish(calendar_id:int, video_id:str=Query(...,min_length=32,
     if path.stat().st_size<=0 or path.stat().st_size>512*1024*1024:
         raise HTTPException(status_code=413,detail="MP4 size 1 byte se 512 MB ke beech honi chahiye.")
     try:
+        require_publishable_provenance(data_dir=DATA_DIR, output_path=path)
         verify_publishable_mp4(path)
+    except PublishingQualityError:
+        raise HTTPException(status_code=409,detail="Publishing blocked: matching PASS provenance and quality status are required.") from None
     except RendererUnavailable as exc:
         raise HTTPException(status_code=503,detail=str(exc)) from None
     except RenderFailed:
@@ -2649,6 +2656,7 @@ def meta_instagram_publish(calendar_id:int,video_url:str=Query(...,min_length=12
         item=conn.execute("SELECT id,status,platform FROM content_calendar WHERE id=?",(calendar_id,)).fetchone()
     if not item or item["status"]!="Approved" or item["platform"]!="instagram":
         raise HTTPException(status_code=409,detail="Instagram calendar item approved hona chahiye.")
+    raise HTTPException(status_code=409, detail="Instagram remote-URL publishing is blocked until the source can be matched to a SINTU PASS provenance and quality record.")
     connection=_meta_connection()
     if not connection or not connection["instagram_user_id"]:
         raise HTTPException(status_code=409,detail="Linked Instagram Professional (Business/Creator) account nahi mila.")
@@ -2844,7 +2852,10 @@ def tiktok_publish(calendar_id:int,video_id:str=Query(...,min_length=32,max_leng
     if path.stat().st_size<=0 or path.stat().st_size>512*1024*1024:
         raise HTTPException(status_code=413,detail="MP4 size 1 byte se 512 MB ke beech honi chahiye.")
     try:
+        require_publishable_provenance(data_dir=DATA_DIR, output_path=path)
         verify_publishable_mp4(path)
+    except PublishingQualityError:
+        raise HTTPException(status_code=409,detail="Publishing blocked: matching PASS provenance and quality status are required.") from None
     except RendererUnavailable as exc:
         raise HTTPException(status_code=503,detail=str(exc)) from None
     except RenderFailed:
@@ -4764,6 +4775,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 fps=payload.fps, quality=payload.quality,
             )
         try:
+            quality_report = verify_publishable_mp4(OUTPUT_DIR / rendered["filename"])
             manifest = write_render_manifest(
                 data_dir=DATA_DIR,
                 run_id=run_id,
@@ -4785,6 +4797,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                     "music": str(music_result.get("provider") or "local"),
                     "renderer": "FFmpeg",
                 },
+                quality_report=quality_report,
             )
         except Exception as exc:
             (OUTPUT_DIR / rendered["filename"]).unlink(missing_ok=True)
@@ -4863,6 +4876,7 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput, 
         if music_matches:
             asset_paths.append(music_matches[0])
     try:
+        quality_report = verify_publishable_mp4(OUTPUT_DIR / render_data["filename"])
         manifest = write_render_manifest(
             data_dir=DATA_DIR,
             run_id=run_id,
@@ -4882,6 +4896,7 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput, 
             },
             engines={"renderer": "FFmpeg", "image": "ComfyUI/local-or-procedural-if-requested",
                      "video": "supplied-local-clips-or-procedural-2D-if-requested"},
+            quality_report=quality_report,
         )
     except Exception as exc:
         filename = render_data.get("filename") if isinstance(render_data, dict) else None
