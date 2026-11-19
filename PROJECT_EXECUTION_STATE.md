@@ -900,3 +900,294 @@ The following PRs remain open and unmerged: #213, #209, #207, #206, #205, #204, 
 5. Run read-only forensic scanner on the actual phone for the three target MP4s. Require exact manifest/job/log/DB source mapping. Do not repair or overwrite originals; if provenance is missing, report UNKNOWN and keep publishing blocked.
 6. Keep AI image generation, live YouTube upload, physical Android acceptance, and browser walkthrough marked BLOCKED until their actual external runtime evidence is supplied.
 7. Update this checkpoint after each verified merge/test result. Keep public deployment and public publishing disabled.
+
+
+# Verified main-branch execution update — 2026-11-19 10:15 UTC
+
+## Current repository baseline
+- Main SHA: \`60bf552f95564b896c6f751cfffcf11c1fef7ac8\`.
+- Main push CI run \`44503252018\`: Python 3.11/3.12/3.13/3.14, dependency security audit, and production Docker build passed; offline branded-video E2E/motion audit was still in progress at this checkpoint.
+- Do not call this a final release candidate. Exact physical-device, AI model, OAuth, historical media provenance and full product acceptance remain open.
+
+## Merged engineering work
+- PR #194 — ComfyUI Android resource gate; merged at \`7948ea7619a6d949e8255388254c9ebe473363fb\`; exact CI \`44342524162\` 7/7.
+- PR #196 — Native Android client, secure session/API foundation and WorkManager offline media queue; merged. Exact SINTU CI and Android build were successful on the PR head.
+- PR #198 and #199 — reject black AI/source MP4 inputs with decoded-pixel validation; exact-head CI passed.
+- PR #200 — correct forensic black-frame threshold metadata; exact-head CI passed.
+- PR #201 — read-only source-asset forensic correlation, generated-music/WAV support, SQLite/log scanning and Termux instructions; merged at \`2dcce2907bba58573bf126e4be8e65b5cb71e014\`; exact CI passed.
+- PR #202 — 60-format / 15-module acceptance matrix, with unverified scope kept distinct from completed functionality; merged.
+- PR #203 — reject symlinked/empty render audio inputs; merged after exact-head CI.
+- PR #204 and #205 — consistent AI/mixed-timeline FFmpeg stage timeouts; merged after exact-head CI.
+- PR #213 — timeline preview lifecycle and subtitle preservation; merged at \`0764ba3aaf244cc92ebca6f0b1d602fa21a0c2d3\`; exact CI \`44490770754\` 7/7, including Node simulated lifecycle tests.
+- PR #214 — authoritative checkpoint refresh; merged.
+- PR #215 — content-addressed render provenance, exact-output publishing quality gate, public approval binding, Instagram remote-URL fail-closed gate and safe non-overwriting remux; merged at \`9c75d079371887cefe0f60769a92e78941a64154\`; exact CI \`44501034530\` 7/7.
+- PR #216 — resumable Android offline media upload, 4 MiB chunks, SHA-256 reconciliation, server-side flock serialization and unknown-session/symlink path hardening; merged at \`851ad8b0e582c29739bb462b334238a141586333\`; exact SINTU CI \`44501511511\` 7/7 and Android build \`44501511362\` passed.
+- PR #217 — IndexedDB browser offline-media queue, service-worker integration, honest ComfyUI availability detection, local-model readiness preflight, eSpeak NG Termux fallback and content-hash Flow auto-import; merged at \`60bf552f95564b896c6f751cfffcf11c1fef7ac8\`; exact CI \`44502057339\` 7/7.
+
+## Superseded pull requests
+- PR #190 closed as superseded by #196 (the native Android client plus WorkManager).
+- PR #191 closed as superseded by #201 (expanded forensic source correlation).
+- Original PR #193 closed as superseded by current-main port #215.
+- Original PR #195 closed as superseded by current-main port #217.
+- Original stacked PR #197 closed as superseded by current-main port #216.
+- Keep the exact merged replacement PRs as the source of truth; do not reopen the stale branches.
+
+## Real browser acceptance in progress
+- PR #218 \`test/real-browser-video-editor-e2e\`, head \`3236ccaee69728dccbe2e5d2194c7ab91147584b\`, is open and mergeable.
+- Run \`44502730377\`: Python 3.11–3.14, dependency audit, offline branded-video E2E/motion audit and Docker build all passed. The separate real Chromium job was still installing Chromium/browser dependencies; the Playwright browser tests had not yet run at checkpoint time.
+- The browser test suite loads the actual \`app/static/index.html\` and \`app/static/app.js\` in Chromium and covers image load/timer/error, video seek-to-trim-start/trim-end, invalid trim rejection, stop cancellation and subtitle reorder alignment.
+- Do not call browser acceptance PASS until the Playwright test step itself succeeds.
+
+## Remaining open PRs and dependencies
+- PR #218 — real Chromium Video Editor tests; awaiting browser job result.
+- PR #206/#207/#209 — render queue, FFmpeg cancellation/progress and combined UI/API work. They remain unmerged because the current BackgroundTasks/process-local registry is not a durable multi-worker queue; progress is primarily the final FFmpeg encode stage, not an aggregate ETA.
+- PR #192 — older execution checkpoint; reconcile its unique historical details with this current checkpoint before closing or merging it.
+- Any stacked child PR must be retargeted/rebased and exact-head CI rerun after its parent is merged.
+
+## Device and production blockers — still NOT verified
+- Issue #212 Android \`automation_self_test\` remains open with \`sintu-command-queued\`; there are zero execution comments/results. No physical phone test has passed.
+- Android Native app is in main and Android CI APK build passed, but no APK has been installed/launched on the user's phone. CI build is not physical-device acceptance.
+- The three confirmed historical black MP4 files still have UNKNOWN exact source-to-render-job mapping. PR #201 scanner is now merged; it must be run on the actual Termux device against local MP4/log/SQLite data. Do not overwrite originals or declare root cause from timestamp proximity alone.
+- AI Image Studio still has no demonstrated model load, diffusion inference or actual model-generated image on the target phone. The phone's earlier probe showed about 1.16 GiB available RAM and no installed GGUF/diffusion model. PR #194 blocks ComfyUI on Termux and requires a separate host with at least 8 GiB available RAM and 20 GiB free disk. Procedural graphics and eSpeak are not AI image/audio model generation.
+- YouTube OAuth, channel identity, refresh-token storage and live upload remain unverified because client credentials/token/channel access are not configured. No upload/public publishing was performed. Public deployment and publishing remain disabled.
+- The browser PWA offline queue is merged, but full website user journeys and accessibility acceptance remain incomplete.
+- The 60 formats and 15 modules remain a catalog inventory; each needs actual input/output, API/UI, Android/browser and regression acceptance evidence.
+- No full topic-to-final-MP4 workflow using genuine research, local/remote AI visuals, neural voice, editor, forensic playback and authorized YouTube upload has been demonstrated.
+
+## Next executable steps
+1. Finish PR #218 Chromium job; fix any real-browser failures, then merge only if the exact-head browser test and all other checks pass.
+2. Update this checkpoint with PR #218's final result and the latest main SHA/CI run.
+3. Reconcile PR #192's historical checkpoint additions; close it only after relevant unique facts are preserved.
+4. Continue reviewing PR #206/#207/#209; do not merge as production-durable until worker lease/recovery and multi-worker cancellation semantics are solved and tested.
+5. Run Termux issue #212 and the PR #201 forensic scanner on the actual phone; preserve reports and original media hashes.
+6. Require an actual compatible external AI inference host/model, physical Android install report and YouTube OAuth credentials before marking those gates complete.
+7. Keep production release, public deployment and public YouTube publishing blocked until all acceptance gates pass.
+
+
+## Execution continuation — 2026-11-19 (UTC)
+
+- Main baseline observed during this continuation: `60bf552f95564b896c6f751cfffcf11c1fef7ac8`.
+- PR #219 checkpoint branch is still separate from main; its exact-head CI was observed passing all seven jobs (Python 3.11–3.14, dependency audit, Docker, offline branded-video E2E).
+- PR #218 browser acceptance was run on Chromium. Five of six tests passed; the video trim-start/seek test failed because the mocked media endpoint did not implement HTTP byte-range responses required by Chromium seeking.
+- Regression fixture correction committed to PR #218 branch: `d738184baf43b844043534f0ff96e921ec3e1b70`. The fixture now handles valid byte ranges with HTTP 206 and Content-Range/Accept-Ranges/Content-Length, and rejects invalid/out-of-range requests with 416.
+- This correction has **not yet received a recorded CI run**. PR #218 remains open and unmerged; do not claim browser suite green until the new head's Chromium job passes.
+- Current PR #218 head: `d738184baf43b844043534f0ff96e921ec3e1b70`; mergeable reported true, but CI evidence is pending.
+- No physical Android test, real AI model inference, historical black-MP4 source attribution, or live YouTube OAuth/upload is newly verified by this continuation.
+- Preserve the three confirmed black MP4 originals. The Termux forensic scanner and Android self-test still require device-side execution and evidence.
+
+
+### Chromium byte-range fixture follow-up
+
+- Follow-up inspection found an escaping defect in the first byte-range fixture fix: the JavaScript regex contained literal escaped backslashes and therefore did not match numeric Range headers.
+- Corrected regex committed on PR #218 head: `7c075ff7c3f0a87687b327c7996e3805e75fa56c`; exact expression is `/^bytes=(\d+)-(\d*)$/`.
+- This is the current PR #218 head. The CI run for this exact head is not yet visible in the commit-run query; do not infer a pass. PR #218 remains unmerged pending exact-head CI and browser test results.
+
+
+## Autonomous continuation — 2026-11-19 11:15 UTC
+
+### PR #218 — real Chromium Video Editor acceptance
+- Exact-head run 44510605947 on 7c075ff7c3f0a87687b327c7996e3805e75fa56c completed with Python 3.11–3.14 PASS, dependency audit PASS, Docker PASS and offline video E2E PASS; Chromium failed 1/6 at the video play-position assertion.
+- Failure log: page.waitForFunction timed out waiting for window.__sintuPlayTime; video itself had readyState=4, duration 2s, no media error and preview notice reached "Sequence preview complete." The MutationObserver test probe did not attach before the short clip played. This is a flaky/invalid test probe, not evidence that video playback failed.
+- Fixture server changed from Playwright route fulfillment to a real local HTTP server implementing byte-range responses (206, Content-Range, Accept-Ranges, Content-Length, 416 invalid range), including suffix ranges. Commit a7a9270dcda41d579d6e62c227c2e206396a31ee.
+- Fixture regex corrected to one escaped digit token. Commit f2418a5ebd3209a5be742e183d2f0df9853b73fa.
+- Replaced timing-sensitive MutationObserver probe with deterministic HTMLMediaElement.prototype.play() wrapper that captures currentTime at the exact application play call. Current PR #218 head: 5b7d3a58ec6092d133bdc7010043d25896fcb9d0.
+- Exact-head CI run 44513017475 was pending/in progress at this checkpoint; Python matrix was running and Chromium job had not yet started. Do not claim seek/play PASS until exact-head Chromium succeeds.
+- PR #218 remains OPEN and unmerged.
+
+### PR #219 — checkpoint CI
+- Exact-head run 44510628622 on 69f0abb3c4dd3ef03190132cf0571c86d205ffdf: Python 3.11–3.14 PASS, dependency audit PASS, Docker PASS; offline branded video E2E FAILED before generation.
+- Failure was runner package provisioning: Ubuntu mirror downloads were slow and apt-get install espeak-ng fonts-noto-core hit the 300-second timeout (exit 124). No video report or MP4 artifact was produced; this is not a render-quality failure.
+- PR #219 remains OPEN and unmerged; do not claim CI green.
+
+### PR #220 — CI dependency provisioning resilience
+- New PR: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/220
+- Branch ci/reliable-offline-e2e-tool-install, head cb8476b71ea1e43ec1a1b1a0d07688fa0b0921d0.
+- Offline-video E2E job now refreshes apt indexes once, uses bounded retries/timeouts, allows up to 15 minutes for package installation, and raises only that job timeout to 30 minutes. No acceptance checks are skipped or weakened.
+- Exact-head run 44512589628 was in progress; Python matrix and security audit passed, Docker passed, offline job was still installing eSpeak/fonts. PR #220 is OPEN and unmerged.
+
+### PR #221 — persistent studio queue atomic claim
+- New PR: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/221
+- Branch fix/atomic-studio-render-queue-claims, head 33c8be9e6f1e4528a2a832a406c1452ea2a23de5.
+- studio_engine.update_render_item() now starts a SQLite BEGIN IMMEDIATE transaction before reading queue state and conditionally updates against the previously observed status. This prevents two workers sharing the SQLite DB from both claiming the same queued item.
+- Added a two-thread simultaneous-claim regression test, completion transition and owner-isolation checks in tests/test_studio_engine.py.
+- Exact-head CI run 44512808855 was in progress; all four Python test jobs and dependency audit had passed, Docker was still running, and offline E2E was still installing dependencies.
+- This hardens studio render-queue claims only. It does not make FastAPI BackgroundTasks durable or the separate async render worker multi-host safe. PR #221 is OPEN and unmerged.
+
+### Current execution gates
+- Do not merge #218, #219, #220 or #221 automatically; exact-head CI and diff review remain required. No merge has been performed.
+- Three historical black MP4 source/project/job mappings remain UNKNOWN until the Termux forensic scanner output is supplied. Originals/backups remain untouched.
+- Real AI image inference, physical Android acceptance, complete website walkthrough, 60-format individual acceptance, 15-module acceptance, live OAuth/channel verification and public publishing remain unverified or externally blocked.
+
+
+## Verified execution update — 2026-11-19 11:20 UTC
+
+### PR #218 — exact-head full CI PASS
+- Current head: 5b7d3a58ec6092d133bdc7010043d25896fcb9d0.
+- Exact workflow run 44513017475: all 8 jobs SUCCESS — Python 3.11/3.12/3.13/3.14, dependency security audit, Production Docker build, Real Chromium Video Editor browser tests, and Offline branded video E2E/motion audit.
+- Chromium log confirms 6/6 tests PASS: image load/timer, image load error, video trim-start seek before playback and trim-end stop, invalid trim rejection, stop cancellation, and subtitle alignment after clip reorder.
+- Browser fixture uses a local HTTP server with byte-range support; the play-position probe captures currentTime synchronously at the actual HTMLMediaElement.play() call.
+- Offline E2E artifact ID 14524442731, URL https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44513017475/artifacts/14524442731. It contains the generated MP4 and audit reports.
+- This offline smoke MP4 is 32.04 seconds, 720x1280 H.264/AAC, 8 scenes, SINTU watermark, eSpeak NG Hindi + procedural music, no burned subtitles, procedural art (not AI images), 0 black intervals, 32 sampled frames and motion ratio 0.742. This is NOT the requested 60-second topic E2E.
+- PR #218 remains OPEN and unmerged. Diff review found no review comments/approvals; do not merge until approval policy is satisfied.
+
+### PR #219 — exact-head checkpoint CI PASS
+- Current checkpoint head: dff806ebbefed20acb7b6c14a5c0c9ee844ca8cb.
+- Exact run 44513276655 completed SUCCESS 7/7: Python 3.11–3.14, dependency audit, offline branded video E2E/motion audit, and Production Docker build.
+- PR #219 remains OPEN and unmerged. It is a checkpoint/documentation PR; review API returned no review approvals/comments.
+
+### PR #220 — CI dependency provisioning resilience
+- Head cb8476b71ea1e43ec1a1b1a0d07688fa0b0921d0; run 44512589628 still IN_PROGRESS at last poll.
+- Python 3.11–3.14 and dependency audit PASS; Docker PASS. Offline E2E was still in the Ubuntu apt install step. No acceptance check was skipped or weakened.
+
+### PR #221 — atomic studio render-queue claim
+- Head 33c8be9e6f1e4528a2a832a406c1452ea2a23de5; run 44512808855 still IN_PROGRESS at last poll.
+- Python 3.11–3.14 and dependency audit PASS; Docker PASS. Offline E2E was still in the Ubuntu apt install step.
+- Atomic BEGIN IMMEDIATE + conditional state update and the two-thread simultaneous-claim regression test are included. Do not claim the PR fully green until the remaining job finishes.
+
+### PR #222 — real 60-second Hindi subtitled offline acceptance
+- New PR: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/222
+- Head 3a2708457bf002b84dce52136d7a3a4defff41fd; exact CI run 44513781828 IN_PROGRESS at checkpoint time.
+- Upgrades the offline acceptance from 8 scenes × 4 seconds (32 seconds) to 10 scenes × 6 seconds (60 seconds), longer Hindi narration, local music, 10 timed Hindi subtitle lines burned into MP4, and explicit workflow assertions for duration/audio/subtitles/procedural-art provenance.
+- It intentionally identifies image output as SINTU Procedural Art (offline), not AI inference. It is not a complete research-to-AI-image workflow.
+
+### Review / merge state
+- PR #218 and #219 metadata report mergeable=true, and exact-head CI is green. GitHub review endpoints returned empty reviews and review comments for both; no independent approval is recorded. No PR has been merged in this continuation.
+- PR #220, #221 and #222 remain open pending exact-head CI. Review and merge decisions must remain separate from CI success.
+
+### Product acceptance still blocked or partial
+- Video Editor browser subset: PASS for the 6 covered scenarios in Chromium CI. This is not full Video Editor acceptance, Android playback, real backend integration, project persistence, full multi-track editing, or physical phone verification.
+- Offline renderer smoke: PASS for 32.04s clip, motion, no-black-frame audit, voice/music. 60-second + subtitles acceptance is pending PR #222.
+- AI Image Studio: BLOCKED/UNVERIFIED for real model inference; current CI uses procedural art.
+- Android physical install/device lifecycle: BLOCKED pending user-phone/ADB/Termux evidence.
+- Three historical black MP4 provenance: UNKNOWN pending actual Termux scanner output. Preserve original MP4s/backups.
+- YouTube OAuth/channel/upload: BLOCKED pending owner credentials, OAuth consent and channel verification. No upload/public publish performed.
+- 60 formats / 15 modules: catalog scope exists; individual end-to-end acceptance remains UNVERIFIED.
+- Website full user-journey/accessibility walkthrough and durable multi-worker job execution remain incomplete.
+
+
+## Latest verified CI and engineering results — 2026-11-19 11:33 UTC
+
+### PR #218 — complete CI PASS on current head
+- Current head: 561d47c7ff80084ccf19dd2f7cab4c2e17b2e706.
+- Exact run 44515295282: 8/8 jobs SUCCESS — Python 3.11–3.14, dependency audit, Docker, real Chromium browser tests, offline branded video E2E/motion audit.
+- Python matrix: 701 passed, 5 warnings on Python 3.12. Added real FastAPI /api/ai-videos/{id} byte-range tests for normal ranges (206), suffix ranges (206), and unsatisfiable ranges (416).
+- Chromium log: 6/6 PASS, including actual video trim-start playback position and trim-end stop, invalid trim rejection, image load/error, stop cancellation, and subtitle reorder alignment.
+- Offline artifact remains the 32.04-second smoke clip (8 scenes), procedural images, eSpeak NG Hindi, procedural music, no burned subtitles; 0 black intervals and motion ratio 0.742. This does not yet satisfy the requested 60-second acceptance.
+- PR #218 is OPEN and unmerged. No independent GitHub review approval/comments were recorded.
+
+### PR #219 — checkpoint documentation
+- Current head: 2157a6baba860bf2ecf03c3f3b90439c5e1a07a6.
+- Exact run 44514401790: SUCCESS 7/7 (Python 3.11–3.14, dependency audit, offline video E2E/motion audit, Docker).
+- PR #219 is OPEN and unmerged.
+
+### PR #220 — Ubuntu E2E dependency provisioning
+- Head cb8476b71ea1e43ec1a1b1a0d07688fa0b0921d0.
+- Exact run 44512589628: SUCCESS 7/7. The apt-index refresh/retry and 15-minute install ceiling allowed eSpeak NG and Noto fonts to install and the offline Hindi video E2E/motion audit to finish. No checks were skipped.
+- PR #220 is OPEN and unmerged.
+
+### PR #221 — atomic SQLite studio render-queue claim
+- Current head 935934416768e15fcde29c2fa146af5784c7ab19.
+- Retargeted base to PR #220 branch so it inherits the verified apt dependency fix; PR #220 must merge before #221 can be merged into main.
+- Exact run 44514872178: SUCCESS 7/7. Python matrix, security audit, Docker and offline E2E all passed.
+- The concurrent two-thread claim regression ensures exactly one worker changes a queued item to running, then verifies completion and owner isolation.
+- PR #221 is OPEN and unmerged.
+
+### PR #222 — 60-second Hindi subtitled offline acceptance
+- Current head 75b0ffac00031ad3017bb089a74ab379da199934.
+- Exact run 44515483070 was IN_PROGRESS at this checkpoint. Security audit and Python 3.11 passed; Python 3.12–3.14 were still running. The 60-second E2E job had not started.
+- The prior 10-scene/6-second attempt failed renderer motion audit (29/59 transitions, 49.2%, below the 60% requirement). The test was changed to 15 scenes × 4 seconds, 15 Hindi subtitle cues, and the same 60-second total. This keeps the known 4-second scene motion cadence.
+- A prior unit-test failure also exposed a mismatch in mocked scene count/duration; tests were updated to expect 15 scene assets, 15 subtitle cues, 60 seconds and burned-in subtitles.
+- Do not claim 60-second output PASS until exact-head run verifies real MP4 duration, burned subtitles, voice/music, no black intervals and motion ratio.
+
+### Merge/review
+- No PR has been merged in this continuation. PR #218–#220 have exact-head green CI; #221 green on stacked base #220; #222 still pending.
+- GitHub review endpoints for #218/#219 returned empty review and review-comment lists. CI success alone is not an independent code-review approval. Keep merge status separate from test status.
+
+### Remaining product gates
+- Real AI image inference remains UNVERIFIED/BLOCKED; current offline E2E uses procedural art and must not be described as AI-generated.
+- Physical Android installation/lifecycle acceptance remains BLOCKED pending actual device report/ADB/Termux evidence.
+- Historical three-black-MP4 project/source/job mapping remains UNKNOWN pending Termux scanner output; originals and backups remain untouched.
+- YouTube OAuth/channel identity/live upload remain BLOCKED pending owner credentials and consent; no public upload performed.
+- 60 individual formats and 15 modules remain unverified beyond inventory/catalog registration.
+- Full website journeys, multi-track editor workflows, durable distributed worker recovery and actual Android editor playback remain incomplete.
+
+
+## Main merge reconciliation — 2026-11-19 11:46 UTC
+
+### Changes merged into main during this continuation
+- PR #220 merged (squash) at 11126bad707b6943e9c822e1178c4c5f74f81dcb. CI offline E2E dependency installation now refreshes apt indexes once, retries downloads, allows a 15-minute install and a 30-minute job ceiling.
+- PR #221 merged (squash) at 4c151ff0d24552edcaa9b848d6480d8d0c0a079c. Persistent studio render queue state transitions now acquire SQLite BEGIN IMMEDIATE and conditionally update the previously observed status; concurrent claims are serialized. Exact PR run 44514872178 passed 7/7.
+- PR #218 merged (squash) at ea2f65b9102ae3f80b753be78b1a679e6812b28f. Adds the real Chromium Video Editor browser acceptance workflow and tests plus FastAPI media byte-range tests (206 normal/suffix, 416 unsatisfiable). Exact-head run 44516131123 passed 8/8: Python 3.11–3.14, dependency audit, Docker, Chromium 6/6 and offline 32-second renderer smoke.
+- Main CI for latest main SHA ea2f65b9102ae3f80b753be78b1a679e6812b28f is run 44517322339. Python 3.11–3.14 and dependency audit PASS; Chromium 6/6 PASS; Docker health check and offline E2E were still running at checkpoint time.
+
+### PR #219 — current checkpoint refresh
+- PR #219 branch head remains 9a6028551b0014918ea86858f444f9fe2229f086 before this update; run 44515758341 passed 7/7.
+- This commit appends the main merges and current state; a new exact-head CI run is expected. PR #219 remains OPEN and unmerged.
+
+### PR #222 — 60-second Hindi subtitle acceptance
+- Latest branch head before this checkpoint: 7eb9c09ab87a01ef62c5ede46d3c8e4114f4863f; run 44517162187 was still IN_PROGRESS. Python 3.11, 3.12 and 3.13 plus dependency audit passed; Python 3.14 remained in progress.
+- Earlier exact-head run 44515483070 failed on Python 3.13 after 630.16 seconds: 698 passed and one pre-existing mixed-timeline FFmpeg integration test hit its 600-second render timeout. The 60-second acceptance test itself was not reached. This is a runner/render-test timeout, not proof that the 60-second output passed or failed.
+- Test coverage now asserts 15 scene inputs × 4 seconds, 15 timed subtitle cues, 60-second music duration and burned-in subtitle output. The script creates a 60-second MP4 only in the offline E2E job; no 60-second output artifact has been verified yet.
+- PR #222 is OPEN and unmerged.
+
+### PR #223 — YouTube OAuth test coverage
+- Latest branch head f1814eb292a0628e2ada717935e96b85dcde143a; exact run 44517490834 in progress at checkpoint time.
+- Python 3.11–3.14 and dependency audit PASS. Docker, Chromium and offline E2E still running.
+- Previous run 44515907410 passed Python and Docker but failed before generation because it used the old 300-second apt install step. The current run is after the CI dependency fix.
+- Tests simulate OAuth code exchange/channel lookup, session-bound one-time state/replay rejection, encrypted token storage, secret-free status responses, and refresh-token preservation. They do not establish live Google consent, actual channel ownership or a real upload.
+- PR #223 is OPEN and unmerged.
+
+### PR #224 — reduce slow mixed-timeline test cost
+- New PR: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/224
+- Latest head 3b19e2476c37bdcc9737f8cbdf3652b526b42a94; exact CI run 44517701642 pending at checkpoint time.
+- The mixed image/video/source-audio/voice/music/subtitle FFmpeg integration test previously exceeded 600 seconds on one Python 3.13 CI runner. This test now uses a test-only 160x284 profile (source-native size) while preserving the same filter graph and stream/subtitle assertions. Production 720x1280 rendering remains covered by the offline E2E/motion audit. No production output profile was changed.
+- PR #224 is OPEN and unmerged.
+
+### Other open PRs / release gate
+- PRs #206/#207/#209 remain open and stacked. BackgroundTasks durability, process-local FFmpeg registry, single-worker assumptions and non-durable recovery limitations remain. Do not merge these as a durable multi-worker queue without further design and tests.
+- PR #192 is an older checkpoint PR; reconcile its unique content with this checkpoint before any closure.
+- Current main SHA: ea2f65b9102ae3f80b753be78b1a679e6812b28f.
+- No 60-second topic video, real AI image inference, physical Android install, three historical black-MP4 provenance mappings, live YouTube OAuth/upload, complete website journeys or individual 60-format/15-module acceptance has been verified.
+- The 32.04-second PR #218 smoke output is procedural art + eSpeak NG + procedural music, not AI imagery; it contains no burned subtitles. Preserve this distinction.
+
+
+## Latest reconciliation — PR #223 merged and next acceptance gates — 2026-11-19 11:50 UTC
+
+### PR #223 — YouTube OAuth security/refresh integration tests merged
+- Merged into main by squash at 82403b8a6133ff96c0b33a4180c3b3f843a57a75.
+- Exact-head run 44517490834: **SUCCESS 8/8** — Python 3.11–3.14, dependency security audit, production Docker, real Chromium browser tests, and offline branded-video E2E/motion audit.
+- Adds three simulated integration tests: authorization-code exchange + channel lookup; state replay and different-browser session rejection; encrypted access/refresh token storage and status response secret redaction; expired-token refresh with refresh-token preservation.
+- This validates the existing OAuth implementation under mocked Google responses only. Live Google consent, real channel ownership, token refresh against Google and resumable upload remain unverified; no live upload was performed.
+
+### Current main and post-merge verification
+- Main SHA: 82403b8a6133ff96c0b33a4180c3b3f843a57a75.
+- Main run after PR #218 and #223 merges was triggered; latest known run 44517322339 on parent main ea2f65... had Python 3.11–3.14, dependency audit, Chromium 6/6 and Docker PASS; offline E2E was still in apt install at last poll. A new main run for 82403... must complete before calling main regression green.
+- PR #220, #221, #218 and #223 are merged. PR #219, #222, #224 remain open.
+
+### PR #222 — 60-second Hindi subtitled render acceptance
+- Current head 7eb9c09ab87a01ef62c5ede46d3c8e4114f4863f; run 44517162187 still IN_PROGRESS at last poll. Python 3.11–3.13 and security audit passed; Python 3.14 remained running.
+- Earlier run 44515483070 failed after 630.16s on the pre-existing mixed-timeline FFmpeg integration test timeout (698 passed, one failure); it never reached offline 60-second rendering.
+- The current 60-second script has 15 scenes × 4 seconds, 15 Hindi subtitle cues, 60-second music and explicit unit assertions for render inputs. No 60-second MP4 output has been verified.
+- PR #222 base is now main at 82403...; exact-head CI must be rerun/confirmed against current main after the base update.
+
+### PR #224 — reduce mixed-timeline test runtime
+- Current head 3b19e2476c37bdcc9737f8cbdf3652b526b42a94; run 44517701642 was pending at last poll.
+- Changes only the slow mixed-timeline integration test to use a test-only 160x284 output profile, while retaining image+video timeline, source audio, voice, music, subtitles, FFprobe stream checks and explicit output-dimension assertions. Production output profiles are unchanged.
+- This is intended to stop a 600-second test timeout under constrained CI runners. It must pass exact-head tests before merge.
+
+### PR #219 — checkpoint refresh
+- Current branch head 8abdc5edbe05f2718f265ae9cd7b915b94d6f73c before this update; exact run 44517856302 had Python 3.11–3.14, security audit, Chromium and Docker PASS, offline E2E still in progress.
+- This commit adds the PR #223 merge and latest main/acceptance status. A new exact-head run is expected. PR #219 remains open/unmerged.
+
+### Historical PR #192
+- PR #192 remains open/draft and conflicts with current main because it also appends to PROJECT_EXECUTION_STATE.md. Its 573-line historical appendix contains unique older status records for PRs #190–#202 and forensic chronology. Do not auto-merge or close until its unique history is reconciled into the authoritative checkpoint. Current PR #219 checkpoint is the active update path.
+
+
+## Latest update — PR #224 merged; 60-second E2E rerun — 2026-11-19 11:55 UTC
+
+- PR #224 merged into main at 160cf148b18d06cc1c36f8f31737172cfd6366f5. Exact run 44517701642: **SUCCESS 8/8** (Python 3.11–3.14, dependency audit, Docker, Chromium, offline E2E). Python 3.14 logged 702 passed, 5 warnings in 55.82s. The mixed timeline test now uses a test-only 160x284 profile; production profiles are unchanged.
+- PR #222 latest head ae20ee5bad84a2c0c2066ff3277e106534967250. Exact run 44518946207 is IN_PROGRESS on current main 160cf...; dependency security audit passed and four Python test jobs were running. This run includes the merged faster mixed-timeline test and explicit assertions for 15 scenes × 4s, 15 subtitle cues and 60s music. No 60-second MP4 output has been verified yet.
+- Prior PR #222 run 44517162187 on head 7eb9c09... failed because Python 3.14 timed out in the pre-existing mixed-timeline FFmpeg test; it did not reach the offline 60-second render. PR #224 addresses that test runtime; do not treat the prior failure as a failure of the 60-second MP4.
+- Main SHA is 160cf148b18d06cc1c36f8f31737172cfd6366f5. Main CI run 44518879015 is IN_PROGRESS; security audit passed and Python jobs were running.
+- PR #219 checkpoint branch has been retargeted to main 160cf...; its previous run 44518662615 was against the earlier base and is superseded by the next exact-head run after this checkpoint update.
+- PR #218, #220, #221, #223 and #224 are merged. PR #219, #222 remain open. PR #192 remains open/draft and conflicting on the same checkpoint file; its unique historical appendix still requires reconciliation.
