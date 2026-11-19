@@ -10,6 +10,8 @@ import tempfile
 import textwrap
 import uuid
 
+from . import render_process
+
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -708,7 +710,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             command += ["-t", f"{duration + (1 / fps):.6f}", "-c:v", "libx264", "-preset", preset,
                         "-crf", str(crf), "-pix_fmt", "yuv420p", "-r", str(fps),
                         "-movflags", "+faststart", "-threads", "2", str(temporary_output_path)]
-            completed = subprocess.run(command, capture_output=True, text=True, timeout=RENDER_TIMEOUT_SECONDS, check=False)
+            completed = render_process.run_render_process(command, capture_output=True, text=True, timeout=RENDER_TIMEOUT_SECONDS, check=False)
             if completed.returncode != 0 or not temporary_output_path.is_file():
                 detail = (completed.stderr or "FFmpeg render failed")[-1200:]
                 raise RenderFailed(detail)
@@ -937,7 +939,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                         "-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
                         "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", "-t", f"{total_duration:.3f}",
                         "-movflags", "+faststart", str(temporary_output_path)]
-            completed = subprocess.run(command, capture_output=True, text=True, timeout=900, check=False)
+            completed = render_process.run_render_process(command, capture_output=True, text=True, timeout=900, check=False)
             if completed.returncode != 0 or not temporary_output_path.is_file():
                 detail = (completed.stderr or "FFmpeg AI clip assembly failed")[-1600:]
                 raise RenderFailed(detail)
@@ -1046,7 +1048,7 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                 if segment_duration<0.25: raise ValueError("Trimmed video kam se kam 0.25 seconds ka hona chahiye.")
                 segment=work/f"trimmed-{index:03d}.mp4"
                 command=[ffmpeg,"-y","-hide_banner","-loglevel","error","-ss",f"{trim_start:.3f}","-i",str(path),"-t",f"{segment_duration:.3f}","-map","0:v:0","-map","0:a?","-c:v","libx264","-preset","veryfast","-pix_fmt","yuv420p","-c:a","aac","-b:a","128k","-ar","48000","-ac","2","-movflags","+faststart",str(segment)]
-                completed=subprocess.run(command,capture_output=True,text=True,timeout=180,check=False)
+                completed=render_process.run_render_process(command,capture_output=True,text=True,timeout=180,check=False)
                 if completed.returncode!=0 or not segment.is_file():
                     raise RenderFailed((completed.stderr or "Video trim failed")[-1200:])
                 clip_paths.append(segment)
@@ -1060,7 +1062,7 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                 frame = work / f"still-{index:03d}.png"
                 _make_frame(frame, title, scenes[index - 1], index, len(items), path, width=width, height=height, include_watermark=False)
                 segment = work / f"still-{index:03d}.mp4"
-                completed = subprocess.run(
+                completed = render_process.run_render_process(
                     [ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
                      "-loop", "1", "-framerate", "30", "-i", str(frame),
                      "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
