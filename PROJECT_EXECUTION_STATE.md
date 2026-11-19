@@ -1364,3 +1364,11 @@ Thus the older renderer defect is temporally plausible, not ruled out. This timi
 - PR #200 head `f3a613a77b0deb85b242eb91aa38bb081aed2376`, workflow run `44456525639`: **SUCCESS 7/7**. Python 3.11–3.14, dependency security audit, production Docker build, and offline branded-video E2E/motion audit all passed.
 - The change only corrects the forensic report's `black_pixel_threshold` metadata to match the actual FFmpeg `blackframe` threshold of 17 and adds populated/empty-summary regression assertions. It does not change classification behavior or modify media.
 - PR #200 remains open/draft/unmerged.
+
+
+## PR #191 generated-music forensic scan validation — 2026-11-19
+
+- PR #191 (`fix/forensics-generated-music-assets`), head `e091558c9b0417f16618369ce6e06d6e6961078b`, exact-head workflow run `44329127820`: **SUCCESS 7/7**.
+- Adds `generated_music/` to the read-only source-asset correlation scan and records WAV duration/sample-rate/channel/sample-width/frame-count metadata, with regression coverage for generated WAV discovery.
+- PR #191 remains open, non-draft, unmerged. This enables richer correlation but does not itself prove that a particular WAV produced any of the black MP4s.
+- Original issue #90 was annotated with the later pixel-forensics correction: three assets confirmed full-black; two are dark-visible and not confirmed full-black. No media changed.
