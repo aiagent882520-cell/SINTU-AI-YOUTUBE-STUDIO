@@ -528,7 +528,9 @@ def test_mixed_timeline_mixes_source_voice_music_and_burns_subtitles(tmp_path, m
     assert metadata.returncode == 0, metadata.stderr
     import json
     streams = json.loads(metadata.stdout)["streams"]
-    assert sum(stream["codec_type"] == "video" for stream in streams) == 1
+    video_streams = [stream for stream in streams if stream["codec_type"] == "video"]
+    assert len(video_streams) == 1
+    assert (video_streams[0]["width"], video_streams[0]["height"]) == (160, 284)
     audio_streams = [stream for stream in streams if stream["codec_type"] == "audio"]
     assert len(audio_streams) == 1
     assert audio_streams[0]["codec_name"] == "aac"
