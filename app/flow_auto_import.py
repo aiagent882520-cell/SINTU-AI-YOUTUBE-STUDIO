@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
 import re
 import shutil
 import threading
 import time
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +24,33 @@ MAX_BYTES = 512 * 1024 * 1024
 _POLL_SECONDS = 5.0
 _QUIET_SECONDS = 20.0
 _worker: "FlowAutoImporter | None" = None
+
+ 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _atomic_write_json(path: Path, value) -> None:
+    """Persist queue/ledger JSON without exposing a partially-written state file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix="." + path.name + "-", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(value, stream, ensure_ascii=False, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    except Exception:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
 
 
 def default_download_dirs() -> list[Path]:
@@ -76,10 +105,7 @@ class FlowAutoImporter:
 
     def _save_pending(self) -> None:
         """Atomically persist pending video IDs so a crash cannot lose the queue."""
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        temporary = self.pending_path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(self.pending, ensure_ascii=False), encoding="utf-8")
-        temporary.replace(self.pending_path)
+        _atomic_write_json(self.pending_path, self.pending)
 
     def start(self) -> bool:
         if self._thread and self._thread.is_alive():
@@ -139,7 +165,12 @@ class FlowAutoImporter:
                         continue
                     key = str(source.resolve())
                     signature = (stat.st_size, stat.st_mtime_ns)
-                    if ledger.get(key) == [signature[0], signature[1]]:
+                    previous = ledger.get(key)
+                    if previous == [signature[0], signature[1]]:
+                        continue
+                    if (isinstance(previous, dict)
+                            and previous.get("size_bytes") == signature[0]
+                            and previous.get("mtime_ns") == signature[1]):
                         continue
                     if self._seen.get(key) != signature:
                         self._seen[key] = signature
@@ -148,12 +179,31 @@ class FlowAutoImporter:
                     temporary = self.video_dir / (video_id + ".upload")
                     destination = self.video_dir / (video_id + ".mp4")
                     try:
+                        source_hash_before = _sha256_file(source)
                         with source.open("rb") as src, temporary.open("xb") as dst:
                             shutil.copyfileobj(src, dst, length=1024 * 1024)
+                            dst.flush()
+                            os.fsync(dst.fileno())
                         copied = temporary.stat()
                         current = source.stat()
+                        copied_hash = _sha256_file(temporary)
+                        source_hash_after = _sha256_file(source)
                         if (copied.st_size != signature[0] or
-                                (current.st_size, current.st_mtime_ns) != signature):
+                                (current.st_size, current.st_mtime_ns) != signature or
+                                source_hash_before != copied_hash or source_hash_after != copied_hash):
+                            self.last_error = (source.name + ": source changed during import; retrying")[:300]
+                            continue
+                        duplicate = next((
+                            value for value in ledger.values()
+                            if isinstance(value, dict) and value.get("sha256") == copied_hash
+                        ), None)
+                        if duplicate:
+                            ledger[key] = {
+                                "size_bytes": signature[0], "mtime_ns": signature[1],
+                                "sha256": copied_hash, "duplicate_of": duplicate.get("video_id"),
+                            }
+                            _atomic_write_json(self.ledger_path, ledger)
+                            self.skipped += 1
                             continue
                         metadata = self.validator(temporary)
                         if not isinstance(metadata, dict) or not metadata:
@@ -161,8 +211,11 @@ class FlowAutoImporter:
                         temporary.replace(destination)
                         self.pending.append(video_id)
                         self._save_pending()
-                        ledger[key] = [signature[0], signature[1]]
-                        self.ledger_path.write_text(json.dumps(ledger, ensure_ascii=False, indent=2), "utf-8")
+                        ledger[key] = {
+                            "size_bytes": signature[0], "mtime_ns": signature[1],
+                            "sha256": copied_hash, "video_id": video_id,
+                        }
+                        _atomic_write_json(self.ledger_path, ledger)
                         self.imported += 1
                         self.last_import = source.name
                         self.last_added_at = time.monotonic()
