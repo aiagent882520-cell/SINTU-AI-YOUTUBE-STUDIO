@@ -53,13 +53,13 @@ def cancel_render_process(job_id: str, grace_seconds: float = 2.0) -> bool:
     return True
 
 
-def run_render_process(command, *, timeout: float, text: bool = True):
+def run_render_process(command, *, timeout: float, text: bool = True, capture_output: bool = True, check: bool = False):
     """Run one FFmpeg stage with timeout and cooperative job cancellation."""
     job_id = getattr(_job, "job_id", None)
     process = subprocess.Popen(
         command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=subprocess.PIPE if capture_output else subprocess.DEVNULL,
+        stderr=subprocess.PIPE if capture_output else subprocess.DEVNULL,
         text=text,
     )
     if job_id:
@@ -86,7 +86,10 @@ def run_render_process(command, *, timeout: float, text: bool = True):
                 raise subprocess.TimeoutExpired(command, timeout, output=stdout, stderr=stderr)
             time.sleep(0.05)
         stdout, stderr = process.communicate()
-        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+        completed = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+        if check and process.returncode:
+            raise subprocess.CalledProcessError(process.returncode, command, output=stdout, stderr=stderr)
+        return completed
     finally:
         if job_id:
             with _lock:
