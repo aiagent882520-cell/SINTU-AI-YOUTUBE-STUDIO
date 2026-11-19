@@ -62,6 +62,7 @@ from .flow_auto_import import start_flow_auto_import, stop_flow_auto_import, flo
 from .termux_bridge import router as termux_bridge_router
 from .youtube_upload import transfer_resumable_upload, sha256_file as youtube_sha256_file, validate_session_uri, validate_state_transition, UploadProtocolError
 from .offline_media import (OfflineMediaError, MAX_MEDIA_BYTES, import_media_file, list_offline_media, get_offline_media_path)
+from .resumable_media_upload import (ResumableUploadError, create_upload, get_upload, append_upload_chunk, complete_upload)
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT.parent))).expanduser().resolve()
@@ -1616,6 +1617,41 @@ def studio_approve_run(run_id: str, payload: StudioApprovalInput, request: Reque
     if not result:
         raise HTTPException(status_code=404, detail="Production run not found.")
     return {"run": result, "publishing_started": False, "note": "Human approval records workflow completion; it does not publish publicly."}
+
+@app.post("/api/offline-media/uploads", status_code=201)
+def offline_media_upload_create(filename: str = Query(..., min_length=1, max_length=180), size_bytes: int = Query(..., ge=1, le=MAX_MEDIA_BYTES), sha256: str = Query(..., min_length=64, max_length=64)):
+    try:
+        return create_upload(data_dir=DATA_DIR, filename=filename, size_bytes=size_bytes, sha256=sha256)
+    except ResumableUploadError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+@app.get("/api/offline-media/uploads/{upload_id}")
+def offline_media_upload_status(upload_id: str):
+    try:
+        return get_upload(data_dir=DATA_DIR, upload_id=upload_id)
+    except ResumableUploadError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+
+@app.put("/api/offline-media/uploads/{upload_id}/chunks")
+async def offline_media_upload_chunk(upload_id: str, request: Request, offset: int = Query(..., ge=0), chunk_sha256: str = Header(..., alias="X-Chunk-SHA256")):
+    body = bytearray()
+    async for piece in request.stream():
+        body.extend(piece)
+        if len(body) > 4 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Chunk exceeds the 4 MiB limit.")
+    try:
+        return append_upload_chunk(data_dir=DATA_DIR, upload_id=upload_id, offset=offset, chunk=bytes(body), chunk_sha256=chunk_sha256)
+    except ResumableUploadError as exc:
+        status = 409 if "Offset conflict" in str(exc) else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from None
+
+@app.post("/api/offline-media/uploads/{upload_id}/complete", status_code=201)
+def offline_media_upload_complete(upload_id: str, request: Request):
+    try:
+        return complete_upload(data_dir=DATA_DIR, upload_id=upload_id, content_type=request.headers.get("content-type", "application/octet-stream"))
+    except ResumableUploadError as exc:
+        status = 409 if "incomplete" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from None
 
 @app.post("/api/offline-media/import", status_code=201)
 async def offline_media_import(request: Request, filename: str = Query(..., min_length=1, max_length=180)):
