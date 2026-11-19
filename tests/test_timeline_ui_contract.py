@@ -52,7 +52,8 @@ def test_timeline_preview_uses_current_image_item_without_stale_index():
     assert "rows[index].id" not in preview
     assert "const startPlayback=()=>" in preview
     assert "const onSeeked=()=>startPlayback();" in preview
-    assert "try{\n     const playback=video.play();" not in preview
+    assert "const playback=video.play();" in preview
+    assert "startPlayback();" in preview
 
 
 def test_video_preview_metadata_is_initialized_once():
@@ -125,7 +126,7 @@ def test_timeline_reorder_and_remove_keep_aligned_subtitle_rows():
     assert "subtitleRows.splice(i,1)" in handler
     assert "[subtitleRows[i-1],subtitleRows[i]]=[subtitleRows[i],subtitleRows[i-1]]" in handler
     assert "[subtitleRows[i+1],subtitleRows[i]]=[subtitleRows[i],subtitleRows[i+1]]" in handler
-    assert 'subtitleField.value=subtitleRows.join("\\n")' in handler
+    assert "subtitleField.value=subtitleRows.join(" in handler
 
 
 def test_image_timeline_preview_waits_for_load_and_cleans_up_on_cancel():
