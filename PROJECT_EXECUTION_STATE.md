@@ -1291,3 +1291,11 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - YouTube OAuth/channel/live upload remain BLOCKED pending owner credentials, consent, encryption key and channel verification. No live upload/public publish was performed.
 - 60 formats and 15 modules remain catalogued; individual full render acceptance is still UNVERIFIED.
 - Full website journey/accessibility, worker crash recovery, and end-to-end browser-to-Android media handoff remain incomplete.
+
+
+### Offline E2E package mirror incident — 2026-11-19 12:40 UTC
+- PR #227 exact run 44523472533 passed Python 3.11–3.14, dependency audit, Chromium and Docker, but its offline-video job failed before generation with apt exit 100.
+- Package download log showed repeated HTTP 503 responses from security.ubuntu.com for libasyncns0 and libflac12t64; other 20 MB of packages downloaded from archive.ubuntu.com. No MP4 or audit artifact was produced by that failed run.
+- This is a runner package mirror failure, not an Android Image Studio or renderer failure.
+- PR #233 follows up by rewriting ephemeral runner apt sources to canonical archive.ubuntu.com, refreshing indexes after rewrite, verifying the actual Noto Sans Devanagari family, and using bounded retries/timeouts. Exact-head CI is pending.
+- Until PR #233's exact run completes, offline E2E jobs in PRs #225/#227/#228/#230/#231 remain PENDING/FAILED as observed; do not call their overall CI green based only on Python, Chromium or Docker jobs.
