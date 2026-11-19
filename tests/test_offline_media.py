@@ -139,7 +139,7 @@ def test_offline_media_refuses_same_size_corrupt_unindexed_destination(tmp_path)
     with sqlite3.connect(database) as connection:
         connection.execute("DELETE FROM offline_media WHERE sha256=?", (record["sha256"],))
     stored = tmp_path / "offline_media" / "files" / record["stored_name"]
-    stored.write_bytes(b"corrupt-content")  # same byte length, different SHA-256
+    stored.write_bytes(b"corrupts-content")  # same byte length, different SHA-256
     retry = tmp_path / "retry.part"
     retry.write_bytes(b"expected-content")
     with pytest.raises(OfflineMediaError, match="hash mismatch"):
