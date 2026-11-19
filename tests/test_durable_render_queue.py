@@ -32,7 +32,7 @@ def test_expired_lease_is_recovered_after_worker_crash(tmp_path, monkeypatch):
     report = queue.recover_expired_leases(now=expired)
     assert report == {"requeued": 1, "dead_lettered": 0}
     assert queue.get_item("owner", item["id"])["status"] == "queued"
-    second = queue.claim_next("worker-after-restart", lease_seconds=60)
+    second = queue.claim_next("worker-after-restart", lease_seconds=60, now=expired)
     assert second["id"] == item["id"]
     assert second["attempts"] == 2
     assert second["lease_token"] != claim["lease_token"]
@@ -43,7 +43,7 @@ def test_stale_worker_is_fenced_from_heartbeat_and_completion(tmp_path, monkeypa
     item = queue.enqueue("owner", "project", {"title": "fencing"})
     first = queue.claim_next("worker-a", lease_seconds=60)
     queue.recover_expired_leases(now=datetime.now(timezone.utc) + timedelta(seconds=61))
-    second = queue.claim_next("worker-b", lease_seconds=60)
+    second = queue.claim_next("worker-b", lease_seconds=60, now=datetime.now(timezone.utc) + timedelta(seconds=61))
     assert second["id"] == item["id"]
     assert queue.heartbeat(item["id"], first["lease_token"]) is False
     assert queue.complete(item["id"], first["lease_token"], {"video_id": "stale"}) is False
