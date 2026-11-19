@@ -51,7 +51,8 @@ def test_timeline_preview_uses_current_image_item_without_stale_index():
     assert '"/api/images/' in preview and "item.id" in preview
     assert "rows[index].id" not in preview
     assert "const startPlayback=()=>" in preview
-    assert "const onSeeked=()=>startPlayback();" in preview
+    assert "const onSeeked=()=>{if(seekTimer!==null)" in preview
+    assert "startPlayback();};" in preview
     assert "const playback=video.play();" in preview
     assert "startPlayback();" in preview
 
