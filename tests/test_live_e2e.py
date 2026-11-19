@@ -232,6 +232,10 @@ def test_offline_storyboard_e2e_creates_verified_local_video(monkeypatch, tmp_pa
     assert result["scene_count"] == 15
     assert len(result["forts_covered"]) == 10
     assert len(result["research_sources"]) == 10
+    assert result["research_source_count"] == 10
+    assert result["research_method"] == "curated_official_sources"
+    assert all(source.get("claim") and source.get("url") and source.get("source_type") for source in result["research_sources"])
+    assert len({source["fort"] for source in result["research_sources"]}) == 10
     assert result["forts_covered"][0] == "भानगढ़ किला"
     assert any("Golconda" in source["fort"] for source in result["research_sources"])
     assert "folklore" in render_calls[0]["scenes"][1].lower()
