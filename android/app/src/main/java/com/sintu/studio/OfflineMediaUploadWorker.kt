@@ -37,12 +37,12 @@ class OfflineMediaUploadWorker(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val rawUri = inputData.getString(KEY_URI) ?: return@withContext Result.failure(failureData("Missing media URI."))
         val filename = inputData.getString(KEY_FILENAME)?.takeIf { it.isNotBlank() }
-            ?: return@withContext Result.failure(error("Missing media filename."))
+            ?: return@withContext Result.failure(failureData("Missing media filename."))
         val mimeType = inputData.getString(KEY_MIME)?.ifBlank { null } ?: "application/octet-stream"
         val uri = try { Uri.parse(rawUri) } catch (_: Exception) {
-            return@withContext Result.failure(error("Invalid media URI."))
+            return@withContext Result.failure(failureData("Invalid media URI."))
         }
-        if (uri.scheme != "content") return@withContext Result.failure(error("Only Android document-provider URIs are accepted."))
+        if (uri.scheme != "content") return@withContext Result.failure(failureData("Only Android document-provider URIs are accepted."))
 
         val baseUrl = applicationContext.getSharedPreferences("sintu_app", Context.MODE_PRIVATE)
             .getString("api_base_url", "http://127.0.0.1:8000/")
@@ -59,15 +59,15 @@ class OfflineMediaUploadWorker(
                         if (count < 0) break
                         total += count
                         if (total > MAX_BYTES) {
-                            return@withContext Result.failure(error("Media exceeds the 256 MiB upload limit."))
+                            return@withContext Result.failure(failureData("Media exceeds the 256 MiB upload limit."))
                         }
                         output.write(buffer, 0, count)
                     }
                     output.fd.sync()
                 }
-            } ?: return@withContext Result.failure(error("Android cannot read the selected media URI. Re-select the file."))
+            } ?: return@withContext Result.failure(failureData("Android cannot read the selected media URI. Re-select the file."))
             if (!temp.isFile || temp.length() <= 0L) {
-                return@withContext Result.failure(error("Selected media file is empty."))
+                return@withContext Result.failure(failureData("Selected media file is empty."))
             }
 
             val api = SintuApi(applicationContext, baseUrl)
@@ -83,7 +83,7 @@ class OfflineMediaUploadWorker(
             if (isRetryableOfflineUploadHttpStatus(error.code())) {
                 Result.retry()
             } else {
-                Result.failure(error(error.message().take(300)))
+                Result.failure(failureData(error.message().take(300)))
             }
         } catch (error: IOException) {
             Result.retry()
