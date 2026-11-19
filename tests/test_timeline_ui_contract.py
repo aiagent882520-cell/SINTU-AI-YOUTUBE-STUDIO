@@ -126,3 +126,18 @@ def test_timeline_reorder_and_remove_keep_aligned_subtitle_rows():
     assert "[subtitleRows[i-1],subtitleRows[i]]=[subtitleRows[i],subtitleRows[i-1]]" in handler
     assert "[subtitleRows[i+1],subtitleRows[i]]=[subtitleRows[i],subtitleRows[i+1]]" in handler
     assert 'subtitleField.value=subtitleRows.join("\\n")' in handler
+
+
+def test_image_timeline_preview_waits_for_load_and_cleans_up_on_cancel():
+    source = (ROOT / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    start = source.index(" const waitForImage=(item,durationMs)=>")
+    end = source.index(" const waitForVideo=(item)=>", start)
+    preview = source[start:end]
+
+    assert 'image.addEventListener("load",onLoad,{once:true})' in preview
+    assert 'image.addEventListener("error",onError,{once:true})' in preview
+    assert "if(image.complete){if(image.naturalWidth>0)onLoad();else onError();}" in preview
+    assert "timer=setTimeout(()=>finish(true),durationMs)" in preview
+    assert "image.removeEventListener(\"load\",onLoad)" in preview
+    assert "image.removeEventListener(\"error\",onError)" in preview
+    assert "finishCurrent=keepGoing=>finish(keepGoing)" in preview
