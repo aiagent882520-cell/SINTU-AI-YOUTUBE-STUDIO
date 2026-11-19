@@ -426,6 +426,14 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
                         work.outputData.getString(OfflineMediaUploadWorker.KEY_ERROR)?.let {
                             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                         }
+                        if (work.state == WorkInfo.State.ENQUEUED ||
+                            work.state == WorkInfo.State.BLOCKED ||
+                            work.state == WorkInfo.State.RUNNING) {
+                            OutlinedButton(onClick = {
+                                WorkManager.getInstance(context).cancelWorkById(work.id)
+                                mediaNotice = "Upload cancelled. Select the file again to queue a fresh transfer."
+                            }) { Text("Cancel upload") }
+                        }
                     }
                 }
             }
