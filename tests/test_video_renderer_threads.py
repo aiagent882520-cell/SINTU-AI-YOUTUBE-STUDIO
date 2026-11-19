@@ -16,8 +16,4 @@ from app import video_renderer
 )
 def test_ffmpeg_thread_count_is_bounded(raw, expected, monkeypatch):
     monkeypatch.setenv("SINTU_FFMPEG_THREADS", raw)
-    try:
-        count = max(1, min(8, int(raw)))
-    except ValueError:
-        count = 2
-    assert count == expected
+    assert video_renderer._ffmpeg_thread_count() == expected
