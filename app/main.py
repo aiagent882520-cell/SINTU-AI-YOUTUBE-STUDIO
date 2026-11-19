@@ -1662,36 +1662,45 @@ def studio_create_version(payload: StudioVersionInput, request: Request):
                 "assets": studio_engine.list_assets(_studio_owner(request), payload.project_id)}
     return {"version": studio_engine.create_version(_studio_owner(request), payload.project_id, snapshot)}
 
+def _execute_studio_render_queue(owner: str, item_id: str):
+    item = next((entry for entry in studio_engine.list_render_queue(owner) if entry["id"] == item_id), None)
+    if not item or item["status"] != "running":
+        return
+    try:
+        result = render_video(RenderInput(**item["payload"]))
+        studio_engine.update_render_item(owner, item_id, "completed", result)
+    except HTTPException as exc:
+        try: studio_engine.update_render_item(owner, item_id, "failed", {"status_code": exc.status_code, "error": str(exc.detail)})
+        except ValueError: pass
+    except Exception as exc:
+        try: studio_engine.update_render_item(owner, item_id, "failed", {"error": str(exc)[:1200], "error_type": type(exc).__name__})
+        except ValueError: pass
+
+
 @app.post("/api/studio/render-queue/{item_id}/execute")
-def studio_execute_render_queue(item_id: str, request: Request):
+def studio_execute_render_queue(item_id: str, request: Request, background_tasks: BackgroundTasks):
     owner = _studio_owner(request)
     item = next((entry for entry in studio_engine.list_render_queue(owner) if entry["id"] == item_id), None)
-    if not item:
-        raise HTTPException(status_code=404, detail="Render queue item not found.")
-    try:
-        studio_engine.update_render_item(owner, item_id, "running")
-        render_payload = RenderInput(**item["payload"])
-        result = render_video(render_payload)
-        completed = studio_engine.update_render_item(owner, item_id, "completed", result)
-        return {"item": completed, "render": result}
-    except HTTPException as exc:
-        try:
-            studio_engine.update_render_item(owner, item_id, "failed", {"status_code": exc.status_code, "error": str(exc.detail)})
-        except ValueError:
-            pass
-        raise
-    except (ValueError, TypeError) as exc:
-        try:
-            studio_engine.update_render_item(owner, item_id, "failed", {"error": str(exc)})
-        except ValueError:
-            pass
-        raise HTTPException(status_code=400, detail="Render queue payload invalid: " + str(exc))
-    except Exception as exc:
-        try:
-            studio_engine.update_render_item(owner, item_id, "failed", {"error": type(exc).__name__})
-        except ValueError:
-            pass
-        raise HTTPException(status_code=500, detail="Render queue item failed (" + type(exc).__name__ + ").") from None
+    if not item: raise HTTPException(status_code=404, detail="Render queue item not found.")
+    try: running = studio_engine.update_render_item(owner, item_id, "running")
+    except ValueError as exc: raise HTTPException(status_code=409, detail=str(exc)) from None
+    background_tasks.add_task(_execute_studio_render_queue, owner, item_id)
+    return {"item": running, "started": True, "note": "Render started in background; poll queue for completed/failed status."}
+
+
+@app.post("/api/studio/render-queue/{item_id}/cancel")
+def studio_cancel_render_queue(item_id: str, request: Request):
+    item = studio_engine.cancel_queued_render(_studio_owner(request), item_id)
+    if not item: raise HTTPException(status_code=409, detail="Only a queued render can be cancelled; running renders cannot be cancelled through this control.")
+    return {"item": item, "cancelled": True}
+
+
+@app.post("/api/studio/render-queue/{item_id}/retry")
+def studio_retry_render_queue(item_id: str, request: Request):
+    item = studio_engine.retry_failed_render(_studio_owner(request), item_id)
+    if not item: raise HTTPException(status_code=409, detail="Only a failed render can be retried.")
+    return {"item": item, "requeued": True}
+
 
 @app.get("/api/studio/render-queue")
 def studio_get_render_queue(request: Request, project_id: str | None = None):
