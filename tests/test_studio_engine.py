@@ -49,3 +49,22 @@ def test_full_run_requires_every_checker_and_final_human_approval(tmp_path, monk
     assert run["status"] == "awaiting_human_approval"
     completed = studio_engine.approve_run("tester", run["id"], True, "Final review passed.")
     assert completed["status"] == "completed"
+
+
+def test_render_queue_cancel_retry_and_running_safety(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    queued = studio_engine.enqueue_render("owner", "project-1", {"title": "keep"})
+    assert studio_engine.cancel_queued_render("other", queued["id"]) is None
+    assert studio_engine.cancel_queued_render("owner", queued["id"])["status"] == "cancelled"
+    assert studio_engine.cancel_queued_render("owner", queued["id"]) is None
+    failed = studio_engine.enqueue_render("owner", "project-1", {"title": "retry me"})
+    studio_engine.update_render_item("owner", failed["id"], "running")
+    studio_engine.update_render_item("owner", failed["id"], "failed", {"error": "temporary"})
+    assert studio_engine.retry_failed_render("other", failed["id"]) is None
+    retried = studio_engine.retry_failed_render("owner", failed["id"])
+    assert retried["status"] == "queued" and retried["payload"] == {"title": "retry me"} and retried["result"] is None
+    assert studio_engine.retry_failed_render("owner", failed["id"]) is None
+    running = studio_engine.enqueue_render("owner", "project-1", {"title": "running"})
+    studio_engine.update_render_item("owner", running["id"], "running")
+    assert studio_engine.cancel_queued_render("owner", running["id"]) is None
+    assert studio_engine.list_render_queue("owner")[0]["status"] == "running"
