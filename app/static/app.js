@@ -102,8 +102,8 @@ async function playTimelinePreview(){
  const session={stop:()=>{cancelled=true;if(finishCurrent)finishCurrent(false);}};
  activeTimelinePreview=session;
  $("timelinePreviewStop").onclick=()=>stopActiveTimelinePreview();
- const waitForImage=(durationMs)=>{
-  stage.innerHTML='<img alt="Timeline scene" style="width:100%;max-height:420px;object-fit:contain" src="/api/images/'+rows[index].id+'">';
+ const waitForImage=(item,durationMs)=>{
+  stage.innerHTML='<img alt="Timeline scene" style="width:100%;max-height:420px;object-fit:contain" src="/api/images/'+item.id+'">';
   return new Promise(resolve=>{
    const timer=setTimeout(()=>{finishCurrent=null;resolve(true);},durationMs);
    finishCurrent=(keepGoing)=>{clearTimeout(timer);finishCurrent=null;resolve(keepGoing);};
@@ -125,8 +125,10 @@ async function playTimelinePreview(){
    const finish=(keepGoing)=>{if(settled)return;settled=true;cleanup();finishCurrent=null;resolve(keepGoing);};
    const onMetadata=()=>{
     try{video.currentTime=item.trimStart||0;}catch(error){onError();}
-    const playback=video.play();
-    if(playback&&typeof playback.catch==="function")playback.catch(error=>{if(!cancelled){settled=true;cleanup();finishCurrent=null;reject(error);}});
+    try{
+     const playback=video.play();
+     if(playback&&typeof playback.catch==="function")playback.catch(error=>{if(!cancelled){settled=true;cleanup();finishCurrent=null;reject(error);}});
+    }catch(error){onError();}
    };
    const onTimeUpdate=()=>{if(item.trimEnd!==null&&video.currentTime>=item.trimEnd)finish(true);};
    const onEnded=()=>finish(true);
@@ -144,7 +146,7 @@ async function playTimelinePreview(){
    const item=rows[index];
    notice.textContent="Preview scene "+(index+1)+" / "+rows.length;
    const keepGoing=item.kind==="image"
-    ?await waitForImage(item.duration*1000)
+    ?await waitForImage(item,item.duration*1000)
     :await waitForVideo(item);
    if(!keepGoing||cancelled)break;
   }
