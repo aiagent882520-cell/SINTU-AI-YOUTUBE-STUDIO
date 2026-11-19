@@ -1,6 +1,8 @@
 package com.sintu.studio
 
 import android.os.Bundle
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.content.Intent
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -10,6 +12,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.rememberScrollState
@@ -17,11 +20,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -118,13 +125,14 @@ private fun SintuRoot() {
 private fun StudioTabs(api: SintuApi) {
     var tab by remember { mutableIntStateOf(0) }
     TabRow(selectedTabIndex = tab) {
-        listOf("Assistant", "Video", "Projects").forEachIndexed { i, title ->
+        listOf("Assistant", "Images", "Video", "Projects").forEachIndexed { i, title ->
             Tab(selected = tab == i, onClick = { tab = i }, text = { Text(title) })
         }
     }
     when (tab) {
         0 -> AssistantScreen(api, Modifier.fillMaxSize())
-        1 -> VideoScreen(api, Modifier.fillMaxSize())
+        1 -> ImageStudioScreen(api, Modifier.fillMaxSize())
+        2 -> VideoScreen(api, Modifier.fillMaxSize())
         else -> ProjectsScreen(api, Modifier.fillMaxSize())
     }
 }
@@ -220,6 +228,145 @@ private fun AssistantScreen(api: SintuApi, modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxWidth()
         ) { Text(if (busy) "Thinking…" else "Send") }
         Text(notice, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+private fun ImageStudioScreen(api: SintuApi, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var prompt by rememberSaveable { mutableStateOf("") }
+    var kind by rememberSaveable { mutableStateOf("scene") }
+    var aspect by rememberSaveable { mutableStateOf("portrait") }
+    var imageId by rememberSaveable { mutableStateOf("") }
+    var provider by rememberSaveable { mutableStateOf("") }
+    var notice by rememberSaveable { mutableStateOf("Checking the configured local image engine…") }
+    var savedUri by rememberSaveable { mutableStateOf("") }
+    var preview by remember { mutableStateOf<Bitmap?>(null) }
+    var busy by remember { mutableStateOf(false) }
+
+    LaunchedEffect(api) {
+        try {
+            val capabilities = api.imageCapabilities()
+            val engine = capabilities["local_engine"]?.toString().orEmpty()
+            val comfy = capabilities["comfyui_available"] == true
+            notice = if (comfy) {
+                "Local ComfyUI AI engine available: " + engine
+            } else {
+                "AI inference is not configured. Current free fallback: " + engine +
+                    ". Procedural artwork is not generative AI."
+            }
+        } catch (error: Exception) {
+            notice = error.message ?: "Image engine status unavailable."
+        }
+    }
+
+    LaunchedEffect(api, imageId) {
+        if (imageId.isBlank()) {
+            preview = null
+            return@LaunchedEffect
+        }
+        try {
+            val bytes = api.downloadImageBytes(imageId)
+            val bitmap = withContext(Dispatchers.IO) {
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            }
+            preview = bitmap ?: throw IllegalStateException("Generated image could not be decoded on this device.")
+        } catch (error: Exception) {
+            preview = null
+            notice = error.message ?: "Image preview could not be loaded."
+        }
+    }
+
+    Column(
+        modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text("Image Studio", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text("Use the configured local ComfyUI AI engine when available. Otherwise the server uses clearly labelled procedural art.", style = MaterialTheme.typography.bodySmall)
+        OutlinedTextField(
+            prompt,
+            { prompt = it.take(3000) },
+            Modifier.fillMaxWidth(),
+            label = { Text("Image prompt") },
+            minLines = 4,
+            maxLines = 8
+        )
+        Text("Output type", fontWeight = FontWeight.Bold)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { kind = "scene" }) { Text(if (kind == "scene") "✓ Scene" else "Scene") }
+            OutlinedButton(onClick = {
+                kind = "thumbnail"
+                aspect = "landscape"
+            }) { Text(if (kind == "thumbnail") "✓ Thumbnail" else "Thumbnail") }
+        }
+        Text("Aspect ratio", fontWeight = FontWeight.Bold)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("portrait", "landscape", "square").filter { kind != "thumbnail" || it == "landscape" }.forEach { option ->
+                OutlinedButton(onClick = { aspect = option }) {
+                    Text((if (aspect == option) "✓ " else "") + when (option) {
+                        "portrait" -> "9:16"
+                        "landscape" -> "16:9"
+                        else -> "1:1"
+                    })
+                }
+            }
+        }
+        Button(
+            onClick = {
+                scope.launch {
+                    busy = true
+                    try {
+                        val result = api.generateImage(prompt, kind, aspect)
+                        imageId = result.image_id
+                        provider = result.provider
+                        savedUri = ""
+                        notice = result.notice
+                    } catch (error: Exception) {
+                        notice = error.message ?: "Image generation failed."
+                    } finally { busy = false }
+                }
+            },
+            enabled = !busy && prompt.isNotBlank(),
+            modifier = Modifier.fillMaxWidth()
+        ) { Text(if (busy) "Generating…" else "Generate image") }
+
+        Text(notice, style = MaterialTheme.typography.bodySmall)
+        if (imageId.isNotBlank()) {
+            Text("Provider: " + provider, fontWeight = FontWeight.Bold)
+            if (provider.contains("Procedural", ignoreCase = true)) {
+                Text("This output is procedural artwork, not AI-generated imagery.", color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall)
+            } else if (provider.contains("ComfyUI", ignoreCase = true)) {
+                Text("Generated by the configured local AI inference server.", style = MaterialTheme.typography.bodySmall)
+            }
+            preview?.let { bitmap ->
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "Generated SINTU image",
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 440.dp),
+                    contentScale = ContentScale.Fit
+                )
+            }
+            Button(
+                onClick = {
+                    scope.launch {
+                        busy = true
+                        try {
+                            val uri = api.saveImageToGallery(context, imageId)
+                            savedUri = uri.toString()
+                            notice = "Image saved to Pictures/SINTU on this phone."
+                        } catch (error: Exception) {
+                            notice = error.message ?: "Image could not be saved to the gallery."
+                        } finally { busy = false }
+                    }
+                },
+                enabled = !busy && preview != null,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(if (busy) "Saving…" else "Save image to phone gallery") }
+            if (savedUri.isNotBlank()) {
+                Text("Saved · " + savedUri, style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }
 
