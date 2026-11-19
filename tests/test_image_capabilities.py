@@ -37,6 +37,8 @@ def test_android_image_api_returns_validated_procedural_jpeg(tmp_path, monkeypat
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "false")
     monkeypatch.setenv("SINTU_PRODUCTION_ENABLED", "true")
     monkeypatch.setattr(image_generator, "IMAGE_DIR", tmp_path)
+    # app.main imported IMAGE_DIR at module load; patch its bound reference too.
+    monkeypatch.setattr(main, "IMAGE_DIR", tmp_path)
     monkeypatch.setattr(
         image_generator,
         "image_workflow_status",
