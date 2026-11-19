@@ -71,3 +71,13 @@ def test_invalid_trim_edits_do_not_mutate_previous_value():
     assert "item[field]=next;" in helper
     assert helper.index("item.trimEnd<=next") < helper.index("item[field]=next;")
     assert helper.index("next<=item.trimStart") < helper.index("item[field]=next;")
+
+
+def test_timeline_scene_description_limit_matches_render_api():
+    source = (ROOT / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    start = source.index("function renderTimelineEditor(rows=timelineRows())")
+    end = source.index('\n$("flowClipImportButton")', start)
+    editor = source[start:end]
+
+    assert 'maxlength="500"' in editor
+    assert 'maxlength="1000"' not in editor
