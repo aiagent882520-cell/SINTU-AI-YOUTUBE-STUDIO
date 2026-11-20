@@ -1376,3 +1376,11 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - PR #236 (`d5decc39695e1f150ecac52ab8d7dba7d4fd0516`) is open against main and mergeable, but its available green checks are from earlier run `44531566887` / `44531566929`, before current main changes. No review submissions are recorded. Revalidate against current main and obtain independent review before merging.
 - FastAPI Cloud check for the main deployment failed (check `136042837437`); GitHub supplied no failure summary or annotations. Root cause remains unknown without provider deployment logs. Do not report deployment success.
 - External acceptance remains unverified: physical Android device test, reachable ComfyUI model inference, live YouTube OAuth/channel/upload, and forensic audit of the three private black MP4 files. CI/offline rendering is not a substitute for these.
+
+
+## PR #241 completion (2026-11-20)
+
+- PR #241 merged to main by squash at `552d7b0b0c7f2938672d83821cf674a737f6166b` after all 8 exact-head checks passed: Python 3.11-3.14, dependency security audit, Chromium Video Editor browser tests, offline branded-video E2E/motion audit, and production Docker build. The change is test-only; production renderer defaults were not changed.
+- The immediately preceding main CI run `44662198484` passed Python 3.11-3.14, security, Chromium, and Docker, but its offline E2E job was cancelled when a newer workflow run superseded it. Treat the PR #241 exact-head all-green run as the validation evidence for the timeout test change; await a fresh complete main workflow on the merge commit.
+- FastAPI Cloud deployment for merge commit `552d7b0b0c7f2938672d83821cf674a737f6166b` was queued at the time of this checkpoint; no deployment success/failure conclusion yet.
+- PR #236 remains open; current mergeability is being recalculated and the available green CI predates the latest main merges. No review submissions recorded. Do not merge until current-base validation and independent review are obtained.
