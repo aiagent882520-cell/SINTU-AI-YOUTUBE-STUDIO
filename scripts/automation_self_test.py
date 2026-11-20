@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read-only diagnostic for the ChatGPT -> GitHub -> Termux -> SINTU control plane."""
 from __future__ import annotations
-import argparse, fcntl, json, os, shutil, subprocess, sys, urllib.request
+import argparse, fcntl, json, os, shutil, subprocess, sys, time, urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -16,6 +16,17 @@ def run_check(name, fn):
         return {"name": name, "ok": True, "detail": fn()}
     except Exception as exc:
         return {"name": name, "ok": False, "detail": str(exc)[:400]}
+
+
+def relay_heartbeat_status(path: Path | None = None, *, max_age_seconds: int = 2100, now: float | None = None):
+    """Require evidence of a recent successful GitHub queue poll."""
+    heartbeat = path or (Path.home() / ".sintu" / "github-relay.heartbeat")
+    if not heartbeat.is_file():
+        raise RuntimeError("GitHub relay has not recorded a successful queue poll")
+    age = (time.time() if now is None else now) - heartbeat.stat().st_mtime
+    if age < -5 or age > max_age_seconds:
+        raise RuntimeError(f"GitHub relay heartbeat is stale ({age:.1f}s; limit {max_age_seconds}s)")
+    return {"last_successful_poll_age_seconds": round(max(0.0, age), 1)}
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -85,6 +96,7 @@ def main():
                 return "relay singleton lock held"
             raise RuntimeError("GitHub relay lock is free; relay is not running")
     results.append(run_check("github_relay_singleton", relay_lock))
+    results.append(run_check("github_relay_poll", relay_heartbeat_status))
     report = {"ok": all(item["ok"] for item in results), "checks": results}
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if report["ok"] else 1
