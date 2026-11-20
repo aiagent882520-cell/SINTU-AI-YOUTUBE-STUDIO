@@ -1384,3 +1384,12 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - The immediately preceding main CI run `44662198484` passed Python 3.11-3.14, security, Chromium, and Docker, but its offline E2E job was cancelled when a newer workflow run superseded it. Treat the PR #241 exact-head all-green run as the validation evidence for the timeout test change; await a fresh complete main workflow on the merge commit.
 - FastAPI Cloud deployment for merge commit `552d7b0b0c7f2938672d83821cf674a737f6166b` was queued at the time of this checkpoint; no deployment success/failure conclusion yet.
 - PR #236 remains open; current mergeability is being recalculated and the available green CI predates the latest main merges. No review submissions recorded. Do not merge until current-base validation and independent review are obtained.
+
+
+## PR #236 current-main revalidation started (2026-11-20)
+
+- Retargeted PR #236 to current main commit `5ace0c612902610dc980fe799be5d9cb7293b60f`. GitHub initially reported a README conflict because both branches had independently added physical-device acceptance instructions. Resolved the overlap by preserving main's full smoke/manual checklist and merging the PR's Image Studio/saved-state documentation into it. Latest PR head: `959b756ddead312948386b8d08acbc017b159f0a`; GitHub mergeability reports clean/true.
+- Added no product behavior in this sync; it is a documentation-only merge-base conflict resolution. Fresh current-base CI is running: SINTU CI run `44662879919` and Native Android App run `44662879924`. Do not merge until all checks complete successfully.
+- Main CI run `44662616816` on `5ace0c612902610dc980fe799be5d9cb7293b60f`: Python 3.11-3.14, dependency security audit, Chromium browser tests and production Docker build PASS; offline branded-video E2E/motion audit remains IN_PROGRESS at checkpoint time.
+- PR #236 still has no submitted independent review. Its previous checks were from the pre-current-main base; the new runs above are the required fresh validation. Keep PR open pending green checks and independent review.
+- FastAPI Cloud check for main commit `5ace0c612902610dc980fe799be5d9cb7293b60f` failed at deployment `1d7d04b7-c4f3-4954-bda7-36234395b379`; GitHub check output contains no failure summary/annotations. Root cause remains unverified without provider deployment logs.
