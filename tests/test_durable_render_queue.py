@@ -195,3 +195,34 @@ def test_idempotency_keys_are_scoped_to_owner_and_validate_length(tmp_path, monk
     assert first["id"] != second["id"]
     with pytest.raises(ValueError, match="1-200"):
         queue.enqueue("owner-a", "project", {"title": "bad"}, idempotency_key="x" * 201)
+
+
+def test_running_job_cancellation_is_owner_scoped_and_lease_fenced(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    item = queue.enqueue("owner-a", "project", {"title": "active"})
+    claim = queue.claim_next("worker", lease_seconds=60)
+    assert queue.request_cancel("owner-b", item["id"]) is None
+    requested = queue.request_cancel("owner-a", item["id"])
+    assert requested["status"] == "running"
+    assert requested["cancel_requested"] == 1
+    assert queue.cancellation_requested(item["id"], claim["lease_token"])
+    assert queue.finalize_cancelled(item["id"], "stale-token") is False
+    assert queue.finalize_cancelled(item["id"], claim["lease_token"]) is True
+    persisted = queue.get_item("owner-a", item["id"])
+    assert persisted["status"] == "cancelled"
+    assert persisted["lease_token"] is None
+    assert persisted["lease_expires_at"] is None
+    assert persisted["cancel_requested"] == 0
+
+
+def test_cancelled_running_job_recovers_as_cancelled_after_worker_crash(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    item = queue.enqueue("owner", "project", {"title": "cancel-crash"})
+    claim = queue.claim_next("worker", lease_seconds=15)
+    queue.request_cancel("owner", item["id"])
+    expired = datetime.now(timezone.utc) + timedelta(seconds=16)
+    queue.recover_expired_leases(now=expired)
+    persisted = queue.get_item("owner", item["id"])
+    assert persisted["status"] == "cancelled"
+    assert persisted["lease_token"] is None
+    assert persisted["cancel_requested"] == 0
