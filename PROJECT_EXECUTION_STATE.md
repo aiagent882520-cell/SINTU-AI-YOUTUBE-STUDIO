@@ -1393,3 +1393,36 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Main CI run `44662616816` on `5ace0c612902610dc980fe799be5d9cb7293b60f`: Python 3.11-3.14, dependency security audit, Chromium browser tests and production Docker build PASS; offline branded-video E2E/motion audit remains IN_PROGRESS at checkpoint time.
 - PR #236 still has no submitted independent review. Its previous checks were from the pre-current-main base; the new runs above are the required fresh validation. Keep PR open pending green checks and independent review.
 - FastAPI Cloud check for main commit `5ace0c612902610dc980fe799be5d9cb7293b60f` failed at deployment `1d7d04b7-c4f3-4954-bda7-36234395b379`; GitHub check output contains no failure summary/annotations. Root cause remains unverified without provider deployment logs.
+
+
+## Current execution status — 2026-11-20 (fresh CI and blocker reconciliation)
+
+### PR #236 — all branch checks green; merge still gated
+- Current PR head: `959b756ddead312948386b8d08acbc017b159f0a`; PR remains open and GitHub reports mergeable/clean.
+- Exact PR-head SINTU CI run `44662879919`: **8/8 SUCCESS** — Python 3.11, 3.12, 3.13, 3.14; dependency security audit; production Docker build + container health; real Chromium Video Editor browser tests; offline branded-video E2E and motion audit.
+- Exact PR-head Native Android App run `44662879924`: **SUCCESS** (Android build).
+- No submitted PR reviews and no requested reviewers. Keep merge blocked until an independent reviewer actually reviews the change. A successful CI run or author self-review is not independent approval.
+- PR base metadata still reports SHA `5ace0c612902610dc980fe799be5d9cb7293b60f`; main is `21c9a629258dd24ab521c30fc98c396f11f575d5`. GitHub reports clean mergeability, but do not claim that the PR was merged or independently reviewed.
+
+### Current main validation and deployment
+- Main SHA: `21c9a629258dd24ab521c30fc98c396f11f575d5`; SINTU CI run `44662940717`.
+- PASS: Python 3.11–3.14, dependency security audit, Chromium browser tests, production Docker build and health endpoint.
+- Offline branded-video E2E/motion audit is still **IN_PROGRESS** at the latest poll, currently in the free local voice/font tools installation step. Do not mark the complete main workflow green until it finishes.
+- FastAPI Cloud check for this SHA is **FAILURE**, deployment `ebd5d9b2-c270-4cf1-8068-cac40358a1c8`. GitHub exposes no failure summary or annotations. The provider dashboard logs/credentials are required to diagnose; Docker CI success is not a live deployment.
+
+### Black MP4 forensic disposition — Issue #95
+- The post-calibration Android forensic run #171 confirmed three full-duration black videos with 30/30 blackframe samples and 5/5 decoded pixel samples: `3f4c2151e8e640109f464b2c2e9b7569.mp4`, `59430f1fb7fd4bdf80cf8b7d9f456098.mp4`, and `8cfe9da88d5c43d184f3572e371ff4a6.mp4`.
+- The other two assets are not full-black under the calibrated consensus; both still need human visual quality review. Android health audit #172 reports 15 PASS / 3 FAIL; the only three failures are the confirmed black files.
+- Historical source/project/job provenance for the three black assets remains UNKNOWN. No causal renderer attribution is proven. Original MP4s and backups remain untouched; no repair, regeneration, quarantine, deletion, upload or publishing occurred. Production remains PAUSED for those assets.
+
+### Remaining real-world acceptance gates
+- Physical Android install/login/editor/media-storage/network/lifecycle/accessibility acceptance: UNVERIFIED; CI APK build and smoke-harness code are not a physical-phone test.
+- Real ComfyUI inference: UNVERIFIED; Android probe previously found ComfyUI unreachable and no model files. Requires a separately managed compatible host, installed open model weights, API workflow and successful real inference. Do not install diffusion stacks on the Android phone.
+- Live YouTube OAuth/channel ownership/resumable upload: BLOCKED pending owner-provided Google OAuth credentials, consent and explicit authorization. No upload or publishing occurred.
+- Full website user journeys/accessibility and individual acceptance of all 60 formats / 15 modules: UNVERIFIED; catalog presence and offline fixture are not per-module acceptance.
+- FastAPI Cloud deployment diagnosis requires access to the provider deployment logs. The GitHub check alone does not expose the cause.
+
+### Next safe execution
+1. Wait for main run `44662940717` offline-video E2E/motion job to finish; capture final result and generated artifact evidence.
+2. Obtain an actual independent PR #236 review; only then consider merge, using the current main base and exact green checks.
+3. Continue only safe code-side work for deployment diagnostics, ComfyUI readiness and module acceptance while keeping physical-device, private-media and OAuth gates explicitly blocked until real access/evidence exists.
