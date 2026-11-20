@@ -3049,8 +3049,13 @@ def test_complete_studio_api_worker_checker_memory_assets_versions_and_queue(tmp
     queue = client.post("/api/studio/render-queue", json={"project_id":project_id,"payload":{"profile":"portrait_full_hd"}})
     assert queue.status_code == 201
     item_id = queue.json()["item"]["id"]
-    assert client.patch(f"/api/studio/render-queue/{item_id}", json={"status":"running"}).status_code == 200
-    assert client.patch(f"/api/studio/render-queue/{item_id}", json={"status":"completed","result":{"video_id":"a"*32}}).status_code == 200
+    # Queue state is owned by lease-holding workers; clients cannot forge execution.
+    assert client.patch(f"/api/studio/render-queue/{item_id}", json={"status":"running"}).status_code == 409
+    assert client.patch(f"/api/studio/render-queue/{item_id}", json={"status":"completed","result":{"video_id":"a"*32}}).status_code == 409
+    assert client.get("/api/studio/render-queue").json()["queue"][0]["status"] == "queued"
+    cancelled = client.delete(f"/api/studio/render-queue/{item_id}")
+    assert cancelled.status_code == 200
+    assert cancelled.json()["item"]["status"] == "cancelled"
 
 
 def test_render_queue_executes_existing_ffmpeg_renderer(tmp_path, monkeypatch):

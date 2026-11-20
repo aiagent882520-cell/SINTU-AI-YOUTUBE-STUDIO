@@ -12,6 +12,7 @@ import sqlite3
 import re
 import shutil
 import tempfile
+import threading
 import zipfile
 import secrets
 import urllib.parse
@@ -41,7 +42,7 @@ from pydantic import BaseModel, Field
 from .agents import list_agents
 from .production_catalog import production_catalog
 from .studio_scope import agent_registry, production_plan, scope_summary
-from . import studio_engine
+from . import studio_engine, durable_render_queue
 from .policy import paid_upgrades_allowed, production_actions_allowed, external_publishing_allowed
 from .blender_renderer import BLENDER_DIR, blender_status, render_scene, BlenderUnavailable, BlenderRenderFailed
 from .agent_orchestrator import workflow_team, orchestration_summary
@@ -81,6 +82,7 @@ app.include_router(termux_bridge_router)
 def start_google_flow_auto_import():
     """Recover interrupted production jobs, then watch Android Downloads."""
     recover_interrupted_runs()
+    durable_render_queue.recover_expired_leases()
     start_flow_auto_import(DATA_DIR, AI_VIDEO_DIR)
 
 
@@ -1758,33 +1760,44 @@ def studio_create_version(payload: StudioVersionInput, request: Request):
 @app.post("/api/studio/render-queue/{item_id}/execute")
 def studio_execute_render_queue(item_id: str, request: Request):
     owner = _studio_owner(request)
-    item = next((entry for entry in studio_engine.list_render_queue(owner) if entry["id"] == item_id), None)
+    worker_id = "api-" + str(os.getpid()) + "-" + secrets.token_hex(8)
+    item = durable_render_queue.claim_item(owner, item_id, worker_id, lease_seconds=1800)
     if not item:
-        raise HTTPException(status_code=404, detail="Render queue item not found.")
+        existing = durable_render_queue.get_item(owner, item_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Render queue item not found.")
+        raise HTTPException(status_code=409, detail="Render item is not queued or is currently leased by another worker.")
+
+    lease_token = item["lease_token"]
+    stop_heartbeat = threading.Event()
+
+    def renew_lease():
+        while not stop_heartbeat.wait(30):
+            if not durable_render_queue.heartbeat(item_id, lease_token, lease_seconds=1800):
+                stop_heartbeat.set()
+                return
+
+    heartbeat_thread = threading.Thread(target=renew_lease, name="sintu-render-lease", daemon=True)
+    heartbeat_thread.start()
     try:
-        studio_engine.update_render_item(owner, item_id, "running")
         render_payload = RenderInput(**item["payload"])
         result = render_video(render_payload)
-        completed = studio_engine.update_render_item(owner, item_id, "completed", result)
+        if not durable_render_queue.complete(item_id, lease_token, result):
+            raise HTTPException(status_code=409, detail="Render lease expired or was reclaimed; stale worker output was not published.")
+        completed = durable_render_queue.get_item(owner, item_id)
         return {"item": completed, "render": result}
     except HTTPException as exc:
-        try:
-            studio_engine.update_render_item(owner, item_id, "failed", {"status_code": exc.status_code, "error": str(exc.detail)})
-        except ValueError:
-            pass
+        durable_render_queue.fail(item_id, lease_token, str(exc.detail), retry_base_seconds=15)
         raise
     except (ValueError, TypeError) as exc:
-        try:
-            studio_engine.update_render_item(owner, item_id, "failed", {"error": str(exc)})
-        except ValueError:
-            pass
+        durable_render_queue.fail(item_id, lease_token, str(exc), retry_base_seconds=15)
         raise HTTPException(status_code=400, detail="Render queue payload invalid: " + str(exc))
     except Exception as exc:
-        try:
-            studio_engine.update_render_item(owner, item_id, "failed", {"error": type(exc).__name__})
-        except ValueError:
-            pass
+        durable_render_queue.fail(item_id, lease_token, type(exc).__name__, retry_base_seconds=15)
         raise HTTPException(status_code=500, detail="Render queue item failed (" + type(exc).__name__ + ").") from None
+    finally:
+        stop_heartbeat.set()
+        heartbeat_thread.join(timeout=2)
 
 @app.get("/api/studio/render-queue")
 def studio_get_render_queue(request: Request, project_id: str | None = None):
@@ -1797,17 +1810,24 @@ def studio_enqueue_render(payload: StudioRenderInput, request: Request):
     _studio_project_or_404(payload.project_id, request)
     if len(json.dumps(payload.payload, ensure_ascii=False)) > 20000:
         raise HTTPException(status_code=400, detail="Render payload is too large.")
-    return {"item": studio_engine.enqueue_render(_studio_owner(request), payload.project_id, payload.payload)}
+    return {"item": durable_render_queue.enqueue(_studio_owner(request), payload.project_id, payload.payload)}
 
 @app.patch("/api/studio/render-queue/{item_id}")
 def studio_update_render_queue(item_id: str, payload: StudioRenderUpdateInput, request: Request):
-    try:
-        item = studio_engine.update_render_item(_studio_owner(request), item_id, payload.status, payload.result)
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
-    if not item:
+    # Job state is worker-owned. Allowing browser clients to PATCH "completed"
+    # would bypass the lease token and publish unverified render results.
+    raise HTTPException(status_code=409, detail="Render status is worker-managed; use the execute endpoint or cancel an unclaimed job.")
+
+@app.delete("/api/studio/render-queue/{item_id}")
+def studio_cancel_render_queue(item_id: str, request: Request):
+    owner = _studio_owner(request)
+    item = durable_render_queue.cancel_queued(owner, item_id)
+    if item:
+        return {"item": item, "cancelled": True}
+    existing = durable_render_queue.get_item(owner, item_id)
+    if not existing:
         raise HTTPException(status_code=404, detail="Render queue item not found.")
-    return {"item": item}
+    raise HTTPException(status_code=409, detail="Only queued, unclaimed render jobs can be cancelled.")
 
 
 @app.get("/api/agents")
