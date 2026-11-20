@@ -1806,11 +1806,22 @@ def studio_get_render_queue(request: Request, project_id: str | None = None):
     return {"queue": studio_engine.list_render_queue(_studio_owner(request), project_id)}
 
 @app.post("/api/studio/render-queue", status_code=201)
-def studio_enqueue_render(payload: StudioRenderInput, request: Request):
+def studio_enqueue_render(
+    payload: StudioRenderInput,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+):
     _studio_project_or_404(payload.project_id, request)
     if len(json.dumps(payload.payload, ensure_ascii=False)) > 20000:
         raise HTTPException(status_code=400, detail="Render payload is too large.")
-    return {"item": durable_render_queue.enqueue(_studio_owner(request), payload.project_id, payload.payload)}
+    try:
+        item = durable_render_queue.enqueue(
+            _studio_owner(request), payload.project_id, payload.payload,
+            idempotency_key=idempotency_key,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    return {"item": item}
 
 @app.patch("/api/studio/render-queue/{item_id}")
 def studio_update_render_queue(item_id: str, payload: StudioRenderUpdateInput, request: Request):
