@@ -1813,7 +1813,7 @@ def studio_enqueue_render(
     _studio_project_or_404(payload.project_id, request)
     if len(json.dumps(payload.payload, ensure_ascii=False)) > 20000:
         raise HTTPException(status_code=400, detail="Render payload is too large.")
-    idempotency_key = request.headers.get("Idempotency-Key")
+    idempotency_key = getattr(request, "headers", {}).get("Idempotency-Key")
     try:
         item = durable_render_queue.enqueue(
             _studio_owner(request), payload.project_id, payload.payload,
