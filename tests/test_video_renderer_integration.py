@@ -480,7 +480,7 @@ def test_mixed_timeline_mixes_source_voice_music_and_burns_subtitles(tmp_path, m
     source = tmp_path / "source-with-audio.mp4"
     generated = subprocess.run(
         [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
-         "-f", "lavfi", "-i", "testsrc2=size=160x284:rate=24:duration=1.5",
+         "-f", "lavfi", "-i", "testsrc2=size=160x284:rate=12:duration=1.5",
          "-f", "lavfi", "-i", "sine=frequency=330:sample_rate=48000:duration=1.5",
          "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p",
          "-c:a", "aac", "-ar", "48000", "-ac", "2", str(source)],
@@ -515,7 +515,7 @@ def test_mixed_timeline_mixes_source_voice_music_and_burns_subtitles(tmp_path, m
         subtitles=["पहला दृश्य", "दूसरा दृश्य"],
         transitions=["cut", "fade"],
         resolution="160x284",
-        fps=24,
+        fps=12,
         quality="standard",
     )
 
@@ -527,7 +527,7 @@ def test_mixed_timeline_mixes_source_voice_music_and_burns_subtitles(tmp_path, m
     assert result["audio"] == "source+voiceover+music"
     metadata = subprocess.run(
         [ffprobe, "-v", "error", "-show_entries",
-         "stream=codec_type,codec_name,sample_rate,channels,width,height",
+         "stream=codec_type,codec_name,sample_rate,channels,width,height,r_frame_rate",
          "-of", "json", str(output)],
         capture_output=True, text=True, timeout=30, check=False,
     )
@@ -537,6 +537,7 @@ def test_mixed_timeline_mixes_source_voice_music_and_burns_subtitles(tmp_path, m
     video_streams = [stream for stream in streams if stream["codec_type"] == "video"]
     assert len(video_streams) == 1
     assert (video_streams[0]["width"], video_streams[0]["height"]) == (160, 284)
+    assert video_streams[0]["r_frame_rate"] == "12/1"
     audio_streams = [stream for stream in streams if stream["codec_type"] == "audio"]
     assert len(audio_streams) == 1
     assert audio_streams[0]["codec_name"] == "aac"
