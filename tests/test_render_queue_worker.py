@@ -53,3 +53,54 @@ def test_worker_marks_render_failure_for_queue_retry(monkeypatch):
     monkeypatch.setattr(worker.durable_render_queue, "heartbeat", lambda *a, **k: True)
     assert worker.run_worker(once=True, lease_seconds=15, worker_id="retry-worker") == 0
     assert failures == [("job-fail", "lease-fail", "RuntimeError")]
+
+
+def test_worker_cancels_real_active_subprocess_and_releases_lease(tmp_path, monkeypatch):
+    import os
+    import time
+    from app import durable_render_queue, render_process
+
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(worker.signal, "signal", lambda *_args: None)
+    monkeypatch.setattr(worker, "production_actions_allowed", lambda: True)
+    durable_render_queue.ensure_schema()
+    item = durable_render_queue.enqueue("owner", "project", {"title": "active-cancel"})
+    started = threading.Event()
+
+    def actual_subprocess_render(_payload):
+        started.set()
+        with render_process.render_job(item["id"]):
+            result = render_process.run_render_process(
+                [os.sys.executable, "-c", "import time; time.sleep(30)"],
+                timeout=35, capture_output=True, text=True, check=False,
+            )
+        return {"returncode": result.returncode}
+
+    monkeypatch.setattr(worker, "render_video", actual_subprocess_render)
+    result = []
+    thread = threading.Thread(
+        target=lambda: result.append(worker.run_worker(once=True, lease_seconds=60, worker_id="cancel-worker")),
+        daemon=True,
+    )
+    thread.start()
+    assert started.wait(5)
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        with render_process._lock:
+            if item["id"] in render_process._active:
+                break
+        time.sleep(0.02)
+    else:
+        raise AssertionError("render subprocess was not registered")
+    requested = durable_render_queue.request_cancel("owner", item["id"])
+    assert requested["cancel_requested"] == 1
+    thread.join(8)
+    assert not thread.is_alive(), "worker did not stop after active render cancellation"
+    persisted = durable_render_queue.get_item("owner", item["id"])
+    assert persisted["status"] == "cancelled"
+    assert persisted["lease_token"] is None
+    assert persisted["lease_expires_at"] is None
+    assert persisted["cancel_requested"] == 0
+    with render_process._lock:
+        assert item["id"] not in render_process._active
+    assert result == [0]
