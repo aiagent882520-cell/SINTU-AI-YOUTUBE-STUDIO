@@ -240,3 +240,44 @@ def test_cancellation_intent_fences_completion_and_retry(tmp_path, monkeypatch):
     assert persisted["result"] is None
     assert persisted["lease_token"] is None
     assert persisted["attempts"] == 1
+
+
+def test_concurrent_cancel_and_completion_have_one_durable_winner(tmp_path, monkeypatch):
+    import threading
+
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    item = queue.enqueue("owner", "project", {"title": "cancel-complete-race"})
+    claim = queue.claim_next("worker", lease_seconds=60)
+    barrier = threading.Barrier(3)
+    outcomes = {}
+
+    def cancel():
+        barrier.wait()
+        outcomes["cancel"] = queue.request_cancel("owner", item["id"])
+
+    def complete():
+        barrier.wait()
+        outcomes["complete"] = queue.complete(
+            item["id"], claim["lease_token"], {"filename": "race-result.mp4"}
+        )
+
+    threads = [threading.Thread(target=cancel), threading.Thread(target=complete)]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        thread.join(5)
+        assert not thread.is_alive()
+
+    persisted = queue.get_item("owner", item["id"])
+    if persisted["status"] == "running" and persisted["cancel_requested"]:
+        assert queue.finalize_cancelled(item["id"], claim["lease_token"])
+        persisted = queue.get_item("owner", item["id"])
+    assert persisted["status"] in {"completed", "cancelled"}
+    assert persisted["cancel_requested"] == 0
+    if persisted["status"] == "completed":
+        assert persisted["result"] == {"filename": "race-result.mp4"}
+        assert persisted["lease_token"] is None
+    else:
+        assert persisted["result"] is None
+        assert persisted["lease_token"] is None
