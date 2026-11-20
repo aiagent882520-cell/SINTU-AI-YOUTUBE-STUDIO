@@ -1438,9 +1438,9 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 
 ### PR #245 — durable render worker startup/recovery integration
 - PR: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/245
-- Branch: `fix/termux-render-worker-supervision`; exact head at PR creation: `37d8fb99b0a5c214013e427616affe4f203f0647`.
+- Branch: `fix/termux-render-worker-supervision`; head advanced after review fixes; latest commit: `6376869e6b21fd6eb456b410af28761e10ee1d66`.
 - Confirmed gap: `scripts/render_queue_worker.py` and the durable SQLite queue existed, but `scripts/start_services.sh` did not start the render worker. The watchdog also did not monitor it, and delayed identity-checked service restarts did not stop/restart it.
-- Changes: start the render worker with a dedicated PID/log after checking process identity; monitor it through the watchdog; include it in the delayed safe restart helper; add startup/watchdog/restart regression assertions.
+- Changes: start the render worker with a dedicated PID/log after checking process identity; monitor it through the watchdog; include it in the delayed safe restart helper; add startup/watchdog/restart regression assertions. Delayed restart now gives an active render up to 960 seconds to finish after SIGTERM (matching the maximum 900-second FFmpeg render timeout plus margin); it never SIGKILLs the worker.
 - Safety: worker process remains governed by the existing fail-closed `SINTU_PRODUCTION_ENABLED` gate. This change does not enable production rendering, enqueue work, modify media or run a render.
 - Validation status: exact-head CI pending at checkpoint creation. Physical Termux startup and Android reboot recovery remain UNVERIFIED until the device runs this branch.
 - Status: `PARTIAL — CI PENDING; PHYSICAL DEVICE UNVERIFIED`.
