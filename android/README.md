@@ -32,14 +32,31 @@ This first native client tranche is not yet a complete parity release. Backgroun
 The GitHub Actions workflow `.github/workflows/android-app.yml` runs the URL-validation unit tests and assembles both `app-debug.apk` and `app-release-unsigned.apk`. The debug and unsigned release APKs are uploaded together as the `sintu-android-apks` workflow artifact. A successful CI build proves compilation/package creation, not installation or functional testing on a physical Android device.
 
 
-## Physical-device acceptance (release gate)
+## Physical Android device acceptance
 
-Run the repository smoke harness from the project root after connecting one authorized Android device with USB debugging enabled:
+CI APK compilation is not a physical-device test. Build a debug APK on a host with JDK 17 and Android SDK 35:
 
 ```bash
-bash scripts/android_physical_device_smoke.sh
+gradle -p android assembleDebug
 ```
 
-The harness checks the selected device, installs and launches the supplied debug APK, verifies the app process, records basic Android OS/ABI/display/memory diagnostics, and scans recent AndroidRuntime crash logs. Set `ANDROID_SERIAL` when more than one device is attached; the harness intentionally refuses ambiguous device selection. Pass the APK path as the first positional argument when it is not at the default path, for example `bash scripts/android_physical_device_smoke.sh /path/to/app-debug.apk`. Set `ANDROID_SERIAL` when selecting one device explicitly; `ADB`, `ANDROID_PACKAGE` and `ANDROID_DEVICE_REPORT` are optional overrides.
+Connect and authorize exactly one phone with USB debugging enabled, then run from the repository root:
 
-A successful smoke run is only the installation/launch/crash-log gate. A human must still exercise login/session persistence, chat and project persistence, image generation/save, network retry, video render/download/playback, force-stop recovery, accessibility/TalkBack and screen-size layouts. Record device model, Android version, APK SHA-256 and test evidence before marking physical acceptance PASS. CI compilation or emulator-free tests must never be substituted for this gate.
+```bash
+bash scripts/android_physical_device_smoke.sh android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+The script installs/updates the debug package, launches it, checks that the process remains alive, records Android release/ABI/display and memory diagnostics, and scans fresh AndroidRuntime logs for a fatal crash. It writes android-device-acceptance.txt. If multiple phones are connected, set ANDROID_SERIAL. For a release APK use ANDROID_PACKAGE=com.sintu.studio.
+
+This is only an install/launch smoke test. Complete the following manual acceptance on the same physical device before marking the Android module complete:
+
+1. Configure the backend URL (same-device Termux can use http://127.0.0.1:8000/; remote backends must use HTTPS).
+2. Sign in with a real test account; verify session persistence and logout.
+3. Create/select a conversation, send a message, restart the app and verify history.
+4. Create a project and verify backend persistence.
+5. Import media using the document picker; verify WorkManager upload progress, retry after network loss, and no duplicate upload.
+6. Create a production run, verify approval gates, render a real MP4, download it to the gallery and play it.
+7. Force-stop/relaunch during a queued upload; verify recovery and permission handling.
+8. Repeat on small and large screen sizes; inspect TalkBack labels, keyboard navigation and memory/crash logs.
+
+Do not attach credentials, cookies, .env files, or private media to the report. A PASS from this script must be labelled PHYSICAL INSTALL/LAUNCH SMOKE PASS, not full Android acceptance.
