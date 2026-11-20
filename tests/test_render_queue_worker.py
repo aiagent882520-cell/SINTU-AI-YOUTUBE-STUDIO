@@ -64,6 +64,7 @@ def test_worker_cancels_real_active_subprocess_and_releases_lease(tmp_path, monk
     monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(worker.signal, "signal", lambda *_args: None)
     monkeypatch.setattr(worker, "production_actions_allowed", lambda: True)
+    monkeypatch.setattr(worker, "RenderInput", lambda **payload: payload)
     durable_render_queue.ensure_schema()
     item = durable_render_queue.enqueue("owner", "project", {"title": "active-cancel"})
     started = threading.Event()
