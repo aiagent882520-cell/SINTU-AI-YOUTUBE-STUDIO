@@ -57,3 +57,21 @@ The scanner redacts common token/secret fields and bounds log excerpts, but insp
 - A production log or database reference matching an asset path/stem is stronger linkage evidence, but must still be checked against the correct render/job ID and timestamps.
 - No match means provenance is still unknown; it does not prove no source asset existed.
 - Keep the original MP4s and backups unchanged. Any future repair must write to a separate output path and pass independent frame/audio validation.
+
+## Optional human-visible contact sheets
+
+The scanner can also export five decoded frames per target (first, quarter, middle, three-quarter and last) so a person can inspect dark footage instead of relying only on luma statistics. The output directory must be outside the SINTU data directory. Existing review JPEGs are never overwritten.
+
+Run the same read-only scan with an additional output directory:
+
+```bash
+REPORT="$HOME/sintu-forensics-report-with-contact-sheets.txt"
+REVIEW_DIR="$HOME/sintu-forensic-contact-sheets"
+SINTU_DATA_DIR="$APP_DIR" "$APP_DIR/.venv/bin/python" "$SCANNER" --contact-sheet-dir "$REVIEW_DIR" > "$REPORT"
+RESULT=$?
+echo "Forensic scanner exit code: $RESULT"
+echo "Review sheets: $REVIEW_DIR"
+ls -lh "$REVIEW_DIR"
+```
+
+Each JPEG contains the five sampled frames with timestamps and measured pixel metrics. A `PASS` sheet has all five frames extracted; `PARTIAL` means at least one timestamp could not be rendered and must not be treated as a complete visual review. This export does not repair or alter source MP4s. Review the two dark-visible clips manually and keep the three pixel-confirmed black originals blocked. Share the report and contact sheets only after checking them for private content.
