@@ -64,6 +64,9 @@ def run_worker(*, once: bool = False, poll_seconds: float = 2.0,
             while not heartbeat_stop.wait(1.0):
                 if durable_render_queue.cancellation_requested(item["id"], lease_token):
                     render_process.cancel_render_process(item["id"])
+                    if not durable_render_queue.heartbeat(item["id"], lease_token, lease_seconds=lease_seconds):
+                        lease_lost.set()
+                        return
                     continue
                 if not durable_render_queue.heartbeat(item["id"], lease_token, lease_seconds=lease_seconds):
                     lease_lost.set()
