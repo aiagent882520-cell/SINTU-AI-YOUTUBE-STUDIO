@@ -276,3 +276,46 @@ def test_comfyui_reports_missing_nodes_and_model_files_together(tmp_path, monkey
         "input": "ckpt_name", "configured": "missing-model.safetensors"
     }]
     assert status["available"] is False
+
+
+def test_comfyui_image_generation_submits_replaced_workflow_and_downloads_output(tmp_path, monkeypatch):
+    workflow = tmp_path / "image.json"
+    image_data = api_workflow()
+    image_data["2"]["inputs"].pop("frames")
+    image_data["2"]["inputs"].pop("fps")
+    image_data["2"]["inputs"]["negative"] = "__SINTU_NEGATIVE__"
+    workflow.write_text(json.dumps(image_data), encoding="utf-8")
+    monkeypatch.setenv("COMFYUI_IMAGE_WORKFLOW_PATH", str(workflow))
+    monkeypatch.setattr(comfyui_client, "image_workflow_status", lambda: {
+        "available": True, "base_url": "http://127.0.0.1:8188"
+    })
+    monkeypatch.setattr(comfyui_client.time, "sleep", lambda *_: None)
+    calls = []
+    submitted_workflows = []
+
+    def fake_request(url, data=None, timeout=30):
+        calls.append(url)
+        if url.endswith("/prompt"):
+            payload = json.loads(data.decode("utf-8"))
+            submitted_workflows.append(payload["prompt"])
+            return b'{"prompt_id":"image-job-1"}'
+        if "/history/" in url:
+            return json.dumps({"image-job-1": {"outputs": {
+                "7": {"images": [{
+                    "filename": "scene.png", "subfolder": "sintu", "type": "output"
+                }]}
+            }}}).encode()
+        if "/view?" in url:
+            assert "scene.png" in url
+            return b"realistic-png-test-bytes"
+        raise AssertionError("Unexpected ComfyUI URL: " + url)
+
+    monkeypatch.setattr(comfyui_client, "_request", fake_request)
+    result = comfyui_client.generate_image_bytes("A cinematic forest", 768, 1360, timeout_seconds=5)
+    assert result == b"realistic-png-test-bytes"
+    inputs = submitted_workflows[0]["2"]["inputs"]
+    assert inputs["text"] == "A cinematic forest"
+    assert inputs["width"] == 768
+    assert inputs["height"] == 1360
+    assert inputs["negative"] == "text, watermark, low quality, distorted, malformed, extra limbs"
+    assert any("/history/image-job-1" in url for url in calls)
