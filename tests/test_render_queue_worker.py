@@ -57,8 +57,10 @@ def test_worker_marks_render_failure_for_queue_retry(monkeypatch):
 
 
 def test_worker_cancels_real_active_subprocess_and_releases_lease(tmp_path, monkeypatch):
-    import os
+    import shutil
+    import tempfile
     import time
+    from pathlib import Path
     from app import durable_render_queue, render_process
 
     monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
@@ -69,13 +71,23 @@ def test_worker_cancels_real_active_subprocess_and_releases_lease(tmp_path, monk
     item = durable_render_queue.enqueue("owner", "project", {"title": "active-cancel"})
     started = threading.Event()
 
+    ffmpeg = shutil.which("ffmpeg")
+    assert ffmpeg, "FFmpeg must be installed in the automation integration-test environment"
+    temporary_root = tmp_path / "render-temporaries"
+    temporary_root.mkdir()
+
     def actual_subprocess_render(_payload):
-        started.set()
-        result = render_process.run_render_process(
-                [os.sys.executable, "-c", "import time; time.sleep(30)"],
-            timeout=35, capture_output=True, text=True, check=False,
-        )
-        return {"returncode": result.returncode}
+        with tempfile.TemporaryDirectory(prefix="active-cancel-", dir=temporary_root) as work:
+            output = Path(work) / "partial.mp4"
+            started.set()
+            result = render_process.run_render_process(
+                [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-re",
+                 "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=30",
+                 "-t", "30", "-an", "-c:v", "libx264", "-preset", "ultrafast",
+                 "-pix_fmt", "yuv420p", str(output)],
+                timeout=35, capture_output=True, text=True, check=False,
+            )
+            return {"returncode": result.returncode}
 
     monkeypatch.setattr(worker, "render_video", actual_subprocess_render)
     result = []
@@ -105,3 +117,4 @@ def test_worker_cancels_real_active_subprocess_and_releases_lease(tmp_path, monk
     with render_process._lock:
         assert item["id"] not in render_process._active
     assert result == [0]
+    assert list(temporary_root.iterdir()) == [], "cancelled render temporary directory leaked"
