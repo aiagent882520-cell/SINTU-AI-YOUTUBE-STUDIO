@@ -47,6 +47,17 @@ ACTIONS = {
     "offline_video_e2e", "full_self_test", "full_studio_e2e",
 }
 
+HEARTBEAT_PATH = Path.home() / ".sintu" / "github-relay.heartbeat"
+
+
+def write_relay_heartbeat(path: Path | None = None) -> None:
+    """Atomically record a successful GitHub queue poll without storing credentials."""
+    target = path or HEARTBEAT_PATH
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(f"{target.name}.{os.getpid()}.tmp")
+    temporary.write_text(datetime.now(timezone.utc).isoformat(), encoding="utf-8")
+    os.replace(temporary, target)
+
 
 def github_token() -> str:
     """Read an already-authenticated GitHub CLI token; never print it."""
@@ -310,6 +321,9 @@ def main() -> int:
     while True:
         try:
             issues = github.pending()
+            # A heartbeat means authentication and at least one complete GitHub
+            # queue poll succeeded; the singleton lock alone cannot prove that.
+            write_relay_heartbeat()
             if not issues and args.once:
                 return 0
             if process_pending(github, issues):
