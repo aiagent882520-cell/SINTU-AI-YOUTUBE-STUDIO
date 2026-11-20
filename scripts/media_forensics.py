@@ -562,12 +562,12 @@ def create_review_contact_sheets(videos: list[dict], output_dir: Path) -> list[d
     data_root = DATA_DIR.resolve()
     if output_dir.is_symlink():
         raise ValueError("Contact-sheet output directory must not be a symlink.")
-    output_dir.mkdir(parents=True, exist_ok=True)
     resolved_output = output_dir.resolve()
     if resolved_output == media_root or media_root in resolved_output.parents:
         raise ValueError("Contact sheets must be saved outside generated_videos.")
     if resolved_output == data_root or data_root in resolved_output.parents:
         raise ValueError("Contact sheets must be saved outside the SINTU data directory.")
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     results = []
     cell_width, image_height, label_height = 480, 270, 42
