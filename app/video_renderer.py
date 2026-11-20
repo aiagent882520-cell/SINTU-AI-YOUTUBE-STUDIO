@@ -11,6 +11,7 @@ import textwrap
 import uuid
 
 from PIL import Image, ImageDraw, ImageFont
+from . import render_process
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT))).expanduser().resolve()
@@ -52,7 +53,7 @@ def _validate_source_video(path: Path) -> None:
     if not ffmpeg:
         raise RendererUnavailable("AI source clip ke actual pixels verify karne ke liye FFmpeg required hai.")
     try:
-        pixels = subprocess.run(
+        pixels = render_process.run_render_process(
             [ffmpeg, "-v", "error", "-i", str(path), "-vf", "fps=1,scale=32:32",
              "-frames:v", "600", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
             capture_output=True, check=False, timeout=45,
