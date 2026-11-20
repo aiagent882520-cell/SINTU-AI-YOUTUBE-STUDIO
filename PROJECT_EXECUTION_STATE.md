@@ -1464,3 +1464,28 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Added migration-safe schema column, durable queue tests (replay, conflicting payload/project, owner isolation, key length), and API contract tests.
 - Commits: `a87292e` queue implementation; `bc3ebae` API header; `16ad280` queue tests; `5b920ab` API tests.
 - Exact-head CI pending; no local Python test execution is claimed in this cloud-only edit.
+
+
+## Durable worker active-cancellation port — 2026-11-20
+
+### PR #245 final verification
+- PR #245 exact head `bf22740fbf89e231c3730da66196177c48e02f21`, workflow run `44745373961`: **8/8 SUCCESS** (Python 3.11–3.14, dependency security audit, Chromium Video Editor browser tests, offline branded-video E2E/motion audit, production Docker build).
+- Merged by squash to main at `61c6b098410691372db1f89a0274ad19cc00b699`.
+- This verifies the merged branch CI; it does not certify physical Termux restart or device E2E.
+
+### PR #209 cancellation architecture reworked for durable leases
+- Did not merge or cherry-pick the old PR #209 process-local API registry as a standalone solution.
+- New branch: `feat/durable-worker-active-cancellation`, based on the PR #245 merge commit.
+- Added SQLite `cancel_requested` migration and owner-scoped `request_cancel`; active cancellation intent is durable and fenced by the current lease token.
+- Added worker polling of the durable intent, termination of the matching registered render subprocess, and lease-fenced `finalize_cancelled` only after renderer unwinds. Renderer FFmpeg/FFprobe subprocess calls are routed through the interruptible process runner; temporary-file cleanup remains in the renderer's existing finally/context cleanup.
+- Expired-lease recovery resolves cancellation-requested jobs to `cancelled`, clears lease fields and cancellation intent; ordinary expired leases retain existing retry/dead-letter policy.
+- API DELETE route now requests cancellation for queued or running owner-owned jobs. The legacy PR #209 process-local cancellation is not the cross-process control plane.
+- Added tests for durable active-cancel intent/owner isolation, cancellation after worker crash, API request contract, subprocess termination, and worker active-child cancellation with lease cleanup.
+- Added Termux diagnostic/recovery script and physical reboot instructions. Script refuses worker restart if a render is active, verifies PID command identity and never SIGKILLs a stuck worker.
+- Code/test/docs commits on this branch include: `0cf87ab`, `130b91e`, `02bd2ff`, `8852472`, `aec385c`, `dcfbeef`, `521f977`, `16229cc`, `5280707`, `a73d610`, `c2b08ff`, `8b601c1`, `74f8698`, `293b33b`, `112eeaa`, `162a5a3`, `a896265`, `422fd37`.
+- CI status: pending until a PR is opened and the latest exact head completes. No local Python execution is claimed in this cloud-only session.
+
+### External verification still blocked
+- Physical Android install/launch/backend/background recovery/reboot: requires the actual Termux device. Exact script: `scripts/termux_render_worker_recovery_test.sh`; procedure: `docs/TERMUX_RENDER_WORKER_RECOVERY.md`.
+- Three original black MP4 files are not mounted in this session. No original file was opened, hashed or modified here; provenance remains unverified. Existing Android report evidence is historical, not a fresh forensic run.
+- Real ComfyUI inference, YouTube live OAuth and physical Android acceptance remain unverified. Keep production publishing disabled.
