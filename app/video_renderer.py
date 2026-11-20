@@ -257,6 +257,43 @@ def validate_sampled_motion(frames: bytes, *, frame_bytes: int = 32 * 32 * 3,
     }
 
 
+def _probe_stream_duration_seconds(stream: dict | None) -> float:
+    """Read stream duration directly or derive it from FFprobe duration_ts/time_base."""
+    if not stream:
+        return 0.0
+    raw = stream.get("duration")
+    if raw not in (None, "", "N/A"):
+        try:
+            value = float(raw)
+            if math.isfinite(value) and value > 0:
+                return value
+        except (TypeError, ValueError):
+            pass
+    try:
+        ticks = int(stream.get("duration_ts", 0))
+        numerator, denominator = (
+            int(part) for part in str(stream.get("time_base", "0/1")).split("/", 1)
+        )
+        if ticks > 0 and numerator > 0 and denominator > 0:
+            return ticks * numerator / denominator
+    except (TypeError, ValueError, ZeroDivisionError):
+        pass
+    return 0.0
+
+
+def _verify_audio_stream_decodes(path: Path, ffmpeg: str, timeout: int = 45) -> None:
+    """Decode the complete audio stream; metadata duration alone is not playback evidence."""
+    try:
+        result = render_process.run_render_process(
+            [ffmpeg, "-v", "error", "-i", str(path), "-map", "0:a:0", "-f", "null", "-"],
+            capture_output=True, text=True, timeout=timeout, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise RenderFailed("Final MP4 audio stream full-duration decode timed out or failed.") from None
+    if result.returncode != 0 or (result.stderr or "").strip():
+        raise RenderFailed("Final MP4 audio stream failed full-duration decode.")
+
+
 def _verify_rendered_output(path: Path, expected_width: int, expected_height: int,
                             expected_duration: float, require_audio: bool | None = None,
                             expected_fps: int = 30,
@@ -269,7 +306,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         result = render_process.run_render_process(
             [ffprobe, "-v", "error", "-count_frames",
              "-show_entries",
-             "format=format_name,duration:stream=codec_type,codec_name,width,height,pix_fmt,duration,nb_read_frames,avg_frame_rate,sample_rate,channels",
+             "format=format_name,duration:stream=codec_type,codec_name,width,height,pix_fmt,duration,nb_read_frames,avg_frame_rate,sample_rate,channels,duration_ts,time_base",
              "-of", "json", str(path)],
             capture_output=True, text=True, timeout=30, check=False,
         )
@@ -293,6 +330,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         audio_codec = str(audio_stream.get("codec_name", "")).lower() if audio_stream else ""
         audio_sample_rate = int(audio_stream.get("sample_rate", 0)) if audio_stream else 0
         audio_channels = int(audio_stream.get("channels", 0)) if audio_stream else 0
+        audio_duration = _probe_stream_duration_seconds(audio_stream)
         names = str(fmt.get("format_name", "")).lower().split(",")
         has_audio = any(item.get("codec_type") == "audio" for item in metadata.get("streams", []))
         frame_rate_num, frame_rate_den = (int(part) for part in str(video.get("avg_frame_rate", "0/1")).split("/", 1))
@@ -316,10 +354,21 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         raise RenderFailed("Final video frame rate expected FPS se match nahi karta.")
     if require_audio is not None and has_audio != require_audio:
         raise RenderFailed("Final video audio stream expected setting se match nahi karti.")
+    if has_audio:
+        sync_tolerance = max(0.5, 2.0 / expected_fps)
+        if (not math.isfinite(audio_duration) or audio_duration <= 0
+                or abs(audio_duration - video_duration) > sync_tolerance):
+            raise RenderFailed(
+                "Audio/video stream durations are not synchronized "
+                f"(audio={audio_duration:.3f}s, video={video_duration:.3f}s, "
+                f"tolerance={sync_tolerance:.3f}s)."
+            )
 
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RendererUnavailable("Visual quality verification ke liye FFmpeg required hai.")
+    if has_audio:
+        _verify_audio_stream_decodes(path, ffmpeg)
 
     # Reject full-black and long black segments at render time too, not
     # only when a later upload is attempted.
@@ -372,6 +421,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         )
     verified = {"verified": True, "duration_seconds": duration, "video_duration_seconds": video_duration,
                 "frame_count": frame_count, "fps": actual_fps,
+                "audio_duration_seconds": audio_duration if has_audio else None,
                 "resolution": f"{width}x{height}", "video_codec": codec, "audio": has_audio,
                 "black_intervals": black_intervals,
                 "longest_black_segment_seconds": round(longest_black_seconds, 3),
@@ -400,7 +450,7 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
     try:
         result = render_process.run_render_process(
             [ffprobe, "-v", "error", "-count_frames", "-show_entries",
-             "format=format_name,duration:stream=codec_type,codec_name,width,height,duration,nb_read_frames,avg_frame_rate",
+             "format=format_name,duration:stream=codec_type,codec_name,width,height,duration,duration_ts,time_base,nb_read_frames,avg_frame_rate",
              "-of", "json", str(path)],
             capture_output=True, text=True, timeout=45, check=False,
         )
@@ -422,6 +472,8 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
         names = str(fmt.get("format_name", "")).lower().split(",")
         numerator, denominator = (int(part) for part in str(video.get("avg_frame_rate", "0/1")).split("/", 1))
         fps = numerator / denominator if denominator else 0
+        audio_stream = next((item for item in streams if item.get("codec_type") == "audio"), None)
+        audio_duration = _probe_stream_duration_seconds(audio_stream) if audio_stream else None
     except (AttributeError, TypeError, ValueError, StopIteration, json.JSONDecodeError, ZeroDivisionError):
         raise RenderFailed("Upload MP4 mein valid video stream/frame metadata nahi hai.") from None
     if not any(name in {"mov", "mp4", "m4a", "3gp", "3g2", "mj2"} for name in names):
@@ -435,6 +487,13 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
     minimum_frames = max(1, math.floor(duration * fps * 0.95))
     if frame_count < minimum_frames or abs(duration - video_duration) > max(0.5, 2 / fps):
         raise RenderFailed("Upload MP4 truncated hai: actual frames aur video duration match nahi karte.")
+    if audio_stream is not None:
+        if (audio_duration is None or not math.isfinite(audio_duration) or audio_duration <= 0
+                or abs(audio_duration - video_duration) > max(0.5, 2 / fps)):
+            raise RenderFailed(
+                "Upload MP4 audio/video streams are not synchronized "
+                f"(audio={audio_duration}, video={video_duration:.3f}s)."
+            )
 
     # Metadata alone does not prove that the encoded picture contains visible
     # content. Reject full-duration black exports and sample short clips too;
@@ -442,6 +501,8 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RendererUnavailable("Upload se pehle visual MP4 verification ke liye FFmpeg required hai.")
+    if audio_stream is not None:
+        _verify_audio_stream_decodes(path, ffmpeg)
     try:
         black = render_process.run_render_process(
             [ffmpeg, "-hide_banner", "-i", str(path), "-vf",
@@ -513,7 +574,7 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
         motion_audit = validate_sampled_motion(pixels.stdout, minimum_ratio=0.40)
     return {
         "verified": True, "size_bytes": size, "duration_seconds": duration,
-        "video_duration_seconds": video_duration, "frame_count": frame_count,
+        "video_duration_seconds": video_duration, "audio_duration_seconds": audio_duration, "frame_count": frame_count,
         "fps": fps, "resolution": f"{width}x{height}", "video_codec": codec,
         "black_intervals": black_intervals,
         "longest_black_segment_seconds": round(longest_black_seconds, 3),

@@ -9,7 +9,7 @@ from app.video_renderer import RenderFailed, _verify_rendered_output
 def _metadata(width=720, height=1280, duration=8.0, audio=True, codec="h264", pix_fmt="yuv420p", audio_codec="aac", sample_rate="48000", channels=2):
     streams = [{"codec_type": "video", "codec_name": codec, "width": width, "height": height, "pix_fmt": pix_fmt, "duration": str(duration), "nb_read_frames": "240", "avg_frame_rate": "30/1"}]
     if audio:
-        streams.append({"codec_type": "audio", "codec_name": audio_codec, "sample_rate": sample_rate, "channels": channels})
+        streams.append({"codec_type": "audio", "codec_name": audio_codec, "sample_rate": sample_rate, "channels": channels, "duration": str(duration)})
     return {"streams": streams, "format": {"format_name": "mov,mp4,m4a", "duration": str(duration)}}
 
 
@@ -31,7 +31,7 @@ def test_final_mp4_verification_accepts_expected_video_and_audio(tmp_path, monke
     output = tmp_path / "final.mp4"
     output.write_bytes(b"mp4")
     result = _verify_rendered_output(output, 720, 1280, 8, require_audio=True)
-    assert result == {"verified": True, "duration_seconds": 8.0, "video_duration_seconds": 8.0, "frame_count": 240, "fps": 30.0, "resolution": "720x1280", "video_codec": "h264", "audio": True, "black_intervals": [], "longest_black_segment_seconds": 0.0, "visible_frame_count": 1, "sampled_frame_count": 1}
+    assert result == {"verified": True, "duration_seconds": 8.0, "video_duration_seconds": 8.0, "frame_count": 240, "fps": 30.0, "resolution": "720x1280", "video_codec": "h264", "audio": True, "audio_duration_seconds": 8.0, "black_intervals": [], "longest_black_segment_seconds": 0.0, "visible_frame_count": 1, "sampled_frame_count": 1}
 
 
 @pytest.mark.parametrize("metadata", [
@@ -254,3 +254,25 @@ def test_render_gate_rejects_long_black_segment_before_publishing_output(tmp_pat
             candidate, 720, 1280, 12, require_audio=False, expected_fps=24,
             minimum_motion_ratio=0.40,
         )
+
+
+def test_final_mp4_verification_derives_audio_duration_from_time_base(tmp_path, monkeypatch):
+    metadata = _metadata()
+    audio = metadata["streams"][1]
+    audio.pop("duration")
+    audio["duration_ts"] = "384000"
+    audio["time_base"] = "1/48000"
+    _setup_probe(monkeypatch, metadata)
+    output = tmp_path / "duration-ts-audio.mp4"
+    output.write_bytes(b"mp4")
+    result = _verify_rendered_output(output, 720, 1280, 8, require_audio=True)
+    assert result["audio_duration_seconds"] == pytest.approx(8.0)
+
+
+def test_audio_stream_decode_gate_rejects_decoder_errors(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from app import video_renderer
+
+    monkeypatch.setattr(video_renderer.render_process, "run_render_process", lambda *args, **kwargs: SimpleNamespace(returncode=1, stderr="Invalid AAC frame"))
+    with pytest.raises(RenderFailed, match="full-duration decode"):
+        video_renderer._verify_audio_stream_decodes(tmp_path / "broken-audio.mp4", "/usr/bin/ffmpeg")

@@ -550,3 +550,58 @@ def test_mixed_timeline_mixes_source_voice_music_and_burns_subtitles(tmp_path, m
     )
     assert measured.returncode == 0, measured.stderr
     assert "mean_volume: -inf dB" not in measured.stderr
+
+
+def test_render_verifier_rejects_audio_video_duration_drift(tmp_path):
+    ffmpeg, _ = _ffmpeg_tools()
+    mismatched = tmp_path / "audio-shorter-than-video.mp4"
+    result = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+         "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=24:duration=2",
+         "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=1",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
+         "-ar", "48000", "-ac", "2", "-t", "2", str(mismatched)],
+        capture_output=True, check=False, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
+    with pytest.raises(video_renderer.RenderFailed, match="not synchronized"):
+        video_renderer._verify_rendered_output(
+            mismatched, 320, 240, expected_duration=2,
+            require_audio=True, expected_fps=24,
+        )
+
+
+def test_render_verifier_reports_synchronized_audio_video_durations(tmp_path):
+    ffmpeg, _ = _ffmpeg_tools()
+    matched = tmp_path / "audio-matches-video.mp4"
+    result = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+         "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=24:duration=2",
+         "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=2",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
+         "-ar", "48000", "-ac", "2", "-t", "2", str(matched)],
+        capture_output=True, check=False, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
+    verified = video_renderer._verify_rendered_output(
+        matched, 320, 240, expected_duration=2,
+        require_audio=True, expected_fps=24,
+    )
+    assert verified["verified"] is True
+    assert abs(verified["audio_duration_seconds"] - verified["video_duration_seconds"]) <= 0.5
+
+
+def test_publish_verifier_rejects_unsynchronized_audio_track(tmp_path):
+    ffmpeg, _ = _ffmpeg_tools()
+    mismatched = tmp_path / "publish-audio-drift.mp4"
+    result = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+         "-f", "lavfi", "-i", "testsrc2=size=720x1280:rate=24:duration=2",
+         "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=1",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
+         "-ar", "48000", "-ac", "2", "-t", "2", str(mismatched)],
+        capture_output=True, check=False, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
+    with pytest.raises(video_renderer.RenderFailed, match="not synchronized"):
+        video_renderer.verify_publishable_mp4(mismatched)
