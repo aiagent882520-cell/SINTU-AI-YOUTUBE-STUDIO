@@ -1,13 +1,13 @@
 # Termux black-MP4 forensic run (read-only)
 
-This run is required to turn the three confirmed black-video investigations from timestamp-only candidates into evidence-backed source mapping. It reads local media, logs, SQLite databases and source assets. It does not repair, overwrite, move, delete, regenerate, upload or publish anything.
+This run performs read-only source mapping for the five MP4 filenames retained from the historical Android health audit. The current scanner target list contains five historical candidates; it has **not** been proven that these are the same three original MP4 files requested for the current forensic investigation. Match the three originals by owner-confirmed filenames and SHA-256 before attributing any result to them. The scanner reads local media, logs, SQLite databases and source assets. It does not repair, overwrite, move, delete, regenerate, upload or publish anything.
 
 ## Before running
 
 - Run this on the Android phone where the five target MP4s and SINTU data live.
 - The default installer path is `$HOME/SINTU-AI-YOUTUBE-STUDIO`. If you used a custom `SINTU_APP_DIR`, change `APP_DIR` below.
 - The scanner needs the app's existing virtualenv, Pillow, FFmpeg and FFprobe.
-- Ensure the five target files are in `$APP_DIR/generated_videos/`, and the relevant logs, SQLite files and generated assets remain in the app data directory.
+- Ensure the five historical candidate files are in `$APP_DIR/generated_videos/`, and the relevant logs, SQLite files and generated assets remain in the app data directory. If the three original files have different names, do not rename or copy them over these candidates; first add their exact names as separate scanner targets in a reviewed code change, or run a separate read-only hash/probe against their original paths.
 - Download the current forensic scanner from the repository's main branch. Update the Android app checkout to the latest main release before relying on the new contact-sheet option.
 
 ## Exact command
