@@ -56,7 +56,7 @@ def _validate_source_video(path: Path) -> None:
         pixels = render_process.run_render_process(
             [ffmpeg, "-v", "error", "-i", str(path), "-vf", "fps=1,scale=32:32",
              "-frames:v", "600", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
-            capture_output=True, check=False, timeout=45,
+            capture_output=True, text=False, check=False, timeout=45,
         )
     except (OSError, subprocess.TimeoutExpired):
         raise ValueError("AI source video ke visual frames verify nahi ho sake.") from None
@@ -352,7 +352,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         pixels = render_process.run_render_process(
             [ffmpeg, "-v", "error", "-i", str(path), "-vf", "fps=1,scale=32:32",
              "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
-            capture_output=True, timeout=45, check=False,
+            capture_output=True, text=False, timeout=45, check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
         raise RenderFailed("Final video ke actual visual frames decode nahi ho sake.") from None
