@@ -4,8 +4,8 @@ from scripts import render_queue_worker as worker
 
 
 def _patch_worker_basics(monkeypatch):
-    monkeypatch.setattr(worker, "ensure_schema", lambda: None)
-    monkeypatch.setattr(worker, "recover_expired_leases", lambda: {"requeued": 0, "dead_lettered": 0})
+    monkeypatch.setattr(worker.durable_render_queue, "ensure_schema", lambda: None)
+    monkeypatch.setattr(worker.durable_render_queue, "recover_expired_leases", lambda: {"requeued": 0, "dead_lettered": 0})
     monkeypatch.setattr(worker.signal, "signal", lambda *_args: None)
 
 
