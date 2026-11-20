@@ -91,7 +91,7 @@ def test_schema_migrates_existing_studio_queue_without_losing_rows(tmp_path, mon
         )
     queue.ensure_schema()
     columns = {row["name"] for row in queue._connect().execute("PRAGMA table_info(studio_render_queue)")}
-    assert {"lease_owner", "lease_token", "lease_expires_at", "heartbeat_at", "available_at", "attempts", "max_attempts", "last_error", "idempotency_key"} <= columns
+    assert {"lease_owner", "lease_token", "lease_expires_at", "heartbeat_at", "available_at", "attempts", "max_attempts", "last_error", "idempotency_key", "cancel_requested"} <= columns
     claimed = queue.claim_next("migration-worker", lease_seconds=60)
     assert claimed["id"] == "legacy-id"
     assert claimed["payload"] == {"title": "legacy"}
@@ -195,3 +195,89 @@ def test_idempotency_keys_are_scoped_to_owner_and_validate_length(tmp_path, monk
     assert first["id"] != second["id"]
     with pytest.raises(ValueError, match="1-200"):
         queue.enqueue("owner-a", "project", {"title": "bad"}, idempotency_key="x" * 201)
+
+
+def test_running_job_cancellation_is_owner_scoped_and_lease_fenced(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    item = queue.enqueue("owner-a", "project", {"title": "active"})
+    claim = queue.claim_next("worker", lease_seconds=60)
+    assert queue.request_cancel("owner-b", item["id"]) is None
+    requested = queue.request_cancel("owner-a", item["id"])
+    assert requested["status"] == "running"
+    assert requested["cancel_requested"] == 1
+    assert queue.cancellation_requested(item["id"], claim["lease_token"])
+    assert queue.finalize_cancelled(item["id"], "stale-token") is False
+    assert queue.finalize_cancelled(item["id"], claim["lease_token"]) is True
+    persisted = queue.get_item("owner-a", item["id"])
+    assert persisted["status"] == "cancelled"
+    assert persisted["lease_token"] is None
+    assert persisted["lease_expires_at"] is None
+    assert persisted["cancel_requested"] == 0
+
+
+def test_cancelled_running_job_recovers_as_cancelled_after_worker_crash(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    item = queue.enqueue("owner", "project", {"title": "cancel-crash"})
+    claim = queue.claim_next("worker", lease_seconds=15)
+    queue.request_cancel("owner", item["id"])
+    expired = datetime.now(timezone.utc) + timedelta(seconds=16)
+    queue.recover_expired_leases(now=expired)
+    persisted = queue.get_item("owner", item["id"])
+    assert persisted["status"] == "cancelled"
+    assert persisted["lease_token"] is None
+    assert persisted["cancel_requested"] == 0
+
+
+def test_cancellation_intent_fences_completion_and_retry(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    item = queue.enqueue("owner", "project", {"title": "cancel-race"}, max_attempts=3)
+    claim = queue.claim_next("worker", lease_seconds=60)
+    queue.request_cancel("owner", item["id"])
+    assert queue.complete(item["id"], claim["lease_token"], {"filename": "must-not-publish.mp4"}) is False
+    assert queue.fail(item["id"], claim["lease_token"], "renderer stopped") == "cancelled"
+    persisted = queue.get_item("owner", item["id"])
+    assert persisted["status"] == "cancelled"
+    assert persisted["result"] is None
+    assert persisted["lease_token"] is None
+    assert persisted["attempts"] == 1
+
+
+def test_concurrent_cancel_and_completion_have_one_durable_winner(tmp_path, monkeypatch):
+    import threading
+
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    item = queue.enqueue("owner", "project", {"title": "cancel-complete-race"})
+    claim = queue.claim_next("worker", lease_seconds=60)
+    barrier = threading.Barrier(3)
+    outcomes = {}
+
+    def cancel():
+        barrier.wait()
+        outcomes["cancel"] = queue.request_cancel("owner", item["id"])
+
+    def complete():
+        barrier.wait()
+        outcomes["complete"] = queue.complete(
+            item["id"], claim["lease_token"], {"filename": "race-result.mp4"}
+        )
+
+    threads = [threading.Thread(target=cancel), threading.Thread(target=complete)]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        thread.join(5)
+        assert not thread.is_alive()
+
+    persisted = queue.get_item("owner", item["id"])
+    if persisted["status"] == "running" and persisted["cancel_requested"]:
+        assert queue.finalize_cancelled(item["id"], claim["lease_token"])
+        persisted = queue.get_item("owner", item["id"])
+    assert persisted["status"] in {"completed", "cancelled"}
+    assert persisted["cancel_requested"] == 0
+    if persisted["status"] == "completed":
+        assert persisted["result"] == {"filename": "race-result.mp4"}
+        assert persisted["lease_token"] is None
+    else:
+        assert persisted["result"] is None
+        assert persisted["lease_token"] is None

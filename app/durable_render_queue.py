@@ -56,6 +56,7 @@ def ensure_schema() -> None:
             "max_attempts": "INTEGER NOT NULL DEFAULT 4",
             "last_error": "TEXT",
             "idempotency_key": "TEXT",
+            "cancel_requested": "INTEGER NOT NULL DEFAULT 0",
         }
         for name, declaration in migrations.items():
             if name not in columns:
@@ -119,19 +120,27 @@ def recover_expired_leases(*, now: datetime | None = None) -> dict:
     current = _stamp(now)
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            """UPDATE studio_render_queue SET status='cancelled',cancel_requested=0,
+               lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,
+               last_error='Cancelled while recovering expired worker lease.',updated_at=?
+               WHERE status='running' AND cancel_requested=1
+                 AND lease_expires_at IS NOT NULL AND lease_expires_at<=?""",
+            (current, current),
+        )
         dead = conn.execute(
             """UPDATE studio_render_queue
                SET status='dead_letter',last_error=COALESCE(last_error,'Worker lease expired; retry budget exhausted.'),
-                   lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,updated_at=?
+                   lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,cancel_requested=0,updated_at=?
                WHERE status='running' AND lease_expires_at IS NOT NULL AND lease_expires_at<=?
-                 AND attempts>=max_attempts""", (current, current)
+                 AND cancel_requested=0 AND attempts>=max_attempts""", (current, current)
         ).rowcount
         queued = conn.execute(
             """UPDATE studio_render_queue
-               SET status='queued',available_at=?,last_error=COALESCE(last_error,'Worker lease expired; job recovered.'),
-                   lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,updated_at=?
+               SET status='queued',available_at=?,last_error=CASE WHEN cancel_requested=1 THEN 'Cancelled during worker recovery.' ELSE COALESCE(last_error,'Worker lease expired; job recovered.') END,
+                   lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,cancel_requested=0,updated_at=?
                WHERE status='running' AND lease_expires_at IS NOT NULL AND lease_expires_at<=?
-                 AND attempts<max_attempts""", (current, current, current)
+                 AND cancel_requested=0 AND attempts<max_attempts""", (current, current, current)
         ).rowcount
     return {"requeued": queued, "dead_lettered": dead}
 
@@ -146,9 +155,9 @@ def claim_next(worker_id: str, *, lease_seconds: int = 900, owner: str | None = 
         conn.execute("BEGIN IMMEDIATE")
         # Reclaim expired leases inside the same write transaction as claiming.
         conn.execute(
-            """UPDATE studio_render_queue SET status=CASE WHEN attempts>=max_attempts THEN 'dead_letter' ELSE 'queued' END,
-               available_at=?,last_error=COALESCE(last_error,'Worker lease expired; job recovered.'),
-               lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,updated_at=?
+            """UPDATE studio_render_queue SET status=CASE WHEN cancel_requested=1 THEN 'cancelled' WHEN attempts>=max_attempts THEN 'dead_letter' ELSE 'queued' END,
+               available_at=?,last_error=CASE WHEN cancel_requested=1 THEN 'Cancelled while recovering expired worker lease.' ELSE COALESCE(last_error,'Worker lease expired; job recovered.') END,
+               lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,cancel_requested=0,updated_at=?
                WHERE status='running' AND lease_expires_at IS NOT NULL AND lease_expires_at<=?""",
             (now_s, now_s, now_s),
         )
@@ -185,8 +194,8 @@ def claim_item(owner: str, item_id: str, worker_id: str, *, lease_seconds: int =
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         conn.execute(
-            """UPDATE studio_render_queue SET status=CASE WHEN attempts>=max_attempts THEN 'dead_letter' ELSE 'queued' END,
-               available_at=?,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,updated_at=?
+            """UPDATE studio_render_queue SET status=CASE WHEN cancel_requested=1 THEN 'cancelled' WHEN attempts>=max_attempts THEN 'dead_letter' ELSE 'queued' END,
+               available_at=?,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,cancel_requested=0,updated_at=?
                WHERE status='running' AND lease_expires_at IS NOT NULL AND lease_expires_at<=?""",
             (now_s, now_s, now_s),
         )
@@ -224,7 +233,7 @@ def complete(item_id: str, lease_token: str, result: dict) -> bool:
         changed = conn.execute(
             """UPDATE studio_render_queue SET status='completed',result_json=?,last_error=NULL,
                lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,updated_at=?
-               WHERE id=? AND status='running' AND lease_token=? AND lease_expires_at>?""",
+               WHERE id=? AND status='running' AND lease_token=? AND lease_expires_at>? AND cancel_requested=0""",
             (json.dumps(result, ensure_ascii=False), now, item_id, lease_token, now),
         )
     return changed.rowcount == 1
@@ -236,11 +245,17 @@ def fail(item_id: str, lease_token: str, error: str, *, retry_base_seconds: int 
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
-            "SELECT attempts,max_attempts FROM studio_render_queue WHERE id=? AND status='running' AND lease_token=? AND lease_expires_at>?",
+            "SELECT attempts,max_attempts,cancel_requested FROM studio_render_queue WHERE id=? AND status='running' AND lease_token=? AND lease_expires_at>?",
             (item_id, lease_token, now),
         ).fetchone()
         if row is None:
             return None
+        if row["cancel_requested"]:
+            conn.execute(
+                "UPDATE studio_render_queue SET status='cancelled',cancel_requested=0,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,updated_at=? WHERE id=? AND lease_token=?",
+                (now, item_id, lease_token),
+            )
+            return "cancelled"
         retry = row["attempts"] < row["max_attempts"]
         delay = min(3600, max(1, retry_base_seconds) * (2 ** max(0, row["attempts"] - 1)))
         status = "queued" if retry else "dead_letter"
@@ -276,3 +291,44 @@ def cancel_queued(owner: str, item_id: str) -> dict | None:
         row = conn.execute("SELECT * FROM studio_render_queue WHERE id=?", (item_id,)).fetchone()
     return _decode(row)
 
+
+
+def cancellation_requested(item_id: str, lease_token: str) -> bool:
+    """Read a durable cancellation intent fenced by the active lease."""
+    ensure_schema()
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT cancel_requested FROM studio_render_queue WHERE id=? AND status='running' AND lease_token=?",
+            (item_id, lease_token),
+        ).fetchone()
+    return bool(row and row["cancel_requested"])
+
+
+def request_cancel(owner: str, item_id: str) -> dict | None:
+    """Cancel queued work or persist cancellation intent for its active lease owner."""
+    ensure_schema()
+    now = _stamp()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            "UPDATE studio_render_queue SET status='cancelled',updated_at=? WHERE id=? AND owner=? AND status='queued'",
+            (now, item_id, owner),
+        )
+        conn.execute(
+            "UPDATE studio_render_queue SET cancel_requested=1,updated_at=? WHERE id=? AND owner=? AND status='running' AND cancel_requested=0",
+            (now, item_id, owner),
+        )
+        row = conn.execute("SELECT * FROM studio_render_queue WHERE id=? AND owner=?", (item_id, owner)).fetchone()
+    return _decode(row)
+
+
+def finalize_cancelled(item_id: str, lease_token: str) -> bool:
+    """Commit cancellation only after renderer cleanup has unwound."""
+    ensure_schema()
+    now = _stamp()
+    with _connect() as conn:
+        changed = conn.execute(
+            "UPDATE studio_render_queue SET status='cancelled',cancel_requested=0,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,updated_at=? WHERE id=? AND status='running' AND lease_token=? AND cancel_requested=1 AND lease_expires_at>?",
+            (now, item_id, lease_token, now),
+        )
+    return changed.rowcount == 1
