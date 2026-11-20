@@ -637,10 +637,16 @@ def create_review_contact_sheets(videos: list[dict], output_dir: Path) -> list[d
         stem = Path(filename).stem
         destination = resolved_output / f"{stem}-contact-sheet.jpg"
         suffix = 1
-        while destination.exists():
-            destination = resolved_output / f"{stem}-contact-sheet-{suffix}.jpg"
-            suffix += 1
-        canvas.save(destination, format="JPEG", quality=88, optimize=True)
+        while True:
+            try:
+                # Exclusive creation also refuses dangling symlinks; never follow
+                # an attacker-controlled pre-existing output path.
+                with destination.open("xb") as output_file:
+                    canvas.save(output_file, format="JPEG", quality=88, optimize=True)
+                break
+            except FileExistsError:
+                destination = resolved_output / f"{stem}-contact-sheet-{suffix}.jpg"
+                suffix += 1
         results.append({
             "file": filename,
             "status": "PASS" if extracted_count == 5 else "PARTIAL",
