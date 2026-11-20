@@ -226,3 +226,17 @@ def test_cancelled_running_job_recovers_as_cancelled_after_worker_crash(tmp_path
     assert persisted["status"] == "cancelled"
     assert persisted["lease_token"] is None
     assert persisted["cancel_requested"] == 0
+
+
+def test_cancellation_intent_fences_completion_and_retry(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    item = queue.enqueue("owner", "project", {"title": "cancel-race"}, max_attempts=3)
+    claim = queue.claim_next("worker", lease_seconds=60)
+    queue.request_cancel("owner", item["id"])
+    assert queue.complete(item["id"], claim["lease_token"], {"filename": "must-not-publish.mp4"}) is False
+    assert queue.fail(item["id"], claim["lease_token"], "renderer stopped") == "cancelled"
+    persisted = queue.get_item("owner", item["id"])
+    assert persisted["status"] == "cancelled"
+    assert persisted["result"] is None
+    assert persisted["lease_token"] is None
+    assert persisted["attempts"] == 1
