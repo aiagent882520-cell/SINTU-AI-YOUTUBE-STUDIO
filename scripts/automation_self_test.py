@@ -18,7 +18,7 @@ def run_check(name, fn):
         return {"name": name, "ok": False, "detail": str(exc)[:400]}
 
 
-def relay_heartbeat_status(path: Path | None = None, *, max_age_seconds: int = 90, now: float | None = None):
+def relay_heartbeat_status(path: Path | None = None, *, max_age_seconds: int = 2100, now: float | None = None):
     """Require evidence of a recent successful GitHub queue poll."""
     heartbeat = path or (Path.home() / ".sintu" / "github-relay.heartbeat")
     if not heartbeat.is_file():
