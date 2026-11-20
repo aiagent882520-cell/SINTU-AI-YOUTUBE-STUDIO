@@ -158,7 +158,7 @@ class RenderFailed(Exception):
 @lru_cache(maxsize=8)
 def _ffmpeg_supports_subtitles(ffmpeg: str) -> bool:
     try:
-        result = subprocess.run(
+        result = render_process.run_render_process(
             [ffmpeg, "-hide_banner", "-filters"],
             capture_output=True, text=True, timeout=15, check=False,
         )
@@ -266,7 +266,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
     if not ffprobe:
         raise RendererUnavailable("Final video verification ke liye FFprobe installed hona chahiye.")
     try:
-        result = subprocess.run(
+        result = render_process.run_render_process(
             [ffprobe, "-v", "error", "-count_frames",
              "-show_entries",
              "format=format_name,duration:stream=codec_type,codec_name,width,height,pix_fmt,duration,nb_read_frames,avg_frame_rate,sample_rate,channels",
@@ -324,7 +324,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
     # Reject full-black and long black segments at render time too, not
     # only when a later upload is attempted.
     try:
-        black = subprocess.run(
+        black = render_process.run_render_process(
             [ffmpeg, "-hide_banner", "-i", str(path), "-vf",
              "blackdetect=d=0.5:pix_th=0.10", "-an", "-f", "null", "-"],
             capture_output=True, text=True, timeout=45, check=False,
@@ -349,7 +349,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
     # Decode real pixels at one frame per second. Metadata-only checks let an
     # all-black H.264 file pass as a successful video; reject that failure mode.
     try:
-        pixels = subprocess.run(
+        pixels = render_process.run_render_process(
             [ffmpeg, "-v", "error", "-i", str(path), "-vf", "fps=1,scale=32:32",
              "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
             capture_output=True, timeout=45, check=False,
@@ -398,7 +398,7 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
     if not ffprobe:
         raise RendererUnavailable("Upload se pehle MP4 verify karne ke liye FFprobe required hai.")
     try:
-        result = subprocess.run(
+        result = render_process.run_render_process(
             [ffprobe, "-v", "error", "-count_frames", "-show_entries",
              "format=format_name,duration:stream=codec_type,codec_name,width,height,duration,nb_read_frames,avg_frame_rate",
              "-of", "json", str(path)],
@@ -443,7 +443,7 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
     if not ffmpeg:
         raise RendererUnavailable("Upload se pehle visual MP4 verification ke liye FFmpeg required hai.")
     try:
-        black = subprocess.run(
+        black = render_process.run_render_process(
             [ffmpeg, "-hide_banner", "-i", str(path), "-vf",
              "blackdetect=d=0.5:pix_th=0.10", "-an", "-f", "null", "-"],
             capture_output=True, text=True, timeout=45, check=False,
@@ -470,7 +470,7 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
     # This avoids inspecting only the opening 10 minutes of a longer render.
     sample_rate = min(2.0, 600.0 / duration)
     try:
-        pixels = subprocess.run(
+        pixels = render_process.run_render_process(
             [ffmpeg, "-v", "error", "-i", str(path), "-vf",
              f"fps={sample_rate:.8f},scale=32:32",
              "-frames:v", "600", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
@@ -501,7 +501,7 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
         if not ffmpeg:
             raise RendererUnavailable("Long MP4 motion verification ke liye FFmpeg required hai.")
         try:
-            pixels = subprocess.run(
+            pixels = render_process.run_render_process(
                 [ffmpeg, "-v", "error", "-i", str(path), "-vf", "fps=1,scale=32:32",
                  "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
                 capture_output=True, timeout=45, check=False,
@@ -745,7 +745,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             command += ["-t", f"{duration + (1 / fps):.6f}", "-c:v", "libx264", "-preset", preset,
                         "-crf", str(crf), "-pix_fmt", "yuv420p", "-r", str(fps),
                         "-movflags", "+faststart", "-threads", "2", str(temporary_output_path)]
-            completed = subprocess.run(command, capture_output=True, text=True, timeout=RENDER_TIMEOUT_SECONDS, check=False)
+            completed = render_process.run_render_process(command, capture_output=True, text=True, timeout=RENDER_TIMEOUT_SECONDS, check=False)
             if completed.returncode != 0 or not temporary_output_path.is_file():
                 detail = (completed.stderr or "FFmpeg render failed")[-1200:]
                 raise RenderFailed(detail)
@@ -839,7 +839,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
     clip_info = []
     total_duration = 0.0
     for path in video_paths:
-        probe = subprocess.run(
+        probe = render_process.run_render_process(
             [ffprobe, "-v", "error", "-show_entries", "format=duration:stream=codec_type",
              "-of", "json", str(path)], capture_output=True, text=True, timeout=30, check=False
         )
@@ -975,7 +975,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                         "-c:v", "libx264", "-threads", str(_ffmpeg_thread_count()), "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
                         "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", "-t", f"{total_duration:.3f}",
                         "-movflags", "+faststart", str(temporary_output_path)]
-            completed = subprocess.run(command, capture_output=True, text=True, timeout=RENDER_TIMEOUT_SECONDS, check=False)
+            completed = render_process.run_render_process(command, capture_output=True, text=True, timeout=RENDER_TIMEOUT_SECONDS, check=False)
             if completed.returncode != 0 or not temporary_output_path.is_file():
                 detail = (completed.stderr or "FFmpeg AI clip assembly failed")[-1600:]
                 raise RenderFailed(detail)
@@ -1069,7 +1069,7 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                     raise ValueError("Video trim start/end finite hone chahiye aur end, start se bada hona chahiye.")
                 ffprobe=shutil.which("ffprobe")
                 if not ffprobe: raise RendererUnavailable("Video trimming ke liye FFprobe installed hona chahiye.")
-                probe=subprocess.run([ffprobe,"-v","error","-show_entries","format=duration","-of","default=noprint_wrappers=1:nokey=1",str(path)],capture_output=True,text=True,timeout=30,check=False)
+                probe=render_process.run_render_process([ffprobe,"-v","error","-show_entries","format=duration","-of","default=noprint_wrappers=1:nokey=1",str(path)],capture_output=True,text=True,timeout=30,check=False)
                 if probe.returncode!=0: raise RenderFailed("Source video duration read nahi ho saki.")
                 try:
                     source_duration = float(probe.stdout.strip())
@@ -1084,7 +1084,7 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                 if segment_duration<0.25: raise ValueError("Trimmed video kam se kam 0.25 seconds ka hona chahiye.")
                 segment=work/f"trimmed-{index:03d}.mp4"
                 command=[ffmpeg,"-y","-hide_banner","-loglevel","error","-ss",f"{trim_start:.3f}","-i",str(path),"-t",f"{segment_duration:.3f}","-map","0:v:0","-map","0:a?","-c:v","libx264","-preset","veryfast","-pix_fmt","yuv420p","-c:a","aac","-b:a","128k","-ar","48000","-ac","2","-movflags","+faststart",str(segment)]
-                completed=subprocess.run(command,capture_output=True,text=True,timeout=min(RENDER_TIMEOUT_SECONDS, 180),check=False)
+                completed=render_process.run_render_process(command,capture_output=True,text=True,timeout=min(RENDER_TIMEOUT_SECONDS, 180),check=False)
                 if completed.returncode!=0 or not segment.is_file():
                     raise RenderFailed((completed.stderr or "Video trim failed")[-1200:])
                 clip_paths.append(segment)
@@ -1098,7 +1098,7 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
                 frame = work / f"still-{index:03d}.png"
                 _make_frame(frame, title, scenes[index - 1], index, len(items), path, width=width, height=height, include_watermark=False)
                 segment = work / f"still-{index:03d}.mp4"
-                completed = subprocess.run(
+                completed = render_process.run_render_process(
                     [ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
                      "-loop", "1", "-framerate", "30", "-i", str(frame),
                      "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
