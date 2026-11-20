@@ -1456,3 +1456,11 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Covers the actual worker loop's fail-closed production gate (no claim while disabled), claim → render → durable completion, and render exception → queue retry state.
 - These are worker-process logic tests with a stubbed renderer/queue boundary; they do not claim a real FFmpeg render or physical Termux execution.
 - Fresh exact-head CI is required because this addition supersedes the previously running workflow. Status remains `CI PENDING`.
+
+
+### Duplicate-job prevention / idempotency gap found and implemented
+- Audit found `enqueue()` always generated a fresh UUID and had no request-level deduplication. Concurrent client retries could create duplicate render jobs.
+- Added optional owner-scoped `Idempotency-Key` persistence with a partial unique SQLite index and transactional replay lookup. Reusing a key with the same project/payload returns the existing job; reusing it for a different request returns HTTP 409. Existing clients without the header retain the previous behavior.
+- Added migration-safe schema column, durable queue tests (replay, conflicting payload/project, owner isolation, key length), and API contract tests.
+- Commits: `a87292e` queue implementation; `bc3ebae` API header; `16ad280` queue tests; `5b920ab` API tests.
+- Exact-head CI pending; no local Python test execution is claimed in this cloud-only edit.
