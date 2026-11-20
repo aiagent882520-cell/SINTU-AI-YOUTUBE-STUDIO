@@ -1235,3 +1235,98 @@ The following PRs remain open and unmerged: #213, #209, #207, #206, #205, #204, 
 
 ### Required device-side evidence
 Run the read-only forensic scanner and Android diagnostic on the actual Termux phone. The exact five-file forensic command and safety notes are in docs/TERMUX_BLACK_MP4_FORENSIC_RUN.md. Attach only the generated report; never send .env, OAuth tokens, private keys or model files. Do not overwrite or repair original MP4s.
+
+
+## PR #236 exact-head verification and current execution — 2026-11-19 13:25 UTC
+
+### Current Git baseline
+- Current main SHA at checkpoint: `9e7db12f8716ff86a077617c74ff51555d50a9ef` (main has advanced beyond the older `60bf552f...` checkpoint).
+- PR #236 head: `d5decc39695e1f150ecac52ab8d7dba7d4fd0516`, branch `feat/video-editor-undo-redo-rebased`; PR remains OPEN and UNMERGED.
+- PR #236 currently has 19 commits ahead and 1 commit behind main; GitHub reports mergeable=true / mergeable_state=clean, but the branch is not at the current main base.
+- PR #236 has no submitted reviews, no review threads and no review comments in the GitHub review endpoints. Do not merge until required independent review/approval conditions are satisfied and exact-head checks are current against the updated base.
+
+### Exact-head CI evidence for PR #236
+- SINTU CI run `44531566929`: SUCCESS, 8/8 jobs — dependency security audit; Python 3.11, 3.12, 3.13, 3.14; production Docker build + health; offline branded-video E2E + motion audit; real Chromium Video Editor browser tests.
+- Offline E2E job ID `135586719376`: SUCCESS. Free local voice/font tools installation completed; actual Hindi MP4 generation, 60-second acceptance, metadata/black-frame/motion audit, camera-motion enforcement and artifact upload all completed.
+- Generated artifact: `sintu-offline-video-e2e`, artifact ID `14535235542`, run URL https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44531566929/artifacts/14535235542. Artifact ZIP SHA-256: `047d9ed887edce34bfe13a314b1f079be6b7e469dd99b91376d0da6a83a57f6b`. Retention is 7 days; download and inspect before expiry.
+- MP4 render ID `f45374ade33540c895ae2b25b31d15d7`; 5,062,668 bytes; 60.04 seconds; 720x1280; H.264/yuv420p + AAC 48 kHz stereo; 15 timed Hindi subtitles burned in; eSpeak NG Hindi WAV narration + local procedural music; SINTU watermark.
+- Audit: zero black intervals; 60 sampled frames; 54/59 moving transitions; motion ratio 0.915; mean frame delta 9.462; project/media audit PASS (2 checks, 0 warnings, 0 failures). Paid services=false; publishing_performed=false.
+- Provenance is explicitly SINTU Procedural Art (offline), not generative-AI image inference. The 10-fort fixture records 10 curated official-source records; this is reproducible offline acceptance, not proof of live web research at runtime.
+- Android workflow run `44531566887`: `android-build` SUCCESS, including unit tests and APK build/artifact upload. This is CI build evidence only, not physical-device installation evidence.
+
+### Current main regression baseline
+- Main SINTU CI run `44530421155` for exact main SHA `9e7db12f8716ff86a077617c74ff51555d50a9ef`: SUCCESS, 8/8 jobs — Python 3.11–3.14, security audit, Docker/health, Chromium and offline branded-video E2E/motion audit.
+- Main now includes the reproducible ten-fort Hindi video acceptance fixture at `docs/OFFLINE_TEN_FORT_VIDEO_ACCEPTANCE.md`; it explicitly labels procedural illustrations as non-generative AI and Bhangarh supernatural claims as folklore.
+
+### Remaining gates — do not overstate
+- PR #236 merge remains BLOCKED pending independent review and a fresh exact-head run against current main after branch synchronization. No review approval is recorded.
+- Physical Android install/login/editor/media-storage/lifecycle tests remain UNVERIFIED; Android CI APK build is not a device PASS.
+- Three historical black MP4 provenance mappings remain UNKNOWN pending the read-only Termux report described in `docs/TERMUX_BLACK_MP4_FORENSIC_RUN.md`. Preserve original MP4s/backups; repair only to separate output paths.
+- Real ComfyUI inference remains BLOCKED/UNVERIFIED until a reachable host, valid workflow and compatible open-source model are configured. Current offline generation is procedural art, not AI inference.
+- Durable multi-worker video render lifecycle remains PARTIAL/BLOCKED: SQLite atomic studio-queue claims do not make FastAPI BackgroundTasks or process-local FFmpeg cancellation durable across worker crashes/restarts.
+- YouTube live OAuth/channel verification/upload remains BLOCKED pending owner credentials, consent and explicit authorization. No upload/public publishing occurred.
+- All 60 format and 15 module catalog entries remain individually UNVERIFIED until each has its own real output/integration acceptance evidence.
+- Full website user journeys/accessibility, physical Android-to-backend media workflows and crash-recovery acceptance remain incomplete.
+
+### Next executable work
+1. Keep PR #236 open pending independent review; synchronize its branch to current main and rerun exact-head CI before merge.
+2. Continue the durable render-worker/lease/recovery design rather than merging stale stacked PRs #206/#207/#209 without multi-worker crash tests.
+3. Run physical Termux diagnostics/forensic scanner when the device-side report is available; no hardware result may be inferred from CI.
+4. Implement and test ComfyUI host/workflow/model readiness with explicit model/license and CPU/GPU resource checks; retain procedural fallback as a clearly labelled fallback.
+
+
+## Follow-up execution — 2026-11-20
+
+### Android physical-device harness merged
+- PR #240 merged to main at c1c479192f1e0b67560c9ced7ef71fb02c71bd35 after its exact-head CI runs 44568653062 and 44568651761 completed successfully.
+- Adds an ADB install/launch smoke script and a manual acceptance checklist. This is test infrastructure only: no physical phone was connected during this work, so install/login/editor/media/lifecycle device acceptance remains UNVERIFIED.
+- Main CI runs 44660366180 and 44660366215 were triggered for merge commit c1c479... and were still running at checkpoint update time.
+
+### Durable worker PR #239 — visible startup diagnostics
+- Updated worker head: b81de1f09edd2cfc4d6e4fda8efd99dfeb3690c6.
+- Worker now prints STARTED, PAUSED (when SINTU_PRODUCTION_ENABLED is false), READY (when rendering is explicitly enabled), and STOPPED messages. This removes ambiguity when the process is alive but correctly fail-closed; it does not enable rendering by default.
+- Exact-head run 44660125186: Python 3.11–3.14, dependency security audit, Chromium editor tests and production Docker build passed; offline branded-video E2E/motion audit was still running at checkpoint update. Do not merge until all jobs finish successfully.
+
+### PR #236 — current-main synchronization
+- PR #236 retargeted to current main commit c1c479... after PR #240 merged. GitHub reports mergeable/clean at retarget time.
+- Previous exact-head runs 44531566887 and 44531566929 passed, but predate the current-main retarget; fresh exact-head CI is required before merge. No independent review approval or merge is claimed.
+
+### Remaining external gates
+- Physical Android functional acceptance still requires the owner's actual phone and APK; CI harness success is not a device PASS.
+- Three historical black MP4 source/project/job mappings remain UNKNOWN until the read-only Termux scanner report is supplied.
+- Real ComfyUI model inference remains UNVERIFIED; CPU launcher readiness does not establish installed model weights or successful inference.
+- YouTube live OAuth consent/channel verification/upload remains BLOCKED pending owner credentials and explicit authorization.
+- All 60 formats and 15 modules still require individual acceptance; inventory presence is not functional PASS.
+
+
+## Follow-up execution — 2026-11-20 (CI reconciliation)
+
+### Durable worker PR #239 — first full run passed; Android harness synchronized
+- Initial worker head b81de1f09edd2cfc4d6e4fda8efd99dfeb3690c6, exact run 44660125186: **SUCCESS 8/8**. Python 3.11–3.14, dependency security audit, real Chromium Video Editor browser tests, production Docker build, and offline branded Hindi MP4/motion audit all passed.
+- The offline E2E completed successfully, including generated-video metadata, black-frame and sampled-motion acceptance. This is a CI-generated offline artifact; it does not map the user's three historical black MP4s.
+- Main advanced with PR #240, so PR #239 was reconciled by copying the merged Android smoke harness, README acceptance instructions and CI shell-syntax check into its feature branch.
+- Updated PR #239 head: 030c619561f468f0ad7ed8bf229c0c13b143eb20. GitHub reports mergeable/clean. New exact-head Python/security checks were queued after synchronization; the original 8/8 run does not validate this later sync commit. Keep PR open until the new head's checks finish.
+
+### Main commit c1c4791 — latest known CI state
+- Main SHA: c1c479192f1e0b67560c9ced7ef71fb02c71bd35.
+- Android build: PASS (run 44660366215).
+- Python 3.12, 3.13 and 3.14 plus dependency security audit: PASS (run 44660366180).
+- Python 3.11 test suite was still IN_PROGRESS at the latest poll.
+- The external FastAPI Cloud deployment status check reported FAILURE. This is distinct from the GitHub Actions Python/security/Android jobs; deployment failure needs separate diagnosis and must not be described as a passing release deployment.
+
+### PR #236 — editor recovery, Android Image Studio and YouTube upload history
+- Head remains d5decc39695e1f150ecac52ab8d7dba7d4fd0516, base main c1c4791..., mergeable/clean.
+- Exact-head CI run 44531566929 plus Android build run 44531566887: all 9 reported checks PASS, including Python 3.11–3.14, security, Chromium, Docker, offline E2E and Android build.
+- No review submissions are recorded. Do not merge until the independent review/release policy is satisfied. Android Image Studio's procedural fallback is not real ComfyUI generative inference; physical-device acceptance remains separate.
+
+### PR #238 checkpoint evidence
+- Updated checkpoint branch head before this append: 4ab71a0fdae06aa23f63602d429a254cda074995.
+- Exact-head CI run 44660520316 completed **8/8 PASS** (Python 3.11–3.14, dependency security audit, Chromium, Docker and offline E2E). This validates the checkpoint branch's CI, not the unmerged documentation on main.
+
+### Still not accepted / externally gated
+- Actual Android phone install/login/editor/media/lifecycle test: UNVERIFIED; no physical device was connected.
+- Three historical black MP4 provenance mappings: UNKNOWN until the user's read-only Termux scanner report is available.
+- Real ComfyUI model inference: UNVERIFIED pending reachable host, valid workflow, compatible model weights and successful inference.
+- Live YouTube OAuth/channel verification/resumable upload: BLOCKED pending owner credentials and explicit authorization.
+- Complete website user journeys and individual acceptance for all 60 formats / 15 modules: UNVERIFIED.
+- Durable worker multi-process local SQLite tests passed in CI; multi-host/network-filesystem coordination is not claimed.
