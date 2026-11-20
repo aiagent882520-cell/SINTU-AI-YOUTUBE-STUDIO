@@ -257,6 +257,30 @@ def validate_sampled_motion(frames: bytes, *, frame_bytes: int = 32 * 32 * 3,
     }
 
 
+def _probe_stream_duration_seconds(stream: dict | None) -> float:
+    """Read stream duration directly or derive it from FFprobe duration_ts/time_base."""
+    if not stream:
+        return 0.0
+    raw = stream.get("duration")
+    if raw not in (None, "", "N/A"):
+        try:
+            value = float(raw)
+            if math.isfinite(value) and value > 0:
+                return value
+        except (TypeError, ValueError):
+            pass
+    try:
+        ticks = int(stream.get("duration_ts", 0))
+        numerator, denominator = (
+            int(part) for part in str(stream.get("time_base", "0/1")).split("/", 1)
+        )
+        if ticks > 0 and numerator > 0 and denominator > 0:
+            return ticks * numerator / denominator
+    except (TypeError, ValueError, ZeroDivisionError):
+        pass
+    return 0.0
+
+
 def _verify_rendered_output(path: Path, expected_width: int, expected_height: int,
                             expected_duration: float, require_audio: bool | None = None,
                             expected_fps: int = 30,
@@ -269,7 +293,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         result = render_process.run_render_process(
             [ffprobe, "-v", "error", "-count_frames",
              "-show_entries",
-             "format=format_name,duration:stream=codec_type,codec_name,width,height,pix_fmt,duration,nb_read_frames,avg_frame_rate,sample_rate,channels",
+             "format=format_name,duration:stream=codec_type,codec_name,width,height,pix_fmt,duration,nb_read_frames,avg_frame_rate,sample_rate,channels,duration_ts,time_base",
              "-of", "json", str(path)],
             capture_output=True, text=True, timeout=30, check=False,
         )
@@ -293,7 +317,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         audio_codec = str(audio_stream.get("codec_name", "")).lower() if audio_stream else ""
         audio_sample_rate = int(audio_stream.get("sample_rate", 0)) if audio_stream else 0
         audio_channels = int(audio_stream.get("channels", 0)) if audio_stream else 0
-        audio_duration = float(audio_stream.get("duration", 0)) if audio_stream else 0.0
+        audio_duration = _probe_stream_duration_seconds(audio_stream)
         names = str(fmt.get("format_name", "")).lower().split(",")
         has_audio = any(item.get("codec_type") == "audio" for item in metadata.get("streams", []))
         frame_rate_num, frame_rate_den = (int(part) for part in str(video.get("avg_frame_rate", "0/1")).split("/", 1))
@@ -411,7 +435,7 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
     try:
         result = render_process.run_render_process(
             [ffprobe, "-v", "error", "-count_frames", "-show_entries",
-             "format=format_name,duration:stream=codec_type,codec_name,width,height,duration,nb_read_frames,avg_frame_rate",
+             "format=format_name,duration:stream=codec_type,codec_name,width,height,duration,duration_ts,time_base,nb_read_frames,avg_frame_rate",
              "-of", "json", str(path)],
             capture_output=True, text=True, timeout=45, check=False,
         )
@@ -434,7 +458,7 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
         numerator, denominator = (int(part) for part in str(video.get("avg_frame_rate", "0/1")).split("/", 1))
         fps = numerator / denominator if denominator else 0
         audio_stream = next((item for item in streams if item.get("codec_type") == "audio"), None)
-        audio_duration = float(audio_stream.get("duration", 0)) if audio_stream else None
+        audio_duration = _probe_stream_duration_seconds(audio_stream) if audio_stream else None
     except (AttributeError, TypeError, ValueError, StopIteration, json.JSONDecodeError, ZeroDivisionError):
         raise RenderFailed("Upload MP4 mein valid video stream/frame metadata nahi hai.") from None
     if not any(name in {"mov", "mp4", "m4a", "3gp", "3g2", "mj2"} for name in names):
