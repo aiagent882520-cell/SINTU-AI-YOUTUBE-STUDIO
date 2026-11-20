@@ -2,7 +2,7 @@
 import pytest
 
 from app.format_rendering import format_render_profile
-from app.studio_scope import video_formats
+from app.studio_scope import production_plan, video_formats
 
 FORMAT_ROWS = {row["id"]: row for row in video_formats()}
 FORMAT_IDS = tuple(FORMAT_ROWS)
@@ -21,6 +21,16 @@ def test_each_catalog_format_has_an_individually_validated_render_contract(forma
     assert profile["aspect_ratio"] == source["aspect_ratio"]
     assert profile["default_resolution"] in {"1080x1920", "1080x1080", "1920x1080"}
     assert profile["fps_options"] == [24, 30, 60]
+    assert source["roles"]
+    assert len(source["roles"]) == len(set(source["roles"]))
+    assert source["checker_roles"] == [role + " Checker" for role in source["roles"]]
+    plan = production_plan(format_id)
+    planned_pairs = [
+        pair for stage in plan["pipeline"] for pair in stage["worker_checker_pairs"]
+    ]
+    assert planned_pairs, "Every format must select at least one specialist/checker pair."
+    assert all(pair["worker"] in source["roles"] for pair in planned_pairs)
+    assert all(pair["checker"] in source["checker_roles"] for pair in planned_pairs)
     assert profile["output"] == "MP4 / H.264"
     assert profile["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
     assert profile["burned_in_text"] is False
