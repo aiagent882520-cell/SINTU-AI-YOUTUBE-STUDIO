@@ -474,7 +474,7 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
             [ffmpeg, "-v", "error", "-i", str(path), "-vf",
              f"fps={sample_rate:.8f},scale=32:32",
              "-frames:v", "600", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
-            capture_output=True, timeout=45, check=False,
+            capture_output=True, text=False, timeout=45, check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
         raise RenderFailed("Upload MP4 visible-frame verification fail ya timeout ho gaya.") from None
@@ -504,7 +504,7 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
             pixels = render_process.run_render_process(
                 [ffmpeg, "-v", "error", "-i", str(path), "-vf", "fps=1,scale=32:32",
                  "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
-                capture_output=True, timeout=45, check=False,
+                capture_output=True, text=False, timeout=45, check=False,
             )
         except (OSError, subprocess.TimeoutExpired):
             raise RenderFailed("Upload MP4 motion verification fail ya timeout ho gaya.") from None
