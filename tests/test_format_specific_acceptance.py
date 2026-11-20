@@ -38,6 +38,8 @@ def test_each_catalog_format_has_an_individually_validated_render_contract(forma
 
     if format_id in SPECIALIZED_BLOCKED:
         assert profile["limitations"][0]
+    elif format_id in PROCEDURAL_NATIVE:
+        assert "Local vector cartoon character animation" in profile["limitations"][0]
     else:
         assert "This profile assembles supplied media" in profile["limitations"][0]
 
