@@ -1273,3 +1273,27 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 2. Continue the durable render-worker/lease/recovery design rather than merging stale stacked PRs #206/#207/#209 without multi-worker crash tests.
 3. Run physical Termux diagnostics/forensic scanner when the device-side report is available; no hardware result may be inferred from CI.
 4. Implement and test ComfyUI host/workflow/model readiness with explicit model/license and CPU/GPU resource checks; retain procedural fallback as a clearly labelled fallback.
+
+
+## Follow-up execution — 2026-11-20
+
+### Android physical-device harness merged
+- PR #240 merged to main at c1c479192f1e0b67560c9ced7ef71fb02c71bd35 after its exact-head CI runs 44568653062 and 44568651761 completed successfully.
+- Adds an ADB install/launch smoke script and a manual acceptance checklist. This is test infrastructure only: no physical phone was connected during this work, so install/login/editor/media/lifecycle device acceptance remains UNVERIFIED.
+- Main CI runs 44660366180 and 44660366215 were triggered for merge commit c1c479... and were still running at checkpoint update time.
+
+### Durable worker PR #239 — visible startup diagnostics
+- Updated worker head: b81de1f09edd2cfc4d6e4fda8efd99dfeb3690c6.
+- Worker now prints STARTED, PAUSED (when SINTU_PRODUCTION_ENABLED is false), READY (when rendering is explicitly enabled), and STOPPED messages. This removes ambiguity when the process is alive but correctly fail-closed; it does not enable rendering by default.
+- Exact-head run 44660125186: Python 3.11–3.14, dependency security audit, Chromium editor tests and production Docker build passed; offline branded-video E2E/motion audit was still running at checkpoint update. Do not merge until all jobs finish successfully.
+
+### PR #236 — current-main synchronization
+- PR #236 retargeted to current main commit c1c479... after PR #240 merged. GitHub reports mergeable/clean at retarget time.
+- Previous exact-head runs 44531566887 and 44531566929 passed, but predate the current-main retarget; fresh exact-head CI is required before merge. No independent review approval or merge is claimed.
+
+### Remaining external gates
+- Physical Android functional acceptance still requires the owner's actual phone and APK; CI harness success is not a device PASS.
+- Three historical black MP4 source/project/job mappings remain UNKNOWN until the read-only Termux scanner report is supplied.
+- Real ComfyUI model inference remains UNVERIFIED; CPU launcher readiness does not establish installed model weights or successful inference.
+- YouTube live OAuth consent/channel verification/upload remains BLOCKED pending owner credentials and explicit authorization.
+- All 60 formats and 15 modules still require individual acceptance; inventory presence is not functional PASS.
