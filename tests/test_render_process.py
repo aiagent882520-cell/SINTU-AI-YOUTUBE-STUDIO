@@ -69,3 +69,23 @@ def test_progress_callback_is_optional_and_does_not_change_plain_process_result(
     )
     assert result.returncode == 0
     assert result.stdout.strip() == "plain"
+
+
+def test_render_process_drains_large_stdout_inside_job_context():
+    payload = "x" * 250000
+    result = render_process.run_render_process(
+        ["python", "-c", "import sys; sys.stdout.write('x' * 250000)"],
+        timeout=5, capture_output=True, text=True,
+    )
+    assert result.returncode == 0
+    assert len(result.stdout) == len(payload)
+
+
+def test_render_process_drains_large_stdout_with_cancellable_job():
+    with render_process.render_job("large-stdout-job"):
+        result = render_process.run_render_process(
+            ["python", "-c", "import sys; sys.stdout.write('y' * 250000)"],
+            timeout=5, capture_output=True, text=True,
+        )
+    assert result.returncode == 0
+    assert len(result.stdout) == 250000
