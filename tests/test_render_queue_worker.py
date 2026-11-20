@@ -1,4 +1,5 @@
 import signal
+import threading
 
 from scripts import render_queue_worker as worker
 
@@ -69,11 +70,10 @@ def test_worker_cancels_real_active_subprocess_and_releases_lease(tmp_path, monk
 
     def actual_subprocess_render(_payload):
         started.set()
-        with render_process.render_job(item["id"]):
-            result = render_process.run_render_process(
+        result = render_process.run_render_process(
                 [os.sys.executable, "-c", "import time; time.sleep(30)"],
-                timeout=35, capture_output=True, text=True, check=False,
-            )
+            timeout=35, capture_output=True, text=True, check=False,
+        )
         return {"returncode": result.returncode}
 
     monkeypatch.setattr(worker, "render_video", actual_subprocess_render)
