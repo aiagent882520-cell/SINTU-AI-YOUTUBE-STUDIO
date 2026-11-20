@@ -85,12 +85,28 @@ def run_render_process(command, *, timeout: float, text: bool = True,
             _active[job_id] = process
 
     progress_queue = queue.Queue()
+    stdout_capture = None
     reader = None
-    if report_progress and process.stdout is not None:
+    if process.stdout is not None and report_progress:
         def read_progress():
             for line in process.stdout:
                 progress_queue.put(line.strip())
         reader = threading.Thread(target=read_progress, daemon=True)
+        reader.start()
+    elif process.stdout is not None and capture_output:
+        # Drain stdout concurrently. FFmpeg raw-frame verification can emit
+        # megabytes; waiting for process.poll() with an undrained PIPE deadlocks.
+        stdout_capture = tempfile.TemporaryFile(
+            mode="w+t" if text else "w+b",
+            **({"encoding": "utf-8"} if text else {}),
+        )
+        def read_stdout():
+            while True:
+                chunk = process.stdout.read(65536)
+                if not chunk:
+                    break
+                stdout_capture.write(chunk)
+        reader = threading.Thread(target=read_stdout, daemon=True)
         reader.start()
 
     deadline = time.monotonic() + timeout
@@ -153,8 +169,11 @@ def run_render_process(command, *, timeout: float, text: bool = True,
         if process.stdout is not None:
             if report_progress:
                 stdout = ""
+            elif stdout_capture is not None:
+                stdout_capture.seek(0)
+                stdout = stdout_capture.read()
             else:
-                stdout = process.stdout.read()
+                stdout = None
         stderr = ""
         if stderr_file is not None:
             stderr_file.seek(0)
@@ -169,6 +188,8 @@ def run_render_process(command, *, timeout: float, text: bool = True,
             process.wait()
         if stderr_file is not None:
             stderr_file.close()
+        if stdout_capture is not None:
+            stdout_capture.close()
         if process.stdout is not None:
             process.stdout.close()
         if job_id:
