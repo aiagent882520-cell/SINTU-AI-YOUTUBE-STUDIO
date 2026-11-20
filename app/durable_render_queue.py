@@ -245,11 +245,17 @@ def fail(item_id: str, lease_token: str, error: str, *, retry_base_seconds: int 
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
-            "SELECT attempts,max_attempts FROM studio_render_queue WHERE id=? AND status='running' AND lease_token=? AND lease_expires_at>?",
+            "SELECT attempts,max_attempts,cancel_requested FROM studio_render_queue WHERE id=? AND status='running' AND lease_token=? AND lease_expires_at>?",
             (item_id, lease_token, now),
         ).fetchone()
         if row is None:
             return None
+        if row["cancel_requested"]:
+            conn.execute(
+                "UPDATE studio_render_queue SET status='cancelled',cancel_requested=0,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,updated_at=? WHERE id=? AND lease_token=?",
+                (now, item_id, lease_token),
+            )
+            return "cancelled"
         retry = row["attempts"] < row["max_attempts"]
         delay = min(3600, max(1, retry_base_seconds) * (2 ** max(0, row["attempts"] - 1)))
         status = "queued" if retry else "dead_letter"
