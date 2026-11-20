@@ -1449,3 +1449,10 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - SQLite queue tests already cover atomic multi-thread and multi-process claims, crash/lease recovery, fencing, retry/backoff, dead-letter, owner scope and schema migration in the repository test suite. Their CI pass is single-host test evidence, not multi-host/network-filesystem guarantees.
 - The API exposes durable enqueue/status/execute/cancel routes, but a separately supervised Termux consumer was not connected to startup before PR #245.
 - Next: inspect exact-head CI for PR #245; fix any genuine failures; merge only after all required jobs pass. Then validate device worker startup/heartbeat and continue remaining automation E2E gaps before advancing to rendering acceptance.
+
+
+### Additional worker execution regression coverage
+- Added `tests/test_render_queue_worker.py` at commit `c953301da7c1324e4468452abcc5016ad5504523`.
+- Covers the actual worker loop's fail-closed production gate (no claim while disabled), claim → render → durable completion, and render exception → queue retry state.
+- These are worker-process logic tests with a stubbed renderer/queue boundary; they do not claim a real FFmpeg render or physical Termux execution.
+- Fresh exact-head CI is required because this addition supersedes the previously running workflow. Status remains `CI PENDING`.
