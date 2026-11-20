@@ -328,7 +328,7 @@ def finalize_cancelled(item_id: str, lease_token: str) -> bool:
     now = _stamp()
     with _connect() as conn:
         changed = conn.execute(
-            "UPDATE studio_render_queue SET status='cancelled',cancel_requested=0,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,updated_at=? WHERE id=? AND status='running' AND lease_token=? AND cancel_requested=1",
-            (now, item_id, lease_token),
+            "UPDATE studio_render_queue SET status='cancelled',cancel_requested=0,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,updated_at=? WHERE id=? AND status='running' AND lease_token=? AND cancel_requested=1 AND lease_expires_at>?",
+            (now, item_id, lease_token, now),
         )
     return changed.rowcount == 1
