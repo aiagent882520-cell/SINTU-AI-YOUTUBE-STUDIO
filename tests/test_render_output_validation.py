@@ -254,3 +254,16 @@ def test_render_gate_rejects_long_black_segment_before_publishing_output(tmp_pat
             candidate, 720, 1280, 12, require_audio=False, expected_fps=24,
             minimum_motion_ratio=0.40,
         )
+
+
+def test_final_mp4_verification_derives_audio_duration_from_time_base(tmp_path, monkeypatch):
+    metadata = _metadata()
+    audio = metadata["streams"][1]
+    audio.pop("duration")
+    audio["duration_ts"] = "384000"
+    audio["time_base"] = "1/48000"
+    _setup_probe(monkeypatch, metadata)
+    output = tmp_path / "duration-ts-audio.mp4"
+    output.write_bytes(b"mp4")
+    result = _verify_rendered_output(output, 720, 1280, 8, require_audio=True)
+    assert result["audio_duration_seconds"] == pytest.approx(8.0)
