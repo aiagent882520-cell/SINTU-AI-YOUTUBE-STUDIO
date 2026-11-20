@@ -54,6 +54,11 @@ while true; do
     if [ "$state" -eq 2 ]; then unsafe=1; else restart=1; fi
   fi
 
+  if process_state render-worker "scripts/render_queue_worker.py"; then :; else
+    state=$?
+    if [ "$state" -eq 2 ]; then unsafe=1; else restart=1; fi
+  fi
+
   if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
     if process_state github-relay "scripts/github_termux_relay.py"; then :; else
       state=$?

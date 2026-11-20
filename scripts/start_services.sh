@@ -85,6 +85,19 @@ else
   echo $! > "$LOG_DIR/bridge-worker.pid"
 fi
 
+# Start the durable render queue consumer as a supervised local service.
+# The worker remains PAUSED while SINTU_PRODUCTION_ENABLED is false; starting
+# the process never opts the owner into rendering or publishing.
+if pid_is_expected "$LOG_DIR/render-worker.pid" "scripts/render_queue_worker.py"; then
+  :
+else
+  state=$?
+  [ "$state" -ne 2 ] || exit 1
+  : > "$LOG_DIR/render-worker.log"
+  nohup .venv/bin/python scripts/render_queue_worker.py >>"$LOG_DIR/render-worker.log" 2>&1 </dev/null &
+  echo $! > "$LOG_DIR/render-worker.pid"
+fi
+
 # Restore the ChatGPT/GitHub-to-Termux issue relay after Android reboot.
 # Do not silently report all workers as running when GitHub authentication is
 # unavailable: queued GitHub commands cannot reach this device without it.

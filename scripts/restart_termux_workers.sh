@@ -13,6 +13,7 @@ sleep 15
 stop_expected() {
   local pid_file="$1"
   local marker="$2"
+  local graceful_wait_seconds="${3:-5}"
   [ -f "$pid_file" ] || return 0
   local pid
   pid="$(cat "$pid_file" 2>/dev/null || true)"
@@ -32,7 +33,7 @@ stop_expected() {
     return 1
   fi
   kill -TERM "$pid" 2>/dev/null || true
-  for _ in $(seq 1 20); do
+  for _ in $(seq 1 $((graceful_wait_seconds * 4))); do
     kill -0 "$pid" 2>/dev/null || break
     sleep 0.25
   done
@@ -47,6 +48,9 @@ stop_expected() {
 # signalling. Never kill a PID based only on a stale PID file.
 stop_expected "$LOG_DIR/server.pid" "uvicorn app.main:app" || exit 1
 stop_expected "$LOG_DIR/bridge-worker.pid" "scripts/termux_bridge_worker.py" || exit 1
+# Render worker may be finishing an active FFmpeg job; its maximum configured
+# render timeout is 900s. Wait for its graceful signal handler, never SIGKILL it.
+stop_expected "$LOG_DIR/render-worker.pid" "scripts/render_queue_worker.py" 960 || exit 1
 stop_expected "$LOG_DIR/github-relay.pid" "scripts/github_termux_relay.py" || exit 1
 
 sleep 2

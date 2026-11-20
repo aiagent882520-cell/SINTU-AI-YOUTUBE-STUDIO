@@ -17,6 +17,20 @@ def test_service_launcher_starts_watchdog():
     assert "watchdog.pid" in launcher
 
 
+def test_service_launcher_starts_durable_render_worker():
+    launcher = (ROOT / "scripts" / "start_services.sh").read_text(encoding="utf-8")
+    assert 'pid_is_expected "$LOG_DIR/render-worker.pid" "scripts/render_queue_worker.py"' in launcher
+    assert 'nohup .venv/bin/python scripts/render_queue_worker.py' in launcher
+    assert 'render-worker.log' in launcher
+    assert "SINTU_PRODUCTION_ENABLED is false" in launcher
+
+
+def test_watchdog_recovers_missing_render_worker():
+    script = (ROOT / "scripts" / "termux_watchdog.sh").read_text(encoding="utf-8")
+    assert 'process_state render-worker "scripts/render_queue_worker.py"' in script
+    assert 'if [ "$restart" -eq 1 ] && [ "$unsafe" -eq 0 ]; then' in script
+
+
 def test_service_launcher_explains_when_github_issue_relay_cannot_start():
     launcher = (ROOT / "scripts" / "start_services.sh").read_text(encoding="utf-8")
     assert "GitHub CLI (gh) is not installed" in launcher

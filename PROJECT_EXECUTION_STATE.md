@@ -1426,3 +1426,41 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 1. Wait for main run `44662940717` offline-video E2E/motion job to finish; capture final result and generated artifact evidence.
 2. Obtain an actual independent PR #236 review; only then consider merge, using the current main base and exact green checks.
 3. Continue only safe code-side work for deployment diagnostics, ComfyUI readiness and module acceptance while keeping physical-device, private-media and OAuth gates explicitly blocked until real access/evidence exists.
+
+
+## Continued execution checkpoint — 2026-11-20 (relay heartbeat and render-worker supervision)
+
+### PR #244 — live GitHub relay poll diagnostics merged
+- Merged to main by squash at `de3271aa6a274c2e1ccc748204580bd79787acac`.
+- Exact final-head SINTU CI run `44743577574`: **8/8 SUCCESS** — Python 3.11–3.14, dependency security audit, production Docker build, real Chromium Video Editor browser tests, and offline branded-video E2E/motion audit.
+- Adds an atomic, credential-free heartbeat after a successful authenticated GitHub issue-queue poll. The read-only automation self-test now distinguishes the relay singleton lock from a recent successful poll.
+- This proves that the relay process completed a successful poll within the heartbeat freshness window; it does not prove that a Termux command was executed or that an Android device is online.
+
+### PR #245 — durable render worker startup/recovery integration
+- PR: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/245
+- Branch: `fix/termux-render-worker-supervision`; head advanced after review fixes; latest commit: `6376869e6b21fd6eb456b410af28761e10ee1d66`.
+- Confirmed gap: `scripts/render_queue_worker.py` and the durable SQLite queue existed, but `scripts/start_services.sh` did not start the render worker. The watchdog also did not monitor it, and delayed identity-checked service restarts did not stop/restart it.
+- Changes: start the render worker with a dedicated PID/log after checking process identity; monitor it through the watchdog; include it in the delayed safe restart helper; add startup/watchdog/restart regression assertions. Delayed restart now gives an active render up to 960 seconds to finish after SIGTERM (matching the maximum 900-second FFmpeg render timeout plus margin); it never SIGKILLs the worker.
+- Safety: worker process remains governed by the existing fail-closed `SINTU_PRODUCTION_ENABLED` gate. This change does not enable production rendering, enqueue work, modify media or run a render.
+- Validation status: exact-head CI pending at checkpoint creation. Physical Termux startup and Android reboot recovery remain UNVERIFIED until the device runs this branch.
+- Status: `PARTIAL — CI PENDING; PHYSICAL DEVICE UNVERIFIED`.
+
+### Automation acceptance disposition
+- SQLite queue tests already cover atomic multi-thread and multi-process claims, crash/lease recovery, fencing, retry/backoff, dead-letter, owner scope and schema migration in the repository test suite. Their CI pass is single-host test evidence, not multi-host/network-filesystem guarantees.
+- The API exposes durable enqueue/status/execute/cancel routes, but a separately supervised Termux consumer was not connected to startup before PR #245.
+- Next: inspect exact-head CI for PR #245; fix any genuine failures; merge only after all required jobs pass. Then validate device worker startup/heartbeat and continue remaining automation E2E gaps before advancing to rendering acceptance.
+
+
+### Additional worker execution regression coverage
+- Added `tests/test_render_queue_worker.py` at commit `c953301da7c1324e4468452abcc5016ad5504523`.
+- Covers the actual worker loop's fail-closed production gate (no claim while disabled), claim → render → durable completion, and render exception → queue retry state.
+- These are worker-process logic tests with a stubbed renderer/queue boundary; they do not claim a real FFmpeg render or physical Termux execution.
+- Fresh exact-head CI is required because this addition supersedes the previously running workflow. Status remains `CI PENDING`.
+
+
+### Duplicate-job prevention / idempotency gap found and implemented
+- Audit found `enqueue()` always generated a fresh UUID and had no request-level deduplication. Concurrent client retries could create duplicate render jobs.
+- Added optional owner-scoped `Idempotency-Key` persistence with a partial unique SQLite index and transactional replay lookup. Reusing a key with the same project/payload returns the existing job; reusing it for a different request returns HTTP 409. Existing clients without the header retain the previous behavior.
+- Added migration-safe schema column, durable queue tests (replay, conflicting payload/project, owner isolation, key length), and API contract tests.
+- Commits: `a87292e` queue implementation; `bc3ebae` API header; `16ad280` queue tests; `5b920ab` API tests.
+- Exact-head CI pending; no local Python test execution is claimed in this cloud-only edit.
