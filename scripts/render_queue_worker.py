@@ -14,7 +14,7 @@ import threading
 import time
 import uuid
 
-from app import durable_render_queue
+from app import durable_render_queue, render_process
 from app.policy import production_actions_allowed
 from app.main import RenderInput, render_video
 
@@ -61,7 +61,10 @@ def run_worker(*, once: bool = False, poll_seconds: float = 2.0,
         heartbeat_stop = threading.Event()
 
         def renew():
-            while not heartbeat_stop.wait(min(30, max(5, lease_seconds // 3))):
+            while not heartbeat_stop.wait(1.0):
+                if durable_render_queue.cancellation_requested(item["id"], lease_token):
+                    render_process.cancel_render_process(item["id"])
+                    continue
                 if not durable_render_queue.heartbeat(item["id"], lease_token, lease_seconds=lease_seconds):
                     lease_lost.set()
                     return
@@ -69,12 +72,16 @@ def run_worker(*, once: bool = False, poll_seconds: float = 2.0,
         heartbeat = threading.Thread(target=renew, name="render-lease-heartbeat", daemon=True)
         heartbeat.start()
         try:
-            result = render_video(RenderInput(**item["payload"]))
+            with render_process.render_job(item["id"]):
+                result = render_video(RenderInput(**item["payload"]))
             if lease_lost.is_set() or not durable_render_queue.complete(item["id"], lease_token, result):
                 print(f"STALE_OUTPUT_DISCARDED job={item['id']} worker={worker_id}", flush=True)
             else:
                 processed += 1
                 print(f"COMPLETED job={item['id']} worker={worker_id}", flush=True)
+        except render_process.RenderProcessCancelled:
+            durable_render_queue.finalize_cancelled(item["id"], lease_token)
+            print(f"CANCELLED job={item['id']} worker={worker_id}", flush=True)
         except Exception as exc:
             status = durable_render_queue.fail(item["id"], lease_token, type(exc).__name__)
             print(f"FAILED job={item['id']} retry_state={status or 'lease-lost'} error={type(exc).__name__}", flush=True)
