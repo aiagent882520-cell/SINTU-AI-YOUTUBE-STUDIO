@@ -1489,3 +1489,28 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Physical Android install/launch/backend/background recovery/reboot: requires the actual Termux device. Exact script: `scripts/termux_render_worker_recovery_test.sh`; procedure: `docs/TERMUX_RENDER_WORKER_RECOVERY.md`.
 - Three original black MP4 files are not mounted in this session. No original file was opened, hashed or modified here; provenance remains unverified. Existing Android report evidence is historical, not a fresh forensic run.
 - Real ComfyUI inference, YouTube live OAuth and physical Android acceptance remain unverified. Keep production publishing disabled.
+
+
+## Durable active-render cancellation checkpoint — 2026-11-20
+
+### Merged changes
+- PR #245 merged: `61c6b098410691372db1f89a0274ad19cc00b699`. Exact-head CI run `44745373961`: 8/8 PASS, including Python 3.11–3.14, security audit, Chromium browser tests, offline video E2E/motion audit and Docker build.
+- PR #246 merged: `caabd8d7443c1f2d325fd6587f94cd472ad19063`. Exact-head SHA `ee7751fc2cf159b02c27baaf3986dd95cfbb2fa0`; CI run `44748145035`: **8/8 PASS**.
+- PR #209 was not merged; its process-local single-worker implementation was superseded and the old PR is closed.
+
+### Durable active-render cancellation evidence
+- Durable SQLite cancellation intent is owner-scoped and fenced by the active lease token.
+- The lease-owning worker polls cancellation intent and terminates only the matching registered FFmpeg subprocess. Lease renewal continues until cancellation cleanup completes.
+- Completion is fenced against cancellation intent; cancellation-vs-completion race has a concurrent test. Cancellation finalization requires a live lease and occurs only after subprocess and temporary-directory cleanup.
+- Expired leases with cancellation intent recover as cancelled; ordinary crash recovery retains retry/dead-letter behavior.
+- Video renderer subprocess calls use the interruptible runner. Binary decoded-frame output remains bytes; a large-stdout regression test prevents pipe deadlocks.
+- Real FFmpeg child-process cancellation test asserts terminal cancelled status, cleared lease, removed process registry entry and temporary directory cleanup.
+- Exact-head CI: Python 3.11/3.12/3.13/3.14 each **755 passed, 5 warnings**; dependency security audit PASS; real Chromium Video Editor browser acceptance PASS; offline Hindi MP4 generation, 60-second subtitle acceptance, black-frame and motion audit PASS; production Docker build and health endpoint PASS.
+- No tests were disabled or skipped for this change. No local Termux execution is claimed.
+
+### Physical/device and media gates remain open
+- Physical Termux restart/reboot and Android install/launch/backend/background recovery have not been run on the actual phone. Prepared procedure: `docs/TERMUX_RENDER_WORKER_RECOVERY.md`; script: `scripts/termux_render_worker_recovery_test.sh`. Existing `scripts/android_physical_device_smoke.sh` still requires an authorized ADB device.
+- The three original black MP4s are not present in this session. Read-only scanner already in repository: `scripts/media_forensics.py`; exact device run instructions: `docs/TERMUX_BLACK_MP4_FORENSIC_RUN.md`. No original files were hashed or modified in this session, and no repair output was fabricated.
+- CI offline MP4 generation is not proof of physical Android playback or full-duration playback of the three originals.
+- Keep all original media immutable. Repaired videos must be new, separate output files.
+- Automation is not declared 100% verified until the physical device gates pass. Rendering and other module/format acceptance remains in progress; do not label the product COMPLETE or PRODUCTION READY.
