@@ -1547,3 +1547,13 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - `docs/FORMAT_MODULE_ACCEPTANCE_MATRIX.md` now records generic output evidence separately from native E2E and human review.
 - 15 modules have registry consistency tests only; dedicated UI/API workflows remain unverified.
 - Physical Android/Termux and original MP4 forensic gates remain blocked as documented above. Product is not COMPLETE or PRODUCTION READY.
+
+
+## ComfyUI local workflow contract checkpoint — 2026-11-20
+
+- PR #251 merged by squash at `c1343f6ef113207b8a86471fa2b1ee03e13f45bc` after exact-head workflow run `44752625727` completed **8/8 SUCCESS**: Python 3.11–3.14, dependency security audit, offline branded video E2E/motion audit, Chromium Video Editor browser tests and production Docker build.
+- Added deterministic tests for the existing ComfyUI CPU launcher (explicit CPU, automatic CPU fallback, auto CUDA selection, invalid device/port, loopback binding, and no implicit install/download) and local image workflow placeholder substitution, prompt submission, history polling and image retrieval.
+- Evidence boundary: these tests use a fake existing host/Python executable and mocked local HTTP workflow. They verify launcher/workflow contracts only. They do **not** establish that a real ComfyUI server, model checkpoint, video custom nodes, GPU, CPU inference or prompt-to-image/video generation is available. Real inference remains UNVERIFIED/BLOCKED pending a compatible host and model assets.
+- The merge-triggered main CI run `44753948548` for the exact merge commit is in progress at checkpoint time; do not treat it as complete until all jobs finish.
+- Open engineering work remains: PR #236 (editor recovery + native Android Image Studio + YouTube history), PR #235 (native Android Image Studio), PR #231 (YouTube upload history), PR #230 (editor undo/redo), PR #225 (browser draft recovery), plus older render queue PRs #206/#207 requiring careful base/architecture review. Do not merge overlapping feature branches without rebasing and exact-head CI.
+- Physical Termux reboot/recovery, three original black MP4 forensic hashes/analysis, real ComfyUI inference, Android physical installation/playback, and live YouTube OAuth/upload remain external/device/file/credential gates. No such result is claimed by this checkpoint.
