@@ -96,3 +96,15 @@ def test_render_queue_api_replays_idempotent_request_and_rejects_key_reuse(tmp_p
             request,
         )
     assert conflict.value.status_code == 409
+
+
+def test_running_render_cancellation_endpoint_persists_intent(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(main, "DB_PATH", tmp_path / "sintu_studio.db")
+    monkeypatch.setattr(main, "_studio_owner", lambda request: "owner")
+    item = durable_render_queue.enqueue("owner", "f" * 32, {"title": "active-cancel-api"})
+    claim = durable_render_queue.claim_next("worker", lease_seconds=60)
+    response = main.studio_cancel_render_queue(item["id"], object())
+    assert response["cancellation_requested"] is True
+    assert durable_render_queue.cancellation_requested(item["id"], claim["lease_token"])
+    assert durable_render_queue.get_item("owner", item["id"])["status"] == "running"
