@@ -1330,3 +1330,38 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Live YouTube OAuth/channel verification/resumable upload: BLOCKED pending owner credentials and explicit authorization.
 - Complete website user journeys and individual acceptance for all 60 formats / 15 modules: UNVERIFIED.
 - Durable worker multi-process local SQLite tests passed in CI; multi-host/network-filesystem coordination is not claimed.
+
+
+## Follow-up execution — 2026-11-20 (durable worker merged; CI timeout follow-up)
+
+### PR #239 — durable render worker merged
+- PR #239 merged into main by squash at 301b6bab42c935d716b33ea07ae043659bd72da8.
+- Exact final feature-head CI run 44660924355: **SUCCESS 8/8** — Python 3.11–3.14, dependency security audit, production Docker build, Chromium Video Editor browser tests, and offline branded-video E2E/motion audit. Android build run 44660924312: **SUCCESS**.
+- Includes SQLite durable job/lease handling, atomic claims, renewable heartbeats, stale lease recovery, fencing, retry/dead-letter behavior, supervised worker lifecycle, safe cancellation, API protection against forged completion, fail-closed production gate, explicit worker startup diagnostics, and ComfyUI CPU fallback launcher documentation.
+- This validates the tested single-host SQLite workflow and CI process-crash recovery; it does not establish multi-host/network-filesystem locking safety or actual ComfyUI model inference.
+
+### Main CI failure — isolated Python 3.11 FFmpeg timeout
+- Main run 44660366180 on c1c479...: Python 3.12–3.14 and dependency audit PASS; Python 3.11 failed with **710 passed, 1 failed** after 628.50s.
+- Sole failure: tests/test_video_renderer_integration.py::test_mixed_timeline_mixes_source_voice_music_and_burns_subtitles. FFmpeg final assembly exceeded its 600-second test timeout. This is a resource/runtime timeout, not a functional assertion failure. Dependent Docker, Chromium and offline E2E jobs were skipped because the matrix prerequisite failed.
+- PR #241 opened: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/241
+- PR #241 changes only that test's synthetic clip and test output to 12 fps while retaining the 160x284 test profile, full mixed image/video timeline, source audio, voiceover, music, Hindi subtitles, FFprobe stream assertions and non-silent audio check. Production renderer code, defaults and output profiles are unchanged.
+- Exact PR #241 run 44662079913 was IN_PROGRESS at checkpoint time; no merge or PASS is claimed yet.
+
+### PR #238 checkpoint merged
+- PR #238 merged into main at 03612de1c48637d5d66b341e1baf7906b5c88b40 after its exact-head CI run 44661004115 completed successfully.
+
+### PR #236 — retargeted to current main
+- PR #236 head d5decc39695e1f150ecac52ab8d7dba7d4fd0516; retargeted from c1c479... to main after the durable worker and checkpoint merges. GitHub mergeability recalculation was pending at this checkpoint.
+- Its previous exact-head Python/browser/Docker/offline E2E and Android build checks passed, but those checks predate the latest base update. Revalidate on the current base before merging. No independent review submission is recorded.
+
+### Current main after worker merge
+- Main SHA: 301b6bab42c935d716b33ea07ae043659bd72da8.
+- New main SINTU CI run 44662149929 was queued after merge; wait for exact-main results before calling main green.
+- Android build had passed on worker feature head 030c619...; post-merge Android CI is included in the new main workflow where configured.
+
+### Remaining external acceptance gates (unchanged)
+- Actual Android physical-device install/login/editor/media/lifecycle acceptance: UNVERIFIED; no physical device connected.
+- Three historical black MP4 source/project/job provenance mappings: UNKNOWN pending read-only Termux scanner report.
+- Real ComfyUI generative inference: UNVERIFIED pending reachable host, compatible model weights/workflow and successful inference; procedural fallback is not AI inference.
+- Live YouTube OAuth consent, channel ownership and resumable upload: BLOCKED pending owner credentials and explicit authorization.
+- Full website journeys/accessibility and individual acceptance of all 60 formats / 15 modules: UNVERIFIED.
