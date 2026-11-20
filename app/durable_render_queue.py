@@ -233,7 +233,7 @@ def complete(item_id: str, lease_token: str, result: dict) -> bool:
         changed = conn.execute(
             """UPDATE studio_render_queue SET status='completed',result_json=?,last_error=NULL,
                lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,updated_at=?
-               WHERE id=? AND status='running' AND lease_token=? AND lease_expires_at>?""",
+               WHERE id=? AND status='running' AND lease_token=? AND lease_expires_at>? AND cancel_requested=0""",
             (json.dumps(result, ensure_ascii=False), now, item_id, lease_token, now),
         )
     return changed.rowcount == 1
