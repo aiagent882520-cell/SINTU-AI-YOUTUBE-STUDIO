@@ -1575,3 +1575,14 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Test command intended for CI: `pytest -q tests/test_youtube_upload_history.py`; no local test execution is claimed in this connector-only session. Exact-head CI pending.
 - No live OAuth, resumable network upload, channel authorization or published video is claimed. Existing publishing safety gates remain unchanged.
 - Next executable task after CI: port editor draft recovery / undo-redo as isolated current-main changes; then continue module-specific API acceptance. Android physical test and YouTube live upload remain external blockers.
+
+
+## Fresh Termux regression and device diagnostic — 2026-11-20 14:46 UTC
+
+- Device: Android 15, aarch64, Termux, Python 3.14.10. Local repository and origin both at `d3296143a4f64e7e95d4da4886de937f09cd538d`; no tracked working-tree changes. Existing user-owned untracked backups, databases, logs, flow JSON and diagnostics remain present and were not modified.
+- User-executed targeted regression suite: `tests/test_durable_render_queue.py`, `tests/test_render_queue_api_leases.py`, `tests/test_render_queue_worker.py`, `tests/test_youtube_upload_history.py`: **27 passed, 5 warnings, 0 failures** in 9.16 seconds. Warnings are FastAPI `on_event` and Starlette TestClient/httpx deprecations.
+- Device diagnostic: FFmpeg 9.0.2 and FFprobe 9.0.2 available; 16 MP4 files inventoried with SHA-256. This inventory is not a forensic diagnosis and does not establish identity with the three owner-referenced original black MP4s or the five historical candidates.
+- Dependency health is **not clean**: `pip check` exits 1 with `pillow 13.0.0 is not supported on this platform`. Do not downgrade or reinstall Pillow blindly; first determine Android-compatible packaging and whether the affected image features require Pillow on-device.
+- Local backend `127.0.0.1:8000/api/health` is unreachable; no APK files found; automation self-test was explicitly NOT RUN. This diagnostic did not start a service, worker, model, renderer or upload.
+- Engine probe confirms no local ComfyUI endpoint/workflow and no model assets. Current available RAM is below the configured 8 GiB ComfyUI manual-review threshold; do not install ComfyUI or diffusion models on this Android device. Use procedural offline fallback until a separate compatible host is configured.
+- Physical worker restart/recovery, Android app installation/launch, real ComfyUI inference, YouTube OAuth/channel/upload and original-media forensic review remain unverified/blocked. Production remains paused; no public publishing.
