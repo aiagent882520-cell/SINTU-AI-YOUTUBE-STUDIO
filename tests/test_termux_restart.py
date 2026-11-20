@@ -29,7 +29,9 @@ def test_delayed_restart_uses_fixed_pid_files_and_command_identity():
     helper = (ROOT / "scripts" / "restart_termux_workers.sh").read_text()
     assert 'stop_expected "$LOG_DIR/server.pid" "uvicorn app.main:app"' in helper
     assert 'stop_expected "$LOG_DIR/bridge-worker.pid" "scripts/termux_bridge_worker.py"' in helper
-    assert 'stop_expected "$LOG_DIR/render-worker.pid" "scripts/render_queue_worker.py"' in helper
+    assert 'stop_expected "$LOG_DIR/render-worker.pid" "scripts/render_queue_worker.py" 960' in helper
+    assert 'local graceful_wait_seconds="${3:-5}"' in helper
+    assert 'graceful_wait_seconds * 4' in helper
     assert 'stop_expected "$LOG_DIR/github-relay.pid" "scripts/github_termux_relay.py"' in helper
     assert 'tr \'\\0\' ' in helper
     assert 'ps -o args= -p "$pid"' in helper
