@@ -91,7 +91,7 @@ def test_schema_migrates_existing_studio_queue_without_losing_rows(tmp_path, mon
         )
     queue.ensure_schema()
     columns = {row["name"] for row in queue._connect().execute("PRAGMA table_info(studio_render_queue)")}
-    assert {"lease_owner", "lease_token", "lease_expires_at", "heartbeat_at", "available_at", "attempts", "max_attempts", "last_error", "idempotency_key"} <= columns
+    assert {"lease_owner", "lease_token", "lease_expires_at", "heartbeat_at", "available_at", "attempts", "max_attempts", "last_error", "idempotency_key", "cancel_requested"} <= columns
     claimed = queue.claim_next("migration-worker", lease_seconds=60)
     assert claimed["id"] == "legacy-id"
     assert claimed["payload"] == {"title": "legacy"}
