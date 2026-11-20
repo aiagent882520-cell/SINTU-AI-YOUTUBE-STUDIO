@@ -29,6 +29,7 @@ def test_delayed_restart_uses_fixed_pid_files_and_command_identity():
     helper = (ROOT / "scripts" / "restart_termux_workers.sh").read_text()
     assert 'stop_expected "$LOG_DIR/server.pid" "uvicorn app.main:app"' in helper
     assert 'stop_expected "$LOG_DIR/bridge-worker.pid" "scripts/termux_bridge_worker.py"' in helper
+    assert 'stop_expected "$LOG_DIR/render-worker.pid" "scripts/render_queue_worker.py"' in helper
     assert 'stop_expected "$LOG_DIR/github-relay.pid" "scripts/github_termux_relay.py"' in helper
     assert 'tr \'\\0\' ' in helper
     assert 'ps -o args= -p "$pid"' in helper
@@ -49,5 +50,7 @@ def test_startup_validates_pid_command_identity_and_clears_only_stale_references
     assert "API health is already OK; cleared stale server PID reference" in launcher
     assert 'pid_is_expected "$LOG_DIR/bridge-worker.pid"' in launcher
     assert 'pid_is_expected "$LOG_DIR/github-relay.pid"' in launcher
+    assert 'pid_is_expected "$LOG_DIR/render-worker.pid" "scripts/render_queue_worker.py"' in launcher
+    assert 'render-worker.log' in launcher
     assert "Local LLM servers are deliberately not auto-started" in launcher
     assert "llama-server -m" not in launcher
