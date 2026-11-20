@@ -554,6 +554,104 @@ def extract_frame_pixel_verification(path: Path, timestamp: str, label: str) -> 
         return {"status": "FAIL", "extraction_exit": None, "error": str(exc)[:220]}
 
 
+
+def create_review_contact_sheets(videos: list[dict], output_dir: Path) -> list[dict]:
+    """Write optional human-review sheets outside the media tree; never alter source MP4s."""
+    output_dir = Path(output_dir).expanduser()
+    media_root = MEDIA_DIR.resolve()
+    data_root = DATA_DIR.resolve()
+    if output_dir.is_symlink():
+        raise ValueError("Contact-sheet output directory must not be a symlink.")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    resolved_output = output_dir.resolve()
+    if resolved_output == media_root or media_root in resolved_output.parents:
+        raise ValueError("Contact sheets must be saved outside generated_videos.")
+    if resolved_output == data_root or data_root in resolved_output.parents:
+        raise ValueError("Contact sheets must be saved outside the SINTU data directory.")
+
+    results = []
+    cell_width, image_height, label_height = 480, 270, 42
+    columns, rows = 3, 2
+    sheet_size = (columns * cell_width, rows * (image_height + label_height))
+    resampling = getattr(Image, "Resampling", Image).LANCZOS
+
+    for video in videos:
+        filename = str(video.get("file") or "")
+        if filename not in TARGETS or Path(filename).name != filename:
+            results.append({"file": filename[:100], "status": "SKIPPED", "error": "not an allowlisted forensic target"})
+            continue
+        source = media_root / filename
+        if source.is_symlink() or not source.is_file():
+            results.append({"file": filename, "status": "FAIL", "error": "source MP4 missing or unsafe"})
+            continue
+
+        canvas = Image.new("RGB", sheet_size, (28, 30, 34))
+        draw = ImageDraw.Draw(canvas)
+        extracted_count = 0
+        samples = video.get("decoded_frame_samples") or []
+        with tempfile.TemporaryDirectory(prefix="sintu-review-") as temporary_dir:
+            for index, label in enumerate(("first", "quarter", "middle", "three_quarter", "last")):
+                sample = next((item for item in samples if item.get("sample") == label), {})
+                timestamp = sample.get("timestamp")
+                row, column = divmod(index, columns)
+                left, top = column * cell_width, row * (image_height + label_height)
+                if timestamp is not None:
+                    try:
+                        seek = float(timestamp)
+                        if not math.isfinite(seek) or seek < 0:
+                            raise ValueError("invalid decoded timestamp")
+                        frame_path = Path(temporary_dir) / (label + ".jpg")
+                        extraction = run([
+                            "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(source),
+                            "-ss", f"{seek:.6f}", "-frames:v", "1",
+                            "-vf", "scale=464:254:force_original_aspect_ratio=decrease,"
+                                   "pad=464:254:(ow-iw)/2:(oh-ih)/2",
+                            "-an", "-y", str(frame_path),
+                        ], timeout=120)
+                        if extraction.get("returncode") == 0 and frame_path.is_file() and frame_path.stat().st_size:
+                            with Image.open(frame_path) as frame:
+                                frame = frame.convert("RGB")
+                                frame.thumbnail((464, 254), resampling)
+                                x = left + (cell_width - frame.width) // 2
+                                y = top + 8 + (254 - frame.height) // 2
+                                canvas.paste(frame, (x, y))
+                                extracted_count += 1
+                        else:
+                            draw.text((left + 18, top + 120), "FRAME EXTRACTION FAILED", fill=(255, 170, 130))
+                    except (OSError, TypeError, ValueError):
+                        draw.text((left + 18, top + 120), "FRAME UNAVAILABLE", fill=(255, 170, 130))
+                else:
+                    draw.text((left + 18, top + 120), "NO VERIFIED TIMESTAMP", fill=(255, 170, 130))
+
+                pixel = sample.get("pixel_verification") or {}
+                metric = (
+                    f"mean luma {pixel.get('mean_luma', 'n/a')} | "
+                    f"black pixels {pixel.get('black_pixel_percentage', 'n/a')}%"
+                )
+                draw.text((left + 10, top + image_height + 5),
+                          f"{label} @ {timestamp if timestamp is not None else 'n/a'}s",
+                          fill=(245, 245, 245))
+                draw.text((left + 10, top + image_height + 22), metric[:64],
+                          fill=(185, 195, 205))
+
+        stem = Path(filename).stem
+        destination = resolved_output / f"{stem}-contact-sheet.jpg"
+        suffix = 1
+        while destination.exists():
+            destination = resolved_output / f"{stem}-contact-sheet-{suffix}.jpg"
+            suffix += 1
+        canvas.save(destination, format="JPEG", quality=88, optimize=True)
+        results.append({
+            "file": filename,
+            "status": "PASS" if extracted_count == 5 else "PARTIAL",
+            "frames_extracted": extracted_count,
+            "frames_expected": 5,
+            "contact_sheet": str(destination),
+            "source_modified": False,
+        })
+    return results
+
+
 def analyze_av_sync(streams: list[dict], tolerance_seconds: float = 0.25) -> dict:
     """Compare decoded container stream timelines; this is timestamp sync evidence, not lip-sync perception."""
     video = next((item for item in streams if item.get("type") == "video"), None)
@@ -910,8 +1008,16 @@ def compact_forensic_summary(report: dict) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true")
-    parser.parse_args()
+    parser.add_argument(
+        "--contact-sheet-dir",
+        help="Optional output directory OUTSIDE SINTU_DATA_DIR for five-timestamp human-review JPEG sheets.",
+    )
+    args = parser.parse_args()
     videos = [inspect_video(MEDIA_DIR / name) for name in TARGETS]
+    contact_sheets = (
+        create_review_contact_sheets(videos, Path(args.contact_sheet_dir))
+        if args.contact_sheet_dir else []
+    )
     assets = {}
     for video in videos:
         if video.get("exists"):
@@ -932,6 +1038,7 @@ def main() -> int:
             "forensic_tool_failure_count": tool_failures,
         },
         "targets": videos,
+        "human_review_contact_sheets": contact_sheets,
         "candidate_source_assets": list(assets.values()),
         "production_log_matches": scan_text_logs(needles),
         "production_database_matches": scan_database_records(needles),
