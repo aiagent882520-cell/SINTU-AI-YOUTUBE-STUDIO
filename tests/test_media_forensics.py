@@ -1182,3 +1182,26 @@ def test_contact_sheet_does_not_overwrite_an_existing_review(tmp_path, monkeypat
     assert Path(result[0]["contact_sheet"]).name.endswith("-contact-sheet-1.jpg")
     assert result[0]["status"] == "PARTIAL"
     assert result[0]["frames_extracted"] == 0
+
+
+def test_contact_sheet_never_follows_a_dangling_or_live_output_symlink(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    media_dir = data_dir / "generated_videos"
+    media_dir.mkdir(parents=True)
+    monkeypatch.setattr(media_forensics, "DATA_DIR", data_dir)
+    monkeypatch.setattr(media_forensics, "MEDIA_DIR", media_dir)
+    filename = media_forensics.TARGETS[0]
+    (media_dir / filename).write_bytes(b"original")
+    output_dir = tmp_path / "review"
+    output_dir.mkdir()
+    protected = tmp_path / "protected.jpg"
+    protected.write_bytes(b"do-not-overwrite")
+    link = output_dir / (Path(filename).stem + "-contact-sheet.jpg")
+    link.symlink_to(protected)
+
+    result = media_forensics.create_review_contact_sheets(
+        [{"file": filename, "decoded_frame_samples": []}], output_dir
+    )
+    assert protected.read_bytes() == b"do-not-overwrite"
+    assert link.is_symlink()
+    assert Path(result[0]["contact_sheet"]).name.endswith("-contact-sheet-1.jpg")
