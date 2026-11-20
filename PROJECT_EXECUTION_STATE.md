@@ -1514,3 +1514,26 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - CI offline MP4 generation is not proof of physical Android playback or full-duration playback of the three originals.
 - Keep all original media immutable. Repaired videos must be new, separate output files.
 - Automation is not declared 100% verified until the physical device gates pass. Rendering and other module/format acceptance remains in progress; do not label the product COMPLETE or PRODUCTION READY.
+
+
+## Rendering and module registry checkpoint — 2026-11-20
+
+### Format and module contract coverage
+- PR #247 merged: `55fe5493a7aaf6769e3a0bc06429f76b4c943a5e`. Exact-head CI `44749186261`: 8/8 PASS; 817 tests passed on Python 3.11–3.14. Every one of the 60 format IDs has an individually named contract test covering profile, source requirements, generic export capability, format-specific worker/checker role mapping and limitations. This is profile validation, not 60 native MP4 generation runs.
+- PR #249 merged: `30c81f2097f7019bff97a0a12a7732c1bda1eebf`. Exact-head CI `44750784853`: 8/8 PASS; 833 tests passed on Python 3.11–3.14. All 15 module registry entries are individually tested for catalog/scope consistency. This does not prove 15 functional UI workflows.
+- `docs/FORMAT_MODULE_ACCEPTANCE_MATRIX.md` now distinguishes profile/registry evidence from full render and functional acceptance.
+
+### Rendering A/V verification
+- PR #248 merged: `e25b62ad74f097e1f887259a375bc58f669a4fda`. Exact-head CI `44750318745`: 8/8 PASS; 822 tests passed on Python 3.11–3.14.
+- Render-time and publish-time FFprobe gates compare audio/video stream durations with a 0.5-second bounded tolerance; audio duration can be derived from FFprobe duration ticks/time base if the direct duration field is absent.
+- Full audio-stream decode is run at render and publish verification gates. Regression fixtures cover matched and mismatched stream durations, duration-tick fallback and decoder errors.
+- This proves stream-duration parity and complete audio decoding in CI. It does not prove sample-level phase alignment or physical full-duration playback on Android.
+
+### Current acceptance boundary
+- Offline Hindi MP4 generation, 60-second subtitle acceptance, MP4 metadata, black-frame scan, sampled visual content, motion audit, Chromium Video Editor browser tests and Docker build/health checks pass in CI.
+- 60 formats: profile/role contract tested; per-format media generation and human review remain unverified.
+- 15 modules: registry tested; dedicated UI/API workflows remain unverified.
+- Physical Termux restart, Android install/launch/backend/background recovery and playback remain blocked until actual device access.
+- Three original black MP4s remain unavailable in this session. The read-only scanner and device instructions are prepared; no original was hashed or modified here, and no repair output was fabricated.
+- ComfyUI real inference, YouTube live OAuth and native hardware-heavy engines remain unverified. Keep production publishing disabled.
+- Automation is not declared 100% verified until physical device acceptance passes. Product remains incomplete; do not declare COMPLETE or PRODUCTION READY.
