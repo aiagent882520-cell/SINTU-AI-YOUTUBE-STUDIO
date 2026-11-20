@@ -267,3 +267,12 @@ def test_final_mp4_verification_derives_audio_duration_from_time_base(tmp_path, 
     output.write_bytes(b"mp4")
     result = _verify_rendered_output(output, 720, 1280, 8, require_audio=True)
     assert result["audio_duration_seconds"] == pytest.approx(8.0)
+
+
+def test_audio_stream_decode_gate_rejects_decoder_errors(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from app import video_renderer
+
+    monkeypatch.setattr(video_renderer.render_process, "run_render_process", lambda *args, **kwargs: SimpleNamespace(returncode=1, stderr="Invalid AAC frame"))
+    with pytest.raises(RenderFailed, match="full-duration decode"):
+        video_renderer._verify_audio_stream_decodes(tmp_path / "broken-audio.mp4", "/usr/bin/ffmpeg")
