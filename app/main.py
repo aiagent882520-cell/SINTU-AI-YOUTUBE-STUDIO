@@ -1775,6 +1775,9 @@ def studio_execute_render_queue(item_id: str, request: Request):
         while not stop_heartbeat.wait(1):
             if durable_render_queue.cancellation_requested(item_id, lease_token):
                 render_process.cancel_render_process(item_id)
+                if not durable_render_queue.heartbeat(item_id, lease_token, lease_seconds=1800):
+                    stop_heartbeat.set()
+                    return
                 continue
             if not durable_render_queue.heartbeat(item_id, lease_token, lease_seconds=1800):
                 stop_heartbeat.set()
