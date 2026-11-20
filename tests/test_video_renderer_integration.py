@@ -589,3 +589,19 @@ def test_render_verifier_reports_synchronized_audio_video_durations(tmp_path):
     )
     assert verified["verified"] is True
     assert abs(verified["audio_duration_seconds"] - verified["video_duration_seconds"]) <= 0.5
+
+
+def test_publish_verifier_rejects_unsynchronized_audio_track(tmp_path):
+    ffmpeg, _ = _ffmpeg_tools()
+    mismatched = tmp_path / "publish-audio-drift.mp4"
+    result = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+         "-f", "lavfi", "-i", "testsrc2=size=720x1280:rate=24:duration=2",
+         "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=1",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
+         "-ar", "48000", "-ac", "2", "-t", "2", str(mismatched)],
+        capture_output=True, check=False, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
+    with pytest.raises(video_renderer.RenderFailed, match="not synchronized"):
+        video_renderer.verify_publishable_mp4(mismatched)
