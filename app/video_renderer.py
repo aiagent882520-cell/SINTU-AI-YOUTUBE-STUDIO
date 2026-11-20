@@ -281,6 +281,19 @@ def _probe_stream_duration_seconds(stream: dict | None) -> float:
     return 0.0
 
 
+def _verify_audio_stream_decodes(path: Path, ffmpeg: str, timeout: int = 45) -> None:
+    """Decode the complete audio stream; metadata duration alone is not playback evidence."""
+    try:
+        result = render_process.run_render_process(
+            [ffmpeg, "-v", "error", "-i", str(path), "-map", "0:a:0", "-f", "null", "-"],
+            capture_output=True, text=True, timeout=timeout, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise RenderFailed("Final MP4 audio stream full-duration decode timed out or failed.") from None
+    if result.returncode != 0 or (result.stderr or "").strip():
+        raise RenderFailed("Final MP4 audio stream failed full-duration decode.")
+
+
 def _verify_rendered_output(path: Path, expected_width: int, expected_height: int,
                             expected_duration: float, require_audio: bool | None = None,
                             expected_fps: int = 30,
@@ -354,6 +367,8 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RendererUnavailable("Visual quality verification ke liye FFmpeg required hai.")
+    if has_audio:
+        _verify_audio_stream_decodes(path, ffmpeg)
 
     # Reject full-black and long black segments at render time too, not
     # only when a later upload is attempted.
@@ -486,6 +501,8 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RendererUnavailable("Upload se pehle visual MP4 verification ke liye FFmpeg required hai.")
+    if audio_stream is not None:
+        _verify_audio_stream_decodes(path, ffmpeg)
     try:
         black = render_process.run_render_process(
             [ffmpeg, "-hide_banner", "-i", str(path), "-vf",
