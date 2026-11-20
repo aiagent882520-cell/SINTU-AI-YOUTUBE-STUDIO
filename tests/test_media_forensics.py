@@ -1,4 +1,5 @@
 import json
+import pytest
 from pathlib import Path
 from scripts import media_forensics
 from scripts.media_forensics import parse_black_intervals, redact_secrets
@@ -1092,3 +1093,115 @@ def test_sqlite_scan_reports_candidate_source_asset_reference(tmp_path, monkeypa
         item["record"]["source_asset_path"] == "generated_music/session-track-123456.wav"
         for item in result
     )
+
+
+def test_contact_sheet_exports_five_decoded_timestamps_without_modifying_mp4(tmp_path, monkeypatch):
+    import hashlib
+    from PIL import Image
+
+    data_dir = tmp_path / "data"
+    media_dir = data_dir / "generated_videos"
+    media_dir.mkdir(parents=True)
+    output_dir = tmp_path / "review-sheets"
+    filename = media_forensics.TARGETS[0]
+    source = media_dir / filename
+    source.write_bytes(b"original-mp4-placeholder")
+    original_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    monkeypatch.setattr(media_forensics, "DATA_DIR", data_dir)
+    monkeypatch.setattr(media_forensics, "MEDIA_DIR", media_dir)
+
+    samples = [
+        {
+            "sample": label,
+            "timestamp": str(index * 1.5),
+            "pixel_verification": {
+                "mean_luma": 0.0 if index == 0 else 22.11,
+                "black_pixel_percentage": 100.0 if index == 0 else 0.122,
+            },
+        }
+        for index, label in enumerate(("first", "quarter", "middle", "three_quarter", "last"))
+    ]
+    calls = []
+
+    def fake_run(command, timeout=120):
+        calls.append(command)
+        Image.new("RGB", (64, 64), (index_color(command), 90, 120)).save(command[-1], format="JPEG")
+        return {"returncode": 0, "stdout": "", "stderr": ""}
+
+    def index_color(command):
+        return len(calls) * 20
+
+    monkeypatch.setattr(media_forensics, "run", fake_run)
+    result = media_forensics.create_review_contact_sheets(
+        [{"file": filename, "decoded_frame_samples": samples}], output_dir
+    )
+
+    assert len(calls) == 5
+    assert result[0]["status"] == "PASS"
+    assert result[0]["frames_extracted"] == 5
+    sheet = Path(result[0]["contact_sheet"])
+    assert sheet.is_file()
+    with Image.open(sheet) as image:
+        assert image.size == (1440, 624)
+    assert hashlib.sha256(source.read_bytes()).hexdigest() == original_hash
+    assert result[0]["source_modified"] is False
+
+
+def test_contact_sheet_rejects_output_inside_media_tree_before_creating_it(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    media_dir = data_dir / "generated_videos"
+    media_dir.mkdir(parents=True)
+    monkeypatch.setattr(media_forensics, "DATA_DIR", data_dir)
+    monkeypatch.setattr(media_forensics, "MEDIA_DIR", media_dir)
+
+    unsafe_output = media_dir / "review"
+    with pytest.raises(ValueError, match="outside generated_videos"):
+        media_forensics.create_review_contact_sheets([], unsafe_output)
+    assert not unsafe_output.exists()
+
+
+def test_contact_sheet_does_not_overwrite_an_existing_review(tmp_path, monkeypatch):
+    from PIL import Image
+
+    data_dir = tmp_path / "data"
+    media_dir = data_dir / "generated_videos"
+    media_dir.mkdir(parents=True)
+    monkeypatch.setattr(media_forensics, "DATA_DIR", data_dir)
+    monkeypatch.setattr(media_forensics, "MEDIA_DIR", media_dir)
+    filename = media_forensics.TARGETS[0]
+    (media_dir / filename).write_bytes(b"original")
+    output_dir = tmp_path / "review"
+    output_dir.mkdir()
+    first_sheet = output_dir / (Path(filename).stem + "-contact-sheet.jpg")
+    first_sheet.write_bytes(b"keep-existing-review")
+
+    result = media_forensics.create_review_contact_sheets(
+        [{"file": filename, "decoded_frame_samples": []}], output_dir
+    )
+    assert first_sheet.read_bytes() == b"keep-existing-review"
+    assert Path(result[0]["contact_sheet"]).name.endswith("-contact-sheet-1.jpg")
+    assert result[0]["status"] == "PARTIAL"
+    assert result[0]["frames_extracted"] == 0
+
+
+def test_contact_sheet_never_follows_a_dangling_or_live_output_symlink(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    media_dir = data_dir / "generated_videos"
+    media_dir.mkdir(parents=True)
+    monkeypatch.setattr(media_forensics, "DATA_DIR", data_dir)
+    monkeypatch.setattr(media_forensics, "MEDIA_DIR", media_dir)
+    filename = media_forensics.TARGETS[0]
+    (media_dir / filename).write_bytes(b"original")
+    output_dir = tmp_path / "review"
+    output_dir.mkdir()
+    protected = tmp_path / "protected.jpg"
+    protected.write_bytes(b"do-not-overwrite")
+    link = output_dir / (Path(filename).stem + "-contact-sheet.jpg")
+    link.symlink_to(protected)
+
+    result = media_forensics.create_review_contact_sheets(
+        [{"file": filename, "decoded_frame_samples": []}], output_dir
+    )
+    assert protected.read_bytes() == b"do-not-overwrite"
+    assert link.is_symlink()
+    assert Path(result[0]["contact_sheet"]).name.endswith("-contact-sheet-1.jpg")
