@@ -42,7 +42,7 @@ from pydantic import BaseModel, Field
 from .agents import list_agents
 from .production_catalog import production_catalog
 from .studio_scope import agent_registry, production_plan, scope_summary
-from . import studio_engine, durable_render_queue
+from . import studio_engine, durable_render_queue, render_process
 from .policy import paid_upgrades_allowed, production_actions_allowed, external_publishing_allowed
 from .blender_renderer import BLENDER_DIR, blender_status, render_scene, BlenderUnavailable, BlenderRenderFailed
 from .agent_orchestrator import workflow_team, orchestration_summary
@@ -1832,13 +1832,17 @@ def studio_update_render_queue(item_id: str, payload: StudioRenderUpdateInput, r
 @app.delete("/api/studio/render-queue/{item_id}")
 def studio_cancel_render_queue(item_id: str, request: Request):
     owner = _studio_owner(request)
-    item = durable_render_queue.cancel_queued(owner, item_id)
-    if item:
-        return {"item": item, "cancelled": True}
-    existing = durable_render_queue.get_item(owner, item_id)
-    if not existing:
+    item = durable_render_queue.request_cancel(owner, item_id)
+    if not item:
         raise HTTPException(status_code=404, detail="Render queue item not found.")
-    raise HTTPException(status_code=409, detail="Only queued, unclaimed render jobs can be cancelled.")
+    if item["status"] == "cancelled":
+        return {"item": item, "cancelled": True}
+    if item["status"] == "running" and item.get("cancel_requested"):
+        # The lease-owning worker polls this durable intent and terminates only
+        # the FFmpeg child registered for this exact queue item.
+        render_process.cancel_render_process(item_id)
+        return {"item": item, "cancellation_requested": True}
+    raise HTTPException(status_code=409, detail="Render item is not in a cancellable state.")
 
 
 @app.get("/api/agents")
