@@ -77,23 +77,31 @@
 
 ## Studio modules (15)
 
+### Per-module registry evidence (not functional acceptance)
+- PR #249 merged at `30c81f2097f7019bff97a0a12a7732c1bda1eebf`.
+- Exact-head CI run `44750784853`: 8/8 PASS; 833 tests passed on Python 3.11–3.14; security audit, Chromium, offline video E2E and Docker build passed.
+- `tests/test_studio_module_registry.py` validates each of the 15 declared module names individually against the production catalog and scope summary.
+- This proves registry consistency only. The 15 modules still need dedicated UI/API workflow tests, output verification and physical Android acceptance before being marked functionally complete.
+
+
+
 | # | Module | Registry status | Functional acceptance status | Evidence required |
 |---:|---|---|---|---|
-| 1 | AI Topic Studio | Registered | **UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
-| 2 | AI Writing Studio | Registered | **UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
-| 3 | AI Prompt Studio | Registered | **UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
-| 4 | AI Storyboard Studio | Registered | **UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
-| 5 | AI Image Studio | Registered | **UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
-| 6 | AI Video Studio | Registered | **UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
-| 7 | 2D Animation Studio | Registered | **UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
-| 8 | 3D Animation Studio | Registered | **UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
-| 9 | AI Film Studio | Registered | **UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
-| 10 | Documentary Studio | Registered | **UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
-| 11 | AI Voice Studio | Registered | **UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
-| 12 | AI Music Studio | Registered | **UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
-| 13 | AI Editing Studio | Registered | **UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
-| 14 | Quality Control Studio | Registered | **UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
-| 15 | YouTube Publishing Studio | Registered | **UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
+| 1 | AI Topic Studio | Registered | **REGISTRY TESTED / FUNCTIONAL E2E UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
+| 2 | AI Writing Studio | Registered | **REGISTRY TESTED / FUNCTIONAL E2E UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
+| 3 | AI Prompt Studio | Registered | **REGISTRY TESTED / FUNCTIONAL E2E UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
+| 4 | AI Storyboard Studio | Registered | **REGISTRY TESTED / FUNCTIONAL E2E UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
+| 5 | AI Image Studio | Registered | **REGISTRY TESTED / FUNCTIONAL E2E UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
+| 6 | AI Video Studio | Registered | **REGISTRY TESTED / FUNCTIONAL E2E UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
+| 7 | 2D Animation Studio | Registered | **REGISTRY TESTED / FUNCTIONAL E2E UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
+| 8 | 3D Animation Studio | Registered | **REGISTRY TESTED / FUNCTIONAL E2E UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
+| 9 | AI Film Studio | Registered | **REGISTRY TESTED / FUNCTIONAL E2E UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
+| 10 | Documentary Studio | Registered | **REGISTRY TESTED / FUNCTIONAL E2E UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
+| 11 | AI Voice Studio | Registered | **REGISTRY TESTED / FUNCTIONAL E2E UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
+| 12 | AI Music Studio | Registered | **REGISTRY TESTED / FUNCTIONAL E2E UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
+| 13 | AI Editing Studio | Registered | **REGISTRY TESTED / FUNCTIONAL E2E UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
+| 14 | Quality Control Studio | Registered | **REGISTRY TESTED / FUNCTIONAL E2E UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
+| 15 | YouTube Publishing Studio | Registered | **REGISTRY TESTED / FUNCTIONAL E2E UNVERIFIED** | UI action + backend route + engine execution + persisted output + failure/retry test |
 
 ## Shared acceptance gates
 
