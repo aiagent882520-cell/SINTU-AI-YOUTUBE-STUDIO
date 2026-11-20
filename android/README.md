@@ -30,3 +30,16 @@ This first native client tranche is not yet a complete parity release. Backgroun
 ## CI build evidence
 
 The GitHub Actions workflow `.github/workflows/android-app.yml` runs the URL-validation unit tests and assembles both `app-debug.apk` and `app-release-unsigned.apk`. The debug and unsigned release APKs are uploaded together as the `sintu-android-apks` workflow artifact. A successful CI build proves compilation/package creation, not installation or functional testing on a physical Android device.
+
+
+## Physical-device acceptance (release gate)
+
+Run the repository smoke harness from the project root after connecting one authorized Android device with USB debugging enabled:
+
+```bash
+bash scripts/android_physical_device_smoke.sh
+```
+
+The harness checks the selected device, installs and launches the supplied debug APK, verifies the app process, records basic Android OS/ABI/display/memory diagnostics, and scans recent AndroidRuntime crash logs. Set `ANDROID_SERIAL` when more than one device is attached; the harness intentionally refuses ambiguous device selection. Supply the APK path through the harness-supported environment variable documented in its usage output.
+
+A successful smoke run is only the installation/launch/crash-log gate. A human must still exercise login/session persistence, chat and project persistence, image generation/save, network retry, video render/download/playback, force-stop recovery, accessibility/TalkBack and screen-size layouts. Record device model, Android version, APK SHA-256 and test evidence before marking physical acceptance PASS. CI compilation or emulator-free tests must never be substituted for this gate.
