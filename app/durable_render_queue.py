@@ -195,7 +195,7 @@ def claim_item(owner: str, item_id: str, worker_id: str, *, lease_seconds: int =
         conn.execute("BEGIN IMMEDIATE")
         conn.execute(
             """UPDATE studio_render_queue SET status=CASE WHEN cancel_requested=1 THEN 'cancelled' WHEN attempts>=max_attempts THEN 'dead_letter' ELSE 'queued' END,
-               available_at=?,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,updated_at=?
+               available_at=?,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,cancel_requested=0,updated_at=?
                WHERE status='running' AND lease_expires_at IS NOT NULL AND lease_expires_at<=?""",
             (now_s, now_s, now_s),
         )
