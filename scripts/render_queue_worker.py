@@ -32,14 +32,23 @@ def run_worker(*, once: bool = False, poll_seconds: float = 2.0,
     durable_render_queue.ensure_schema()
     durable_render_queue.recover_expired_leases()
     processed = 0
+    gate_state = None
+    print(f"STARTED worker={worker_id} once={once} poll_seconds={poll_seconds}", flush=True)
     while not stopping.is_set():
         # A separately supervised process must obey the same fail-closed
         # production gate as the HTTP API; queued jobs are not implicit consent.
-        if not production_actions_allowed():
+        enabled = production_actions_allowed()
+        if not enabled:
+            if gate_state != "paused":
+                print("PAUSED: rendering is disabled. Set SINTU_PRODUCTION_ENABLED=true only when the owner intentionally enables local rendering.", flush=True)
+                gate_state = "paused"
             if once:
                 break
             stopping.wait(poll_seconds)
             continue
+        if gate_state != "enabled":
+            print("READY: production rendering enabled; polling durable queue.", flush=True)
+            gate_state = "enabled"
         item = durable_render_queue.claim_next(worker_id, lease_seconds=lease_seconds)
         if item is None:
             if once:
@@ -76,6 +85,7 @@ def run_worker(*, once: bool = False, poll_seconds: float = 2.0,
             heartbeat.join(timeout=2)
         if once:
             break
+    print(f"STOPPED worker={worker_id} completed={processed}", flush=True)
     return processed
 
 
