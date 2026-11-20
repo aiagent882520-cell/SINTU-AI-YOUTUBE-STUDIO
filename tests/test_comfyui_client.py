@@ -280,7 +280,11 @@ def test_comfyui_reports_missing_nodes_and_model_files_together(tmp_path, monkey
 
 def test_comfyui_image_generation_submits_replaced_workflow_and_downloads_output(tmp_path, monkeypatch):
     workflow = tmp_path / "image.json"
-    workflow.write_text(json.dumps(api_workflow()), encoding="utf-8")
+    image_data = api_workflow()
+    image_data["2"]["inputs"].pop("frames")
+    image_data["2"]["inputs"].pop("fps")
+    image_data["2"]["inputs"]["negative"] = "__SINTU_NEGATIVE__"
+    workflow.write_text(json.dumps(image_data), encoding="utf-8")
     monkeypatch.setenv("COMFYUI_IMAGE_WORKFLOW_PATH", str(workflow))
     monkeypatch.setattr(comfyui_client, "image_workflow_status", lambda: {
         "available": True, "base_url": "http://127.0.0.1:8188"
