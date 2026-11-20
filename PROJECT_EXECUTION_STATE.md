@@ -1564,3 +1564,14 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Reviewed `scripts/media_forensics.py` and `docs/TERMUX_BLACK_MP4_FORENSIC_RUN.md`. The current scanner has five hard-coded filenames from the historical Android health audit, while the current owner instruction refers to three original MP4s. Their identity mapping is not established in this session; do not assume the five historical candidates are the same three originals.
 - Updated the forensic runbook at commit `cb7f02b8b8184afd450cee3fd1264e819a08c1d7` to require owner-confirmed filenames/SHA-256 matching before attribution and to prohibit overwriting/copying originals onto historical candidate paths.
 - No original media files were available here; no hashes, frame samples, repair outputs or playback results are claimed. The physical forensic execution remains BLOCKED pending the original files and device/data access.
+
+
+## YouTube upload history API port — 2026-11-20
+
+- Status: PARTIAL pending exact-head CI and merge. Ported the isolated safe upload-history endpoint from diverged PR #236 onto current main in PR #252 rather than merging its 22-ahead/29-behind branch.
+- Branch commits: `c83d75d` (endpoint + allowlisted fields), `3524ebe` (API regression tests); PR #252 head at checkpoint: `3524ebe2ec40d9570c9001e130c3adcc6bb6af55`.
+- Files: `app/main.py`, `tests/test_youtube_upload_history.py`.
+- Acceptance covered: newest-first ordering; bounded limit; allowlisted status filter; acknowledged-byte progress; no encrypted session URI, file SHA-256 or description SHA-256 leakage; invalid status and oversized limit rejection.
+- Test command intended for CI: `pytest -q tests/test_youtube_upload_history.py`; no local test execution is claimed in this connector-only session. Exact-head CI pending.
+- No live OAuth, resumable network upload, channel authorization or published video is claimed. Existing publishing safety gates remain unchanged.
+- Next executable task after CI: port editor draft recovery / undo-redo as isolated current-main changes; then continue module-specific API acceptance. Android physical test and YouTube live upload remain external blockers.
