@@ -1809,11 +1809,11 @@ def studio_get_render_queue(request: Request, project_id: str | None = None):
 def studio_enqueue_render(
     payload: StudioRenderInput,
     request: Request,
-    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     _studio_project_or_404(payload.project_id, request)
     if len(json.dumps(payload.payload, ensure_ascii=False)) > 20000:
         raise HTTPException(status_code=400, detail="Render payload is too large.")
+    idempotency_key = request.headers.get("Idempotency-Key")
     try:
         item = durable_render_queue.enqueue(
             _studio_owner(request), payload.project_id, payload.payload,
