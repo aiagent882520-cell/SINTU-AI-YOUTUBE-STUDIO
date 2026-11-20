@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Header, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 router = APIRouter(prefix="/api/termux-bridge", tags=["Termux Bridge"])
 
@@ -107,6 +107,8 @@ def _authorize(authorization: str | None, *, worker: bool = False) -> None:
 
 
 class CreateJobInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     action: Literal["git_status", "git_pull_ff_only", "run_tests", "compile_check", "automation_self_test", "health_audit", "operational_readiness", "live_preflight", "engine_probe", "safe_optional_install", "restart_services", "media_repair", "media_forensics", "watchdog_recovery_test", "offline_video_e2e", "full_self_test", "full_studio_e2e"]
     test_path: str | None = Field(default=None, max_length=160)
     topic: str | None = Field(default=None, max_length=300)
