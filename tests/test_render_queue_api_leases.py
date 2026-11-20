@@ -78,3 +78,20 @@ def test_external_worker_respects_production_pause(tmp_path, monkeypatch, capsys
     assert "STARTED worker=" in output
     assert "PAUSED: rendering is disabled" in output
     assert "STOPPED worker=" in output
+
+
+def test_render_queue_api_replays_idempotent_request_and_rejects_key_reuse(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(main, "DB_PATH", tmp_path / "sintu_studio.db")
+    monkeypatch.setattr(main, "_studio_owner", lambda request: "owner")
+    monkeypatch.setattr(main, "_studio_project_or_404", lambda project_id, request: {"id": project_id})
+    payload = main.StudioRenderInput(project_id="e" * 32, payload={"title": "idempotent"})
+    first = main.studio_enqueue_render(payload, object(), idempotency_key="api-request-1")
+    replay = main.studio_enqueue_render(payload, object(), idempotency_key="api-request-1")
+    assert replay["item"]["id"] == first["item"]["id"]
+    with pytest.raises(main.HTTPException) as conflict:
+        main.studio_enqueue_render(
+            main.StudioRenderInput(project_id="e" * 32, payload={"title": "different"}),
+            object(), idempotency_key="api-request-1",
+        )
+    assert conflict.value.status_code == 409
