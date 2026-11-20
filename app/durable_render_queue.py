@@ -138,7 +138,7 @@ def recover_expired_leases(*, now: datetime | None = None) -> dict:
         queued = conn.execute(
             """UPDATE studio_render_queue
                SET status='queued',available_at=?,last_error=CASE WHEN cancel_requested=1 THEN 'Cancelled during worker recovery.' ELSE COALESCE(last_error,'Worker lease expired; job recovered.') END,
-                   lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,updated_at=?
+                   lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,cancel_requested=0,updated_at=?
                WHERE status='running' AND lease_expires_at IS NOT NULL AND lease_expires_at<=?
                  AND cancel_requested=0 AND attempts<max_attempts""", (current, current, current)
         ).rowcount
@@ -156,8 +156,8 @@ def claim_next(worker_id: str, *, lease_seconds: int = 900, owner: str | None = 
         # Reclaim expired leases inside the same write transaction as claiming.
         conn.execute(
             """UPDATE studio_render_queue SET status=CASE WHEN cancel_requested=1 THEN 'cancelled' WHEN attempts>=max_attempts THEN 'dead_letter' ELSE 'queued' END,
-               available_at=?,last_error=COALESCE(last_error,'Worker lease expired; job recovered.'),
-               lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,updated_at=?
+               available_at=?,last_error=CASE WHEN cancel_requested=1 THEN 'Cancelled while recovering expired worker lease.' ELSE COALESCE(last_error,'Worker lease expired; job recovered.') END,
+               lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,cancel_requested=0,updated_at=?
                WHERE status='running' AND lease_expires_at IS NOT NULL AND lease_expires_at<=?""",
             (now_s, now_s, now_s),
         )
@@ -194,7 +194,7 @@ def claim_item(owner: str, item_id: str, worker_id: str, *, lease_seconds: int =
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         conn.execute(
-            """UPDATE studio_render_queue SET status=CASE WHEN attempts>=max_attempts THEN 'dead_letter' ELSE 'queued' END,
+            """UPDATE studio_render_queue SET status=CASE WHEN cancel_requested=1 THEN 'cancelled' WHEN attempts>=max_attempts THEN 'dead_letter' ELSE 'queued' END,
                available_at=?,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,updated_at=?
                WHERE status='running' AND lease_expires_at IS NOT NULL AND lease_expires_at<=?""",
             (now_s, now_s, now_s),
