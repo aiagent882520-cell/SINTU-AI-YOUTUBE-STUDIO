@@ -47,6 +47,7 @@ stop_expected() {
 # signalling. Never kill a PID based only on a stale PID file.
 stop_expected "$LOG_DIR/server.pid" "uvicorn app.main:app" || exit 1
 stop_expected "$LOG_DIR/bridge-worker.pid" "scripts/termux_bridge_worker.py" || exit 1
+stop_expected "$LOG_DIR/render-worker.pid" "scripts/render_queue_worker.py" || exit 1
 stop_expected "$LOG_DIR/github-relay.pid" "scripts/github_termux_relay.py" || exit 1
 
 sleep 2
