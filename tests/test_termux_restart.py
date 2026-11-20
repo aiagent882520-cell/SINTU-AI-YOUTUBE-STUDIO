@@ -32,6 +32,7 @@ def test_delayed_restart_uses_fixed_pid_files_and_command_identity():
     assert 'stop_expected "$LOG_DIR/render-worker.pid" "scripts/render_queue_worker.py" 960' in helper
     assert 'local graceful_wait_seconds="${3:-5}"' in helper
     assert 'graceful_wait_seconds * 4' in helper
+    assert 'for _ in $(seq 1 $((graceful_wait_seconds * 4))); do' in helper
     assert 'stop_expected "$LOG_DIR/github-relay.pid" "scripts/github_termux_relay.py"' in helper
     assert 'tr \'\\0\' ' in helper
     assert 'ps -o args= -p "$pid"' in helper
