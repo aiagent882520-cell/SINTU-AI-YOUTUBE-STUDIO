@@ -91,7 +91,7 @@ def test_schema_migrates_existing_studio_queue_without_losing_rows(tmp_path, mon
         )
     queue.ensure_schema()
     columns = {row["name"] for row in queue._connect().execute("PRAGMA table_info(studio_render_queue)")}
-    assert {"lease_owner", "lease_token", "lease_expires_at", "heartbeat_at", "available_at", "attempts", "max_attempts", "last_error"} <= columns
+    assert {"lease_owner", "lease_token", "lease_expires_at", "heartbeat_at", "available_at", "attempts", "max_attempts", "last_error", "idempotency_key"} <= columns
     claimed = queue.claim_next("migration-worker", lease_seconds=60)
     assert claimed["id"] == "legacy-id"
     assert claimed["payload"] == {"title": "legacy"}
@@ -167,3 +167,31 @@ def test_actual_worker_process_exit_recovers_after_lease_expiry(tmp_path, monkey
     replacement = queue.claim_next("replacement-after-crash", lease_seconds=60, now=expired)
     assert replacement["id"] == item["id"]
     assert replacement["lease_token"] != old_token
+
+
+def test_idempotency_key_returns_existing_job_without_duplicate(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    first = queue.enqueue("owner", "project", {"title": "same"}, idempotency_key="request-123")
+    replay = queue.enqueue("owner", "project", {"title": "same"}, idempotency_key="request-123")
+    assert replay["id"] == first["id"]
+    assert replay["idempotency_key"] == "request-123"
+    assert queue.claim_next("worker", lease_seconds=60)["id"] == first["id"]
+    assert queue.claim_next("worker", lease_seconds=60) is None
+
+
+def test_idempotency_key_rejects_different_payload_or_project(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    queue.enqueue("owner", "project-a", {"title": "original"}, idempotency_key="request-456")
+    with pytest.raises(ValueError, match="different render request"):
+        queue.enqueue("owner", "project-a", {"title": "changed"}, idempotency_key="request-456")
+    with pytest.raises(ValueError, match="different render request"):
+        queue.enqueue("owner", "project-b", {"title": "original"}, idempotency_key="request-456")
+
+
+def test_idempotency_keys_are_scoped_to_owner_and_validate_length(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_DATA_DIR", str(tmp_path))
+    first = queue.enqueue("owner-a", "project", {"title": "same"}, idempotency_key="shared-key")
+    second = queue.enqueue("owner-b", "project", {"title": "same"}, idempotency_key="shared-key")
+    assert first["id"] != second["id"]
+    with pytest.raises(ValueError, match="1-200"):
+        queue.enqueue("owner-a", "project", {"title": "bad"}, idempotency_key="x" * 201)
