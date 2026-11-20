@@ -293,6 +293,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         audio_codec = str(audio_stream.get("codec_name", "")).lower() if audio_stream else ""
         audio_sample_rate = int(audio_stream.get("sample_rate", 0)) if audio_stream else 0
         audio_channels = int(audio_stream.get("channels", 0)) if audio_stream else 0
+        audio_duration = float(audio_stream.get("duration", 0)) if audio_stream else 0.0
         names = str(fmt.get("format_name", "")).lower().split(",")
         has_audio = any(item.get("codec_type") == "audio" for item in metadata.get("streams", []))
         frame_rate_num, frame_rate_den = (int(part) for part in str(video.get("avg_frame_rate", "0/1")).split("/", 1))
@@ -316,6 +317,15 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         raise RenderFailed("Final video frame rate expected FPS se match nahi karta.")
     if require_audio is not None and has_audio != require_audio:
         raise RenderFailed("Final video audio stream expected setting se match nahi karti.")
+    if has_audio:
+        sync_tolerance = max(0.5, 2.0 / expected_fps)
+        if (not math.isfinite(audio_duration) or audio_duration <= 0
+                or abs(audio_duration - video_duration) > sync_tolerance):
+            raise RenderFailed(
+                "Audio/video stream durations are not synchronized "
+                f"(audio={audio_duration:.3f}s, video={video_duration:.3f}s, "
+                f"tolerance={sync_tolerance:.3f}s)."
+            )
 
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
@@ -372,6 +382,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         )
     verified = {"verified": True, "duration_seconds": duration, "video_duration_seconds": video_duration,
                 "frame_count": frame_count, "fps": actual_fps,
+                "audio_duration_seconds": audio_duration if has_audio else None,
                 "resolution": f"{width}x{height}", "video_codec": codec, "audio": has_audio,
                 "black_intervals": black_intervals,
                 "longest_black_segment_seconds": round(longest_black_seconds, 3),
