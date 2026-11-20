@@ -74,8 +74,15 @@ def run_worker(*, once: bool = False, poll_seconds: float = 2.0,
         try:
             with render_process.render_job(item["id"]):
                 result = render_video(RenderInput(**item["payload"]))
-            if lease_lost.is_set() or not durable_render_queue.complete(item["id"], lease_token, result):
-                print(f"STALE_OUTPUT_DISCARDED job={item['id']} worker={worker_id}", flush=True)
+            if durable_render_queue.cancellation_requested(item["id"], lease_token):
+                durable_render_queue.finalize_cancelled(item["id"], lease_token)
+                print(f"CANCELLED job={item['id']} worker={worker_id}", flush=True)
+            elif lease_lost.is_set() or not durable_render_queue.complete(item["id"], lease_token, result):
+                if durable_render_queue.cancellation_requested(item["id"], lease_token):
+                    durable_render_queue.finalize_cancelled(item["id"], lease_token)
+                    print(f"CANCELLED job={item['id']} worker={worker_id}", flush=True)
+                else:
+                    print(f"STALE_OUTPUT_DISCARDED job={item['id']} worker={worker_id}", flush=True)
             else:
                 processed += 1
                 print(f"COMPLETED job={item['id']} worker={worker_id}", flush=True)
