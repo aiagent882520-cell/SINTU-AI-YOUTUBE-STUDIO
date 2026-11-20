@@ -1,4 +1,5 @@
 import json
+import pytest
 from pathlib import Path
 from scripts import media_forensics
 from scripts.media_forensics import parse_black_intervals, redact_secrets
