@@ -433,6 +433,8 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
         names = str(fmt.get("format_name", "")).lower().split(",")
         numerator, denominator = (int(part) for part in str(video.get("avg_frame_rate", "0/1")).split("/", 1))
         fps = numerator / denominator if denominator else 0
+        audio_stream = next((item for item in streams if item.get("codec_type") == "audio"), None)
+        audio_duration = float(audio_stream.get("duration", 0)) if audio_stream else None
     except (AttributeError, TypeError, ValueError, StopIteration, json.JSONDecodeError, ZeroDivisionError):
         raise RenderFailed("Upload MP4 mein valid video stream/frame metadata nahi hai.") from None
     if not any(name in {"mov", "mp4", "m4a", "3gp", "3g2", "mj2"} for name in names):
@@ -446,6 +448,13 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
     minimum_frames = max(1, math.floor(duration * fps * 0.95))
     if frame_count < minimum_frames or abs(duration - video_duration) > max(0.5, 2 / fps):
         raise RenderFailed("Upload MP4 truncated hai: actual frames aur video duration match nahi karte.")
+    if audio_stream is not None:
+        if (audio_duration is None or not math.isfinite(audio_duration) or audio_duration <= 0
+                or abs(audio_duration - video_duration) > max(0.5, 2 / fps)):
+            raise RenderFailed(
+                "Upload MP4 audio/video streams are not synchronized "
+                f"(audio={audio_duration}, video={video_duration:.3f}s)."
+            )
 
     # Metadata alone does not prove that the encoded picture contains visible
     # content. Reject full-duration black exports and sample short clips too;
@@ -524,7 +533,7 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
         motion_audit = validate_sampled_motion(pixels.stdout, minimum_ratio=0.40)
     return {
         "verified": True, "size_bytes": size, "duration_seconds": duration,
-        "video_duration_seconds": video_duration, "frame_count": frame_count,
+        "video_duration_seconds": video_duration, "audio_duration_seconds": audio_duration, "frame_count": frame_count,
         "fps": fps, "resolution": f"{width}x{height}", "video_codec": codec,
         "black_intervals": black_intervals,
         "longest_black_segment_seconds": round(longest_black_seconds, 3),
