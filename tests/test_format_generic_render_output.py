@@ -4,8 +4,6 @@ Only three tiny MP4 fixtures are encoded (one per distinct output profile) and
 reused by the 56 formats that advertise generic media assembly. This is not
 native generation acceptance for specialized engines.
 """
-from pathlib import Path
-
 import pytest
 from PIL import Image
 
@@ -62,7 +60,7 @@ def generic_render_outputs(tmp_path_factory):
             assert verified["fps"] == pytest.approx(24, abs=0.1)
             assert verified["video_codec"] == "h264"
             assert verified["visible_frame_count"] >= 1
-            outputs[resolution] = verified
+            outputs[resolution] = {"verified": verified, "render": result}
         yield outputs
     finally:
         video_renderer.OUTPUT_DIR = previous_dir
@@ -77,11 +75,13 @@ def test_each_format_has_a_real_generic_mp4_output_or_explicit_engine_block(
     if format_id in SPECIALIZED_BLOCKED:
         assert profile["generic_export_available"] is False
         assert profile["limitations"]
-        assert profile["default_resolution"] not in generic_render_outputs or True
         return
 
     assert profile["generic_export_available"] is True
-    verified = generic_render_outputs[profile["default_resolution"]]
+    output = generic_render_outputs[profile["default_resolution"]]
+    verified = output["verified"]
+    assert output["render"]["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
+    assert output["render"]["subtitles_burned_in"] is False
     expected_size = SMALL_PROFILES[profile["default_resolution"]]
     assert verified["verified"] is True
     assert verified["resolution"] == f"{expected_size[0]}x{expected_size[1]}"
