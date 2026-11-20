@@ -1365,3 +1365,14 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Real ComfyUI generative inference: UNVERIFIED pending reachable host, compatible model weights/workflow and successful inference; procedural fallback is not AI inference.
 - Live YouTube OAuth consent, channel ownership and resumable upload: BLOCKED pending owner credentials and explicit authorization.
 - Full website journeys/accessibility and individual acceptance of all 60 formats / 15 modules: UNVERIFIED.
+
+
+## Continued execution checkpoint (2026-11-20)
+
+- Durable worker PR #239 merged to main; Android physical-device smoke harness PR #240 merged; execution checkpoint PR #238 merged. See the merge commits recorded in the project history.
+- Main commit at the start of this verification: `583fc031af96722297e5ec06046f5bab04d7046c`.
+- Main CI run `44662198484`: Python 3.11, 3.12, 3.13, 3.14 and dependency security audit PASS; Chromium Video Editor browser tests and production Docker build PASS. Offline branded-video E2E/motion audit remained IN_PROGRESS at the latest poll. Do not call the full workflow green until that job completes.
+- PR #241 (`97f0f775bb52e895f05eb6d5d0309afc3284fc0a`) changes only the mixed-timeline integration test profile (12 fps) and asserts the output frame rate; production renderer defaults are unchanged. Its Python 3.11-3.14 matrix, security audit, Chromium browser tests and Docker build PASS; offline branded-video E2E/motion audit remained IN_PROGRESS at latest poll. PR is not merged pending that final job.
+- PR #236 (`d5decc39695e1f150ecac52ab8d7dba7d4fd0516`) is open against main and mergeable, but its available green checks are from earlier run `44531566887` / `44531566929`, before current main changes. No review submissions are recorded. Revalidate against current main and obtain independent review before merging.
+- FastAPI Cloud check for the main deployment failed (check `136042837437`); GitHub supplied no failure summary or annotations. Root cause remains unknown without provider deployment logs. Do not report deployment success.
+- External acceptance remains unverified: physical Android device test, reachable ComfyUI model inference, live YouTube OAuth/channel/upload, and forensic audit of the three private black MP4 files. CI/offline rendering is not a substitute for these.
