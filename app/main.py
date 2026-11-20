@@ -1772,7 +1772,10 @@ def studio_execute_render_queue(item_id: str, request: Request):
     stop_heartbeat = threading.Event()
 
     def renew_lease():
-        while not stop_heartbeat.wait(30):
+        while not stop_heartbeat.wait(1):
+            if durable_render_queue.cancellation_requested(item_id, lease_token):
+                render_process.cancel_render_process(item_id)
+                continue
             if not durable_render_queue.heartbeat(item_id, lease_token, lease_seconds=1800):
                 stop_heartbeat.set()
                 return
@@ -1781,11 +1784,15 @@ def studio_execute_render_queue(item_id: str, request: Request):
     heartbeat_thread.start()
     try:
         render_payload = RenderInput(**item["payload"])
-        result = render_video(render_payload)
+        with render_process.render_job(item_id):
+            result = render_video(render_payload)
         if not durable_render_queue.complete(item_id, lease_token, result):
             raise HTTPException(status_code=409, detail="Render lease expired or was reclaimed; stale worker output was not published.")
         completed = durable_render_queue.get_item(owner, item_id)
         return {"item": completed, "render": result}
+    except render_process.RenderProcessCancelled:
+        durable_render_queue.finalize_cancelled(item_id, lease_token)
+        return {"item": durable_render_queue.get_item(owner, item_id), "cancelled": True}
     except HTTPException as exc:
         durable_render_queue.fail(item_id, lease_token, str(exc.detail), retry_base_seconds=15)
         raise
