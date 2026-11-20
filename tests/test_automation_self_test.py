@@ -36,14 +36,14 @@ def test_automation_self_test_rejects_stale_relay_heartbeat(tmp_path):
     os.utime(target, (100.0, 100.0))
 
     with pytest.raises(RuntimeError, match="stale"):
-        automation_self_test.relay_heartbeat_status(target, now=200.0)
+        automation_self_test.relay_heartbeat_status(target, now=2201.0)
 
 
 def test_automation_self_test_accepts_recent_relay_heartbeat(tmp_path):
     target = tmp_path / "github-relay.heartbeat"
     target.write_text("successful poll", encoding="utf-8")
-    os.utime(target, (195.0, 195.0))
+    os.utime(target, (2195.0, 2195.0))
 
-    assert automation_self_test.relay_heartbeat_status(target, now=200.0) == {
+    assert automation_self_test.relay_heartbeat_status(target, now=2200.0) == {
         "last_successful_poll_age_seconds": 5.0
     }
