@@ -259,9 +259,9 @@ test("real Chromium groups editor edits into undo and redo snapshots", async () 
   try {
     await page.evaluate(() => {
       document.getElementById("renderTimeline").value =
-        "image:" + "a".repeat(32) + ":2:cut\\nimage:" + "b".repeat(32) + ":2:cut";
-      document.getElementById("renderScenes").value = "First scene\\nSecond scene";
-      document.getElementById("renderSubtitles").value = "पहला दृश्य\\nदूसरा दृश्य";
+        "image:" + "a".repeat(32) + ":2:cut\nimage:" + "b".repeat(32) + ":2:cut";
+      document.getElementById("renderScenes").value = "First scene\nSecond scene";
+      document.getElementById("renderSubtitles").value = "पहला दृश्य\nदूसरा दृश्य";
       for (const id of ["renderTimeline", "renderScenes", "renderSubtitles"]) {
         document.getElementById(id).dispatchEvent(new Event("input", { bubbles: true }));
       }
@@ -272,8 +272,8 @@ test("real Chromium groups editor edits into undo and redo snapshots", async () 
     assert.equal(await page.locator("#renderTimeline").inputValue(), "");
     assert.equal(await page.locator("#renderScenes").inputValue(), "");
     await page.locator("#timelineRedo").click();
-    assert.match(await page.locator("#renderTimeline").inputValue(), /^image:a{32}:2:cut\\nimage:b{32}:2:cut$/);
-    assert.equal(await page.locator("#renderScenes").inputValue(), "First scene\\nSecond scene");
+    assert.match(await page.locator("#renderTimeline").inputValue(), /^image:a{32}:2:cut\nimage:b{32}:2:cut$/);
+    assert.equal(await page.locator("#renderScenes").inputValue(), "First scene\nSecond scene");
 
     await page.locator("#renderTitle").fill("Updated title");
     await page.waitForTimeout(450);
