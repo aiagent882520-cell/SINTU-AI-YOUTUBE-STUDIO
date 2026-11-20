@@ -1557,3 +1557,10 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - The merge-triggered main CI run `44753948548` for the exact merge commit is in progress at checkpoint time; do not treat it as complete until all jobs finish.
 - Open engineering work remains: PR #236 (editor recovery + native Android Image Studio + YouTube history), PR #235 (native Android Image Studio), PR #231 (YouTube upload history), PR #230 (editor undo/redo), PR #225 (browser draft recovery), plus older render queue PRs #206/#207 requiring careful base/architecture review. Do not merge overlapping feature branches without rebasing and exact-head CI.
 - Physical Termux reboot/recovery, three original black MP4 forensic hashes/analysis, real ComfyUI inference, Android physical installation/playback, and live YouTube OAuth/upload remain external/device/file/credential gates. No such result is claimed by this checkpoint.
+
+
+## Forensic target provenance clarification — 2026-11-20
+
+- Reviewed `scripts/media_forensics.py` and `docs/TERMUX_BLACK_MP4_FORENSIC_RUN.md`. The current scanner has five hard-coded filenames from the historical Android health audit, while the current owner instruction refers to three original MP4s. Their identity mapping is not established in this session; do not assume the five historical candidates are the same three originals.
+- Updated the forensic runbook at commit `cb7f02b8b8184afd450cee3fd1264e819a08c1d7` to require owner-confirmed filenames/SHA-256 matching before attribution and to prohibit overwriting/copying originals onto historical candidate paths.
+- No original media files were available here; no hashes, frame samples, repair outputs or playback results are claimed. The physical forensic execution remains BLOCKED pending the original files and device/data access.
