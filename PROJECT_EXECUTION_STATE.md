@@ -1537,3 +1537,13 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Three original black MP4s remain unavailable in this session. The read-only scanner and device instructions are prepared; no original was hashed or modified here, and no repair output was fabricated.
 - ComfyUI real inference, YouTube live OAuth and native hardware-heavy engines remain unverified. Keep production publishing disabled.
 - Automation is not declared 100% verified until physical device acceptance passes. Product remains incomplete; do not declare COMPLETE or PRODUCTION READY.
+
+
+## Generic MP4 output acceptance checkpoint — 2026-11-20
+
+- PR #250 merged: `39be010bc3574929717c57a723800845fbc2b9be`. Exact-head CI run `44751591252`: 8/8 PASS; 898 tests passed on Python 3.11–3.14, dependency security audit PASS, Chromium Video Editor PASS, offline Hindi MP4 generation + 60-second subtitle + black-frame/motion audit PASS, Docker build and health PASS.
+- Three real tiny FFmpeg outputs (portrait, square, landscape) were generated and passed the full publish verifier. Each of the 56 generic-export-capable format IDs has an individually named test matching its profile to the appropriate actual output resolution, H.264, 24 FPS, visible decoded frames, SINTU watermark and no burned-in text.
+- Four specialized formats (360-video, VR-video, AR-video, virtual-production) remain explicitly blocked. The 56 generic tests are not native AI generation or separate long-duration format-specific E2E.
+- `docs/FORMAT_MODULE_ACCEPTANCE_MATRIX.md` now records generic output evidence separately from native E2E and human review.
+- 15 modules have registry consistency tests only; dedicated UI/API workflows remain unverified.
+- Physical Android/Termux and original MP4 forensic gates remain blocked as documented above. Product is not COMPLETE or PRODUCTION READY.
