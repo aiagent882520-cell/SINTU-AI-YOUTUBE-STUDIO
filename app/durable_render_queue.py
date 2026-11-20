@@ -55,12 +55,14 @@ def ensure_schema() -> None:
             "attempts": "INTEGER NOT NULL DEFAULT 0",
             "max_attempts": "INTEGER NOT NULL DEFAULT 4",
             "last_error": "TEXT",
+            "idempotency_key": "TEXT",
         }
         for name, declaration in migrations.items():
             if name not in columns:
                 conn.execute(f"ALTER TABLE studio_render_queue ADD COLUMN {name} {declaration}")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_render_queue_claim ON studio_render_queue(status, available_at, created_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_render_queue_lease ON studio_render_queue(status, lease_expires_at)")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_render_queue_idempotency ON studio_render_queue(owner, idempotency_key) WHERE idempotency_key IS NOT NULL")
 
 
 def _decode(row: sqlite3.Row | None) -> dict | None:
@@ -73,21 +75,39 @@ def _decode(row: sqlite3.Row | None) -> dict | None:
     return item
 
 
-def enqueue(owner: str, project_id: str, payload: dict, *, max_attempts: int = 4) -> dict:
+def enqueue(owner: str, project_id: str, payload: dict, *, max_attempts: int = 4,
+            idempotency_key: str | None = None) -> dict:
     ensure_schema()
     if not owner or not project_id or not isinstance(payload, dict):
         raise ValueError("owner, project_id and object payload are required")
     if not 1 <= int(max_attempts) <= 20:
         raise ValueError("max_attempts must be between 1 and 20")
+    if idempotency_key is not None and (
+        not isinstance(idempotency_key, str) or not idempotency_key.strip()
+        or len(idempotency_key) > 200
+    ):
+        raise ValueError("idempotency_key must be 1-200 non-empty characters")
     import uuid
     item_id, now = uuid.uuid4().hex, _stamp()
+    encoded_payload = json.dumps(payload, ensure_ascii=False, sort_keys=True)
     with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if idempotency_key is not None:
+            existing = conn.execute(
+                "SELECT * FROM studio_render_queue WHERE owner=? AND idempotency_key=?",
+                (owner, idempotency_key),
+            ).fetchone()
+            if existing is not None:
+                existing_item = _decode(existing)
+                if existing_item["project_id"] != project_id or existing_item["payload"] != payload:
+                    raise ValueError("idempotency_key was already used for a different render request")
+                return existing_item
         conn.execute(
             """INSERT INTO studio_render_queue
                (id,owner,project_id,status,payload_json,created_at,updated_at,
-                available_at,max_attempts,attempts)
-               VALUES(?,?,?,'queued',?,?,?,?,?,0)""",
-            (item_id, owner, project_id, json.dumps(payload, ensure_ascii=False), now, now, now, max_attempts),
+                available_at,max_attempts,attempts,idempotency_key)
+               VALUES(?,?,?,'queued',?,?,?,?,?,0,?)""",
+            (item_id, owner, project_id, encoded_payload, now, now, now, max_attempts, idempotency_key),
         )
         row = conn.execute("SELECT * FROM studio_render_queue WHERE id=?", (item_id,)).fetchone()
     return _decode(row)
