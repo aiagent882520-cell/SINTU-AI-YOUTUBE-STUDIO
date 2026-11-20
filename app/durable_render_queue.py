@@ -120,6 +120,14 @@ def recover_expired_leases(*, now: datetime | None = None) -> dict:
     current = _stamp(now)
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            """UPDATE studio_render_queue SET status='cancelled',cancel_requested=0,
+               lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL,
+               last_error='Cancelled while recovering expired worker lease.',updated_at=?
+               WHERE status='running' AND cancel_requested=1
+                 AND lease_expires_at IS NOT NULL AND lease_expires_at<=?""",
+            (current, current),
+        )
         dead = conn.execute(
             """UPDATE studio_render_queue
                SET status='dead_letter',last_error=COALESCE(last_error,'Worker lease expired; retry budget exhausted.'),
