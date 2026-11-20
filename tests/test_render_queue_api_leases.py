@@ -86,12 +86,13 @@ def test_render_queue_api_replays_idempotent_request_and_rejects_key_reuse(tmp_p
     monkeypatch.setattr(main, "_studio_owner", lambda request: "owner")
     monkeypatch.setattr(main, "_studio_project_or_404", lambda project_id, request: {"id": project_id})
     payload = main.StudioRenderInput(project_id="e" * 32, payload={"title": "idempotent"})
-    first = main.studio_enqueue_render(payload, object(), idempotency_key="api-request-1")
-    replay = main.studio_enqueue_render(payload, object(), idempotency_key="api-request-1")
+    request = type("Request", (), {"headers": {"Idempotency-Key": "api-request-1"}})()
+    first = main.studio_enqueue_render(payload, request)
+    replay = main.studio_enqueue_render(payload, request)
     assert replay["item"]["id"] == first["item"]["id"]
     with pytest.raises(main.HTTPException) as conflict:
         main.studio_enqueue_render(
             main.StudioRenderInput(project_id="e" * 32, payload={"title": "different"}),
-            object(), idempotency_key="api-request-1",
+            request,
         )
     assert conflict.value.status_code == 409
