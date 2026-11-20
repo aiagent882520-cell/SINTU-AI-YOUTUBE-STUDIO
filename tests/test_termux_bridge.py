@@ -70,6 +70,15 @@ def test_bridge_rejects_arbitrary_commands_and_unsafe_test_paths(tmp_path, monke
     ).status_code == 400
 
 
+def test_bridge_rejects_unknown_fields_even_for_valid_actions(tmp_path, monkeypatch):
+    client, api_headers, _ = bridge_client(tmp_path, monkeypatch)
+    response = client.post(
+        "/api/termux-bridge/jobs", headers=api_headers,
+        json={"action": "git_status", "command": "rm -rf /"},
+    )
+    assert response.status_code == 422
+
+
 def test_bridge_requires_a_strong_configured_token(tmp_path, monkeypatch):
     client, _, _ = bridge_client(tmp_path, monkeypatch)
     monkeypatch.setenv("SINTU_BRIDGE_TOKEN", "short")
