@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from app import ai_brain
@@ -172,3 +174,75 @@ def test_deepseek_chat_completion_uses_official_compatible_endpoint(monkeypatch)
     assert captured["url"] == "https://api.deepseek.com/chat/completions"
     assert captured["auth"] == "Bearer test-key"
     assert '"model": "deepseek-flash"' in captured["body"]
+
+
+def test_claude_provider_status_never_exposes_key(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "claude-secret-test")
+    monkeypatch.setenv("ANTHROPIC_MODEL", "claude-sonnet-5-5")
+    monkeypatch.setattr(ai_brain, "_ollama_status", lambda: {
+        "service_running": False, "model_available": False,
+        "model": "qwen2.5:3b", "base_url": "http://127.0.0.1:11434"
+    })
+    monkeypatch.setattr(ai_brain, "_local_openai_compatible_status", lambda: {
+        "service_running": False, "model_available": False,
+        "model": "auto", "base_url": "http://127.0.0.1:8080/v1"
+    })
+    status = ai_brain.provider_status()
+    assert status["claude"] == {"configured": True, "model": "claude-sonnet-5-5"}
+    assert "claude-secret-test" not in repr(status)
+
+
+def test_claude_provider_is_locked_until_revenue_and_approval(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "claude")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "false")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "false")
+    with pytest.raises(ai_brain.ProviderNotConfigured, match="Paid upgrade locked"):
+        ai_brain._selected_provider()
+
+
+def test_claude_provider_without_key_fails(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "claude")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
+    with pytest.raises(ai_brain.ProviderNotConfigured, match="API key server par set nahi hai"):
+        ai_brain._selected_provider()
+
+
+def test_claude_messages_api_uses_official_endpoint_and_parses_text(monkeypatch):
+    class FakeResponse:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self):
+            return b'{"content":[{"type":"thinking","thinking":"internal"},{"type":"text","text":"Namaste from Claude"}]}'
+    captured = {}
+    def fake_urlopen(request, timeout=0):
+        captured["url"] = request.full_url
+        captured["api_key"] = request.get_header("X-api-key")
+        captured["version"] = request.get_header("Anthropic-version")
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        return FakeResponse()
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
+    monkeypatch.setenv("ANTHROPIC_MODEL", "claude-sonnet-5-5")
+    monkeypatch.setenv("ANTHROPIC_API_VERSION", "2026-10-21")
+    monkeypatch.setattr(ai_brain.urllib.request, "urlopen", fake_urlopen)
+    assert ai_brain._generate_claude("hello") == "Namaste from Claude"
+    assert captured["url"] == "https://api.anthropic.com/v1/messages"
+    assert captured["api_key"] == "test-anthropic-key"
+    assert captured["version"] == "2026-10-21"
+    assert captured["body"]["model"] == "claude-sonnet-5-5"
+    assert captured["body"]["messages"] == [{"role": "user", "content": "hello"}]
+
+
+def test_claude_generation_uses_selected_provider(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "claude")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
+    monkeypatch.setattr(ai_brain, "_generate_claude", lambda prompt: "Claude deliverable")
+    monkeypatch.setattr(ai_brain, "provider_status", lambda selected_override=None: {
+        "claude": {"configured": True, "model": "claude-sonnet-5-5"}
+    })
+    result = ai_brain.generate_text("topic", "content")
+    assert result == {"provider": "claude", "model": "claude-sonnet-5-5", "output": "Claude deliverable"}
