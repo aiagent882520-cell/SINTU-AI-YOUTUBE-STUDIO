@@ -12,6 +12,10 @@ def test_agent_catalog_does_not_claim_registered_roles_are_running():
 
 def test_orchestration_reports_no_independent_background_fleet():
     summary = orchestration_summary()
-    assert summary["catalog_total"] == 61
+    assert summary["catalog_total"] == 158
+    assert summary["catalog_worker_total"] == 158
+    assert summary["core_agent_total"] == 61
+    assert summary["specialist_catalog_total"] == 112
+    assert summary["core_specialist_overlap"] == 15
     assert summary["independent_agents_running"] == 0
     assert summary["checker_pairs"] == summary["independent_checker_catalog_total"]
