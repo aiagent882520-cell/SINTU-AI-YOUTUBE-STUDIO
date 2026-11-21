@@ -1744,3 +1744,14 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - The final offline 10-fort MP4 artifact was visually sampled at multiple timestamps after the PR #269 subtitle fix. It remains a procedural-art fallback, not a ComfyUI image-generation result.
 - GitHub issue #268 contains the read-only `automation_self_test` SINTU-CMD request and remains `sintu-command-queued` with no relay claim/comment as of 2026-11-21. Current Termux relay liveness is therefore still unverified; do not infer a successful device test from GitHub CI.
 - No direct Termux shell/device connection is available in this session. The user's local checkout and untracked data must not be reset, cleaned or overwritten.
+
+
+## ComfyUI fail-closed regression and current relay status — 2026-11-21
+
+- PR #275 merged as `9f9a66254314e45cf9d5f60d01510261f2c18448`. Exact-head CI run [#44885213701](https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44885213701) completed **8/8 PASS**.
+- The regression covers legacy E2E status payloads that omit `comfyui_available`: missing ComfyUI capability now reports unavailable while procedural local fallback remains separately visible. This is a reporting correction; it does not configure or run ComfyUI.
+- Exact PR CI logs show **937 passed, 5 warnings** on each of Python 3.11, 3.12, 3.13 and 3.14. Dependency security audit, real Chromium Video Editor browser tests, offline FFmpeg branded-video/motion audit, and production Docker build/health check all passed.
+- The current valid Termux relay request remains issue [#268](https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/issues/268), body `{"action":"automation_self_test"}`, label `sintu-command-queued`. It still has no claim comment or result comment; therefore there is no current device execution evidence.
+- Historical issue #42 is a valid Termux `operational_readiness` SUCCESS (10 pass / 2 warnings / 0 failed), but that action does not establish current GitHub relay liveness. Issue #38's full self-test actually failed at pytest and media-quality audit; #39–#41 were rejected for unsupported action/field combinations, as recorded above.
+- The issue relay's main-code contract was rechecked: owner-only `SINTU-CMD:` issues, exact queue/running/done/failed labels, JSON keys limited to `action`, `topic`, `test_path`, 17 fixed actions, 30-minute command timeout, 40-minute stale-claim recovery, FIFO queueing, and 20,000-character output cap. No new device command was queued because #268 is already the correct pending read-only probe.
+- GitHub cloud CI is separate from Termux. No device claim/result was fabricated; current Termux relay/worker liveness remains **UNVERIFIED**. Preserve the user's local modified/untracked files and private media.
