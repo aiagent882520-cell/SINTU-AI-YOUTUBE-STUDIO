@@ -81,6 +81,24 @@ def _validate_audio_file(path: Path, label: str) -> None:
         raise ValueError(f"{label} file read nahi ho sakti.") from None
 
 
+def _music_loop_args(ffprobe: str, music_path: Path, total_duration: float) -> list[str]:
+    """Loop background music only when its verified duration is shorter than the clip timeline."""
+    probe = render_process.run_render_process(
+        [ffprobe, "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(music_path)],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    if probe.returncode != 0:
+        raise RenderFailed("Background music duration read nahi ho saki.")
+    try:
+        music_duration = float(probe.stdout.strip())
+    except (TypeError, ValueError):
+        raise RenderFailed("Background music duration invalid hai.") from None
+    if not math.isfinite(music_duration) or music_duration <= 0:
+        raise RenderFailed("Background music duration finite aur positive honi chahiye.")
+    return ["-stream_loop", "-1"] if music_duration + 0.05 < total_duration else []
+
+
 def _validate_scene_image(path: Path) -> None:
     """Reject oversized, unsupported or malformed user-supplied scene images."""
     try:
@@ -967,7 +985,8 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                 next_index += 1
             music_index = None
             if music_path:
-                command += ["-stream_loop", "-1", "-i", str(music_path)]
+                command += _music_loop_args(ffprobe, music_path, total_duration)
+                command += ["-i", str(music_path)]
                 music_index = next_index
                 next_index += 1
             brand_index = next_index
