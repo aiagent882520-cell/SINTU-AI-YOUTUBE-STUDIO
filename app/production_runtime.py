@@ -519,12 +519,18 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
     worker_token = _worker_token(run_id, owner_username)
     if not worker_token:
         return
+    set_run_impl = _set_run
+    save_step_impl = _save_step
+    generate_impl = generate_text
 
     def set_run(*args, **kwargs):
-        return set_run(*args, worker_token=worker_token, **kwargs)
+        changed = set_run_impl(*args, worker_token=worker_token, **kwargs)
+        if not changed and _cancellation_requested(run_id, owner_username, worker_token):
+            raise ProductionRunCancelled("Cancellation requested or worker ownership lost.")
+        return changed
 
     def save_step(*args, **kwargs):
-        return save_step(*args, worker_token=worker_token, **kwargs)
+        return save_step_impl(*args, worker_token=worker_token, **kwargs)
 
     def run_generate(prompt, workflow, provider):
         if _cancellation_requested(run_id, owner_username, worker_token):
@@ -532,8 +538,8 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
         if not _renew_worker_lease(run_id, worker_token):
             raise ProductionRunCancelled("Worker lease lost before model call.")
         started = time.monotonic()
-        generated = run_generate(prompt, workflow, provider)
-        elapsed = __import__("time").monotonic() - started
+        generated = generate_impl(prompt, workflow, provider)
+        elapsed = time.monotonic() - started
         if elapsed > MODEL_CALL_TIMEOUT_SECONDS:
             raise ProductionRunTimeout(f"Model call exceeded {MODEL_CALL_TIMEOUT_SECONDS} seconds.")
         if _cancellation_requested(run_id, owner_username, worker_token):
