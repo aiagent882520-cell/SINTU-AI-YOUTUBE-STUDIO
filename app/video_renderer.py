@@ -83,11 +83,14 @@ def _validate_audio_file(path: Path, label: str) -> None:
 
 def _music_loop_args(ffprobe: str, music_path: Path, total_duration: float) -> list[str]:
     """Loop background music only when its verified duration is shorter than the clip timeline."""
-    probe = render_process.run_render_process(
-        [ffprobe, "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", str(music_path)],
-        capture_output=True, text=True, timeout=30, check=False,
-    )
+    try:
+        probe = render_process.run_render_process(
+            [ffprobe, "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(music_path)],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise RenderFailed("Background music duration probe failed.") from None
     if probe.returncode != 0:
         raise RenderFailed("Background music duration read nahi ho saki.")
     try:
