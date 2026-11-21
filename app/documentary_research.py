@@ -18,6 +18,7 @@ SOURCE_TYPES = {"primary", "academic", "government", "reputable_news", "referenc
 MAX_CLAIMS = 500
 MAX_SOURCES = 500
 MAX_TEXT = 5000
+MAX_PROMPT_CONTEXT_CHARS = 24000
 DOCUMENTARY_FORMAT_IDS = frozenset({
     "documentary", "nature-documentary", "investigative-documentary",
     "science-documentary", "biography", "mystery-documentary",
@@ -194,6 +195,18 @@ def validate_research_package(package):
 
 
 
+def build_research_prompt_context(package):
+    """Serialize the complete ledger within a bounded model-context budget."""
+    import json
+
+    canonical = json.dumps(package, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    if len(canonical) > MAX_PROMPT_CONTEXT_CHARS:
+        raise ValueError(
+            f"Documentary research evidence exceeds the {MAX_PROMPT_CONTEXT_CHARS}-character model-context limit."
+        )
+    return canonical
+
+
 def validate_documentary_evidence_for_production(package):
     """Fail closed unless factual claims are source-linked and structurally corroborated.
 
@@ -217,6 +230,11 @@ def validate_documentary_evidence_for_production(package):
                 )
     result["valid"] = not result["errors"]
     canonical = json.dumps(package, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    if len(canonical) > MAX_PROMPT_CONTEXT_CHARS:
+        result["errors"].append(
+            f"production: research evidence exceeds the {MAX_PROMPT_CONTEXT_CHARS}-character model-context limit"
+        )
+    result["valid"] = not result["errors"]
     result["sha256"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     result["acceptance_boundary"] = (
         "Structural source/claim traceability only. This gate does not fetch URLs, authenticate publishers, "
