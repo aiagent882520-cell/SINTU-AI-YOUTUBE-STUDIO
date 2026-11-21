@@ -605,3 +605,23 @@ def test_publish_verifier_rejects_unsynchronized_audio_track(tmp_path):
     assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
     with pytest.raises(video_renderer.RenderFailed, match="not synchronized"):
         video_renderer.verify_publishable_mp4(mismatched)
+
+def test_portrait_hindi_subtitles_wrap_to_safe_width(tmp_path, monkeypatch):
+    monkeypatch.setattr(video_renderer, "_ffmpeg_supports_subtitles", lambda _ffmpeg: True)
+    subtitle_path, subtitle_filter = video_renderer._create_subtitle_track(
+        tmp_path,
+        ["कुंभलगढ़: अरावली पर लगभग 36 किलोमीटर लंबी दीवार।"],
+        [4.0],
+        720,
+        1280,
+        "ffmpeg",
+    )
+    assert subtitle_path is not None
+    assert subtitle_filter and "subtitles=" in subtitle_filter
+    caption_lines = [
+        line for line in subtitle_path.read_text(encoding="utf-8").splitlines()
+        if line and not line.isdigit() and "-->" not in line
+    ]
+    assert len(caption_lines) >= 2
+    assert max(map(len, caption_lines)) <= 21
+
