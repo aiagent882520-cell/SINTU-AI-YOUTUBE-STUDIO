@@ -270,6 +270,7 @@ def run_council_decision(conn, owner: str, title: str, context: str, decision_ty
     if not title.strip() or not context.strip():
         raise ValueError("Decision title and context are required.")
     ensure_schema(conn)
+    conn.execute("BEGIN IMMEDIATE")
     decision_id = secrets.token_hex(16)
     now = _now()
     conn.execute(
@@ -279,6 +280,7 @@ def run_council_decision(conn, owner: str, title: str, context: str, decision_ty
         (decision_id, owner, title.strip()[:160], decision_type, context.strip()[:12000], now, now),
     )
     _audit(conn, owner, "sintu_council_service", "council_decision_started", decision_id, {"decision_type": decision_type})
+    conn.commit()
     state = council_status()
     eligible = [p for p, status in zip(PRINCIPALS, state["principal_ais"]) if status["eligible_to_call"]]
     prompt_template = (
@@ -324,6 +326,7 @@ def run_council_decision(conn, owner: str, title: str, context: str, decision_ty
         except Exception:
             advisory = {"status": "failed", "model": state["local_fallback"]["model"], "output": ""}
 
+    conn.execute("BEGIN IMMEDIATE")
     for record in records:
         conn.execute(
             """INSERT INTO principal_ai_votes
@@ -388,6 +391,7 @@ def list_decisions(conn, owner: str, limit: int = 50) -> list[dict]:
 
 def owner_approve_decision(conn, owner: str, actor: str, decision_id: str, approved: bool, note: str = "") -> dict | None:
     ensure_schema(conn)
+    conn.execute("BEGIN IMMEDIATE")
     row = conn.execute(
         "SELECT status,owner_approval_status FROM principal_ai_decisions WHERE id=? AND owner_username=?",
         (decision_id, owner),
