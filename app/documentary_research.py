@@ -18,6 +18,11 @@ SOURCE_TYPES = {"primary", "academic", "government", "reputable_news", "referenc
 MAX_CLAIMS = 500
 MAX_SOURCES = 500
 MAX_TEXT = 5000
+DOCUMENTARY_FORMAT_IDS = frozenset({
+    "documentary", "nature-documentary", "investigative-documentary",
+    "science-documentary", "biography", "mystery-documentary",
+    "travel-documentary", "crime-documentary",
+})
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$")
 
 
