@@ -38,7 +38,8 @@ PYTHON = str(ROOT / ".venv" / "bin" / "python")
 if not Path(PYTHON).exists():
     PYTHON = sys.executable
 AUTOMATION_ONLY = os.getenv("SINTU_AUTOMATION_ONLY", "true").strip().lower() in {"1", "true", "yes", "on"}
-AUTOMATION_PAUSED_ACTIONS = {"offline_video_e2e", "full_self_test", "full_studio_e2e", "media_repair"}
+PRODUCTION_ACTIONS = {"offline_video_e2e", "full_self_test", "full_studio_e2e"}
+AUTOMATION_PAUSED_ACTIONS = PRODUCTION_ACTIONS | {"media_repair"}
 ACTIONS = {
     "git_status", "git_pull_ff_only", "run_tests", "compile_check", "automation_self_test",
     "health_audit", "operational_readiness", "live_preflight", "engine_probe",
