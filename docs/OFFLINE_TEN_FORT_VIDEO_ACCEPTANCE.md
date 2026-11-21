@@ -36,3 +36,9 @@ The CI job also performs the branded-video motion audit and stores its MP4 and J
 - The ten-fort Hindi E2E captions are shortened for readability. A long Kumbhalgarh caption is covered by a regression test.
 - Visual QA caught clipping in the first post-fix MP4, so the line-width heuristic was tightened again before accepting the final artifact.
 - Latest CI artifact: 60.04 seconds, 720x1280, H.264/AAC, 24 fps; no black intervals; motion ratio 0.915. This uses procedural offline artwork, not ComfyUI inference.
+
+
+## ComfyUI readiness reporting
+
+- `comfyui_image.available` means a configured, reachable, validated ComfyUI workflow, not merely that a procedural fallback can generate an image.
+- `local_fallback_available` separately reports the offline procedural image path. CI currently verifies the fallback path and must not claim ComfyUI inference while workflow/server/model configuration is absent.
