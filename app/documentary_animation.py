@@ -109,7 +109,8 @@ def _draw_diagram(draw: ImageDraw.ImageDraw, w: int, h: int, p: float, index: in
             draw.polygon([(x+gap,y),(x+gap-12,y-8),(x+gap-12,y+8)],fill=(239,207,144))
 
 
-def _draw_environment(draw: ImageDraw.ImageDraw, w: int, h: int, p: float, index: int) -> None:
+def _draw_environment(draw: ImageDraw.ImageDraw, w: int, h: int, p: float, index: int,
+                       description: str) -> None:
     horizon=int(h*.72)
     # Multi-layer mountains with separate drifting cloud and moving water/fire cues.
     draw.polygon([(0,horizon),(w*.22,h*.34),(w*.43,horizon)],fill=(57,91,112))
@@ -120,19 +121,20 @@ def _draw_environment(draw: ImageDraw.ImageDraw, w: int, h: int, p: float, index
         x=int((cx*w+shift)%(w+100))-50; y=int(cy*h)
         draw.ellipse((x,y,x+w*.16,y+h*.035),fill=(186,199,196))
         draw.ellipse((x+w*.04,y-h*.025,x+w*.12,y+h*.025),fill=(186,199,196))
-    draw.rectangle((0,horizon,w,h),fill=(35,79,81))
-    for i in range(7):
-        x=int((i*w/6 + p*w*.10)%(w+60))-30
-        yy=int(horizon+h*.08+i%3*h*.045)
-        draw.line((x,yy,x+w*.09,yy-3),fill=(127,183,176),width=3)
-    # Rising smoke/fire is deliberately animated when the brief asks for it.
-    draw.ellipse((w*.72,h*.59,w*.82,h*.69),fill=(206,116,65))
-    for i in range(4):
-        rise=(p*70+i*19)%110
-        x=w*.77+math.sin(p*math.tau+i)*w*.012
-        y=h*.60-rise
-        r=8+i*3
-        draw.ellipse((x-r,y-r,x+r,y+r),fill=(115,116,113))
+    if any(word in description.casefold() for word in ("river", "water", "sea", "ocean", "rain", "नदी", "पानी", "समुद्र", "बारिश")):
+        draw.rectangle((0,horizon,w,h),fill=(35,79,81))
+        for i in range(7):
+            x=int((i*w/6 + p*w*.10)%(w+60))-30
+            yy=int(horizon+h*.08+i%3*h*.045)
+            draw.line((x,yy,x+w*.09,yy-3),fill=(127,183,176),width=3)
+    if any(word in description.casefold() for word in ("fire", "smoke", "battle", "explosion", "आग", "धुआँ", "युद्ध", "विस्फोट")):
+        draw.ellipse((w*.72,h*.59,w*.82,h*.69),fill=(206,116,65))
+        for i in range(4):
+            rise=(p*70+i*19)%110
+            x=w*.77+math.sin(p*math.tau+i)*w*.012
+            y=h*.60-rise
+            r=8+i*3
+            draw.ellipse((x-r,y-r,x+r,y+r),fill=(115,116,113))
 
 
 def _draw_character_scene(draw: ImageDraw.ImageDraw, w: int, h: int, p: float, index: int) -> None:
@@ -176,9 +178,16 @@ def _render_frame(description: str, kind: str, index: int, p: float, size: tuple
     elif kind=="character":
         _draw_character_scene(draw,w,h,p,index)
     else:
-        _draw_environment(draw,w,h,p,index)
-    # A subtle camera drift is layered on top of meaningful scene-specific motion.
-    return image
+        _draw_environment(draw,w,h,p,index,description)
+    # Slow camera push and alternating lateral track complement (never replace)
+    # the scene's own moving route, marker, bars, character, or environment layers.
+    zoom=1.0+0.025*p
+    crop_w=max(1,int(w/zoom)); crop_h=max(1,int(h/zoom))
+    max_left=max(0,w-crop_w); max_top=max(0,h-crop_h)
+    direction=1 if index%2==0 else -1
+    left=int(max_left*p) if direction>0 else int(max_left*(1-p))
+    top=int(max_top*0.45)
+    return image.crop((left,top,left+crop_w,top+crop_h)).resize((w,h),Image.Resampling.LANCZOS)
 
 
 def render_documentary_animation_clips(
@@ -237,11 +246,11 @@ def render_documentary_animation_clips(
         clips.append(target)
         evidence.append({"scene":index+1,"visual_type":kind,"duration_seconds":duration,
                          "frames":count,"motion_samples_passed":motion_pixels,
-                         "motion_verified":True,"file":target.name})
+                         "motion_verified":True,"camera_move":"slow_push_with_alternating_track","file":target.name})
     report={"engine":"SINTU scene-aware procedural 2D documentary animation",
             "provider":"local vector animation; no external model inference",
             "fps":fps,"animation_fps":ANIMATION_FPS,"resolution":resolution,
-            "scene_count":len(clips),"scenes":evidence,
+            "scene_count":len(clips),"map_geometry":"schematic_not_geospatial","scenes":evidence,
             "all_scenes_animated":all(x["motion_verified"] for x in evidence)}
     (out/"documentary-animation-report.json").write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
     return clips,report
