@@ -33,7 +33,7 @@ DECISION_TYPES = {
 }
 UNANIMOUS_TYPES = {"security", "architecture", "production_release"}
 OWNER_APPROVAL_TYPES = {
-    "security", "architecture", "production_release", "paid_action",
+    "major", "security", "architecture", "production_release", "paid_action",
     "public_publish", "external_data_sharing", "code_integration",
 }
 GENESIS_HASH = "0" * 64
