@@ -238,6 +238,12 @@ def test_offline_storyboard_e2e_creates_verified_local_video(monkeypatch, tmp_pa
     assert len({source["fort"] for source in result["research_sources"]}) == 10
     assert result["forts_covered"][0] == "भानगढ़ किला"
     assert any("Golconda" in source["fort"] for source in result["research_sources"])
+    by_fort = {source["fort"]: source for source in result["research_sources"]}
+    assert "curse accounts" in by_fort["Bhangarh Fort"]["claim"]
+    assert "1588" in by_fort["Junagarh Fort"]["claim"]
+    assert by_fort["Junagarh Fort"]["url"].endswith("/forts.html")
+    assert "1459" in by_fort["Mehrangarh Fort"]["claim"]
+    assert "seven gates" not in by_fort["Mehrangarh Fort"]["claim"]
     assert "folklore" in render_calls[0]["scenes"][1].lower()
     assert result["duration_seconds"] == 60
     assert result["subtitle_count"] == 15
