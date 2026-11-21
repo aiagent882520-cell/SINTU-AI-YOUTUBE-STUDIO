@@ -2619,10 +2619,6 @@ def _youtube_publish_impl(
     public_approval_token: str | None,
     upload_lock_owner: str,
 ):
-                    title: str = Query(..., min_length=1, max_length=100),
-                    description: str = Query(default="", max_length=5000),
-                    privacy_status: str = Query(default="private", pattern=r"^(private|unlisted|public)$"),
-                    public_approval_token: str | None = Header(default=None, alias="X-SINTU-Public-Approval")):
     if not re.fullmatch(r"[a-f0-9]{32}", video_id):
         raise HTTPException(status_code=400, detail="Invalid rendered video ID.")
     with db() as conn:
@@ -2845,7 +2841,7 @@ def _youtube_publish_impl(
                 access_token = _youtube_access_token(force_refresh=True, stale_access_token=access_token)
                 set_state("RESUMING")
                 uploaded = transfer_resumable_upload(
-                    path, session_uri, access_token, request=_youtube_resumable_http_request,
+                    path, session_uri, access_token, request=locked_resumable_request,
                     on_progress=persist_progress, probe_first=True)
             else:
                 set_state(exc.state)
