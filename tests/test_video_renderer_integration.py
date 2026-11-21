@@ -618,6 +618,8 @@ def test_portrait_hindi_subtitles_wrap_to_safe_width(tmp_path, monkeypatch):
     )
     assert subtitle_path is not None
     assert subtitle_filter and "subtitles=" in subtitle_filter
+    assert "MarginL=43" in subtitle_filter
+    assert "MarginR=43" in subtitle_filter
     caption_lines = [
         line for line in subtitle_path.read_text(encoding="utf-8").splitlines()
         if line and not line.isdigit() and "-->" not in line
