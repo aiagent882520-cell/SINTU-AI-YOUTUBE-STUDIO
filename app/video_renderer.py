@@ -197,7 +197,7 @@ def _srt_timestamp(seconds: float) -> str:
 
 
 def _create_subtitle_track(work: Path, subtitles: list[str] | None,
-                           durations: list[float], height: int,
+                           durations: list[float], width: int, height: int,
                            ffmpeg: str) -> tuple[Path | None, str | None]:
     """Create a timed SRT track and an FFmpeg libass filter for explicit user captions."""
     subtitles = subtitles or []
@@ -212,6 +212,10 @@ def _create_subtitle_track(work: Path, subtitles: list[str] | None,
             "Burned-in subtitles ke liye FFmpeg ka libass subtitles filter chahiye. "
             "Termux mein libass aur fontconfig install karke FFmpeg support check karein."
         )
+    font_size = max(22, round(height * 0.027))
+    horizontal_margin = max(28, round(width * 0.06))
+    available_width = max(1, width - 2 * horizontal_margin)
+    wrap_width = max(16, min(48, int(available_width / (font_size * 0.85))))
     cues = []
     cursor = 0.0
     cue_index = 1
@@ -222,7 +226,7 @@ def _create_subtitle_track(work: Path, subtitles: list[str] | None,
         clean = line.replace("\r", " ").replace("{", "(").replace("}", ")")
         clean = clean.replace("<", "‹").replace(">", "›").strip()
         if clean:
-            wrapped = textwrap.fill(clean, width=42, break_long_words=False, break_on_hyphens=False)
+            wrapped = textwrap.fill(clean, width=wrap_width, break_long_words=False, break_on_hyphens=False)
             cues.append(
                 f"{cue_index}\n{_srt_timestamp(cursor)} --> {_srt_timestamp(cursor + duration)}\n{wrapped}\n"
             )
@@ -236,7 +240,6 @@ def _create_subtitle_track(work: Path, subtitles: list[str] | None,
     font = re.sub(r"[^A-Za-z0-9 _-]", "", os.getenv("SINTU_SUBTITLE_FONT", "Noto Sans Devanagari")).strip()
     if not font:
         font = "Noto Sans Devanagari"
-    font_size = max(22, round(height * 0.027))
     margin = max(28, round(height * 0.055))
     style = (
         f"FontName={font},FontSize={font_size},PrimaryColour=&H00FFFFFF,"
@@ -772,7 +775,7 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
             # Expand the still-image timestamps into a continuous CFR stream before motion/fade filters.
             video_filter_parts = [f"fps={fps}", *filters]
             subtitle_file, subtitle_filter = _create_subtitle_track(
-                work, subtitles, [seconds_per_scene] * len(scenes), height, ffmpeg
+                work, subtitles, [seconds_per_scene] * len(scenes), width, height, ffmpeg
             )
             if subtitle_filter:
                 video_filter_parts.append(subtitle_filter)
@@ -965,7 +968,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             brand_path = work / "sintu-watermark.png"
             _make_watermark_image(width=max(180, int(width * 0.22)), height=max(44, int(width * 0.05))).save(brand_path, format="PNG")
             subtitle_file, subtitle_filter = _create_subtitle_track(
-                work, subtitles, [item["duration"] for item in clip_info], height, ffmpeg
+                work, subtitles, [item["duration"] for item in clip_info], width, height, ffmpeg
             )
             for path in video_paths:
                 command += ["-i", str(path)]
