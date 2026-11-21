@@ -1,3 +1,57 @@
+# CURRENT EXECUTION CHECKPOINT — 2026-11-21 (supersedes older snapshots below)
+
+## Repository truth verified against GitHub
+- Repository: `aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO`; default branch: `main`.
+- Main HEAD at verification: `d21ff09a8f87c53cdcc0b1e463bae48c10bf7658`.
+- Open PRs: **0**.
+- Open issues: **2** — #95 (five MP4 forensic disposition) and #268 (Termux relay self-test).
+- Issue #268 remains open with label `sintu-command-queued`, body `{"action":"automation_self_test"}`, zero comments. No fresh relay claim/result is evidenced; Android relay liveness is **NOT VERIFIED**.
+- Latest main commit-specific workflow-run lookup returned no PR-triggered runs; combined commit status returned no status entries. This is **no CI evidence surfaced by those endpoints**, not a CI pass or a CI failure.
+
+## Current implementation inventory — source inspection
+- `app/main.py`: FastAPI app, startup recovery hooks, render queue, production runtime, image/video/audio/voice engines, YouTube upload protocol and offline media APIs are integrated.
+- `app/durable_render_queue.py`: SQLite durable queue with atomic transaction claims, lease owner/token/expiry, heartbeat, retry limits, idempotency key and cancellation flag. Code presence is not device runtime proof.
+- `app/production_runtime.py`: persistent production runs and worker/checker/reviewer orchestration. It requires an available text provider for automated model calls.
+- `app/video_renderer.py` and media QA: FFmpeg render/validation paths exist; latest exact-main CI evidence was not returned by the commit-specific run/status lookups in this verification.
+- `app/format_rendering.py`: all 60 catalog entries map to generic FFmpeg MP4 profiles except four explicitly blocked specialized profiles. Catalog/profile availability is not native generation acceptance.
+- Four specialized profiles explicitly marked not implemented: `360-video` (360 projection/metadata), `vr-video` (VR projection/stereo/headset validation), `ar-video` (AR tracking/platform packaging), and `virtual-production` (live capture/tracking integration).
+- `app/comfyui_client.py`: local ComfyUI API workflow validation checks node types and advertised model choices, submits prompts and polls history. No local server/model/inference result is established by this repository inspection.
+- `app/youtube_upload.py`: chunked resumable upload helper exists, validates Google session URI, probes server acknowledged offsets, retries and verifies source file identity/hash. Real Google OAuth/channel authorization and actual upload are not established.
+- `README.md` describes the frontend as a responsive PWA foundation; the inspected expected native Gradle path `android/app/build.gradle` does not exist. Native Android APK installation/release signing must remain blocked until an actual native project/build artifact is identified.
+- `.github/workflows/tests.yml` defines Python 3.11–3.14 tests, dependency audit, Chromium browser E2E, offline Hindi MP4 E2E/motion audit and Docker build/health. Workflow definition is not a current-run result.
+- `PROJECT_EXECUTION_STATE.md` previously contained stale snapshot text claiming no open issues and queued issues #90/#91. This checkpoint supersedes those statements; historical sections below are retained as history, not current status.
+
+## Media issue #95 — current evidence
+- Latest owner-supplied Termux report in issue comments: 5/5 inspected, zero forensic tool failures and zero A/V stream-timing failures.
+- Three confirmed full-duration black originals: `3f4c2151e8e640109f464b2c2e9b7569.mp4`, `59430f1fb7fd4bdf80cf8b7d9f456098.mp4`, `8cfe9da88d5c43d184f3572e371ff4a6.mp4`. First two are byte-identical by SHA-256.
+- Two dark-visible but unapproved: `adf9268e5d5543a587defdde5d4c4edd.mp4`, `afa4c87e3c1e42a197b7092e0e24040d.mp4`. Human contact-sheet review described very dark footage with only a tiny lower overlay; no approval.
+- Exact source/render provenance remains unknown. Preserve all originals/backups; no repair, overwrite, deletion, regeneration, quarantine or publishing.
+
+## Acceptance status (do not overclaim)
+| Workstream | Verified status | Remaining evidence / work |
+|---|---|---|
+| Automation queue | Source implements durable SQLite lease/claim/retry/idempotency/cancel paths; prior owner-run tests reported in conversation | Fresh exact-main CI and current Termux relay/device regression |
+| Rendering | FFmpeg offline render and QA workflows exist; earlier merged CI/offline E2E evidence is historical | Current-head CI, Android current-head run, production generation using real configured engines |
+| Android | Termux history includes earlier tests and watchdog process recovery; no current #268 result | APK/native build discovery, physical install, all 20 device acceptance scenarios, full reboot/boot recovery |
+| Google OAuth/YouTube | OAuth/token and chunked upload code/tests exist | credentials, encryption key, consented channel, actual private upload/resume evidence; public publishing remains separately gated |
+| ComfyUI | API workflow/model/node validation and real inference client exist | reachable host, compatible model(s), configured workflows, successful image/video inference and output validation |
+| Black MP4s | Forensic tooling and five-file owner report complete; three black confirmed | root cause/provenance and safe separately generated replacements; originals remain protected |
+| Dark MP4s | Pixel/visual evidence says not full-black | human content-quality decision; do not treat as approved |
+| 360/VR/AR/virtual production | Catalog only; four specialized profiles explicitly blocked | four independent native pipelines and acceptance suites |
+| 60 formats | 60-entry catalog and generic profile mapping | per-format independent acceptance; generic MP4 is not native format acceptance |
+| 15 modules | Module catalog/registry exists in source | inspect each module's real frontend/API/persistence/auth/integration behavior and run independent acceptance |
+| Website/editor | PWA/dashboard and browser editor tests are defined | production/browser/device cross-platform acceptance and remaining feature gaps |
+| Security/backup/release | firewall/security controls, backup validation/restore code and CI workflow exist | fresh exact-head security/Docker results, disaster recovery and production deployment acceptance |
+
+## Execution constraints
+- No Termux shell, physical Android device, private media directory, ComfyUI host/model storage, Google credentials or YouTube account authorization is available through this GitHub-only execution channel.
+- Do not fabricate device/AI/OAuth/upload/CI results. Do not ask for manual steps until software-side work has been exhausted.
+- Keep free/open-source first. No paid APIs/services unless revenue exists and owner explicitly approves.
+- Never overwrite/delete/repair original media or production data without explicit authorization and verified provenance.
+- Resume independent repository-side implementation even while #268, device, AI-host and OAuth work remain blocked.
+
+---
+
 # SINTU AI YOUTUBE STUDIO — execution state
 
 Last updated: 2026-11-21 07:45 UTC
