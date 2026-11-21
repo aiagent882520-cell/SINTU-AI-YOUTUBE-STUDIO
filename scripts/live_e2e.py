@@ -34,6 +34,7 @@ _load_project_environment()
 
 from app.ai_brain import generate_text, provider_status
 from app.agents import AGENTS
+from app.management_hierarchy import SENIOR_MANAGER_NAMES
 from app.comfyui_client import image_workflow_status, video_workflow_status
 from app.image_generator import IMAGE_DIR, generate_image, image_status
 from app.voice_generator import AUDIO_DIR, generate_voiceover
@@ -336,10 +337,13 @@ def _live_agent_catalog(topic: str, include_result: bool = False):
     worker_roles = {step["role"] for step in workers}
     checker_roles = {step["role"].removesuffix(" Checker") for step in checkers}
     reviewer_roles = {step["role"] for step in reviewers}
+    expected_workers = set(AGENTS) | set(SENIOR_MANAGER_NAMES)
     summary = {
         "run_id": run["id"],
         "status": result["status"],
-        "registered_agent_roles": len(AGENTS),
+        "registered_agent_roles": len(expected_workers),
+        "core_agent_roles": len(AGENTS),
+        "senior_manager_roles": len(SENIOR_MANAGER_NAMES),
         "completed_workers": sum(step["status"] == "completed" for step in workers),
         "passed_checkers": sum(step["status"] == "pass" for step in checkers),
         "final_reviewers": sum(step["status"] == "pass" for step in reviewers),
@@ -348,18 +352,17 @@ def _live_agent_catalog(topic: str, include_result: bool = False):
         "reviewer_role_coverage": len(reviewer_roles),
         "error": result.get("error"),
     }
-    expected_workers = set(AGENTS)
     expected_reviewers = set(REVIEWERS)
     if (
         result["status"] != "completed"
         or worker_roles != expected_workers
         or checker_roles != expected_workers
         or reviewer_roles != expected_reviewers
-        or len(workers) != len(AGENTS)
-        or len(checkers) != len(AGENTS)
+        or len(workers) != len(expected_workers)
+        or len(checkers) != len(expected_workers)
         or len(reviewers) != len(REVIEWERS)
-        or summary["completed_workers"] != len(AGENTS)
-        or summary["passed_checkers"] != len(AGENTS)
+        or summary["completed_workers"] != len(expected_workers)
+        or summary["passed_checkers"] != len(expected_workers)
         or summary["final_reviewers"] != len(REVIEWERS)
     ):
         raise RuntimeError(
@@ -422,10 +425,10 @@ def _deployment_health(url: str) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description="SINTU local/live end-to-end checks")
     parser.add_argument("--live-text", action="store_true", help="Make one real local Ollama text inference.")
-    parser.add_argument("--live-agent-catalog", action="store_true", help="Run all 61 workers, 61 checkers and five reviewers using local Ollama.")
+    parser.add_argument("--live-agent-catalog", action="store_true", help="Run all 66 worker/checker roles (61 core + 5 senior managers) and five reviewers using local Ollama.")
     parser.add_argument("--generate-video", action="store_true", help="Generate a real 3-second ComfyUI clip and render a branded MP4.")
     parser.add_argument("--offline-video", action="store_true", help="Generate procedural scene images, local Hindi voiceover and a verified branded MP4 without ComfyUI or paid APIs.")
-    parser.add_argument("--full-studio-e2e", action="store_true", help="Run all 61 workers/checkers and five reviewers, use the approved AI Video Generator scene prompt, render a branded MP4, and attach it to the production run.")
+    parser.add_argument("--full-studio-e2e", action="store_true", help="Run all 66 worker/checker roles (61 core + 5 senior managers) and five reviewers, use the approved AI Video Generator scene prompt, render a branded MP4, and attach it to the production run.")
     parser.add_argument("--topic", default="भारत के प्राचीन किले में सुबह का सिनेमाई दृश्य")
     parser.add_argument("--deployment-url", help="Probe a deployed /api/health URL.")
     args = parser.parse_args()
