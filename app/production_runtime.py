@@ -19,7 +19,7 @@ from .agent_orchestrator import format_team
 from .agents import AGENTS
 from .management_hierarchy import SENIOR_MANAGER_NAMES, management_hierarchy
 from .ai_brain import generate_text, ProviderNotConfigured, ProviderRequestError
-from .documentary_research import DOCUMENTARY_FORMAT_IDS, validate_documentary_evidence_for_production
+from .documentary_research import DOCUMENTARY_FORMAT_IDS, validate_documentary_evidence_for_production, build_research_prompt_context
 from .research_evidence_store import get_research_evidence
 
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(Path(__file__).resolve().parent.parent))).expanduser().resolve()
@@ -300,7 +300,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             return
         research_context_instruction = (
             "DOCUMENTARY RESEARCH EVIDENCE LEDGER (structural traceability only; not independently fact-verified):\n"
-            + json.dumps(research_record["package"], ensure_ascii=False, sort_keys=True)
+            + build_research_prompt_context(research_record["package"])
             + "\nUse this ledger as the factual-claim boundary. Preserve claim IDs and source IDs in relevant "
               "deliverables. Do not invent historical facts, source contents, quotations, dates or citations. "
               "Flag any claim not directly represented in this ledger for human research review. "
