@@ -666,3 +666,34 @@ def test_worker_cannot_transition_a_cancelling_run_to_success(tmp_path, monkeypa
     current = runtime.get_run(run["id"], "alice")
     assert current["status"] == "cancelling"
     assert current["result"] is None
+
+
+def test_transient_provider_errors_retry_with_audited_backoff(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    monkeypatch.setattr(runtime, "format_team", lambda _format: [
+        {"role_type": "specialist", "name": "Script Writer", "mission": "write narration"}
+    ])
+    monkeypatch.setattr(runtime, "REVIEWERS", ())
+    monkeypatch.setenv("SINTU_MODEL_RETRY_ATTEMPTS", "2")
+    monkeypatch.setattr(runtime.time, "sleep", lambda _seconds: None)
+    calls = []
+
+    def flaky_generate(prompt, workflow, provider):
+        calls.append(prompt)
+        if len(calls) <= 2:
+            raise runtime.ProviderRequestError("Local server returned HTTP 503.")
+        return {"output": '{"decision":"PASS","evidence":["checked"],"issues":[],"revision_instructions":[]}',
+                "provider": "test", "model": "fixture"}
+
+    monkeypatch.setattr(runtime, "generate_text", flaky_generate)
+    run = runtime.create_run("youtube-shorts", "retry transient model error", "alice")
+    runtime.execute_run(run["id"], "alice")
+
+    result = runtime.get_run(run["id"], "alice")
+    assert result["status"] == "completed"
+    assert len(calls) == 4
+    retry_events = [event for event in runtime.list_run_events(run["id"], "alice")
+                    if event["event_type"] == "model_call_retry"]
+    assert len(retry_events) == 2
