@@ -9,6 +9,7 @@ This is the native Android application project, separate from the browser PWA an
 - The HttpOnly `sintu_admin_session` cookie is persisted encrypted with an AES-GCM key held by Android Keystore.
 - Persistent multi-conversation assistant: create, select, send, read and delete conversations.
 - Create a YouTube Shorts production project, request a script/scene production package, and browse saved projects.
+- Native Image Studio calls the authenticated server image API, previews returned JPEGs, and saves images to Pictures/SINTU. It labels ComfyUI output as local AI inference and procedural fallback as non-generative artwork.
 - Explicitly reports that script/scene generation is not the same as final MP4 rendering.
 
 ## Build

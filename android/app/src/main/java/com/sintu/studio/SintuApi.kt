@@ -14,6 +14,7 @@ import okhttp3.OkHttpClient
 import okhttp3.RequestBody
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import java.io.File
+import java.io.ByteArrayOutputStream
 import retrofit2.Response
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +30,25 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 import retrofit2.http.Header
 import retrofit2.http.PUT
+
+data class ImageGenerateRequest(
+    val prompt: String,
+    val kind: String = "scene",
+    val aspect: String = "portrait"
+)
+data class ImageGenerationResponse(
+    val image_id: String,
+    val url: String = "",
+    val kind: String = "scene",
+    val aspect: String = "portrait",
+    val width: Int = 0,
+    val height: Int = 0,
+    val format: String = "",
+    val size_bytes: Long = 0,
+    val provider: String = "",
+    val local: Boolean = true,
+    val notice: String = ""
+)
 
 data class LoginRequest(val username: String, val password: String)
 data class LoginResponse(val authenticated: Boolean = false, val username: String = "", val role: String = "")
@@ -133,6 +153,17 @@ private interface SintuService {
     @GET("api/auth/session")
     suspend fun session(): Response<SessionResponse>
 
+    @GET("api/images/capabilities")
+    suspend fun imageCapabilities(): Response<Map<String, Any?>>
+
+    @POST("api/images")
+    suspend fun generateImage(@Body body: ImageGenerateRequest): Response<ImageGenerationResponse>
+
+    @Streaming
+    @GET("api/images/{imageId}")
+    suspend fun imageFile(@Path("imageId") imageId: String): Response<ResponseBody>
+
+
     @GET("api/providers")
     suspend fun providerStatus(): Response<Map<String, Any?>>
 
@@ -218,6 +249,77 @@ class SintuApi(context: Context, baseUrl: String) {
     }
 
     suspend fun session(): SessionResponse = service.session().bodyOrThrow()
+    suspend fun imageCapabilities(): Map<String, Any?> = service.imageCapabilities().bodyOrThrow()
+
+    suspend fun generateImage(prompt: String, kind: String, aspect: String): ImageGenerationResponse =
+        service.generateImage(ImageGenerateRequest(prompt.trim(), kind, aspect)).bodyOrThrow()
+
+    suspend fun downloadImageBytes(imageId: String): ByteArray = withContext(Dispatchers.IO) {
+        require(imageId.matches(Regex("[a-f0-9]{32}"))) { "Invalid SINTU image ID." }
+        val response = service.imageFile(imageId)
+        if (!response.isSuccessful) {
+            val detail = response.errorBody()?.string()?.take(1000)
+            throw IllegalStateException(detail?.takeIf { it.isNotBlank() }
+                ?: "SINTU image download failed with HTTP ${response.code()}.")
+        }
+        val body = response.body() ?: throw IllegalStateException("SINTU server returned an empty image.")
+        try {
+            if (body.contentLength() > MAX_IMAGE_DOWNLOAD_BYTES) {
+                throw IllegalStateException("Image exceeds the 15 MB phone-download limit.")
+            }
+            val output = ByteArrayOutputStream(
+                body.contentLength().takeIf { it in 1..MAX_IMAGE_DOWNLOAD_BYTES.toLong() }?.toInt() ?: 64 * 1024
+            )
+            body.byteStream().use { input ->
+                val buffer = ByteArray(32 * 1024)
+                var total = 0
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    total += count
+                    require(total <= MAX_IMAGE_DOWNLOAD_BYTES) {
+                        "Image response exceeds the 15 MB phone-download limit."
+                    }
+                    output.write(buffer, 0, count)
+                }
+            }
+            val bytes = output.toByteArray()
+            require(bytes.isNotEmpty()) { "SINTU server returned an empty image." }
+            require(bytes.size >= 3 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()) {
+                "SINTU image response is not a valid JPEG."
+            }
+            bytes
+        } finally { body.close() }
+    }
+
+    suspend fun saveImageToGallery(context: Context, imageId: String): Uri =
+        withContext(Dispatchers.IO) {
+            require(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                "Gallery image save requires Android 10 or newer."
+            }
+            val bytes = downloadImageBytes(imageId)
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, "SINTU_${imageId}.jpg")
+                put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/SINTU")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val resolver = context.applicationContext.contentResolver
+            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                ?: throw IllegalStateException("Android could not create a Pictures/SINTU image.")
+            try {
+                resolver.openOutputStream(uri, "w")?.use { it.write(bytes); it.flush() }
+                    ?: throw IllegalStateException("Android could not open the image destination.")
+                resolver.update(uri, ContentValues().apply {
+                    put(MediaStore.MediaColumns.IS_PENDING, 0)
+                }, null, null)
+                uri
+            } catch (error: Exception) {
+                resolver.delete(uri, null, null)
+                throw error
+            }
+        }
+
     suspend fun providerStatus(): Map<String, Any?> = service.providerStatus().bodyOrThrow()
     suspend fun conversations(): ConversationsResponse = service.conversations().bodyOrThrow()
     suspend fun createConversation(workflow: String): ConversationCreateResponse =
@@ -337,6 +439,8 @@ class SintuApi(context: Context, baseUrl: String) {
         }
     }
 }
+
+private const val MAX_IMAGE_DOWNLOAD_BYTES = 15 * 1024 * 1024
 
 private fun <T> Response<T>.bodyOrThrow(): T {
     if (!isSuccessful) {
