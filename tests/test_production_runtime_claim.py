@@ -1,12 +1,11 @@
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
-import sqlite3
 import threading
 
 from app import production_runtime as runtime
 
 
 def seed_run(tmp_path, monkeypatch, owner="owner-a", status="queued"):
+    """Create an isolated run row without invoking specialist workers."""
     monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "production-runtime.sqlite3")
     runtime.init_runtime_db()
     run_id = "claim-test-run"
