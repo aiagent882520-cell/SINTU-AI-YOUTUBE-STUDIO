@@ -56,8 +56,7 @@ else
   state=$?
   [ "$state" -ne 2 ] || exit 1
   if ! curl -fsS http://127.0.0.1:8000/api/health >/dev/null 2>&1; then
-    : > "$LOG_DIR/server.log"
-    nohup .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 >>"$LOG_DIR/server.log" 2>&1 </dev/null &
+      nohup .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 >>"$LOG_DIR/server.log" 2>&1 </dev/null &
     echo $! > "$LOG_DIR/server.pid"
   else
     echo "[WARN] API health is already OK; cleared stale server PID reference without starting a duplicate."
@@ -80,7 +79,6 @@ if pid_is_expected "$LOG_DIR/bridge-worker.pid" "scripts/termux_bridge_worker.py
 else
   state=$?
   [ "$state" -ne 2 ] || exit 1
-  : > "$LOG_DIR/bridge-worker.log"
   nohup .venv/bin/python scripts/termux_bridge_worker.py >>"$LOG_DIR/bridge-worker.log" 2>&1 </dev/null &
   echo $! > "$LOG_DIR/bridge-worker.pid"
 fi
@@ -93,7 +91,6 @@ if pid_is_expected "$LOG_DIR/render-worker.pid" "scripts/render_queue_worker.py"
 else
   state=$?
   [ "$state" -ne 2 ] || exit 1
-  : > "$LOG_DIR/render-worker.log"
   nohup .venv/bin/python scripts/render_queue_worker.py >>"$LOG_DIR/render-worker.log" 2>&1 </dev/null &
   echo $! > "$LOG_DIR/render-worker.pid"
 fi
@@ -117,8 +114,7 @@ else
       GITHUB_RELAY_STATUS="not started: existing PID identity cannot be verified"
       echo "[WARN] $GITHUB_RELAY_STATUS." >&2
     else
-      : > "$LOG_DIR/github-relay.log"
-      nohup .venv/bin/python scripts/github_termux_relay.py >>"$LOG_DIR/github-relay.log" 2>&1 </dev/null &
+          nohup .venv/bin/python scripts/github_termux_relay.py >>"$LOG_DIR/github-relay.log" 2>&1 </dev/null &
       echo $! > "$LOG_DIR/github-relay.pid"
       GITHUB_RELAY_STATUS="relay start requested"
     fi
