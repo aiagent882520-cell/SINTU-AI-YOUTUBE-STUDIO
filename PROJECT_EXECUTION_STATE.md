@@ -1,3 +1,13 @@
+# LIVE EXECUTION CHECKPOINT — 2026-11-21
+
+- PR #281 is already merged: merge commit / current main at the time of verification `003de81b440984742ea7dbdbab0ccb77efd22d03`; its exact-head CI had passed 8/8 in the previous verified checkpoint. The main SHA has no PR-triggered workflow run returned by the current GitHub workflow-runs query, so a distinct post-merge main CI run is not claimed.
+- PR #282 carries runtime cancellation/recovery. Its earlier exact head `3623980120bf03b1f15a978404b600d910494427` passed 8/8 jobs, including Python 3.11–3.14 (991 passed, 5 warnings each), dependency audit, Chromium browser tests, offline Hindi video/motion E2E and Docker build. PR #282 remains open pending explicit human merge approval.
+- Follow-up runtime hardening in this branch: startup recovery now leaves a fresh fenced lease alone (avoids a second API process stealing a live worker); legacy or expired active rows remain recoverable. Worker-token state transitions are constrained so cancellation cannot be overwritten by success. Added tests for multi-process lease preservation and cancel-vs-success race; updated runtime docs. These follow-up changes have not yet been CI-verified.
+- Agent inventory: 61 core registry roles; 112 specialist roles including feature/senior-manager roles; 21 feature worker/checker pairs; 5 senior managers; 5 final reviewers. The production runtime invokes selected format roles sequentially with distinct checker calls and management handoffs. This is shared-model role execution, not 163 independent autonomous agents. Existing format presets include common feature workers/checkers plus format-specific specialists; full real-model role E2E remains unverified.
+- External acceptance remains blocked: ComfyUI host/workflow/models/resources, local Hindi TTS executable/model/audio review, three black-video source assets and production records, YouTube OAuth/channel authorization, physical Android access. No real-topic documentary final MP4 is accepted yet.
+
+---
+
 # DOCUMENTARY AUTOMATION EXECUTION — 2026-11-21
 
 ## Current code change (PR #278)
