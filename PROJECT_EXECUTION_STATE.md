@@ -1679,3 +1679,43 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Black-MP4 forensic issue #95 remains open. Original media and backups must remain untouched until provenance and repair are independently verified.
 - 56/60 generic format outputs are covered; four specialized 360/VR/AR/virtual-production formats remain blocked. Registry tests do not prove every module's full functional acceptance.
 - Product status remains **INCOMPLETE / NOT PRODUCTION READY** pending physical-device, media, real-engine and live-publishing gates.
+
+
+## GitHub-to-Termux command contract and safety update — 2026-11-21
+
+### Merged PR #267
+
+- PR #267 merged as `9d68aa712feb3454c6e03e0c303160a3fe46a485`.
+- Exact-head CI run [`44884160886`](https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44884160886) passed **8/8 jobs**: Python 3.11–3.14 each reported **933 passed, 5 warnings**; dependency security audit, real Chromium Video Editor browser tests, offline branded-video E2E/motion audit, and production Docker build all passed.
+- The first PR CI attempt exposed four test regressions (a removed compatibility constant and incorrect assertion/isolation in the new invalid-issue tests). They were corrected; no tests were disabled, skipped, or weakened.
+- `media_repair` is now paused by default in automation-only mode at all three enforcement layers: API bridge, GitHub issue relay, and local Termux bridge worker. It invokes `repair_media.py --apply`, which backs up and then replaces original MP4 paths; do not queue it during the current no-media-mutation safety posture.
+- Production E2E actions (`offline_video_e2e`, `full_self_test`, `full_studio_e2e`) remain paused by default. OpenAPI and Termux documentation now match the current 17-action allowlist and exact JSON body contract.
+- Post-merge main CI run [`44884406703`](https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44884406703) was still running at this checkpoint; the merged PR's exact-head CI is already fully green.
+
+### Verified GitHub issue relay contract
+
+- Eligible command issue: configured owner actor (`aiagent882520-cell` by default), title begins `SINTU-CMD:`, label `sintu-command-queued`, JSON-object body only.
+- Top-level body keys are restricted to `action`, `topic`, and `test_path`; `action` is required. `test_path` is only for `run_tests` and must be an existing Python file directly inside `tests/`. `topic` is only for `offline_video_e2e`, `full_self_test`, or `full_studio_e2e`, length 1–300. All other actions take no extra fields.
+- The 17 accepted actions are: `git_status`, `git_pull_ff_only`, `run_tests`, `compile_check`, `automation_self_test`, `health_audit`, `operational_readiness`, `live_preflight`, `engine_probe`, `safe_optional_install`, `restart_services`, `media_repair`, `media_forensics`, `watchdog_recovery_test`, `offline_video_e2e`, `full_self_test`, `full_studio_e2e`. `full_project_task` is not supported.
+- Relay claims queued issues FIFO/oldest-first; a running issue older than 40 minutes is requeued, subprocess timeout is 30 minutes, and retained output is capped at 20,000 characters. A GitHub claim/result comment is required before counting a command as device-executed.
+
+### Historical command issue audit
+
+- #38 was actually claimed by Android Termux. Its full self-test failed: pytest and media-quality audit failed; offline video E2E passed. Readiness inside that report showed 10 pass / 2 warnings (local model and ComfyUI unavailable).
+- #39 was rejected because `full_project_task` and extra fields are outside the JSON contract.
+- #40 was rejected because `test_path` was supplied to `full_self_test`.
+- #41 was rejected because `full_project_task` is not allowlisted.
+- #42 used the valid body `{"action":"operational_readiness"}` and returned Android Termux SUCCESS: 10 pass, 2 warnings, 0 failed. The local model and ComfyUI remained unavailable.
+
+### Current device relay probe — pending, not executed
+
+- Issue [#268](https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/issues/268) was created with the valid read-only body `{"action":"automation_self_test"}` and `sintu-command-queued`.
+- At this checkpoint #268 is still open/queued with **no claim comment, no Termux result comment, and no device exit code**. It is not a device PASS and no worker execution is claimed.
+- The last verified successful automation self-test is issue #212 (2026-11-19): 7/7 checks, including GitHub CLI auth, Studio API health, bridge worker online, relay singleton lock. This is historical, not a current liveness signal.
+- The latest owner-supplied Termux diagnostic recorded in #254 (2026-11-20) reported 27 targeted tests passed, but local `127.0.0.1:8000/api/health` was unreachable and automation self-test was NOT RUN. `pip check` failed because Pillow 13.0.0 is unsupported on that Android platform. Last known device checkout was `80f4022`, with modified tracked files and untracked backups/diagnostics; preserve them and do not reset/clean or assume a fast-forward to current main.
+
+### Still blocked / release status
+
+- Issue #95 remains open: three original MP4s are visually/pixel-confirmed full-duration black; two are dark-visible but not approved. Exact source/render provenance remains unknown. Originals and backups remain untouched; no repair, regeneration, quarantine, deletion, upload, or publishing is authorized/performed.
+- Current main has not been deployed to Termux by a verified command result. Physical reboot/worker recovery, Android app install/launch, current-device full test suite, real ComfyUI inference, and live YouTube OAuth/upload remain unverified.
+- Product remains **INCOMPLETE / NOT PRODUCTION READY**. GitHub CI success must not be presented as Android device execution.
