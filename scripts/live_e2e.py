@@ -358,11 +358,11 @@ def _live_agent_catalog(topic: str, include_result: bool = False):
         or worker_roles != expected_workers
         or checker_roles != expected_workers
         or reviewer_roles != expected_reviewers
-        or len(workers) != len(AGENTS)
-        or len(checkers) != len(AGENTS)
+        or len(workers) != len(expected_workers)
+        or len(checkers) != len(expected_workers)
         or len(reviewers) != len(REVIEWERS)
-        or summary["completed_workers"] != len(AGENTS)
-        or summary["passed_checkers"] != len(AGENTS)
+        or summary["completed_workers"] != len(expected_workers)
+        or summary["passed_checkers"] != len(expected_workers)
         or summary["final_reviewers"] != len(REVIEWERS)
     ):
         raise RuntimeError(
