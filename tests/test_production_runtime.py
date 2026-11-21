@@ -682,8 +682,10 @@ def test_transient_provider_errors_retry_with_audited_backoff(tmp_path, monkeypa
 
     def flaky_generate(prompt, workflow, provider):
         calls.append(prompt)
-        if len(calls) <= 2:
+        if len(calls) == 1:
             raise runtime.ProviderRequestError("Local server returned HTTP 503.")
+        if len(calls) == 2:
+            return {"output": "   ", "provider": "test", "model": "fixture"}
         return {"output": '{"decision":"PASS","evidence":["checked"],"issues":[],"revision_instructions":[]}',
                 "provider": "test", "model": "fixture"}
 
