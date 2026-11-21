@@ -12,7 +12,7 @@ import json
 import re
 import secrets
 
-from app.ai_brain import (
+from .ai_brain import (
     ProviderNotConfigured,
     ProviderRequestError,
     generate_text,
@@ -121,7 +121,9 @@ def council_status() -> dict:
     return {
         "master_director": "chatgpt",
         "principal_ais": principals,
-        "council_ready": all(item["eligible_to_call"] for item in principals),
+        "council_ready": False,
+        "all_principals_eligible_to_call": all(item["eligible_to_call"] for item in principals),
+        "readiness": "credentials_ready_live_health_unverified" if all(item["eligible_to_call"] for item in principals) else "blocked_or_incomplete",
         "paid_upgrades_allowed": paid_allowed,
         "local_fallback": {
             "configured": bool(local.get("configured")),
@@ -219,7 +221,7 @@ def _parse_vote(output: str) -> dict:
 def _decision_outcome(decision_type: str, vote_records: list[dict]) -> tuple[str, str]:
     complete = {item["principal_id"] for item in vote_records if item["status"] == "valid"}
     if complete != set(PRINCIPAL_IDS):
-        return "blocked_incomplete_council", "pending"
+        return "blocked_incomplete_council", "not_required"
     votes = [item["vote"] for item in vote_records]
     approvals = votes.count("APPROVE")
     rejections = votes.count("REJECT")
