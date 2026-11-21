@@ -260,7 +260,7 @@ class SintuApi(context: Context, baseUrl: String) {
         if (!response.isSuccessful) {
             val detail = response.errorBody()?.string()?.take(1000)
             throw IllegalStateException(detail?.takeIf { it.isNotBlank() }
-                ?: "SINTU image download failed with HTTP \${response.code()}.")
+                ?: "SINTU image download failed with HTTP ${response.code()}.")
         }
         val body = response.body() ?: throw IllegalStateException("SINTU server returned an empty image.")
         try {
@@ -299,7 +299,7 @@ class SintuApi(context: Context, baseUrl: String) {
             }
             val bytes = downloadImageBytes(imageId)
             val values = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, "SINTU_\${imageId}.jpg")
+                put(MediaStore.MediaColumns.DISPLAY_NAME, "SINTU_${imageId}.jpg")
                 put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
                 put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/SINTU")
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
