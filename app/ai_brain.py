@@ -378,7 +378,7 @@ def _generate_claude(user_input: str) -> str:
     except (urllib.error.URLError, TimeoutError):
         raise ProviderRequestError("Claude API connection timed out or network is unavailable.") from None
     blocks = data.get("content", [])
-    output = "\\n".join(
+    output = "\n".join(
         block.get("text", "") for block in blocks
         if isinstance(block, dict) and block.get("type") == "text"
     )
