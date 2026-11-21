@@ -577,6 +577,10 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             started = time.monotonic()
             try:
                 generated = generate_impl(prompt, workflow, provider)
+                if not isinstance(generated, dict) or not isinstance(generated.get("output"), str) or not generated["output"].strip():
+                    raise ProviderRequestError("Local model returned an empty response.")
+                if len(generated["output"]) > 80000:
+                    raise ProviderRequestError("Local model output exceeded the 80000-character handoff limit.")
             except ProviderRequestError as exc:
                 message = str(exc)
                 retryable = bool(re.search(r"\bHTTP (?:429|500|502|503|504)\b", message, re.IGNORECASE)) or "empty response" in message.casefold()
@@ -665,6 +669,8 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             worker_prompt = (
                 "You are a specialist builder in SINTU AI YOUTUBE STUDIO.\n"
                 "Produce only your assigned deliverable, with concrete production-ready detail.\n"
+                "HANDOFF INPUT CONTRACT: run ID and owner are enforced by the runtime; use the selected format, topic, role mission, persisted research ledger (if supplied), and only the previously approved worker/management deliverables included below. Treat missing upstream work as an unresolved dependency; never invent its output.\n"
+                "HANDOFF OUTPUT CONTRACT: return a non-empty deliverable under 80000 characters; state assumptions and unresolved dependencies; preserve supplied claim/source IDs; distinguish completed work from recommendations; never claim external execution that did not occur.\n"
                 "Video policy: Hindi Devanagari >=95%; English <=5%; no subtitles, captions, transcripts, "
                 "titles, labels or text overlays in video frames. Only the final SINTU watermark is permitted.\n"
                 f"Format: {selected['name']} ({selected['aspect_ratio']}, {selected['recommended_resolution']}).\n"
@@ -708,7 +714,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 checker_prompt = (
                     "Act as an independent quality checker. Do not rewrite the work. "
                     "Evaluate accuracy, completeness, format fit, Hindi-first policy, clean text-free video frames, "
-                    "copyright safety and actionable production detail. Return ONLY JSON with keys: "
+                    "copyright safety, the non-empty bounded-output contract, upstream dependency honesty, and actionable production detail. Return ONLY JSON with keys: "
                     "decision (PASS or FAIL), evidence (array), issues (array), revision_instructions (array).\n"
                     f"Topic: {run['topic']}\nSpecialist: {role}\n"
                     + research_context_instruction
@@ -722,6 +728,10 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                            checker_prompt, checked["output"], verdict["evidence"], verdict["issues"],
                            attempts=attempt + 1)
                 if verdict["decision"] == "PASS":
+                    _audit_worker_event(
+                        run_id, owner_username, worker_token, "agent_handoff_approved",
+                        f"worker={role}; checker={checker}; attempt={attempt + 1}; upstream={','.join(sorted({**deliverables, **management_reports}.keys()))[:500]}"
+                    )
                     if role in SENIOR_MANAGER_NAMES:
                         management_reports[role] = worker["output"]
                     else:
