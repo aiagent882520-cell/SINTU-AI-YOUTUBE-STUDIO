@@ -1736,3 +1736,11 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Physical Android install/launch and current-main synchronization of the user's Termux checkout remain unverified. The last known Termux base was `80f4022`; preserve its modified/untracked user files.
 - Live Google OAuth/real upload, ComfyUI inference, black-MP4 forensic remediation (#95), Termux reboot recovery, and the four specialized 360/VR/AR/virtual-production formats remain outstanding.
 - Product remains **INCOMPLETE / NOT PRODUCTION READY**.
+
+
+## ComfyUI preflight reporting and Termux relay checkpoint — 2026-11-21
+
+- PR #273 merged as `d5228e45435add4ad81770ad54096a1d25db9181`; exact-head CI run `44884861319` **8/8 PASS**. The offline E2E preflight now reports actual ComfyUI workflow readiness separately from procedural fallback availability. A procedural fallback can no longer make `comfyui_image.available` appear true.
+- The final offline 10-fort MP4 artifact was visually sampled at multiple timestamps after the PR #269 subtitle fix. It remains a procedural-art fallback, not a ComfyUI image-generation result.
+- GitHub issue #268 contains the read-only `automation_self_test` SINTU-CMD request and remains `sintu-command-queued` with no relay claim/comment as of 2026-11-21. Current Termux relay liveness is therefore still unverified; do not infer a successful device test from GitHub CI.
+- No direct Termux shell/device connection is available in this session. The user's local checkout and untracked data must not be reset, cleaned or overwritten.
