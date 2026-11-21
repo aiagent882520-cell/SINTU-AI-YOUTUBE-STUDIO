@@ -4379,3 +4379,18 @@ def test_documentary_research_evidence_is_owner_scoped_and_integrity_checked(tmp
     save_research_evidence(db_path, "b" * 32, "alice", package, validation)
     assert get_research_evidence(db_path, "b" * 32, "alice")["sha256"] == validation["sha256"]
     assert get_research_evidence(db_path, "b" * 32, "bob") is None
+
+
+
+def test_documentary_run_rejects_evidence_for_a_different_topic(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    called = []
+    monkeypatch.setattr(main, "create_production_run", lambda *args: called.append(args))
+    response = client.post("/api/production/runs", json={
+        "format_id": "documentary",
+        "topic": "भारत का इतिहास",
+        "research_evidence": _documentary_research_package(),
+    })
+    assert response.status_code == 422
+    assert "topic" in response.json()["detail"].lower()
+    assert called == []
