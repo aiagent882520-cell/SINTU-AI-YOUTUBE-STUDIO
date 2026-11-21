@@ -310,3 +310,25 @@ def test_preflight_reports_comfyui_only_when_workflow_is_ready():
     assert report["available"] is True
     assert report["local_fallback_available"] is True
 
+
+
+
+def test_preflight_missing_comfyui_flag_fails_closed_but_reports_local_fallback():
+    report = live_e2e._safe_engine({
+        "available": True,
+        "local_available": True,
+        "local_engine": "SINTU Procedural Art (offline fallback)",
+        "procedural_fallback_available": True,
+        "local_workflow_configured": False,
+        "local_diagnostics": {
+            "server_reachable": False,
+            "workflow_valid": False,
+            "nodes_verified": False,
+            "missing_nodes": [],
+            "missing_models": None,
+            "reason": "Legacy status omitted the ComfyUI capability flag.",
+        },
+    })
+    assert report["available"] is False
+    assert report["local_fallback_available"] is True
+    assert report["local_engine"] == "SINTU Procedural Art (offline fallback)"
