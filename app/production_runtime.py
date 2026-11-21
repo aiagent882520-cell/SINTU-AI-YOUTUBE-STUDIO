@@ -61,6 +61,25 @@ def init_runtime_db() -> None:
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(production_runs)").fetchall()}
         if "owner_username" not in columns:
             conn.execute("ALTER TABLE production_runs ADD COLUMN owner_username TEXT NOT NULL DEFAULT 'local'")
+        for column, definition in (
+            ("cancel_requested", "INTEGER NOT NULL DEFAULT 0"),
+            ("worker_token", "TEXT"),
+            ("lease_expires_at", "TEXT"),
+            ("attempt_count", "INTEGER NOT NULL DEFAULT 0"),
+        ):
+            if column not in columns:
+                conn.execute(f"ALTER TABLE production_runs ADD COLUMN {column} {definition}")
+        conn.execute("""CREATE TABLE IF NOT EXISTS production_run_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id TEXT NOT NULL,
+            owner_username TEXT NOT NULL,
+            from_status TEXT,
+            to_status TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            details TEXT,
+            created_at TEXT NOT NULL
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_production_run_events_owner ON production_run_events(run_id, owner_username, id)")
         conn.execute("""CREATE TABLE IF NOT EXISTS production_steps (
             id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL,
             sequence INTEGER NOT NULL, role TEXT NOT NULL, step_type TEXT NOT NULL,
@@ -118,21 +137,192 @@ def list_runs(owner_username: str = "local", limit: int = 20) -> list[dict[str, 
 
 
 
+WORKER_LEASE_SECONDS = 900
+MODEL_CALL_TIMEOUT_SECONDS = 300
+
+
+class ProductionRunCancelled(Exception):
+    """Raised when a worker loses ownership or its run is cancelled."""
+
+
+class ProductionRunTimeout(Exception):
+    """Raised when a model invocation exceeds the configured runtime budget."""
+
+
+def _event(conn, run_id: str, owner: str, old_status: str | None,
+           new_status: str, event_type: str, details: str | None = None) -> None:
+    conn.execute(
+        """INSERT INTO production_run_events
+           (run_id,owner_username,from_status,to_status,event_type,details,created_at)
+           VALUES(?,?,?,?,?,?,?)""",
+        (run_id, owner, old_status, new_status, event_type, details, _now()),
+    )
+
+
 def _claim_run(run_id: str, owner_username: str | None = None) -> bool:
-    """Atomically claim one queued/paused run across all worker processes."""
+    """Atomically claim one queued/paused run and issue a fenced worker lease."""
     init_runtime_db()
-    where = "id=? AND status IN ('queued','paused')"
-    params: list[Any] = ["running", None, None, _now(), run_id]
-    if owner_username is not None:
-        where += " AND owner_username=?"
-        params.append(owner_username)
+    token = uuid.uuid4().hex
+    now = datetime.now(timezone.utc)
+    lease = (now + __import__("datetime").timedelta(seconds=WORKER_LEASE_SECONDS)).isoformat()
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
+        query = "SELECT status,owner_username FROM production_runs WHERE id=?"
+        row = conn.execute(query, (run_id,)).fetchone()
+        if not row or (owner_username is not None and row["owner_username"] != owner_username):
+            return False
+        if row["status"] not in {"queued", "paused"}:
+            return False
         changed = conn.execute(
-            "UPDATE production_runs SET status=?,current_role=?,error=?,updated_at=? WHERE " + where,
-            params,
+            """UPDATE production_runs SET status='running',current_role=NULL,error=NULL,
+               worker_token=?,lease_expires_at=?,cancel_requested=0,
+               attempt_count=attempt_count+1,updated_at=?
+               WHERE id=? AND status IN ('queued','paused')""",
+            (token, lease, _now(), run_id),
+        ).rowcount
+        if changed == 1:
+            _event(conn, run_id, row["owner_username"], row["status"], "running",
+                   "worker_claimed", "Atomic worker claim with fenced lease.")
+    return changed == 1
+
+
+def _worker_token(run_id: str, owner_username: str | None = None) -> str | None:
+    with _connect() as conn:
+        if owner_username is None:
+            row = conn.execute("SELECT worker_token FROM production_runs WHERE id=?", (run_id,)).fetchone()
+        else:
+            row = conn.execute("SELECT worker_token FROM production_runs WHERE id=? AND owner_username=?",
+                               (run_id, owner_username)).fetchone()
+    return row["worker_token"] if row else None
+
+
+def _renew_worker_lease(run_id: str, token: str) -> bool:
+    lease = (datetime.now(timezone.utc) + __import__("datetime").timedelta(seconds=WORKER_LEASE_SECONDS)).isoformat()
+    with _connect() as conn:
+        changed = conn.execute(
+            """UPDATE production_runs SET lease_expires_at=?,updated_at=?
+               WHERE id=? AND worker_token=? AND cancel_requested=0
+               AND status IN ('running','reviewing')""",
+            (lease, _now(), run_id, token),
         ).rowcount
     return changed == 1
+
+
+def _cancellation_requested(run_id: str, owner_username: str | None, token: str) -> bool:
+    with _connect() as conn:
+        if owner_username is None:
+            row = conn.execute("SELECT status,cancel_requested,worker_token FROM production_runs WHERE id=?",
+                               (run_id,)).fetchone()
+        else:
+            row = conn.execute("SELECT status,cancel_requested,worker_token FROM production_runs WHERE id=? AND owner_username=?",
+                               (run_id, owner_username)).fetchone()
+    return (not row or row["worker_token"] != token or bool(row["cancel_requested"])
+            or row["status"] in {"cancelling", "cancelled"})
+
+
+def _finish_cancel(run_id: str, owner_username: str | None, token: str | None = None) -> bool:
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if token is None:
+            row = conn.execute("SELECT status,owner_username FROM production_runs WHERE id=?",
+                               (run_id,)).fetchone()
+        else:
+            row = conn.execute("SELECT status,owner_username FROM production_runs WHERE id=? AND worker_token=?",
+                               (run_id, token)).fetchone()
+        if not row or (owner_username is not None and row["owner_username"] != owner_username):
+            return False
+        changed = conn.execute(
+            """UPDATE production_runs SET status='cancelled',cancel_requested=1,
+               current_role=NULL,error='Cancelled by owner.',worker_token=NULL,
+               lease_expires_at=NULL,updated_at=?
+               WHERE id=? AND status IN ('cancelling','queued','paused')""",
+            (_now(), run_id),
+        ).rowcount
+        if changed:
+            _event(conn, run_id, row["owner_username"], row["status"], "cancelled",
+                   "cancellation_completed", "Worker stopped at a safe checkpoint; partial outputs were preserved.")
+    return changed == 1
+
+
+def request_cancel(run_id: str, owner_username: str) -> dict[str, Any] | None:
+    """Owner-scoped, idempotent cancellation request; running providers stop at safe boundaries."""
+    init_runtime_db()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT status,owner_username,cancel_requested FROM production_runs WHERE id=? AND owner_username=?",
+                           (run_id, owner_username)).fetchone()
+        if not row:
+            return None
+        status = row["status"]
+        if status in {"completed", "failed", "blocked", "cancelled"}:
+            return get_run(run_id, owner_username)
+        if status in {"queued", "paused"}:
+            target = "cancelled"
+            conn.execute(
+                """UPDATE production_runs SET status='cancelled',cancel_requested=1,
+                   current_role=NULL,error='Cancelled by owner.',worker_token=NULL,
+                   lease_expires_at=NULL,updated_at=? WHERE id=? AND owner_username=?""",
+                (_now(), run_id, owner_username),
+            )
+        else:
+            target = "cancelling"
+            conn.execute(
+                """UPDATE production_runs SET status='cancelling',cancel_requested=1,
+                   error='Cancellation requested; waiting for the active worker safe point.',
+                   updated_at=? WHERE id=? AND owner_username=? AND status IN ('running','reviewing','cancelling')""",
+                (_now(), run_id, owner_username),
+            )
+        if not row["cancel_requested"]:
+            _event(conn, run_id, owner_username, status, target, "cancel_requested",
+                   "Owner requested cancellation; no completed outputs are deleted.")
+    if target == "cancelled":
+        _finish_cancel(run_id, owner_username)
+    return get_run(run_id, owner_username)
+
+
+def list_run_events(run_id: str, owner_username: str) -> list[dict[str, Any]] | None:
+    init_runtime_db()
+    with _connect() as conn:
+        exists = conn.execute("SELECT 1 FROM production_runs WHERE id=? AND owner_username=?",
+                              (run_id, owner_username)).fetchone()
+        if not exists:
+            return None
+        rows = conn.execute(
+            """SELECT from_status,to_status,event_type,details,created_at
+               FROM production_run_events WHERE run_id=? AND owner_username=? ORDER BY id""",
+            (run_id, owner_username),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def recover_stale_runs() -> int:
+    """Fence expired workers and return their runs to a safe resumable/cancelled state."""
+    init_runtime_db()
+    now = _now()
+    recovered = 0
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        rows = conn.execute(
+            """SELECT id,owner_username,status,cancel_requested FROM production_runs
+               WHERE status IN ('running','reviewing') AND lease_expires_at IS NOT NULL
+               AND lease_expires_at < ?""", (now,)
+        ).fetchall()
+        for row in rows:
+            target = "cancelled" if row["cancel_requested"] else "paused"
+            error = ("Cancellation completed after the worker lease expired."
+                     if target == "cancelled" else
+                     "Worker lease expired; run paused for safe checkpoint recovery.")
+            changed = conn.execute(
+                """UPDATE production_runs SET status=?,error=?,worker_token=NULL,
+                   lease_expires_at=NULL,current_role=NULL,updated_at=?
+                   WHERE id=? AND status IN ('running','reviewing') AND lease_expires_at < ?""",
+                (target, error, now, row["id"], now),
+            ).rowcount
+            if changed:
+                _event(conn, row["id"], row["owner_username"], row["status"], target,
+                       "stale_worker_recovered", error)
+                recovered += 1
+    return recovered
 
 
 def get_run(run_id: str, owner_username: str | None = None) -> dict[str, Any] | None:
@@ -158,18 +348,49 @@ def get_run(run_id: str, owner_username: str | None = None) -> dict[str, Any] | 
 
 
 def _set_run(run_id: str, status: str, current_role: str | None = None,
-             error: str | None = None, result: dict | None = None) -> None:
+             error: str | None = None, result: dict | None = None,
+             worker_token: str | None = None) -> bool:
+    """Persist a state transition with an audit event and optional worker fencing."""
     with _connect() as conn:
-        conn.execute("""UPDATE production_runs SET status=?,current_role=?,error=?,
-            result_json=?,updated_at=? WHERE id=?""",
-            (status, current_role, error, json.dumps(result, ensure_ascii=False) if result is not None else None, _now(), run_id))
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT status,owner_username,worker_token FROM production_runs WHERE id=?",
+                           (run_id,)).fetchone()
+        if not row or row["status"] == "cancelled":
+            return False
+        if row["status"] == "cancelling" and status != "cancelled":
+            return False
+        if worker_token is not None and row["worker_token"] != worker_token:
+            return False
+        terminal = status in {"completed", "failed", "blocked", "paused", "cancelled"}
+        changed = conn.execute(
+            """UPDATE production_runs SET status=?,current_role=?,error=?,
+               result_json=COALESCE(?,result_json),worker_token=CASE WHEN ? THEN NULL ELSE worker_token END,
+               lease_expires_at=CASE WHEN ? THEN NULL ELSE lease_expires_at END,updated_at=?
+               WHERE id=?""",
+            (status, current_role, error,
+             json.dumps(result, ensure_ascii=False) if result is not None else None,
+             int(terminal), int(terminal), _now(), run_id),
+        ).rowcount
+        if changed and row["status"] != status:
+            _event(conn, run_id, row["owner_username"], row["status"], status,
+                   "state_transition", error)
+    return changed == 1
 
 
 def _save_step(run_id: str, sequence: int, role: str, step_type: str,
                status: str, input_text: str, output_text: str = "",
                evidence: list | None = None, issues: list | None = None,
-               attempts: int = 1) -> None:
+               attempts: int = 1, worker_token: str | None = None) -> None:
     with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if worker_token is not None:
+            row = conn.execute(
+                "SELECT worker_token,cancel_requested,status FROM production_runs WHERE id=?",
+                (run_id,),
+            ).fetchone()
+            if (not row or row["worker_token"] != worker_token or row["cancel_requested"]
+                    or row["status"] in {"cancelling","cancelled"}):
+                raise ProductionRunCancelled("Worker ownership lost or cancellation requested.")
         conn.execute("""INSERT INTO production_steps
             (run_id,sequence,role,step_type,status,input_text,output_text,evidence_json,issues_json,attempts,created_at,updated_at)
             VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
@@ -213,17 +434,31 @@ def _approved_reviewer_report(steps: list[dict], reviewer: str) -> dict | None:
 
 
 def recover_interrupted_runs() -> int:
-    """Move in-flight runs to resumable paused state after an application restart."""
+    """Recover active jobs after restart without reviving cancelled work."""
     init_runtime_db()
     now = _now()
+    recovered = 0
     with _connect() as conn:
-        cursor = conn.execute(
-            """UPDATE production_runs
-               SET status='paused', error=?, updated_at=?
-               WHERE status IN ('running', 'reviewing')""",
-            ("Application restarted during production. Resume from the last independently approved checkpoint.", now),
-        )
-    return int(cursor.rowcount)
+        conn.execute("BEGIN IMMEDIATE")
+        rows = conn.execute(
+            "SELECT id,owner_username,status,cancel_requested FROM production_runs WHERE status IN ('running','reviewing','cancelling')"
+        ).fetchall()
+        for row in rows:
+            target = "cancelled" if row["cancel_requested"] or row["status"] == "cancelling" else "paused"
+            error = ("Cancellation completed during application restart."
+                     if target == "cancelled" else
+                     "Application restarted during production. Resume from the last independently approved checkpoint.")
+            changed = conn.execute(
+                """UPDATE production_runs SET status=?,error=?,worker_token=NULL,
+                   lease_expires_at=NULL,current_role=NULL,updated_at=?
+                   WHERE id=? AND status IN ('running','reviewing','cancelling')""",
+                (target, error, now, row["id"]),
+            ).rowcount
+            if changed:
+                _event(conn, row["id"], row["owner_username"], row["status"], target,
+                       "restart_recovery", error)
+                recovered += 1
+    return recovered
 
 
 def _checker_payload(text: str) -> dict:
@@ -268,12 +503,38 @@ def _review_payload(text: str) -> dict:
 def execute_run(run_id: str, owner_username: str | None = None) -> None:
     if not _claim_run(run_id, owner_username):
         return
+    worker_token = _worker_token(run_id, owner_username)
+    if not worker_token:
+        return
+
+    def set_run(*args, **kwargs):
+        return set_run(*args, worker_token=worker_token, **kwargs)
+
+    def save_step(*args, **kwargs):
+        return save_step(*args, worker_token=worker_token, **kwargs)
+
+    def run_generate(prompt, workflow, provider):
+        if _cancellation_requested(run_id, owner_username, worker_token):
+            raise ProductionRunCancelled("Cancellation requested before model call.")
+        if not _renew_worker_lease(run_id, worker_token):
+            raise ProductionRunCancelled("Worker lease lost before model call.")
+        started = __import__("time").monotonic()
+        generated = run_generate(prompt, workflow, provider)
+        elapsed = __import__("time").monotonic() - started
+        if elapsed > MODEL_CALL_TIMEOUT_SECONDS:
+            raise ProductionRunTimeout(f"Model call exceeded {MODEL_CALL_TIMEOUT_SECONDS} seconds.")
+        if _cancellation_requested(run_id, owner_username, worker_token):
+            raise ProductionRunCancelled("Cancellation requested during model call.")
+        if not _renew_worker_lease(run_id, worker_token):
+            raise ProductionRunCancelled("Worker lease lost after model call.")
+        return generated
+
     run = get_run(run_id, owner_username)
     if not run:
         return
     selected = _selected_format(run["format_id"])
     if not selected:
-        _set_run(run_id, "failed", error="Video format no longer exists.")
+        set_run(run_id, "failed", error="Video format no longer exists.")
         return
     research_record = None
     research_context_instruction = ""
@@ -283,11 +544,11 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 RESEARCH_EVIDENCE_DB_PATH, run_id, run.get("owner_username", "local")
             )
         except (ValueError, sqlite3.Error):
-            _set_run(run_id, "paused", current_role="Documentary Research Evidence",
+            set_run(run_id, "paused", current_role="Documentary Research Evidence",
                      error="Documentary run paused: research evidence integrity/storage check failed.")
             return
         if not research_record:
-            _set_run(run_id, "paused", current_role="Documentary Research Evidence",
+            set_run(run_id, "paused", current_role="Documentary Research Evidence",
                      error="Documentary run paused: source-linked research evidence is missing.")
             return
         evidence_validation = validate_documentary_evidence_for_production(research_record["package"])
@@ -295,7 +556,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 or evidence_validation["sha256"] != research_record["sha256"]
                 or str(research_record["package"].get("topic", "")).strip().casefold()
                    != str(run.get("topic", "")).strip().casefold()):
-            _set_run(run_id, "paused", current_role="Documentary Research Evidence",
+            set_run(run_id, "paused", current_role="Documentary Research Evidence",
                      error="Documentary run paused: evidence topic, structure or integrity did not match this run.")
             return
         research_context_instruction = (
@@ -329,7 +590,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             if role in approved_roles:
                 continue
             checker = role + " Checker"
-            _set_run(run_id, "running", current_role=role)
+            set_run(run_id, "running", current_role=role)
             worker_prompt = (
                 "You are a specialist builder in SINTU AI YOUTUBE STUDIO.\n"
                 "Produce only your assigned deliverable, with concrete production-ready detail.\n"
@@ -368,10 +629,10 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                         "Revision instructions: " + json.dumps(verdict["revision_instructions"], ensure_ascii=False) + "\n"
                         "Previous deliverable:\n" + previous_output
                     )
-                worker = generate_text(current_worker_prompt, "content", "local")
+                worker = run_generate(current_worker_prompt, "content", "local")
                 previous_output = worker["output"]
                 sequence += 1
-                _save_step(run_id, sequence, role, "builder", "completed",
+                save_step(run_id, sequence, role, "builder", "completed",
                            current_worker_prompt, worker["output"], attempts=attempt + 1)
                 checker_prompt = (
                     "Act as an independent quality checker. Do not rewrite the work. "
@@ -383,10 +644,10 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                     + f"Revision attempt: {attempt + 1} of {MAX_REVISION_ATTEMPTS + 1}\n"
                     + f"Submitted work:\n{worker['output']}"
                 )
-                checked = generate_text(checker_prompt, "content", "local")
+                checked = run_generate(checker_prompt, "content", "local")
                 verdict = _checker_payload(checked["output"])
                 sequence += 1
-                _save_step(run_id, sequence, checker, "checker", verdict["decision"].lower(),
+                save_step(run_id, sequence, checker, "checker", verdict["decision"].lower(),
                            checker_prompt, checked["output"], verdict["evidence"], verdict["issues"],
                            attempts=attempt + 1)
                 if verdict["decision"] == "PASS":
@@ -396,7 +657,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                         deliverables[role] = worker["output"]
                     break
             if verdict["decision"] != "PASS":
-                _set_run(run_id, "paused", current_role=checker,
+                set_run(run_id, "paused", current_role=checker,
                          error="Independent checker failed after the bounded revision attempt. Run paused for human review.")
                 return
 
@@ -406,7 +667,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             if saved_report is not None:
                 review_results[reviewer] = saved_report
                 continue
-            _set_run(run_id, "reviewing", current_role=reviewer)
+            set_run(run_id, "reviewing", current_role=reviewer)
             review_prompt = (
                 "You are an independent final video production reviewer. Review the assembled production package "
                 "for your discipline. Return ONLY JSON with decision (PASS or FAIL), evidence (array), "
@@ -416,7 +677,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 + research_context_instruction
                 + f"Package summary: {json.dumps({k:v[:3500] for k,v in {**deliverables, **management_reports}.items()}, ensure_ascii=False)}"
             )
-            review = generate_text(review_prompt, "content", "local")
+            review = run_generate(review_prompt, "content", "local")
             verdict = _review_payload(review["output"])
             review_results[reviewer] = {
                 "decision": verdict["decision"],
@@ -426,10 +687,10 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 "raw_output": review["output"],
             }
             sequence += 1
-            _save_step(run_id, sequence, reviewer, "reviewer", verdict["decision"].lower(),
+            save_step(run_id, sequence, reviewer, "reviewer", verdict["decision"].lower(),
                        review_prompt, review["output"], verdict["evidence"], verdict["issues"])
             if verdict["decision"] != "PASS":
-                _set_run(run_id, "paused", current_role=reviewer,
+                set_run(run_id, "paused", current_role=reviewer,
                          error=f"Final reviewer failed: {reviewer}. Production run paused for correction.")
                 return
         # Owner Agent runs after all five independent final reviewers so it can
@@ -459,10 +720,10 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                         "Instructions: " + json.dumps(owner_verdict["revision_instructions"], ensure_ascii=False) + "\n"
                         "Previous owner report: " + owner_output
                     )
-                owner_worker = generate_text(current_prompt, "content", "local")
+                owner_worker = run_generate(current_prompt, "content", "local")
                 owner_output = owner_worker["output"]
                 sequence += 1
-                _save_step(run_id, sequence, "Owner Agent", "builder", "completed",
+                save_step(run_id, sequence, "Owner Agent", "builder", "completed",
                            current_prompt, owner_output, attempts=attempt + 1)
                 owner_checker_prompt = (
                     "Act as an independent quality checker for the Owner Agent. Verify that the owner report "
@@ -475,26 +736,26 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                     "Owner report: " + owner_output + "\n"
                     "Reviewer evidence: " + json.dumps(review_results, ensure_ascii=False)
                 )
-                owner_checked = generate_text(owner_checker_prompt, "content", "local")
+                owner_checked = run_generate(owner_checker_prompt, "content", "local")
                 owner_verdict = _checker_payload(owner_checked["output"])
                 sequence += 1
-                _save_step(run_id, sequence, "Owner Agent Checker", "checker",
+                save_step(run_id, sequence, "Owner Agent Checker", "checker",
                            owner_verdict["decision"].lower(), owner_checker_prompt,
                            owner_checked["output"], owner_verdict["evidence"],
                            owner_verdict["issues"], attempts=attempt + 1)
                 if owner_verdict["decision"] == "PASS":
                     management_reports["Owner Agent"] = owner_output
                     if re.search(r"\bNOT\s+READY\b", owner_output, re.IGNORECASE):
-                        _set_run(run_id, "paused", current_role="Owner Agent",
+                        set_run(run_id, "paused", current_role="Owner Agent",
                                  error="Owner Agent identified release blockers; human review is required before continuing.")
                         return
                     if not re.search(r"\bREADY\b", owner_output, re.IGNORECASE):
-                        _set_run(run_id, "paused", current_role="Owner Agent",
+                        set_run(run_id, "paused", current_role="Owner Agent",
                                  error="Owner Agent did not provide an explicit READY verdict; human review is required.")
                         return
                     break
             if not owner_verdict or owner_verdict["decision"] != "PASS":
-                _set_run(run_id, "paused", current_role="Owner Agent Checker",
+                set_run(run_id, "paused", current_role="Owner Agent Checker",
                          error="Owner Agent report failed its independent checker; human review required.")
                 return
 
@@ -516,11 +777,21 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             "published": False,
             "note": "Production package and reviewer reports generated. Media rendering and external publishing are separate explicit stages."
         }
-        _set_run(run_id, "completed", result=result)
+        set_run(run_id, "completed", result=result)
+    except ProductionRunCancelled:
+        _finish_cancel(run_id, owner_username, worker_token)
+    except ProductionRunTimeout as exc:
+        set_run(run_id, "paused", error=str(exc))
     except (ProviderNotConfigured, ProviderRequestError) as exc:
-        _set_run(run_id, "blocked", error=str(exc))
+        if _cancellation_requested(run_id, owner_username, worker_token):
+            _finish_cancel(run_id, owner_username, worker_token)
+        else:
+            set_run(run_id, "blocked", error=str(exc))
     except Exception as exc:
-        _set_run(run_id, "failed", error=f"Production runtime error: {type(exc).__name__}")
+        if _cancellation_requested(run_id, owner_username, worker_token):
+            _finish_cancel(run_id, owner_username, worker_token)
+        else:
+            set_run(run_id, "failed", error=f"Production runtime error: {type(exc).__name__}")
 
 
 def attach_render_result(run_id: str, render_result: dict[str, Any],
