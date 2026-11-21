@@ -42,3 +42,14 @@ def test_ai_clip_music_rejects_probe_failure(monkeypatch, tmp_path):
     )
     with pytest.raises(video_renderer.RenderFailed, match="duration read"):
         video_renderer._music_loop_args("ffprobe", tmp_path / "background.wav", 4.0)
+
+
+def test_ai_clip_music_probe_timeout_is_a_render_failure(monkeypatch, tmp_path):
+    import subprocess
+
+    def timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired("ffprobe", 30)
+
+    monkeypatch.setattr(video_renderer.render_process, "run_render_process", timeout)
+    with pytest.raises(video_renderer.RenderFailed, match="duration probe failed"):
+        video_renderer._music_loop_args("ffprobe", tmp_path / "background.wav", 4.0)
