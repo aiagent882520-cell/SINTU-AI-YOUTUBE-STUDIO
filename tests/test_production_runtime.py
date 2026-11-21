@@ -539,15 +539,21 @@ def test_stale_worker_lease_is_recovered_and_old_worker_is_fenced(tmp_path, monk
 
 
 def test_restart_recovery_finishes_pending_cancellation_without_deleting_steps(tmp_path, monkeypatch):
+    import sqlite3
+    from datetime import datetime, timedelta, timezone
     import app.production_runtime as runtime
 
-    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    database = tmp_path / "runtime.sqlite3"
+    monkeypatch.setattr(runtime, "DB_PATH", database)
     run = runtime.create_run("youtube-shorts", "restart during cancellation", "alice")
     assert runtime._claim_run(run["id"], "alice") is True
     token = runtime._worker_token(run["id"], "alice")
     runtime._save_step(run["id"], 1, "Script Writer", "builder", "completed",
                        "prompt", "preserved checkpoint", worker_token=token)
     assert runtime.request_cancel(run["id"], "alice")["status"] == "cancelling"
+    expired = (datetime.now(timezone.utc) - timedelta(seconds=10)).isoformat()
+    with sqlite3.connect(database) as conn:
+        conn.execute("UPDATE production_runs SET lease_expires_at=? WHERE id=?", (expired, run["id"]))
 
     assert runtime.recover_interrupted_runs() == 1
     result = runtime.get_run(run["id"], "alice")
@@ -630,3 +636,33 @@ def test_stale_cancelling_worker_is_recovered_by_run_poll(tmp_path, monkeypatch)
     assert recovered["status"] == "cancelled"
     assert recovered["steps"][0]["output_text"] == "safe checkpoint"
     assert runtime.list_run_events(run["id"], "alice")[-1]["event_type"] == "stale_worker_recovered"
+
+
+def test_startup_recovery_does_not_steal_a_live_worker_lease(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    run = runtime.create_run("youtube-shorts", "live worker survives sibling startup", "alice")
+    assert runtime._claim_run(run["id"], "alice") is True
+    token = runtime._worker_token(run["id"], "alice")
+
+    assert runtime.recover_interrupted_runs() == 0
+    current = runtime.get_run(run["id"], "alice")
+    assert current["status"] == "running"
+    assert current["worker_token"] == token
+
+
+def test_worker_cannot_transition_a_cancelling_run_to_success(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    run = runtime.create_run("youtube-shorts", "cancel wins over success", "alice")
+    assert runtime._claim_run(run["id"], "alice") is True
+    token = runtime._worker_token(run["id"], "alice")
+    assert runtime.request_cancel(run["id"], "alice")["status"] == "cancelling"
+
+    assert runtime._set_run(run["id"], "completed", result={"fake": "success"},
+                            worker_token=token) is False
+    current = runtime.get_run(run["id"], "alice")
+    assert current["status"] == "cancelling"
+    assert current["result"] is None
