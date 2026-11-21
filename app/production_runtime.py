@@ -213,13 +213,14 @@ def _renew_worker_lease(run_id: str, token: str) -> bool:
 def _cancellation_requested(run_id: str, owner_username: str | None, token: str) -> bool:
     with _connect() as conn:
         if owner_username is None:
-            row = conn.execute("SELECT status,cancel_requested,worker_token FROM production_runs WHERE id=?",
+            row = conn.execute("SELECT status,cancel_requested,worker_token,lease_expires_at FROM production_runs WHERE id=?",
                                (run_id,)).fetchone()
         else:
-            row = conn.execute("SELECT status,cancel_requested,worker_token FROM production_runs WHERE id=? AND owner_username=?",
+            row = conn.execute("SELECT status,cancel_requested,worker_token,lease_expires_at FROM production_runs WHERE id=? AND owner_username=?",
                                (run_id, owner_username)).fetchone()
     return (not row or row["worker_token"] != token or bool(row["cancel_requested"])
-            or row["status"] in {"cancelling", "cancelled"})
+            or row["status"] in {"cancelling", "cancelled"}
+            or not row["lease_expires_at"] or row["lease_expires_at"] < _now())
 
 
 def _finish_cancel(run_id: str, owner_username: str | None, token: str | None = None) -> bool:
@@ -361,13 +362,16 @@ def _set_run(run_id: str, status: str, current_role: str | None = None,
     """Persist a state transition with an audit event and optional worker fencing."""
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute("SELECT status,owner_username,worker_token FROM production_runs WHERE id=?",
+        row = conn.execute("SELECT status,owner_username,worker_token,lease_expires_at FROM production_runs WHERE id=?",
                            (run_id,)).fetchone()
         if not row or row["status"] == "cancelled":
             return False
         if row["status"] == "cancelling" and status != "cancelled":
             return False
-        if worker_token is not None and row["worker_token"] != worker_token:
+        if worker_token is not None and (
+            row["worker_token"] != worker_token or not row["lease_expires_at"]
+            or row["lease_expires_at"] < _now()
+        ):
             return False
         terminal = status in {"completed", "failed", "blocked", "paused", "cancelled"}
         changed = conn.execute(
@@ -393,11 +397,12 @@ def _save_step(run_id: str, sequence: int, role: str, step_type: str,
         conn.execute("BEGIN IMMEDIATE")
         if worker_token is not None:
             row = conn.execute(
-                "SELECT worker_token,cancel_requested,status FROM production_runs WHERE id=?",
+                "SELECT worker_token,cancel_requested,status,lease_expires_at FROM production_runs WHERE id=?",
                 (run_id,),
             ).fetchone()
             if (not row or row["worker_token"] != worker_token or row["cancel_requested"]
-                    or row["status"] in {"cancelling","cancelled"}):
+                    or row["status"] in {"cancelling","cancelled"} or not row["lease_expires_at"]
+                    or row["lease_expires_at"] < _now()):
                 raise ProductionRunCancelled("Worker ownership lost or cancellation requested.")
         conn.execute("""INSERT INTO production_steps
             (run_id,sequence,role,step_type,status,input_text,output_text,evidence_json,issues_json,attempts,created_at,updated_at)
