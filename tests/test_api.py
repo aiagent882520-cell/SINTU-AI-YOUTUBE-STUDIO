@@ -4347,6 +4347,9 @@ def test_documentary_run_persists_evidence_before_scheduling_workers(tmp_path, m
     monkeypatch.setattr(main, "create_production_run", lambda fmt, topic, owner: {
         "id": run_id, "status": "queued", "format_id": fmt, "topic": topic,
     })
+    monkeypatch.setattr(main, "get_production_run", lambda value, owner=None: {
+        "id": run_id, "status": "queued", "owner_username": owner,
+    } if value == run_id and owner == "local" else None)
     def execute(value, owner):
         scheduled.append((value, owner, main.get_research_evidence(main.DB_PATH, value, owner)))
     monkeypatch.setattr(main, "execute_production_run", execute)
