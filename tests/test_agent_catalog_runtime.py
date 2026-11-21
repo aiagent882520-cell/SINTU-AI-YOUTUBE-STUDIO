@@ -52,6 +52,9 @@ def test_full_catalog_run_executes_each_worker_checker_and_final_review(tmp_path
     assert result["result"]["published"] is False
     assert set(result["result"]["management_reports"]) == set(runtime.SENIOR_MANAGER_NAMES)
     assert len(calls) == len(CATALOG_WORKER_ROLES) * 2 + len(runtime.REVIEWERS)
+    handoffs = [event for event in runtime.list_run_events(run["id"], "test-owner")
+                if event["event_type"] == "agent_handoff_approved"]
+    assert len(handoffs) == len(CATALOG_WORKER_ROLES)
 
 
 def test_full_catalog_run_pauses_on_first_failed_independent_checker(tmp_path, monkeypatch):
