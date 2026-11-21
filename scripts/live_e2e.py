@@ -180,14 +180,14 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "ग्वालियर किला",
     ]
     research_sources = [
-        {"fort": "Bhangarh Fort", "claim": "17th-century fort-town built by Raja Madho Singh; haunted stories are folklore, not verified supernatural evidence.", "source_type": "Rajasthan Tourism", "url": "https://www.tourism.rajasthan.gov.in/content/rajasthan-tourism/en/tourist-destinations/bhangarh-fort.html"},
+        {"fort": "Bhangarh Fort", "claim": "Rajasthan Tourism describes the ruined palace, temples and marketplaces; curse accounts are presented as local legends, not verified supernatural evidence.", "source_type": "Rajasthan Tourism", "url": "https://www.tourism.rajasthan.gov.in/content/rajasthan-tourism/en/tourist-destinations/bhangarh-fort.html"},
         {"fort": "Kumbhalgarh Fort", "claim": "15th-century Mewar fort built by Rana Kumbha; its defensive wall stretches about 36 km.", "source_type": "Rajasthan Tourism", "url": "https://www.tourism.rajasthan.gov.in/kumbhalgarh-fort.html"},
         {"fort": "Golconda Fort", "claim": "Fateh Darwaza acoustics carry a clap from the gateway area to a hilltop pavilion almost one kilometre away.", "source_type": "Telangana Tourism", "url": "https://tourism.telangana.gov.in/attractions/golconda-fort"},
         {"fort": "Chittorgarh Fort", "claim": "The approach road passes seven gates; Vijay Stambh was built by Maharana Kumbha between 1440 and 1448.", "source_type": "Rajasthan Tourism", "url": "https://www.tourism.rajasthan.gov.in/content/rajasthan-tourism/en/tourist-destinations/chittorgarh-fort.html"},
         {"fort": "Daulatabad Fort", "claim": "A roughly 200-metre hill and a narrow winding rock-cut approach formed part of its layered defenses.", "source_type": "Maharashtra Tourism", "url": "https://maharashtratourism.gov.in/fort/devgiri-daulatabad/"},
         {"fort": "Kangra Fort", "claim": "The April 4, 1905 Kangra earthquake caused major structural damage; the fort is an ASI-protected monument.", "source_type": "District Kangra, Government of Himachal Pradesh", "url": "https://hpkangra.nic.in/tourist-place/kangra-fort/"},
-        {"fort": "Mehrangarh Fort", "claim": "Founded by Rao Jodha in 1459; seven gates include Jayapol.", "source_type": "Mehrangarh Museum Trust and Airports Authority of India", "url": "https://www.mehrangarh.org/mehrangarh-2/history/", "supporting_urls": ["https://www.aai.aero/en/airports/city-info/jodhpur/Tourist-Place"]},
-        {"fort": "Junagarh Fort", "claim": "The present fort's foundation ceremony was held in 1589 and construction was completed in 1594 under Raja Rai Singh.", "source_type": "Incredible India", "url": "https://www.incredibleindia.gov.in/en/rajasthan/bikaner/junagarh-fort"},
+        {"fort": "Mehrangarh Fort", "claim": "The Mehrangarh Museum Trust dates the fort's foundation by Rao Jodha to 1459.", "source_type": "Mehrangarh Museum Trust", "url": "https://www.mehrangarh.org/mehrangarh-2/architecture/"},
+        {"fort": "Junagarh Fort", "claim": "Rajasthan Tourism dates the fort's construction to 1588 under Raja Rai Singh.", "source_type": "Rajasthan Tourism", "url": "https://www.tourism.rajasthan.gov.in/content/rajasthan-tourism/en/forts.html"},
         {"fort": "Jaisalmer Fort", "claim": "Founded in 1156 on Trikuta Hill; the golden sandstone fort is part of the UNESCO-listed Hill Forts of Rajasthan.", "source_type": "Incredible India and UNESCO", "url": "https://www.prod.incredibleindia.gov.in/content/incredible-india-v2/en/destinations/jaisalmer/jaisalmer-fort.html", "supporting_urls": ["https://whc.unesco.org/en/list/247/"]},
         {"fort": "Gwalior Fort", "claim": "The fortress stands on a steep sandstone hill and its outer walls extend about two miles.", "source_type": "District Gwalior, Government of Madhya Pradesh", "url": "https://gwalior.nic.in/en/tourist-place/the-fort/"},
     ]
@@ -220,26 +220,26 @@ def _offline_storyboard_e2e(topic: str) -> dict:
 
     narration = (
         "आज की यात्रा में दस ऐसे किले, जिनकी कहानियों में इतिहास और लोककथा साथ चलते हैं। "
-        "राजस्थान का भानगढ़ सत्रहवीं सदी का नगर था; उसके श्राप की बातें लोककथाएँ हैं, "
+        "भानगढ़ के महल, मंदिर और बाज़ार के खंडहर आज भी उसकी पुरानी बसावट दिखाते हैं; श्राप की बातें लोककथाएँ हैं, "
         "प्रमाणित अलौकिक घटना नहीं। कुंभलगढ़ की लगभग छत्तीस किलोमीटर दीवार अरावली पर फैली है। "
         "गोलकोंडा के फाटक पर ताली की गूँज लगभग एक किलोमीटर दूर मंडप तक पहुँचती है। "
         "चित्तौड़गढ़ की चढ़ाई सात द्वारों से गुजरती है; विजय स्तंभ महाराणा कुंभा ने बनवाया। "
         "दौलताबाद का दो सौ मीटर ऊँचा पहाड़ और चट्टान में कटा घुमावदार रास्ता रक्षा का हिस्सा थे। "
         "कांगड़ा किला उन्नीस सौ पाँच के भूकंप से बुरी तरह क्षतिग्रस्त हुआ। मेहरानगढ़ की नींव "
-        "राव जोधा ने चौदह सौ उनसठ में रखी; इसके सात द्वार हैं। बीकानेर का जूनागढ़ पंद्रह सौ "
-        "उन्यासी से पंद्रह सौ चौरानवे के बीच बना। जैसलमेर का सुनहरा किला ग्यारह सौ छप्पन में "
+        "राव जोधा ने चौदह सौ उनसठ में रखी। बीकानेर का जूनागढ़ पंद्रह सौ अट्ठासी में राजा राय सिंह ने बनवाया। " +
+        "जैसलमेर का सुनहरा किला ग्यारह सौ छप्पन में "
         "त्रिकूट पहाड़ी पर बसाया गया। ग्वालियर का दुर्ग बलुआ पत्थर की खड़ी पहाड़ी पर है। इनका असली रहस्य है इंजीनियरिंग, इतिहास और लोककथाओं का मेल।"
     )
     subtitles = [
         "दस किले—इतिहास, वास्तुकला और लोककथाओं का संगम।",
-        "भानगढ़: सत्रहवीं सदी का नगर; श्राप की कहानी लोककथा है।",
+        "भानगढ़: महल और मंदिरों के खंडहर; श्राप की कहानी लोककथा है।",
         "कुंभलगढ़: अरावली पर लगभग 36 किलोमीटर लंबी दीवार।",
         "गोलकोंडा: फाटक की ताली की गूँज दूर मंडप तक।",
         "चित्तौड़गढ़: सात द्वार, विजय स्तंभ और वीरता की गाथाएँ।",
         "दौलताबाद: चट्टान काटकर बना घुमावदार रक्षा-पथ।",
         "कांगड़ा: हिमालयी दुर्ग, 1905 के भूकंप से क्षतिग्रस्त।",
-        "मेहरानगढ़: राव जोधा ने 1459 में नींव रखी; सात द्वार।",
-        "जूनागढ़: बीकानेर में 1589 से 1594 के बीच बना।",
+        "मेहरानगढ़: राव जोधा ने 1459 में नींव रखी।",
+        "जूनागढ़: 1588 में राजा राय सिंह ने बनवाया।",
         "जैसलमेर: 1156 में त्रिकूट पहाड़ी पर बना सुनहरा दुर्ग।",
         "ग्वालियर: खड़ी बलुआ-पत्थर पहाड़ी पर विशाल दुर्ग।",
         "खाइयाँ और जलाशय घेराबंदी में सहारा बने।",
