@@ -466,3 +466,143 @@ def test_documentary_runtime_pauses_when_research_evidence_is_missing(tmp_path, 
     assert result["status"] == "paused"
     assert result["current_role"] == "Documentary Research Evidence"
     assert calls == []
+
+
+def test_owner_can_cancel_queued_run_idempotently_and_audit_transition(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    run = runtime.create_run("youtube-shorts", "cancel me", "alice")
+    first = runtime.request_cancel(run["id"], "alice")
+    second = runtime.request_cancel(run["id"], "alice")
+
+    assert first["status"] == "cancelled"
+    assert second["status"] == "cancelled"
+    assert runtime.request_cancel(run["id"], "bob") is None
+    events = runtime.list_run_events(run["id"], "alice")
+    assert [event["event_type"] for event in events].count("cancel_requested") == 1
+    assert events[-1]["to_status"] == "cancelled"
+
+
+def test_cancellation_during_model_call_wins_and_preserves_partial_outputs(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    monkeypatch.setattr(runtime, "format_team", lambda _format: [
+        {"role_type": "specialist", "name": "Script Writer", "mission": "write narration"}
+    ])
+    run = runtime.create_run("youtube-shorts", "cancel during call", "alice")
+    calls = []
+
+    def fake_generate(prompt, workflow, provider):
+        calls.append(prompt)
+        runtime.request_cancel(run["id"], "alice")
+        return {"output": "Must not be persisted after cancellation", "provider": "test", "model": "fixture"}
+
+    monkeypatch.setattr(runtime, "generate_text", fake_generate)
+    runtime.execute_run(run["id"], "alice")
+    result = runtime.get_run(run["id"], "alice")
+
+    assert result["status"] == "cancelled"
+    assert len(calls) == 1
+    assert result["steps"] == []
+    assert result["result"] is None
+    events = runtime.list_run_events(run["id"], "alice")
+    assert any(event["to_status"] == "cancelling" for event in events)
+    assert events[-1]["to_status"] == "cancelled"
+
+
+def test_stale_worker_lease_is_recovered_and_old_worker_is_fenced(tmp_path, monkeypatch):
+    import sqlite3
+    from datetime import datetime, timedelta, timezone
+    import app.production_runtime as runtime
+
+    database = tmp_path / "runtime.sqlite3"
+    monkeypatch.setattr(runtime, "DB_PATH", database)
+    run = runtime.create_run("youtube-shorts", "recover stale worker", "alice")
+    assert runtime._claim_run(run["id"], "alice") is True
+    old_token = runtime._worker_token(run["id"], "alice")
+    expired = (datetime.now(timezone.utc) - timedelta(seconds=10)).isoformat()
+    with sqlite3.connect(database) as conn:
+        conn.execute("UPDATE production_runs SET lease_expires_at=? WHERE id=?", (expired, run["id"]))
+
+    assert runtime.recover_stale_runs() == 1
+    recovered = runtime.get_run(run["id"], "alice")
+    assert recovered["status"] == "paused"
+    assert recovered["worker_token"] is None
+    with pytest.raises(runtime.ProductionRunCancelled):
+        runtime._save_step(run["id"], 1, "Script Writer", "builder", "completed",
+                           "prompt", "stale output", worker_token=old_token)
+
+    assert runtime._claim_run(run["id"], "alice") is True
+    assert runtime._worker_token(run["id"], "alice") != old_token
+
+
+def test_restart_recovery_finishes_pending_cancellation_without_deleting_steps(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    run = runtime.create_run("youtube-shorts", "restart during cancellation", "alice")
+    assert runtime._claim_run(run["id"], "alice") is True
+    token = runtime._worker_token(run["id"], "alice")
+    runtime._save_step(run["id"], 1, "Script Writer", "builder", "completed",
+                       "prompt", "preserved checkpoint", worker_token=token)
+    assert runtime.request_cancel(run["id"], "alice")["status"] == "cancelling"
+
+    assert runtime.recover_interrupted_runs() == 1
+    result = runtime.get_run(run["id"], "alice")
+    assert result["status"] == "cancelled"
+    assert result["steps"][0]["output_text"] == "preserved checkpoint"
+    assert runtime.list_run_events(run["id"], "alice")[-1]["event_type"] == "restart_recovery"
+
+
+def test_completed_run_is_not_cancelled_or_modified(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    run = runtime.create_run("youtube-shorts", "already completed", "alice")
+    original = {"deliverables": {"Script Writer": "approved output"}, "video_rendered": False}
+    runtime._set_run(run["id"], "completed", result=original)
+
+    result = runtime.request_cancel(run["id"], "alice")
+    assert result["status"] == "completed"
+    assert result["result"] == original
+    assert runtime.list_run_events(run["id"], "alice")[-1]["to_status"] == "completed"
+
+
+def test_model_call_timeout_pauses_without_claiming_success(tmp_path, monkeypatch):
+    import time
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    monkeypatch.setattr(runtime, "format_team", lambda _format: [
+        {"role_type": "specialist", "name": "Script Writer", "mission": "write narration"}
+    ])
+    monkeypatch.setattr(runtime, "MODEL_CALL_TIMEOUT_SECONDS", 0.001)
+
+    def slow_generate(prompt, workflow, provider):
+        time.sleep(0.01)
+        return {"output": "late response", "provider": "test", "model": "fixture"}
+
+    monkeypatch.setattr(runtime, "generate_text", slow_generate)
+    run = runtime.create_run("youtube-shorts", "slow provider", "alice")
+    runtime.execute_run(run["id"], "alice")
+
+    result = runtime.get_run(run["id"], "alice")
+    assert result["status"] == "paused"
+    assert "exceeded" in result["error"]
+    assert result["steps"] == []
+
+
+def test_concurrent_cancel_requests_are_idempotent(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    run = runtime.create_run("youtube-shorts", "concurrent cancel", "alice")
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(lambda _index: runtime.request_cancel(run["id"], "alice"), range(6)))
+
+    assert all(item and item["status"] == "cancelled" for item in results)
+    events = runtime.list_run_events(run["id"], "alice")
+    assert [event["event_type"] for event in events].count("cancel_requested") == 1
