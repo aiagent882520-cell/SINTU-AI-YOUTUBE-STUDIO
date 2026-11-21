@@ -267,3 +267,46 @@ def test_offline_storyboard_e2e_rejects_missing_scene_image(monkeypatch, tmp_pat
     })
     with pytest.raises(RuntimeError, match="scene image 1"):
         live_e2e._offline_storyboard_e2e("भारत के किले")
+
+def test_preflight_does_not_report_procedural_fallback_as_comfyui(monkeypatch):
+    image_status = {
+        "available": True,
+        "local_available": True,
+        "local_engine": "SINTU Procedural Art (offline fallback)",
+        "comfyui_available": False,
+        "local_workflow_configured": False,
+        "local_diagnostics": {
+            "server_reachable": False,
+            "workflow_valid": False,
+            "nodes_verified": False,
+            "missing_nodes": [],
+            "missing_models": None,
+            "reason": "API workflow file path is not configured.",
+        },
+    }
+    report = live_e2e._safe_engine(image_status)
+    assert report["available"] is False
+    assert report["local_fallback_available"] is True
+    assert report["local_engine"] == "SINTU Procedural Art (offline fallback)"
+    assert report["workflow_configured"] is False
+
+
+def test_preflight_reports_comfyui_only_when_workflow_is_ready():
+    report = live_e2e._safe_engine({
+        "available": True,
+        "local_available": True,
+        "local_engine": "ComfyUI",
+        "comfyui_available": True,
+        "local_workflow_configured": True,
+        "local_diagnostics": {
+            "server_reachable": True,
+            "workflow_valid": True,
+            "nodes_verified": True,
+            "missing_nodes": [],
+            "missing_models": [],
+            "reason": None,
+        },
+    })
+    assert report["available"] is True
+    assert report["local_fallback_available"] is True
+
