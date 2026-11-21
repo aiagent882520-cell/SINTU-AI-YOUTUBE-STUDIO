@@ -328,6 +328,8 @@ def recover_stale_runs() -> int:
 
 
 def get_run(run_id: str, owner_username: str | None = None) -> dict[str, Any] | None:
+    # Polling a run also acts as a bounded watchdog for expired worker leases.
+    recover_stale_runs()
     init_runtime_db()
     with _connect() as conn:
         if owner_username is None:
