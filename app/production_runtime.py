@@ -10,7 +10,8 @@ import os
 import re
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import time
 from pathlib import Path
 from typing import Any
 
@@ -164,7 +165,7 @@ def _claim_run(run_id: str, owner_username: str | None = None) -> bool:
     init_runtime_db()
     token = uuid.uuid4().hex
     now = datetime.now(timezone.utc)
-    lease = (now + __import__("datetime").timedelta(seconds=WORKER_LEASE_SECONDS)).isoformat()
+    lease = (now + timedelta(seconds=WORKER_LEASE_SECONDS)).isoformat()
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         query = "SELECT status,owner_username FROM production_runs WHERE id=?"
@@ -518,7 +519,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             raise ProductionRunCancelled("Cancellation requested before model call.")
         if not _renew_worker_lease(run_id, worker_token):
             raise ProductionRunCancelled("Worker lease lost before model call.")
-        started = __import__("time").monotonic()
+        started = time.monotonic()
         generated = run_generate(prompt, workflow, provider)
         elapsed = __import__("time").monotonic() - started
         if elapsed > MODEL_CALL_TIMEOUT_SECONDS:
@@ -777,6 +778,8 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             "published": False,
             "note": "Production package and reviewer reports generated. Media rendering and external publishing are separate explicit stages."
         }
+        if _cancellation_requested(run_id, owner_username, worker_token):
+            raise ProductionRunCancelled("Cancellation requested before completion.")
         set_run(run_id, "completed", result=result)
     except ProductionRunCancelled:
         _finish_cancel(run_id, owner_username, worker_token)
