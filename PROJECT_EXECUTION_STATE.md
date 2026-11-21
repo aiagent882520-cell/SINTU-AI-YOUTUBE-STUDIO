@@ -1,6 +1,6 @@
 # SINTU AI YOUTUBE STUDIO — execution state
 
-Last updated: 2026-11-17 15:52 UTC
+Last updated: 2026-11-21 07:45 UTC
 
 ## Current verified snapshot
 
@@ -1586,6 +1586,39 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Local backend `127.0.0.1:8000/api/health` is unreachable; no APK files found; automation self-test was explicitly NOT RUN. This diagnostic did not start a service, worker, model, renderer or upload.
 - Engine probe confirms no local ComfyUI endpoint/workflow and no model assets. Current available RAM is below the configured 8 GiB ComfyUI manual-review threshold; do not install ComfyUI or diffusion models on this Android device. Use procedural offline fallback until a separate compatible host is configured.
 - Physical worker restart/recovery, Android app installation/launch, real ComfyUI inference, YouTube OAuth/channel/upload and original-media forensic review remain unverified/blocked. Production remains paused; no public publishing.
+
+
+## Follow-up execution evidence (2026-11-20 — media source investigation)
+
+### Repository / CI baseline
+
+- Current main baseline used for this update: `80f4022da1f6f215488db07f46d5321be6e42176` (PR #254 merge commit).
+- PR #254 exact-head CI run `44756952214`: 8/8 jobs passed (Python 3.11–3.14, dependency security audit, production Docker build, offline branded-video E2E/motion audit, and real Chromium Video Editor browser tests).
+- Owner-reported Termux targeted regression on the synced checkout: 27 passed, 5 warnings. This is not a full Android device E2E or reboot/recovery acceptance.
+
+### Five MP4 forensic investigation — read-only
+
+- Five target MP4s were examined with the forensic script and human-reviewed contact sheets. Three are confirmed full-duration black by the calibrated multi-signal check: `3f4c2151e8e640109f464b2c2e9b7569.mp4`, `59430f1fb7fd4bdf80cf8b7d9f456098.mp4`, and `8cfe9da88d5c43d184f3572e371ff4a6.mp4`.
+- Two targets (`adf9268e5d5543a587defdde5d4c4edd.mp4`, `afa4c87e3c1e42a197b7092e0e24040d.mp4`) are dark-visible, not full-black under the calibrated pixel checks; they are not approved for production quality.
+- Twelve source-image entries resolve to seven unique contents by SHA-256. A read-only resized RGB pixel comparison ranked `afc9fd540cc74dbdbc82fc986d267eed.jpg` closest to both dark-visible MP4s at five sampled timestamps (mean pixel difference 11.65 at 96x170). This is a similarity candidate only, not provenance evidence. The three black MP4s cannot be attributed by visual comparison of black decoded frames.
+- No matching production manifest/log/database provenance was found in the available forensic scan. Mtime proximity and pixel similarity do not prove source provenance.
+- No MP4, source image, backup, database, or other user data was modified, moved, deleted, repaired, quarantined, or published. The black-media publish gate must remain in force pending verified provenance and owner-reviewed remediation.
+- The owner ran a further read-only timestamp-frame hash comparison command, but its output has not yet been supplied; do not claim static-frame hash results.
+
+### Current blockers (do not overstate)
+
+- Three confirmed full-black MP4s remain unresolved; two dark-visible clips remain unapproved. Source attribution is not established.
+- ComfyUI real inference remains blocked by absent compatible host/models/workflows; Android device RAM is not suitable for installing a large diffusion stack.
+- Android physical restart/recovery and full device E2E remain unverified. Current Termux test count is only the targeted 27-pass result above.
+- Live YouTube OAuth/channel authorization/upload remains unverified. No upload or public publishing was performed.
+- Four specialized 360/VR/AR/virtual-production formats still lack native engines; 15-module registry checks are not functional acceptance.
+- Video Editor, Website, and Android native integration are not complete end-to-end.
+
+### Immediate next engineering steps
+
+1. Keep forensic media read-only until a defensible source match or render manifest is found; do not regenerate or overwrite the originals speculatively.
+2. Continue code-side work on durable YouTube resumable upload and exact-content owner approval, with mocked/interruption tests only; no live upload/public publish.
+3. Keep updating this checkpoint only with evidence-backed changes and exact-head CI results.
 
 
 ## Engineering checkpoint — 2026-11-21
