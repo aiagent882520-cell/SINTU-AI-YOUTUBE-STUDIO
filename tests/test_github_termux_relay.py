@@ -299,12 +299,13 @@ def test_process_issue_rejects_failed_command_issue_shapes_without_execution(
     def forbidden_execution(*args, **kwargs):
         raise AssertionError("Invalid issue payload must never reach subprocess execution")
 
+    monkeypatch.setattr(relay, "AUTOMATION_ONLY", False)
     monkeypatch.setattr(relay.subprocess, "run", forbidden_execution)
     github = FakeGitHub()
     issue = {"number": number, "body": body}
 
     assert relay.process_issue(github, issue) is False
-    assert expected_error in github.comments[-1]
+    assert expected_error in github.comments[-1][1]
     assert github.updates[0] == (number, {"labels": [relay.RUNNING_LABEL]})
     assert github.updates[-1] == (
         number, {"state": "closed", "labels": [relay.FAILED_LABEL]}
