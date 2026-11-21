@@ -137,6 +137,7 @@ def _draw_environment(draw: ImageDraw.ImageDraw, w: int, h: int, p: float, index
 
 def _draw_character_scene(draw: ImageDraw.ImageDraw, w: int, h: int, p: float, index: int) -> None:
     ground=int(h*.80)
+    draw.rectangle((0,ground,w,h),fill=(33,67,58))
     x=int(w*(.25+.48*p)); scale=min(w/720,h/1280)
     stride=math.sin(p*math.tau*2)
     head=(x,int(h*.37+math.sin(p*math.tau*2)*5*scale))
@@ -157,7 +158,6 @@ def _draw_character_scene(draw: ImageDraw.ImageDraw, w: int, h: int, p: float, i
     draw.ellipse((x+7*scale,head[1]-6*scale,x+14*scale,head[1]+4*scale),fill=dark)
     # A separate foreground layer moves at a different rate to create parallax.
     offset=int(p*w*.08)
-    draw.rectangle((0,ground,w,h),fill=(33,67,58))
     for x0 in range(-40,w+40,70):
         xx=x0-offset
         draw.line((xx,ground,xx-8,ground-45),fill=(112,139,93),width=4)
