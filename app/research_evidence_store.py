@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,6 +39,8 @@ def save_research_evidence(db_path, run_id, owner_username, package, validation)
     owner = str(owner_username or "").strip()
     if not owner or len(owner) > 120:
         raise ValueError("Research evidence owner is invalid.")
+    if not isinstance(run_id, str) or not re.fullmatch(r"[a-f0-9]{32}", run_id):
+        raise ValueError("Research evidence run ID is invalid.")
     if not isinstance(package, dict) or not isinstance(validation, dict) or validation.get("valid") is not True:
         raise ValueError("Only structurally valid documentary evidence can be persisted.")
     canonical = json.dumps(package, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -45,8 +48,10 @@ def save_research_evidence(db_path, run_id, owner_username, package, validation)
     if validation.get("sha256") != digest:
         raise ValueError("Research evidence validation digest does not match the package.")
     now = datetime.now(timezone.utc).isoformat()
-    with _connect(db_path) as conn:
+    conn = _connect(db_path)
+    try:
         _ensure_table(conn)
+        conn.commit()
         conn.execute("BEGIN IMMEDIATE")
         conn.execute(
             """INSERT INTO production_research_evidence
@@ -54,6 +59,12 @@ def save_research_evidence(db_path, run_id, owner_username, package, validation)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (run_id, owner, canonical, json.dumps(validation, ensure_ascii=False, sort_keys=True), digest, now, now),
         )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
     return get_research_evidence(db_path, run_id, owner)
 
 
@@ -61,13 +72,17 @@ def get_research_evidence(db_path, run_id, owner_username):
     owner = str(owner_username or "").strip()
     if not owner or len(owner) > 120:
         return None
-    with _connect(db_path) as conn:
+    conn = _connect(db_path)
+    try:
         _ensure_table(conn)
+        conn.commit()
         row = conn.execute(
             """SELECT package_json, validation_json, package_sha256, created_at, updated_at
                FROM production_research_evidence WHERE run_id=? AND owner_username=?""",
             (run_id, owner),
         ).fetchone()
+    finally:
+        conn.close()
     if not row:
         return None
     package = json.loads(row["package_json"])
