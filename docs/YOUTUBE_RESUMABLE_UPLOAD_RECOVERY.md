@@ -59,3 +59,12 @@ Live YouTube verification remains pending until owner-managed OAuth credentials,
 The public approval API creates no approval automatically and no approval is created by scheduled/background workers.
 
 Duplicate protection is channel-wide for an exact MP4 SHA-256, not just per calendar item. A different calendar item cannot upload the same file to the same channel while any prior job is active, failed, expired or completed; a prior job must be explicitly cancelled first. The cancelled calendar record itself remains terminal. The duplicate check runs before OAuth or Google network access.
+
+
+## Cross-worker locking and cancellation hardening (2026-11-21)
+
+- A per-calendar SQLite worker lease prevents two API requests/processes from initializing or transferring the same resumable session concurrently. The lease is 300 seconds, renewed before each resumable chunk/status probe and each state transition. An expired lease can be reclaimed after a worker crash; the lease owner check prevents an old worker from releasing a replacement worker's lease.
+- Upload state transitions run inside a short `BEGIN IMMEDIATE` transaction and update only when the previously read status still matches. A stale progress callback cannot overwrite a concurrent state change.
+- The cancel endpoint intentionally does not acquire the upload lease. It remains callable while a worker is transferring. Cancellation is an atomic transition to terminal `CANCELLED`; any later progress/state callback from that worker is rejected. The local cancel does not revoke or delete the Google-side resumable session, which may remain until Google's session expiry.
+- OAuth refresh has its own SQLite lease (60 seconds), separate from the per-upload lease. Workers re-read encrypted credentials after acquiring it, coalesce concurrent 401 refreshes when the stale access token has already been replaced, preserve a refresh token when Google omits a rotated value, and conditionally persist the encrypted token set. Google `invalid_grant` becomes a sanitized reconnect-required response; provider response details/tokens are not returned.
+- These mechanisms are validated by local protocol/concurrency tests and repository CI. They do not establish a live Google OAuth session or a successful real YouTube upload.
