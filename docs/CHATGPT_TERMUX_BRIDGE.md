@@ -6,8 +6,7 @@ inside Termux can execute it locally.
 
 ## Security model
 
-- The API accepts only a fixed action allowlist: `git_status`,
-  `git_pull_ff_only`, `run_tests`, `compile_check`, `health_audit`, `operational_readiness`, `live_preflight`, and `offline_video_e2e`.
+- The API accepts only these 17 fixed actions: `git_status`, `git_pull_ff_only`, `run_tests`, `compile_check`, `automation_self_test`, `health_audit`, `operational_readiness`, `live_preflight`, `engine_probe`, `safe_optional_install`, `restart_services`, `media_repair`, `media_forensics`, `watchdog_recovery_test`, `offline_video_e2e`, `full_self_test`, and `full_studio_e2e`.
 - No arbitrary shell text, executable path, environment variable, or command
   arguments are accepted from the remote caller.
 - A random bearer token of at least 32 characters is required on every route.
@@ -73,7 +72,7 @@ grant ChatGPT direct access to the phone.
 - `operational_readiness` (JSON readiness report; never prints secret values)
 - `live_preflight` (checks local model/media engine availability without generating media)
 - `offline_video_e2e` (creates a real local branded MP4 using procedural visuals and local Hindi voice; optional topic is limited to 300 characters)
-- `full_self_test` (runs readiness, the full pytest suite, offline MP4 generation and final media-quality audit in one job; optional topic is limited to 300 characters)
+- `full_self_test` (runs readiness, the full pytest suite, offline MP4 generation and final media-quality audit in one job; optional topic is limited to 300 characters; paused by default in automation-only mode)
 
 Jobs and bounded output are persisted in `sintu_termux_bridge.sqlite3`.
 
@@ -120,14 +119,33 @@ The issue must be authored by the configured owner account
 Example:
 
 ```json
-{"action":"full_self_test","topic":"भारत की ऐतिहासिक विरासत"}
+{"action":"operational_readiness"}
 ```
 
-Allowed actions: `git_status`, `git_pull_ff_only`, `run_tests`,
-`compile_check`, `health_audit`, `operational_readiness`,
-`live_preflight`, `offline_video_e2e`, and `full_self_test`.
-Optional `test_path` is accepted only for `run_tests` and must be an
-existing Python test file directly inside `tests/`. No shell commands,
+Allowed actions (exactly): `git_status`, `git_pull_ff_only`, `run_tests`,
+`compile_check`, `automation_self_test`, `health_audit`, `operational_readiness`,
+`live_preflight`, `engine_probe`, `safe_optional_install`, `restart_services`,
+`media_repair`, `media_forensics`, `watchdog_recovery_test`, `offline_video_e2e`,
+`full_self_test`, and `full_studio_e2e`.
+
+The issue body must be one JSON object with `action` required and no keys other
+than `action`, `topic`, and `test_path`. `test_path` is optional only for
+`run_tests` and must name an existing Python file directly inside `tests/`;
+without it, the full pytest suite runs. `topic` is optional only for
+`offline_video_e2e`, `full_self_test`, and `full_studio_e2e`, and must contain
+1–300 characters. Every other action accepts no additional fields. For example,
+`full_project_task`, `priority`, `goals`, and `constraints` are not supported.
+
+`SINTU_AUTOMATION_ONLY` defaults to `true`. In this mode,
+`offline_video_e2e`, `full_self_test`, `full_studio_e2e`, and `media_repair` are
+rejected. `media_repair` invokes `repair_media.py --apply`: it backs up then
+replaces existing MP4 files, so it remains blocked by default and must never be
+queued without explicit owner authorization and a reviewed backup plan.
+
+The relay accepts only issues from the configured owner, with a title beginning
+`SINTU-CMD:` and the `sintu-command-queued` label. It processes oldest-first;
+claims older than 40 minutes are requeued, command execution times out at 30
+minutes, and result output is capped at 20,000 characters. No shell commands,
 arbitrary paths, executable names, or environment changes are accepted.
 
 The worker changes the label to running, adds a claim comment, executes the

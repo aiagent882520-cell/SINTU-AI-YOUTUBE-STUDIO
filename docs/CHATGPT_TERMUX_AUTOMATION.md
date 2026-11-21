@@ -4,7 +4,9 @@
 
 ChatGPT creates a GitHub issue in this repository with the `sintu-command-queued` label. The Android Termux GitHub relay accepts only issues created by the configured repository owner, validates the JSON body, runs a fixed allowlisted command, and posts the result as an issue comment.
 
-For a complete local studio production run, use:
+The GitHub issue contract is JSON-only: required `action`; optional `topic` only for `offline_video_e2e`, `full_self_test`, and `full_studio_e2e` (1–300 characters); optional `test_path` only for `run_tests` (an existing `tests/*.py` file). No other keys are accepted, and `full_project_task` is not a supported action. The issue must be authored by the configured owner, titled with the `SINTU-CMD:` prefix, and labeled `sintu-command-queued`.
+
+**Safety default:** `SINTU_AUTOMATION_ONLY=true` blocks `full_studio_e2e`, `full_self_test`, `offline_video_e2e`, and the mutating `media_repair` action. Do not queue the production example below while this mode is enabled; it will be rejected. Use `{"action":"operational_readiness"}` for a read-only device readiness check.
 
 ```json
 {
@@ -36,4 +38,4 @@ It does not publish or upload to a social platform.
 - FFmpeg/FFprobe must be installed.
 - The command is subject to the relay's 30-minute subprocess timeout. A failed job posts the failure details; it is not reported as a completed render.
 
-For preflight, queue `live_preflight` or `operational_readiness`. For the broader regression suite, queue `full_self_test`. The command relay never accepts arbitrary shell commands.
+For preflight, queue `live_preflight` or `operational_readiness`. `full_self_test` remains paused by default until the owner deliberately changes the safety setting on the device. The command relay never accepts arbitrary shell commands. A relay claim/result comment is required before any device execution can be considered verified.

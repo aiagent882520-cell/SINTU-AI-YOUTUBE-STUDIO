@@ -118,7 +118,7 @@ def test_relay_rejects_payload_fields_for_wrong_action(monkeypatch):
 
 def test_relay_pauses_video_production_in_automation_only_mode(monkeypatch):
     monkeypatch.setattr(relay, "AUTOMATION_ONLY", True)
-    for action in ("offline_video_e2e", "full_self_test", "full_studio_e2e"):
+    for action in ("offline_video_e2e", "full_self_test", "full_studio_e2e", "media_repair"):
         with pytest.raises(ValueError, match="paused"):
             relay.command_for(action, {})
 
@@ -126,6 +126,9 @@ def test_relay_pauses_video_production_in_automation_only_mode(monkeypatch):
 def test_relay_maps_device_maintenance_actions_to_fixed_commands(monkeypatch):
     monkeypatch.setattr(relay, "AUTOMATION_ONLY", True)
     assert relay.command_for("restart_services", {}) == ["bash", "scripts/start_services.sh"]
+    with pytest.raises(ValueError, match="paused"):
+        relay.command_for("media_repair", {})
+    monkeypatch.setattr(relay, "AUTOMATION_ONLY", False)
     assert relay.command_for("media_repair", {}) == [
         relay.PYTHON, "scripts/repair_media.py", "--apply", "--json"
     ]
@@ -248,3 +251,62 @@ def test_relay_preserves_compact_forensic_footer_with_20k_output_limit(monkeypat
     assert relay.process_issue(github, issue) is False
     assert footer in github.comments[-1]
     assert len(github.comments[-1]) > 9000
+
+
+def test_termux_action_allowlists_and_fixed_command_mappings_stay_in_sync(monkeypatch):
+    from app.termux_bridge import ALLOWED_ACTIONS
+    from scripts import termux_bridge_worker as worker
+
+    monkeypatch.setattr(relay, "AUTOMATION_ONLY", False)
+    monkeypatch.setattr(worker, "AUTOMATION_ONLY", False)
+    assert relay.ACTIONS == ALLOWED_ACTIONS
+    for action in sorted(ALLOWED_ACTIONS):
+        assert relay.command_for(action, {})
+        assert worker.command_for({"action": action, "payload": {}})
+
+
+@pytest.mark.parametrize(("number", "body", "expected_error"), [
+    (
+        39,
+        '{"action":"full_project_task","priority":"high","goals":[]}',
+        "Issue body must be JSON with only action, topic, and test_path fields.",
+    ),
+    (
+        40,
+        '{"action":"full_self_test","topic":"fix failures","test_path":"tests"}',
+        "Payload fields are not valid for this action.",
+    ),
+    (
+        41,
+        '{"action":"full_project_task","topic":"integration audit","test_path":"tests"}',
+        "Action is not on the SINTU allowlist.",
+    ),
+])
+def test_process_issue_rejects_failed_command_issue_shapes_without_execution(
+    monkeypatch, number, body, expected_error
+):
+    class FakeGitHub:
+        def __init__(self):
+            self.comments = []
+            self.updates = []
+
+        def update_issue(self, issue_number, **fields):
+            self.updates.append((issue_number, fields))
+
+        def comment(self, issue_number, message):
+            self.comments.append((issue_number, message))
+
+    def forbidden_execution(*args, **kwargs):
+        raise AssertionError("Invalid issue payload must never reach subprocess execution")
+
+    monkeypatch.setattr(relay, "AUTOMATION_ONLY", False)
+    monkeypatch.setattr(relay.subprocess, "run", forbidden_execution)
+    github = FakeGitHub()
+    issue = {"number": number, "body": body}
+
+    assert relay.process_issue(github, issue) is False
+    assert expected_error in github.comments[-1][1]
+    assert github.updates[0] == (number, {"labels": [relay.RUNNING_LABEL]})
+    assert github.updates[-1] == (
+        number, {"state": "closed", "labels": [relay.FAILED_LABEL]}
+    )

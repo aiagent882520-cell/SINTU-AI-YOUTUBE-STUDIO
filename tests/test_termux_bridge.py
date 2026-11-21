@@ -125,7 +125,7 @@ def test_bridge_bearer_auth_works_without_admin_browser_session(tmp_path, monkey
     assert response.status_code == 200
     assert response.json()["enabled"] is True
     assert response.json()["automation_only"] is True
-    assert set(response.json()["paused_actions"]) == {"offline_video_e2e", "full_self_test", "full_studio_e2e"}
+    assert set(response.json()["paused_actions"]) == {"offline_video_e2e", "full_self_test", "full_studio_e2e", "media_repair"}
     assert client.get("/api/termux-bridge/status").status_code == 401
 
 
@@ -147,6 +147,9 @@ def test_bridge_queues_automation_actions_and_pauses_video_jobs(tmp_path, monkey
     assert video.status_code == 423
 
     assert full_studio.status_code == 423
+    media_repair = client.post("/api/termux-bridge/jobs", headers=api_headers,
+                               json={"action": "media_repair"})
+    assert media_repair.status_code == 423
     jobs = [client.get("/api/termux-bridge/jobs/next", headers=worker_headers).json()
             for _ in range(3)]
     assert [job["action"] for job in jobs] == [
@@ -232,7 +235,7 @@ def test_worker_maps_full_studio_e2e_to_full_production_pipeline(monkeypatch):
 def test_worker_blocks_production_jobs_while_automation_only(monkeypatch):
     from scripts import termux_bridge_worker as worker
     monkeypatch.setattr(worker, "AUTOMATION_ONLY", True)
-    for action in ("offline_video_e2e", "full_self_test", "full_studio_e2e"):
+    for action in ("offline_video_e2e", "full_self_test", "full_studio_e2e", "media_repair"):
         with pytest.raises(ValueError, match="paused"):
             worker.command_for({"action": action, "payload": {}})
 
@@ -268,23 +271,24 @@ def test_bridge_queues_read_only_media_forensics_action(tmp_path, monkeypatch):
     assert job.json()["action"] == "media_forensics"
 
 
-def test_bridge_queues_restart_and_media_repair_actions(tmp_path, monkeypatch):
+def test_bridge_queues_restart_but_pauses_media_repair(tmp_path, monkeypatch):
     client, api_headers, worker_headers = bridge_client(tmp_path, monkeypatch)
-    for action in ("restart_services", "media_repair"):
-        created = client.post(
-            "/api/termux-bridge/jobs", headers=api_headers,
-            json={"action": action},
-        )
-        assert created.status_code == 202
-        job = client.get("/api/termux-bridge/jobs/next", headers=worker_headers)
-        assert job.status_code == 200
-        assert job.json()["action"] == action
-        completed = client.post(
-            f"/api/termux-bridge/jobs/{job.json()['job_id']}/complete",
-            headers=worker_headers,
-            json={"status": "succeeded", "exit_code": 0, "output": "ok"},
-        )
-        assert completed.status_code == 200
+    created = client.post("/api/termux-bridge/jobs", headers=api_headers,
+                          json={"action": "restart_services"})
+    assert created.status_code == 202
+    job = client.get("/api/termux-bridge/jobs/next", headers=worker_headers)
+    assert job.status_code == 200
+    assert job.json()["action"] == "restart_services"
+    completed = client.post(
+        f"/api/termux-bridge/jobs/{job.json()['job_id']}/complete",
+        headers=worker_headers,
+        json={"status": "succeeded", "exit_code": 0, "output": "ok"},
+    )
+    assert completed.status_code == 200
+    blocked = client.post("/api/termux-bridge/jobs", headers=api_headers,
+                          json={"action": "media_repair"})
+    assert blocked.status_code == 423
+    assert client.get("/api/termux-bridge/jobs/next", headers=worker_headers).status_code == 204
 
 
 def test_worker_maps_read_only_media_forensics_to_fixed_script(monkeypatch):
@@ -303,6 +307,9 @@ def test_worker_maps_device_maintenance_actions_to_fixed_commands(monkeypatch):
     assert worker.command_for({"action": "restart_services", "payload": {}}) == [
         "bash", "scripts/start_services.sh"
     ]
+    with pytest.raises(ValueError, match="paused"):
+        worker.command_for({"action": "media_repair", "payload": {}})
+    monkeypatch.setattr(worker, "AUTOMATION_ONLY", False)
     assert worker.command_for({"action": "media_repair", "payload": {}}) == [
         "/sintu/.venv/bin/python", "scripts/repair_media.py", "--apply", "--json"
     ]
