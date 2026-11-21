@@ -579,7 +579,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 generated = generate_impl(prompt, workflow, provider)
             except ProviderRequestError as exc:
                 message = str(exc)
-                retryable = bool(re.search(r"\\bHTTP (?:429|500|502|503|504)\\b", message, re.IGNORECASE)) or "empty response" in message.casefold()
+                retryable = bool(re.search(r"\bHTTP (?:429|500|502|503|504)\b", message, re.IGNORECASE)) or "empty response" in message.casefold()
                 if not retryable or retry_index >= retry_limit:
                     raise
                 _audit_worker_event(
