@@ -63,7 +63,7 @@ from .flow_auto_import import start_flow_auto_import, stop_flow_auto_import, flo
 from .termux_bridge import router as termux_bridge_router
 from .youtube_upload import transfer_resumable_upload, sha256_file as youtube_sha256_file, validate_session_uri, validate_state_transition, UploadProtocolError, UPLOAD_STATES
 from .offline_media import (OfflineMediaError, MAX_MEDIA_BYTES, import_media_file, list_offline_media, get_offline_media_path)
-from .documentary_research import validate_documentary_evidence_for_production
+from .documentary_research import DOCUMENTARY_FORMAT_IDS, validate_documentary_evidence_for_production
 from .research_evidence_store import save_research_evidence, get_research_evidence
 from .resumable_media_upload import (ResumableUploadError, create_upload, get_upload, append_upload_chunk, complete_upload)
 
@@ -5002,13 +5002,6 @@ def status():
     }
 
 
-DOCUMENTARY_FORMAT_IDS = {
-    "documentary", "nature-documentary", "investigative-documentary",
-    "science-documentary", "biography", "mystery-documentary",
-    "travel-documentary", "crime-documentary",
-}
-
-
 class ProductionRunInput(BaseModel):
     format_id: str = Field(min_length=1, max_length=80)
     topic: str = Field(min_length=1, max_length=5000)
@@ -5025,6 +5018,8 @@ def start_production_run(payload: ProductionRunInput, background_tasks: Backgrou
                 status_code=422,
                 detail="Documentary production requires a source-linked research_evidence package before any agent run starts.",
             )
+        if str(payload.research_evidence.get("topic", "")).strip().casefold() != payload.topic.strip().casefold():
+            raise HTTPException(status_code=422, detail="Research evidence topic must exactly match the production topic.")
         evidence_validation = validate_documentary_evidence_for_production(payload.research_evidence)
         if not evidence_validation["valid"]:
             raise HTTPException(status_code=422, detail={
