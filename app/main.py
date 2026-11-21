@@ -63,7 +63,7 @@ from .flow_auto_import import start_flow_auto_import, stop_flow_auto_import, flo
 from .termux_bridge import router as termux_bridge_router
 from .youtube_upload import transfer_resumable_upload, sha256_file as youtube_sha256_file, validate_session_uri, validate_state_transition, UploadProtocolError, UPLOAD_STATES
 from .offline_media import (OfflineMediaError, MAX_MEDIA_BYTES, import_media_file, list_offline_media, get_offline_media_path)
-from .documentary_research import validate_research_package, validate_documentary_evidence_for_production
+from .documentary_research import validate_documentary_evidence_for_production
 from .research_evidence_store import save_research_evidence, get_research_evidence
 from .resumable_media_upload import (ResumableUploadError, create_upload, get_upload, append_upload_chunk, complete_upload)
 
@@ -5062,7 +5062,10 @@ def production_run_research_evidence(run_id: str, request: Request):
     owner = _production_project_owner(request)
     if not get_production_run(run_id, owner):
         raise HTTPException(status_code=404, detail="Production run not found.")
-    record = get_research_evidence(DB_PATH, run_id, owner)
+    try:
+        record = get_research_evidence(DB_PATH, run_id, owner)
+    except ValueError:
+        raise HTTPException(status_code=409, detail="Stored research evidence failed its integrity check.") from None
     if not record:
         raise HTTPException(status_code=404, detail="Research evidence package not found.")
     return record
@@ -5164,7 +5167,10 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=409, detail="Production package must pass all builder/checker/reviewer gates first.")
     research_record = None
     if run.get("format_id") in DOCUMENTARY_FORMAT_IDS:
-        research_record = get_research_evidence(DB_PATH, run_id, owner)
+        try:
+            research_record = get_research_evidence(DB_PATH, run_id, owner)
+        except ValueError:
+            raise HTTPException(status_code=409, detail="Documentary render is blocked: persisted research evidence integrity check failed.") from None
         if not research_record:
             raise HTTPException(status_code=409, detail="Documentary render is blocked: persisted source-linked research evidence is missing.")
         evidence_validation = validate_documentary_evidence_for_production(research_record["package"])
