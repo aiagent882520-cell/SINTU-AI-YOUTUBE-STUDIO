@@ -276,7 +276,7 @@ def run_council_decision(conn, owner: str, title: str, context: str, decision_ty
         VALUES(?,?,?,?,?,'running','not_required','{}',?,?)""",
         (decision_id, owner, title.strip()[:160], decision_type, context.strip()[:12000], now, now),
     )
-    _audit(conn, owner, "chatgpt", "council_decision_started", decision_id, {"decision_type": decision_type})
+    _audit(conn, owner, "sintu_council_service", "council_decision_started", decision_id, {"decision_type": decision_type})
     state = council_status()
     eligible = [p for p, status in zip(PRINCIPALS, state["principal_ais"]) if status["eligible_to_call"]]
     prompt_template = (
@@ -344,7 +344,7 @@ def run_council_decision(conn, owner: str, title: str, context: str, decision_ty
         "UPDATE principal_ai_decisions SET status=?,owner_approval_status=?,result_json=?,updated_at=? WHERE id=? AND owner_username=?",
         (status, approval_status, json.dumps(result, ensure_ascii=False), _now(), decision_id, owner),
     )
-    _audit(conn, owner, "chatgpt", "council_decision_completed", decision_id,
+    _audit(conn, owner, "sintu_council_service", "council_decision_completed", decision_id,
            {"status": status, "vote_counts": result["vote_counts"]})
     return get_decision(conn, owner, decision_id)
 
