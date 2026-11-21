@@ -199,16 +199,16 @@ def _worker_token(run_id: str, owner_username: str | None = None) -> str | None:
 
 
 def _renew_worker_lease(run_id: str, token: str) -> bool:
-    lease = (datetime.now(timezone.utc) + __import__("datetime").timedelta(seconds=WORKER_LEASE_SECONDS)).isoformat()
+    now = _now()
+    lease = (datetime.now(timezone.utc) + timedelta(seconds=WORKER_LEASE_SECONDS)).isoformat()
     with _connect() as conn:
         changed = conn.execute(
             """UPDATE production_runs SET lease_expires_at=?,updated_at=?
                WHERE id=? AND worker_token=? AND cancel_requested=0
-               AND status IN ('running','reviewing')""",
-            (lease, _now(), run_id, token),
+               AND lease_expires_at>=? AND status IN ('running','reviewing')""",
+            (lease, now, run_id, token, now),
         ).rowcount
     return changed == 1
-
 
 def _cancellation_requested(run_id: str, owner_username: str | None, token: str) -> bool:
     with _connect() as conn:
