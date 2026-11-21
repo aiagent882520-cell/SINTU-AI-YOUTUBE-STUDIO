@@ -2732,7 +2732,7 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
                 on_progress=persist_progress, probe_first=bool(saved.get("encrypted_session_uri")))
         except UploadProtocolError as exc:
             if exc.status == 401:
-                access_token = _youtube_access_token(force_refresh=True)
+                access_token = _youtube_access_token(force_refresh=True, stale_access_token=access_token)
                 set_state("RESUMING")
                 uploaded = transfer_resumable_upload(
                     path, session_uri, access_token, request=_youtube_resumable_http_request,
