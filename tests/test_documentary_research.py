@@ -130,3 +130,31 @@ def test_limits_and_schema_version_are_enforced():
     assert any("schema_version" in item for item in result["errors"])
     assert any("topic" in item for item in result["errors"])
     assert any("claims" in item for item in result["errors"])
+
+
+def test_malformed_enum_types_fail_without_raising_type_error():
+    data = package()
+    data["claims"][0]["claim_type"] = []
+    data["claims"][0]["status"] = {}
+    data["sources"][0]["source_type"] = []
+    result = validate_research_package(data)
+    assert result["valid"] is False
+    assert any("claim_type" in item for item in result["errors"])
+    assert any("status" in item for item in result["errors"])
+    assert any("source_type" in item for item in result["errors"])
+
+
+def test_boolean_is_not_accepted_as_schema_version_one():
+    data = package()
+    data["schema_version"] = True
+    result = validate_research_package(data)
+    assert result["valid"] is False
+    assert any("schema_version" in item for item in result["errors"])
+
+
+def test_invalid_url_port_is_rejected():
+    data = package()
+    data["sources"][0]["url"] = "https://example.org:99999/source"
+    result = validate_research_package(data)
+    assert result["valid"] is False
+    assert any(".url:" in item for item in result["errors"])
