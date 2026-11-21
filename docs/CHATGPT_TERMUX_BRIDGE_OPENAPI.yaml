@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: SINTU Termux Bridge
   version: 1.0.0
-  description: Queue allowlisted jobs for the local Termux worker. No arbitrary shell execution.
+  description: Queue allowlisted jobs for the local Termux worker. No arbitrary shell execution. In automation-only mode, media repair and production E2E actions are paused.
 servers:
   - url: https://YOUR-HTTPS-TUNNEL-HOST
 components:
@@ -14,17 +14,19 @@ components:
     JobRequest:
       type: object
       required: [action]
+      additionalProperties: false
       properties:
         action:
           type: string
-          enum: [git_status, git_pull_ff_only, run_tests, compile_check, health_audit, operational_readiness, live_preflight, offline_video_e2e, full_self_test]
+          enum: [git_status, git_pull_ff_only, run_tests, compile_check, automation_self_test, health_audit, operational_readiness, live_preflight, engine_probe, safe_optional_install, restart_services, media_repair, media_forensics, watchdog_recovery_test, offline_video_e2e, full_self_test, full_studio_e2e]
         test_path:
           type: string
-          description: Optional Python test file directly inside tests/, only for run_tests.
+          maxLength: 160
+          description: Optional existing Python test file directly inside tests/, only for run_tests; omit to run the full suite.
         topic:
           type: string
           maxLength: 300
-          description: Optional topic for offline_video_e2e or full_self_test only.
+          description: Optional topic for offline_video_e2e, full_self_test, or full_studio_e2e only. Paused by default in automation-only mode.
     Job:
       type: object
       properties:
