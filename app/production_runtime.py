@@ -311,7 +311,7 @@ def recover_stale_runs() -> int:
         conn.execute("BEGIN IMMEDIATE")
         rows = conn.execute(
             """SELECT id,owner_username,status,cancel_requested FROM production_runs
-               WHERE status IN ('running','reviewing') AND lease_expires_at IS NOT NULL
+               WHERE status IN ('running','reviewing','cancelling') AND lease_expires_at IS NOT NULL
                AND lease_expires_at < ?""", (now,)
         ).fetchall()
         for row in rows:
@@ -322,7 +322,7 @@ def recover_stale_runs() -> int:
             changed = conn.execute(
                 """UPDATE production_runs SET status=?,error=?,worker_token=NULL,
                    lease_expires_at=NULL,current_role=NULL,updated_at=?
-                   WHERE id=? AND status IN ('running','reviewing') AND lease_expires_at < ?""",
+                   WHERE id=? AND status IN ('running','reviewing','cancelling') AND lease_expires_at < ?""",
                 (target, error, now, row["id"], now),
             ).rowcount
             if changed:
