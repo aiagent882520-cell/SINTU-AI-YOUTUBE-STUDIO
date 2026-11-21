@@ -737,7 +737,7 @@ def _set_app_setting(key: str, value: str):
 
 
 class ProviderSettingsInput(BaseModel):
-    selected_provider: str = Field(pattern=r"^(auto|local|openai|gemini|deepseek)$")
+    selected_provider: str = Field(pattern=r"^(auto|local|openai|gemini|deepseek|claude)$")
 
 
 @app.get("/api/admin/provider-settings")
@@ -748,7 +748,7 @@ def admin_provider_settings():
         "selected_provider": status["selected"],
         "providers": {
             key: {"configured": value["configured"], "model": value["model"]}
-            for key, value in status.items() if key in {"local", "openai", "gemini", "deepseek"}
+            for key, value in status.items() if key in {"local", "openai", "gemini", "deepseek", "claude"}
         },
         "secret_policy": "API keys are read only from server environment variables and are never accepted or returned by this dashboard."
     }
@@ -757,9 +757,9 @@ def admin_provider_settings():
 @app.patch("/api/admin/provider-settings")
 def update_admin_provider_settings(payload: ProviderSettingsInput):
     status = provider_status(payload.selected_provider)
-    if payload.selected_provider in {"openai", "gemini", "deepseek"} and not paid_upgrades_allowed():
+    if payload.selected_provider in {"openai", "gemini", "deepseek", "claude"} and not paid_upgrades_allowed():
         raise HTTPException(status_code=403, detail="Paid upgrade locked until SINTU earns revenue and the user explicitly approves it.")
-    if payload.selected_provider in {"openai", "gemini", "deepseek"} and not status[payload.selected_provider]["configured"]:
+    if payload.selected_provider in {"openai", "gemini", "deepseek", "claude"} and not status[payload.selected_provider]["configured"]:
         raise HTTPException(status_code=400, detail=f"{payload.selected_provider} API key server par configured nahi hai.")
     _set_app_setting("selected_provider", payload.selected_provider)
     return admin_provider_settings()
@@ -776,7 +776,7 @@ def admin_integrations():
     selected_config = providers["providers"].get(selected, {}).get("configured", False)
     if selected == "local":
         text_status = "ready" if selected_config else "needs_local_model"
-    elif selected in {"openai", "gemini", "deepseek"}:
+    elif selected in {"openai", "gemini", "deepseek", "claude"}:
         text_status = "paid_upgrade_locked" if not paid_allowed else ("ready" if selected_config else "needs_server_key")
     else:
         text_status = "unsupported_provider"
@@ -825,7 +825,7 @@ def admin_integrations():
             "roles_routed": orchestration_summary()["roles_routed"],
             "note": "Registered specialist/checker roles are orchestrated workflows, not 61 continuously running autonomous agents."
         },
-        "other_text_providers": {"status": "deepseek_configured" if providers["providers"]["deepseek"]["configured"] else "needs_server_key", "providers": ["Claude", "GLM", "Doubao", "Kimi"], "deepseek": providers["providers"]["deepseek"]}
+        "other_text_providers": {"status": "deepseek_configured" if providers["providers"]["deepseek"]["configured"] else "needs_server_key", "providers": ["GLM", "Doubao", "Kimi"], "deepseek": providers["providers"]["deepseek"], "claude": providers["providers"]["claude"]}
     }
 
 @app.get("/api/admin/audit")
@@ -1879,6 +1879,8 @@ def capabilities():
             "local": providers["local"]["configured"],
             "openai": providers["openai"]["configured"],
             "gemini": providers["gemini"]["configured"],
+            "deepseek": providers["deepseek"]["configured"],
+            "claude": providers["claude"]["configured"],
         },
         "studio_scope": scope_summary(),
         "blender_3d": blender_status(),
