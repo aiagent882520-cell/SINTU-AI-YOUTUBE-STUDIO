@@ -338,6 +338,8 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 f"Format: {selected['name']} ({selected['aspect_ratio']}, {selected['recommended_resolution']}).\n"
                 f"Topic: {run['topic']}\nRole: {role}\nMission: {pair.get('mission','Perform your specialist task.')}\n"
                 + research_context_instruction
+                + "Previously approved specialist and management deliverables (actual prior-agent handoffs): "
+                  + json.dumps({**deliverables, **management_reports}, ensure_ascii=False) + "\n"
                 + (
                     "You are a senior management agent. Review completed specialist deliverables and earlier management reports; identify missing hand-offs, contradictions, risks and release blockers. Do not claim media was rendered or uploaded.\n"
                     "Current production evidence: " + json.dumps({**deliverables, **management_reports}, ensure_ascii=False) + "\n"
