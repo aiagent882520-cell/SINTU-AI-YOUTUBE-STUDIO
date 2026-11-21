@@ -395,21 +395,26 @@ def _save_step(run_id: str, sequence: int, role: str, step_type: str,
                attempts: int = 1, worker_token: str | None = None) -> None:
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        if worker_token is not None:
-            row = conn.execute(
-                "SELECT worker_token,cancel_requested,status,lease_expires_at FROM production_runs WHERE id=?",
-                (run_id,),
-            ).fetchone()
-            if (not row or row["worker_token"] != worker_token or row["cancel_requested"]
-                    or row["status"] in {"cancelling","cancelled"} or not row["lease_expires_at"]
-                    or row["lease_expires_at"] < _now()):
-                raise ProductionRunCancelled("Worker ownership lost or cancellation requested.")
+        row = conn.execute(
+            "SELECT owner_username,worker_token,cancel_requested,status,lease_expires_at FROM production_runs WHERE id=?",
+            (run_id,),
+        ).fetchone()
+        if not row:
+            raise ValueError("Production run not found.")
+        if worker_token is not None and (
+            row["worker_token"] != worker_token or row["cancel_requested"]
+            or row["status"] in {"cancelling","cancelled"} or not row["lease_expires_at"]
+            or row["lease_expires_at"] < _now()
+        ):
+            raise ProductionRunCancelled("Worker ownership lost or cancellation requested.")
         conn.execute("""INSERT INTO production_steps
             (run_id,sequence,role,step_type,status,input_text,output_text,evidence_json,issues_json,attempts,created_at,updated_at)
             VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
             (run_id, sequence, role, step_type, status, input_text, output_text,
              json.dumps(evidence or [], ensure_ascii=False), json.dumps(issues or [], ensure_ascii=False),
              attempts, _now(), _now()))
+        _event(conn, run_id, row["owner_username"], None, status, "step_saved",
+               f"{step_type}:{role}; attempt={attempts}")
 
 
 def _approved_builder_output(steps: list[dict], role: str) -> str | None:
