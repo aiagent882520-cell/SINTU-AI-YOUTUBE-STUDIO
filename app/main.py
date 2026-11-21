@@ -5173,10 +5173,11 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
             else _subtitle_lines_from_narration(narration, len(scene_prompts))
             if payload.burn_subtitles else []
         )
+        animation_report = None
         if use_procedural_2d:
-            from .animation_2d import render_2d_animation_clips
-            with tempfile.TemporaryDirectory(prefix="sintu-approved-2d-") as animation_temp:
-                animation_clips = render_2d_animation_clips(
+            from .documentary_animation import render_documentary_animation_clips
+            with tempfile.TemporaryDirectory(prefix="sintu-approved-documentary-2d-") as animation_temp:
+                animation_clips, animation_report = render_documentary_animation_clips(
                     scene_prompts, payload.seconds_per_scene, Path(animation_temp),
                     resolution=resolution, fps=payload.fps,
                 )
@@ -5188,9 +5189,9 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                     sound_effects_volume=payload.sound_effects_volume,
                     resolution=resolution, fps=payload.fps, quality=payload.quality,
                 )
-            rendered["animation_mode"] = "2D character animation"
-            rendered["animation_provider"] = "SINTU Procedural 2D Animation (local)"
-            rendered["camera_movement"] = "animated cinematic pan and zoom"
+            rendered["animation_mode"] = "scene-aware 2D documentary animation"
+            rendered["animation_provider"] = animation_report["engine"]
+            rendered["animation_report"] = animation_report
         else:
             rendered = render_storyboard(
                 run.get("topic", "SINTU AI Studio Production"), scene_prompts,
@@ -5219,9 +5220,11 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                     "seconds_per_scene": payload.seconds_per_scene,
                     "scene_count": len(scene_prompts),
                     "subtitles_burned_in": bool(subtitle_lines),
+                    "animation_report": animation_report if use_procedural_2d else None,
                 },
                 engines={
-                    "image": str((image_result.get("provider") if not use_procedural_2d else "SINTU Procedural 2D Animation") or "local"),
+                    "image": str((image_result.get("provider") if not use_procedural_2d else "SINTU Scene-aware 2D Animation") or "local"),
+                    "animation": animation_report["engine"] if animation_report else None,
                     "voice": str(voice_result.get("provider") or "local"),
                     "music": str(music_result.get("provider") or "local"),
                     "renderer": "FFmpeg",
