@@ -4400,3 +4400,58 @@ def test_documentary_run_rejects_evidence_for_a_different_topic(tmp_path, monkey
     assert response.status_code == 422
     assert "topic" in response.json()["detail"].lower()
     assert called == []
+
+
+
+def test_principal_ai_council_api_is_owner_scoped_and_fails_closed(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "false")
+    monkeypatch.setenv("ALLOW_PAID_UPGRADES", "false")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.setattr(main.principal_ai_council, "provider_status", lambda: {
+        "openai": {"configured": False, "model": "gpt-test"},
+        "gemini": {"configured": False, "model": "gemini-test"},
+        "claude": {"configured": False, "model": "claude-test"},
+        "deepseek": {"configured": False, "model": "deepseek-test"},
+        "local": {"configured": False, "model": "local-test"},
+    })
+    status = client.get("/api/admin/principal-ai/council/status")
+    assert status.status_code == 200
+    body = status.json()
+    assert [item["id"] for item in body["principal_ais"]] == ["chatgpt", "gemini", "claude", "deepseek"]
+    assert body["council_ready"] is False
+    assert body["audit_chain"]["valid"] is True
+
+    created = client.post("/api/admin/principal-ai/council/decisions", json={
+        "title": "Check unavailable Council",
+        "decision_type": "major",
+        "context": "The four principal providers have no configured credentials.",
+    })
+    assert created.status_code == 201
+    decision = created.json()
+    assert decision["status"] == "blocked_incomplete_council"
+    assert decision["result"]["all_four_valid_votes"] is False
+    assert len(decision["votes"]) == 4
+    assert all(vote["status"] == "blocked" for vote in decision["votes"])
+    approval = client.post(
+        f"/api/admin/principal-ai/council/decisions/{decision['id']}/owner-approval",
+        json={"approved": True, "note": "Cannot approve an incomplete Council."},
+    )
+    assert approval.status_code == 409
+    assert client.get("/api/admin/principal-ai/council/status").json()["audit_chain"]["valid"] is True
+
+
+def test_principal_ai_council_rejects_non_owner_admin_account(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    login = client.post("/api/auth/login", json={"username": "owner", "password": "a-strong-test-password"})
+    assert login.status_code == 200
+    assert client.get("/api/admin/principal-ai/council/status").status_code == 200
