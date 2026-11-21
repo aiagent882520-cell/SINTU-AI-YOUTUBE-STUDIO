@@ -157,7 +157,7 @@ def validate_research_package(package):
             errors.append(f"{prefix}.source_ids: unknown source IDs {missing}")
         if refs and not _text(claim.get("evidence_notes"), maximum=2000):
             errors.append(f"{prefix}.evidence_notes: explain how the cited source relates to the claim")
-        if kind == "factual" and status in CLAIM_STATUSES:
+        if kind == "factual" and isinstance(status, str) and status in CLAIM_STATUSES:
             if status in {"corroborated", "single_source", "disputed"} and not refs:
                 errors.append(f"{prefix}: factual claim marked {status} must cite at least one source")
             if status == "corroborated" and not missing:
@@ -172,7 +172,7 @@ def validate_research_package(package):
                 warnings.append(f"{prefix}: disputed factual claim must be presented with its disagreement")
             if status == "unverified":
                 warnings.append(f"{prefix}: unverified factual claim must not be narrated as established fact")
-        elif isinstance(kind, str) and kind in CLAIM_TYPES and status in {"corroborated", "single_source"} and not refs:
+        elif isinstance(kind, str) and kind in CLAIM_TYPES and isinstance(status, str) and status in {"corroborated", "single_source"} and not refs:
             errors.append(f"{prefix}: sourced status requires at least one source")
 
     return {
