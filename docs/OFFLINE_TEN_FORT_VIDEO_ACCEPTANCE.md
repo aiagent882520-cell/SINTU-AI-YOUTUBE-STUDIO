@@ -27,3 +27,12 @@ python scripts/live_e2e.py --offline-storyboard --topic "भारत के 10 
 ```
 
 The CI job also performs the branded-video motion audit and stores its MP4 and JSON reports as a workflow artifact when dependency provisioning succeeds.
+
+
+## Portrait subtitle safe-area verification (2026-11-21)
+
+- Burned-in subtitles now wrap according to output width, height, font size and horizontal margins instead of a fixed 42-character line.
+- Portrait output uses conservative Devanagari wrapping (15-character maximum in the current 720x1280 profile) and explicit left/right margins.
+- The ten-fort Hindi E2E captions are shortened for readability. A long Kumbhalgarh caption is covered by a regression test.
+- Visual QA caught clipping in the first post-fix MP4, so the line-width heuristic was tightened again before accepting the final artifact.
+- Latest CI artifact: 60.04 seconds, 720x1280, H.264/AAC, 24 fps; no black intervals; motion ratio 0.915. This uses procedural offline artwork, not ComfyUI inference.
