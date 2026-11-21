@@ -54,12 +54,14 @@ def test_documentary_animation_exports_real_scene_mp4s_and_motion_report(tmp_pat
     )
     assert len(clips) == 5
     assert report["all_scenes_animated"] is True
+    assert report["map_geometry"] == "schematic_not_geospatial"
     assert [item["visual_type"] for item in report["scenes"]] == [
         "map", "timeline", "diagram", "character", "environment"
     ]
     for clip, evidence in zip(clips, report["scenes"]):
         assert clip.is_file() and clip.stat().st_size > 1000
         assert evidence["motion_verified"] is True
+        assert evidence["camera_move"] == "slow_push_with_alternating_track"
         probe = subprocess.run(
             [shutil.which("ffprobe"), "-v", "error", "-show_entries",
              "stream=codec_type,width,height", "-show_entries", "format=duration",
