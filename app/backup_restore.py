@@ -322,15 +322,33 @@ def restore_backup(archive_path: str | Path, data_dir: str | Path, *, app_stoppe
                 _, required_tables = DATABASE_MEMBERS[filename_member]
                 database_results[filename] = validate_database(destination, required_tables)
     except Exception:
+        rollback_succeeded = True
+
         for media_path in reversed(added_media_paths):
-            media_path.unlink(missing_ok=True)
+            try:
+                media_path.unlink(missing_ok=True)
+            except Exception:
+                rollback_succeeded = False
+
         for filename in reversed(installed):
             destination = data_dir / filename
             safe_copy = safety.get(filename)
-            if safe_copy and safe_copy.exists():
-                os.replace(safe_copy, destination)
-            else:
-                destination.unlink(missing_ok=True)
+            try:
+                if safe_copy and safe_copy.exists():
+                    os.replace(safe_copy, destination)
+                else:
+                    destination.unlink(missing_ok=True)
+            except Exception:
+                rollback_succeeded = False
+
+        # Preserve recovery copies if any rollback operation failed.
+        if rollback_succeeded:
+            for safe_copy in safety.values():
+                try:
+                    safe_copy.unlink(missing_ok=True)
+                except Exception:
+                    pass
+
         raise
     finally:
         for stage in staged.values():

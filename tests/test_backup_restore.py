@@ -181,3 +181,52 @@ def test_restore_failure_removes_media_added_before_database_commit(tmp_path, mo
     assert not (media_dir / "sample.mp4").exists()
     assert not list(media_dir.glob(".sintu-restore-media-*.tmp"))
     assert not list(data.glob(".sintu-restore-*.sqlite"))
+
+
+def test_restore_rolls_back_all_databases_when_third_install_fails(tmp_path, monkeypatch):
+    from app import backup_restore
+
+    archive = make_backup(tmp_path, include_earnings=True, include_runtime=True)
+    data = tmp_path / "data"
+    data.mkdir()
+    originals = {
+        "sintu_studio.db": ("old_studio", "studio-original"),
+        "sintu_earnings.sqlite3": ("old_earnings", "earnings-original"),
+        "production_runtime.sqlite3": ("old_runtime", "runtime-original"),
+    }
+    for filename, (table, value) in originals.items():
+        with sqlite3.connect(data / filename) as conn:
+            conn.execute(f"CREATE TABLE {table}(value TEXT)")
+            conn.execute(f"INSERT INTO {table} VALUES(?)", (value,))
+
+    real_replace = backup_restore.os.replace
+    failed = False
+
+    def fail_third_install(source, destination):
+        nonlocal failed
+        source = Path(source)
+        destination = Path(destination)
+        if (
+            not failed
+            and destination == data / "production_runtime.sqlite3"
+            and source.name.startswith(".sintu-restore-")
+        ):
+            failed = True
+            raise OSError("simulated third database install failure")
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(backup_restore.os, "replace", fail_third_install)
+
+    with pytest.raises(OSError, match="third database install failure"):
+        restore_backup(archive, data, app_stopped=True)
+
+    assert failed is True
+    for filename, (table, value) in originals.items():
+        with sqlite3.connect(data / filename) as conn:
+            assert conn.execute(f"SELECT value FROM {table}").fetchone() == (value,)
+            assert conn.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+
+    assert not (data / "generated_videos" / "sample.mp4").exists()
+    assert not list(data.glob(".sintu-restore-*.sqlite"))
+    assert not list(data.glob(".sintu-restore-media-*.tmp"))
+    assert not list((data / "backups").glob("pre-restore-*.sqlite"))
