@@ -398,6 +398,9 @@ def init_db():
             id INTEGER PRIMARY KEY CHECK(id=1), channel_id TEXT NOT NULL, channel_title TEXT NOT NULL,
             encrypted_tokens TEXT NOT NULL, token_expiry INTEGER NOT NULL, connected_at TEXT NOT NULL
         )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS youtube_token_refresh_lock (
+            id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, lease_until INTEGER NOT NULL
+        )""")
         conn.execute("""CREATE TABLE IF NOT EXISTS youtube_uploads (
             calendar_id INTEGER PRIMARY KEY, video_id TEXT NOT NULL, channel_id TEXT NOT NULL,
             title TEXT NOT NULL, description_sha256 TEXT NOT NULL, privacy_status TEXT NOT NULL DEFAULT 'private',
@@ -1980,8 +1983,22 @@ def _youtube_request(url, data=None, headers=None, method=None):
         with urllib.request.urlopen(request, timeout=45) as response:
             return response.status, response.headers, response.read()
     except urllib.error.HTTPError as exc:
-        body = exc.read(2000).decode("utf-8", errors="replace")
-        raise HTTPException(status_code=502, detail="Google API request failed (" + str(exc.code) + "). " + body[:500]) from None
+        body = exc.read(2000)
+        if url == "https://oauth2.googleapis.com/token":
+            try:
+                oauth_error = json.loads(body.decode("utf-8")).get("error")
+            except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+                oauth_error = None
+            if oauth_error == "invalid_grant":
+                raise HTTPException(
+                    status_code=401,
+                    detail="YouTube refresh authorization was rejected; reconnect the channel.",
+                ) from None
+            raise HTTPException(
+                status_code=502,
+                detail="Google OAuth token request failed (HTTP " + str(exc.code) + ").",
+            ) from None
+        raise HTTPException(status_code=502, detail="Google API request failed (" + str(exc.code) + ").") from None
     except (urllib.error.URLError, TimeoutError):
         raise HTTPException(status_code=502, detail="Google API se connection nahi ho paya.") from None
 
@@ -1993,36 +2010,161 @@ def _youtube_connection():
     return dict(row) if row else None
 
 
-def _youtube_access_token(force_refresh: bool = False):
+def _youtube_access_token(
+    force_refresh: bool = False, *, stale_access_token: str | None = None
+):
     config = _youtube_config()
     if not config["client_id"] or not config["client_secret"]:
         raise HTTPException(status_code=503, detail="YouTube OAuth client ID/secret server environment mein configure nahi hain.")
-    with db() as conn:
-        row = conn.execute("SELECT encrypted_tokens,token_expiry FROM youtube_connection WHERE id=1").fetchone()
-    if not row:
-        raise HTTPException(status_code=409, detail="Pehle YouTube channel connect karein.")
+
+    lock_owner = secrets.token_urlsafe(24)
+    lock_lease_seconds = 60
+    wait_deadline = time.monotonic() + 55
+    refresh_snapshot = None
+    tokens = None
+
+    # The lease is claimed in a short BEGIN IMMEDIATE transaction. It works
+    # across threads and separate worker processes sharing the same SQLite DB.
+    while True:
+        acquired = False
+        with db() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT encrypted_tokens,token_expiry FROM youtube_connection WHERE id=1"
+            ).fetchone()
+            if not row:
+                raise HTTPException(status_code=409, detail="Pehle YouTube channel connect karein.")
+            try:
+                current_tokens = json.loads(
+                    _youtube_cipher().decrypt(row["encrypted_tokens"].encode()).decode()
+                )
+            except (InvalidToken, ValueError, json.JSONDecodeError, TypeError):
+                raise HTTPException(
+                    status_code=503,
+                    detail="Stored YouTube credentials decrypt nahi ho rahe; reconnect karein.",
+                ) from None
+            if not isinstance(current_tokens, dict):
+                raise HTTPException(status_code=503, detail="Stored YouTube credentials invalid hain; reconnect karein.")
+            current_access_token = current_tokens.get("access_token")
+            if not isinstance(current_access_token, str) or not current_access_token:
+                raise HTTPException(status_code=503, detail="Stored YouTube access token missing hai; reconnect karein.")
+
+            if force_refresh:
+                if stale_access_token and current_access_token != stale_access_token:
+                    return current_access_token
+                refresh_required = True
+            else:
+                refresh_required = int(row["token_expiry"]) <= int(time.time()) + 90
+
+            if not refresh_required:
+                return current_access_token
+
+            now = int(time.time())
+            lock = conn.execute(
+                "SELECT owner,lease_until FROM youtube_token_refresh_lock WHERE id=1"
+            ).fetchone()
+            if lock is None:
+                conn.execute(
+                    "INSERT INTO youtube_token_refresh_lock(id,owner,lease_until) VALUES(1,?,?)",
+                    (lock_owner, now + lock_lease_seconds),
+                )
+                acquired = True
+            elif int(lock["lease_until"]) <= now:
+                acquired = conn.execute(
+                    """UPDATE youtube_token_refresh_lock SET owner=?,lease_until=?
+                       WHERE id=1 AND lease_until<=?""",
+                    (lock_owner, now + lock_lease_seconds, now),
+                ).rowcount == 1
+
+            if acquired:
+                refresh_snapshot = row["encrypted_tokens"]
+                tokens = current_tokens
+
+        if acquired:
+            break
+        if time.monotonic() >= wait_deadline:
+            raise HTTPException(
+                status_code=503,
+                detail="YouTube token refresh is still in progress; retry shortly.",
+            )
+        time.sleep(0.1)
+
     try:
-        tokens = json.loads(_youtube_cipher().decrypt(row["encrypted_tokens"].encode()).decode())
-    except (InvalidToken, ValueError, json.JSONDecodeError):
-        raise HTTPException(status_code=503, detail="Stored YouTube credentials decrypt nahi ho rahe; reconnect karein.") from None
-    if force_refresh or int(row["token_expiry"]) <= int(time.time()) + 90:
-        if not tokens.get("refresh_token"):
+        refresh_token = tokens.get("refresh_token")
+        if not isinstance(refresh_token, str) or not refresh_token:
             raise HTTPException(status_code=401, detail="YouTube session expire ho gayi; channel reconnect karein.")
         payload = urllib.parse.urlencode({
-            "client_id": config["client_id"], "client_secret": config["client_secret"],
-            "refresh_token": tokens["refresh_token"], "grant_type": "refresh_token"
+            "client_id": config["client_id"],
+            "client_secret": config["client_secret"],
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
         }).encode()
-        _, _, body = _youtube_request("https://oauth2.googleapis.com/token", payload,
-                                      {"Content-Type": "application/x-www-form-urlencoded"})
-        refreshed = json.loads(body.decode())
-        tokens.update(refreshed)
-        tokens["refresh_token"] = tokens.get("refresh_token") or refreshed.get("refresh_token")
-        expiry = int(time.time()) + int(refreshed.get("expires_in", 3600))
-        encrypted = _youtube_cipher().encrypt(json.dumps(tokens).encode()).decode()
+        _, _, body = _youtube_request(
+            "https://oauth2.googleapis.com/token",
+            payload,
+            {"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        try:
+            refreshed = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            raise HTTPException(status_code=502, detail="Google OAuth refresh response invalid hai.") from None
+        if not isinstance(refreshed, dict):
+            raise HTTPException(status_code=502, detail="Google OAuth refresh response invalid hai.")
+        new_access_token = refreshed.get("access_token")
+        expires_in = refreshed.get("expires_in", 3600)
+        if (not isinstance(new_access_token, str) or not new_access_token
+                or isinstance(expires_in, bool) or not isinstance(expires_in, (int, float))
+                or expires_in <= 0):
+            raise HTTPException(status_code=502, detail="Google OAuth refresh response incomplete hai.")
+
+        updated_tokens = dict(tokens)
+        updated_tokens.update(refreshed)
+        # Google may omit refresh_token on rotation; never erase the long-lived token.
+        updated_tokens["refresh_token"] = refreshed.get("refresh_token") or refresh_token
+        encrypted = _youtube_cipher().encrypt(json.dumps(updated_tokens).encode()).decode()
+        expiry = int(time.time()) + int(expires_in)
+
         with db() as conn:
-            conn.execute("UPDATE youtube_connection SET encrypted_tokens=?,token_expiry=? WHERE id=1",
-                         (encrypted, expiry))
-    return tokens["access_token"]
+            conn.execute("BEGIN IMMEDIATE")
+            lock = conn.execute(
+                "SELECT owner FROM youtube_token_refresh_lock WHERE id=1"
+            ).fetchone()
+            if not lock or lock["owner"] != lock_owner:
+                raise HTTPException(status_code=503, detail="YouTube token refresh lease was lost; retry safely.")
+            current = conn.execute(
+                "SELECT encrypted_tokens FROM youtube_connection WHERE id=1"
+            ).fetchone()
+            if not current:
+                raise HTTPException(status_code=409, detail="YouTube channel connection was removed during refresh.")
+            if current["encrypted_tokens"] != refresh_snapshot:
+                try:
+                    latest = json.loads(
+                        _youtube_cipher().decrypt(current["encrypted_tokens"].encode()).decode()
+                    )
+                except (InvalidToken, ValueError, json.JSONDecodeError, TypeError):
+                    raise HTTPException(status_code=503, detail="YouTube credentials changed during refresh; reconnect.") from None
+                latest_access = latest.get("access_token") if isinstance(latest, dict) else None
+                if not isinstance(latest_access, str) or not latest_access:
+                    raise HTTPException(status_code=503, detail="YouTube credentials changed during refresh; reconnect.")
+                return latest_access
+            updated = conn.execute(
+                """UPDATE youtube_connection SET encrypted_tokens=?,token_expiry=?
+                   WHERE id=1 AND encrypted_tokens=?""",
+                (encrypted, expiry, refresh_snapshot),
+            )
+            if updated.rowcount != 1:
+                raise HTTPException(status_code=503, detail="YouTube credentials changed during refresh; retry safely.")
+        return new_access_token
+    finally:
+        # Do not mask the original OAuth/DB error if lock cleanup itself fails.
+        try:
+            with db() as conn:
+                conn.execute(
+                    "DELETE FROM youtube_token_refresh_lock WHERE id=1 AND owner=?",
+                    (lock_owner,),
+                )
+        except sqlite3.Error:
+            pass
 
 
 @app.get("/api/admin/youtube/status")
