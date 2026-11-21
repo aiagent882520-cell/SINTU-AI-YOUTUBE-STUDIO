@@ -1679,3 +1679,20 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Black-MP4 forensic issue #95 remains open. Original media and backups must remain untouched until provenance and repair are independently verified.
 - 56/60 generic format outputs are covered; four specialized 360/VR/AR/virtual-production formats remain blocked. Registry tests do not prove every module's full functional acceptance.
 - Product status remains **INCOMPLETE / NOT PRODUCTION READY** pending physical-device, media, real-engine and live-publishing gates.
+
+
+## Portrait subtitle visual QA and final offline video artifact — 2026-11-21
+
+- PR #266 merged as `552ef9cc0acde98247703fdb86d3c318fc1ff0c7`; exact-head CI run `44883821598` **8/8 PASS**. Added output-pixel-aware subtitle wrapping and explicit left/right safe margins.
+- The first generated preview still showed a long Hindi line clipped at the edge. This was caught by visual inspection of the actual CI MP4 despite automated black-frame/motion checks passing; that artifact was not accepted as final.
+- PR #269 merged as `afbd0fc5e905a2ff6a517a905ff208c8a7aa7133`; exact-head CI run `44884189338` **8/8 PASS**. Tightened Devanagari portrait line wrapping to a 15-character maximum and retained explicit horizontal margins.
+- The new artifact was downloaded and visually sampled at multiple timestamps. Captions now fit the 720x1280 frame. Final MP4: **60.0417 seconds**, H.264, AAC 48 kHz stereo, 24 fps, 5,131,171 bytes. Media audit: **0 black intervals**, 60 sampled frames, 54/59 moving transitions, motion ratio **0.915**, mean frame delta 9.358. Subtitle count 15; all 10 researched forts covered.
+- Final artifact is an offline procedural fallback: `SINTU Procedural Art (offline)`, eSpeak NG Hindi voice, and SINTU Procedural Composer music. ComfyUI workflow path/server/model are not configured/reachable. No paid services or YouTube publishing were used.
+- A verified copy was delivered in the conversation as `sintu-ten-forts-offline-final.mp4`; this artifact is not a GitHub release asset.
+
+### Current gate status
+- GitHub main includes the reliability, Android Image Studio, editor draft, worker concurrency and rendering fixes recorded in the preceding checkpoints, including PRs #256–#266 and #269.
+- The generated offline 10-fort video is a verified procedural demo, not a generative-AI result or live YouTube upload.
+- Physical Android install/launch and current-main synchronization of the user's Termux checkout remain unverified. The last known Termux base was `80f4022`; preserve its modified/untracked user files.
+- Live Google OAuth/real upload, ComfyUI inference, black-MP4 forensic remediation (#95), Termux reboot recovery, and the four specialized 360/VR/AR/virtual-production formats remain outstanding.
+- Product remains **INCOMPLETE / NOT PRODUCTION READY**.
