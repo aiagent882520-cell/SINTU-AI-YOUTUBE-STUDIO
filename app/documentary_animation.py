@@ -18,7 +18,7 @@ from PIL import Image, ImageChops, ImageDraw
 ANIMATION_FPS = 12
 MAX_SCENES = 25
 MAX_TOTAL_SECONDS = 300
-PROFILES = {"720x1280", "1080x1920", "1080x1080", "1280x720", "1920x1080"}
+PROFILES = {"360x640", "720x1280", "1080x1920", "1080x1080", "1280x720", "1920x1080"}
 
 
 def classify_scene(description: str) -> str:
