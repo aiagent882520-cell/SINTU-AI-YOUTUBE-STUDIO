@@ -31,3 +31,8 @@ This contract does not call paid services and does not access private credential
 Documentary formats must submit `research_evidence` in `POST /api/production/runs` before any worker is scheduled. The package is validated, owner-scoped, stored immutably with a SHA-256 digest, and retrievable through `GET /api/production/runs/{run_id}/research-evidence`. A documentary media render rechecks the persisted digest and structural contract and records the digest in the render manifest.
 
 The production gate requires at least one factual claim and requires each factual claim to be marked `corroborated` with references to at least two differently named publishers. This is a structural gate only: it does not fetch URLs or prove that cited sources support claims. Human fact-checking remains mandatory, and the API explicitly returns that limitation.
+
+
+## Agent handoff
+
+The central production runtime loads the persisted, owner-scoped ledger before it claims any documentary worker step. The ledger is supplied to specialist workers, their independent checkers, final reviewers and the Owner Agent. If the ledger is missing, corrupted, structurally invalid, or its topic does not match the run, the runtime pauses before the first model invocation. Passing this handoff does not prove factual truth; independent human fact-checking remains required.
