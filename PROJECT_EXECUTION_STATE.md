@@ -1,3 +1,16 @@
+# LIVE EXECUTION CHECKPOINT — 2026-11-21 (runtime + agent catalog follow-up)
+
+- PR #281 is merged at main commit `003de81b440984742ea7dbdbab0ccb77efd22d03`. Its exact-head CI was 8/8 PASS. The current GitHub Actions query did not return a push-triggered run for this merge commit; post-merge main CI is therefore not independently verified.
+- PR #282 remains open and mergeable after GitHub recalculation; no merge approval has been given. Its previous exact head `3623980120bf03b1f15a978404b600d910494427` passed 8/8 jobs (Python 3.11–3.14 each 991 passed/5 warnings; security audit, Chromium browser, offline Hindi video/motion E2E, Docker build). New follow-up commits invalidate that older exact-head PASS until the current head's CI finishes.
+- Runtime follow-up on this branch: startup recovery no longer steals a fresh lease from another live API/worker process; worker-token state transitions reject cancellation-to-success races; transient local provider HTTP 429/500/502/503/504 and empty outputs retry with bounded backoff and audit events; model output is non-empty and capped at 80,000 characters; every checker-approved worker handoff (including post-review Owner Agent) is audited.
+- Agent catalog correction: previous full-catalog path exercised only 66 workers (61 core + 5 managers), despite the broader specialist registry. It now covers the union of 61 core roles and 130 computed specialist roles, 15 overlaps = 176 unique worker roles, each with an independent checker, then five final reviewers. The Owner Agent remains after reviewers. Updated tests assert full catalog coverage and approved-handoff events; live Ollama execution has not been run. These are shared local-model role invocations, not 176 continuously running autonomous agents.
+- Added `docs/AGENT_HANDOFF_EXECUTION.md`; updated `scripts/live_e2e.py` catalog coverage and runtime cancellation/retry documentation.
+- Consent-based voice cloning remains opt-in only. No YouTube upload, publishing, external service access, or media deletion occurred.
+- External live acceptance remains blocked pending ComfyUI host/workflow/models/resources, Hindi TTS executable/model, three black-video source assets/production records, YouTube OAuth/channel authorization, and physical Android access.
+- Full production acceptance and final documentary MP4 are not verified; SINTU is NOT RELEASE READY.
+
+---
+
 # LIVE EXECUTION CHECKPOINT — 2026-11-21
 
 - PR #281 is already merged: merge commit / current main at the time of verification `003de81b440984742ea7dbdbab0ccb77efd22d03`; its exact-head CI had passed 8/8 in the previous verified checkpoint. The main SHA has no PR-triggered workflow run returned by the current GitHub workflow-runs query, so a distinct post-merge main CI run is not claimed.
