@@ -143,3 +143,18 @@ def test_hash_chained_audit_detects_tampering(monkeypatch):
     assert council.verify_audit_chain(conn, "owner")["valid"] is True
     conn.execute("UPDATE principal_ai_audit SET payload_json='{}' WHERE id=1")
     assert council.verify_audit_chain(conn, "owner")["valid"] is False
+
+
+def test_major_decision_majority_still_waits_for_owner_approval(monkeypatch):
+    conn = _connection()
+    monkeypatch.setattr(council, "provider_status", lambda: _provider_status())
+    monkeypatch.setattr(council, "paid_upgrades_allowed", lambda: True)
+    votes = {"openai": "APPROVE", "gemini": "APPROVE", "claude": "APPROVE", "deepseek": "REJECT"}
+    monkeypatch.setattr(council, "generate_text", lambda prompt, workflow, provider_override=None: {
+        "provider": provider_override, "model": "mock", "output": _fake_vote(votes[provider_override])
+    })
+    decision = council.run_council_decision(
+        conn, "owner", "Approve a major project change", "Evidence for a major project change.", "major"
+    )
+    assert decision["status"] == "pending_owner_approval"
+    assert decision["owner_approval_status"] == "pending"
