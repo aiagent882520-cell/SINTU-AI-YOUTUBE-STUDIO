@@ -429,6 +429,8 @@ def test_documentary_runtime_passes_persisted_research_ledger_to_workers_and_rev
         prompts.append(prompt)
         if "independent quality checker" in prompt.lower() or "final video production reviewer" in prompt.lower():
             output = '{"decision":"PASS","evidence":["reviewed against supplied evidence ledger"],"issues":[],"revision_instructions":[]}'
+        elif "Role: Fact Checker" in prompt:
+            output = "FACT CHECK RESULT: claim-1 is traceable to source IDs a and b; source contents still require human review."
         else:
             output = "भारत के इतिहास पर स्रोत-संदर्भित हिंदी स्क्रिप्ट।"
         return {"output": output, "provider": "test", "model": "fixture"}
@@ -443,7 +445,9 @@ def test_documentary_runtime_passes_persisted_research_ledger_to_workers_and_rev
     ledger_prompts = [prompt for prompt in prompts if "DOCUMENTARY RESEARCH EVIDENCE LEDGER" in prompt]
     assert len(ledger_prompts) >= 2
     assert any("Fact Checker" in prompt and "claim-1" in prompt for prompt in ledger_prompts)
-    assert any("Script Writer" in prompt and "archive-a.example" in prompt for prompt in ledger_prompts)
+    script_prompt = next(prompt for prompt in ledger_prompts if "Role: Script Writer" in prompt)
+    assert "archive-a.example" in script_prompt
+    assert "FACT CHECK RESULT" in script_prompt
 
 
 def test_documentary_runtime_pauses_when_research_evidence_is_missing(tmp_path, monkeypatch):
