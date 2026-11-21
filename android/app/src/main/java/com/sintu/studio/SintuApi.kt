@@ -14,6 +14,7 @@ import okhttp3.OkHttpClient
 import okhttp3.RequestBody
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import java.io.File
+import java.io.ByteArrayOutputStream
 import retrofit2.Response
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +30,25 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 import retrofit2.http.Header
 import retrofit2.http.PUT
+
+data class ImageGenerateRequest(
+    val prompt: String,
+    val kind: String = "scene",
+    val aspect: String = "portrait"
+)
+data class ImageGenerationResponse(
+    val image_id: String,
+    val url: String = "",
+    val kind: String = "scene",
+    val aspect: String = "portrait",
+    val width: Int = 0,
+    val height: Int = 0,
+    val format: String = "",
+    val size_bytes: Long = 0,
+    val provider: String = "",
+    val local: Boolean = true,
+    val notice: String = ""
+)
 
 data class LoginRequest(val username: String, val password: String)
 data class LoginResponse(val authenticated: Boolean = false, val username: String = "", val role: String = "")
@@ -133,6 +153,17 @@ private interface SintuService {
     @GET("api/auth/session")
     suspend fun session(): Response<SessionResponse>
 
+    @GET("api/images/capabilities")
+    suspend fun imageCapabilities(): Response<Map<String, Any?>>
+
+    @POST("api/images")
+    suspend fun generateImage(@Body body: ImageGenerateRequest): Response<ImageGenerationResponse>
+
+    @Streaming
+    @GET("api/images/{imageId}")
+    suspend fun imageFile(@Path("imageId") imageId: String): Response<ResponseBody>
+
+
     @GET("api/providers")
     suspend fun providerStatus(): Response<Map<String, Any?>>
 
@@ -218,6 +249,16 @@ class SintuApi(context: Context, baseUrl: String) {
     }
 
     suspend fun session(): SessionResponse = service.session().bodyOrThrow()
+    suspend fun imageCapabilities(): Response<Map<String, Any?>>
+
+    @POST("api/images")
+    suspend fun generateImage(@Body body: ImageGenerateRequest): Response<ImageGenerationResponse>
+
+    @Streaming
+    @GET("api/images/{imageId}")
+    suspend fun imageFile(@Path("imageId") imageId: String): Response<ResponseBody>
+
+    @GET("api/providers")
     suspend fun providerStatus(): Map<String, Any?> = service.providerStatus().bodyOrThrow()
     suspend fun conversations(): ConversationsResponse = service.conversations().bodyOrThrow()
     suspend fun createConversation(workflow: String): ConversationCreateResponse =
@@ -337,6 +378,8 @@ class SintuApi(context: Context, baseUrl: String) {
         }
     }
 }
+
+private const val MAX_IMAGE_DOWNLOAD_BYTES = 15 * 1024 * 1024
 
 private fun <T> Response<T>.bodyOrThrow(): T {
     if (!isSuccessful) {
