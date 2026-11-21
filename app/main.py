@@ -5220,9 +5220,11 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                     "seconds_per_scene": payload.seconds_per_scene,
                     "scene_count": len(scene_prompts),
                     "subtitles_burned_in": bool(subtitle_lines),
+                    "animation_report": animation_report if use_procedural_2d else None,
                 },
                 engines={
-                    "image": str((image_result.get("provider") if not use_procedural_2d else "SINTU Procedural 2D Animation") or "local"),
+                    "image": str((image_result.get("provider") if not use_procedural_2d else "SINTU Scene-aware 2D Animation") or "local"),
+                    "animation": animation_report["engine"] if animation_report else None,
                     "voice": str(voice_result.get("provider") or "local"),
                     "music": str(music_result.get("provider") or "local"),
                     "renderer": "FFmpeg",
