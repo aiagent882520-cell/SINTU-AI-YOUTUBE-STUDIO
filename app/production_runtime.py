@@ -19,10 +19,13 @@ from .agent_orchestrator import format_team
 from .agents import AGENTS
 from .management_hierarchy import SENIOR_MANAGER_NAMES, management_hierarchy
 from .ai_brain import generate_text, ProviderNotConfigured, ProviderRequestError
+from .documentary_research import DOCUMENTARY_FORMAT_IDS, validate_documentary_evidence_for_production
+from .research_evidence_store import get_research_evidence
 
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(Path(__file__).resolve().parent.parent))).expanduser().resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "production_runtime.sqlite3"
+RESEARCH_EVIDENCE_DB_PATH = DATA_DIR / "sintu_studio.db"
 # Initial attempt plus at most two checker-guided revisions.
 try:
     MAX_REVISION_ATTEMPTS = max(0, min(2, int(os.getenv('SINTU_MAX_REVISION_ATTEMPTS', '2'))))
@@ -272,6 +275,37 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
     if not selected:
         _set_run(run_id, "failed", error="Video format no longer exists.")
         return
+    research_record = None
+    research_context_instruction = ""
+    if run["format_id"] in DOCUMENTARY_FORMAT_IDS:
+        try:
+            research_record = get_research_evidence(
+                RESEARCH_EVIDENCE_DB_PATH, run_id, run.get("owner_username", "local")
+            )
+        except (ValueError, sqlite3.Error):
+            _set_run(run_id, "paused", current_role="Documentary Research Evidence",
+                     error="Documentary run paused: research evidence integrity/storage check failed.")
+            return
+        if not research_record:
+            _set_run(run_id, "paused", current_role="Documentary Research Evidence",
+                     error="Documentary run paused: source-linked research evidence is missing.")
+            return
+        evidence_validation = validate_documentary_evidence_for_production(research_record["package"])
+        if (not evidence_validation["valid"]
+                or evidence_validation["sha256"] != research_record["sha256"]
+                or str(research_record["package"].get("topic", "")).strip().casefold()
+                   != str(run.get("topic", "")).strip().casefold()):
+            _set_run(run_id, "paused", current_role="Documentary Research Evidence",
+                     error="Documentary run paused: evidence topic, structure or integrity did not match this run.")
+            return
+        research_context_instruction = (
+            "DOCUMENTARY RESEARCH EVIDENCE LEDGER (structural traceability only; not independently fact-verified):\n"
+            + json.dumps(research_record["package"], ensure_ascii=False, sort_keys=True)
+            + "\nUse this ledger as the factual-claim boundary. Preserve claim IDs and source IDs in relevant "
+              "deliverables. Do not invent historical facts, source contents, quotations, dates or citations. "
+              "Flag any claim not directly represented in this ledger for human research review. "
+              "The checker may validate traceability but cannot claim it fetched or authenticated sources.\n"
+        )
     try:
         team = format_team(run["format_id"])
         pairs = [item for item in team if item.get("role_type") == "specialist"]
@@ -303,6 +337,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 "titles, labels or text overlays in video frames. Only the final SINTU watermark is permitted.\n"
                 f"Format: {selected['name']} ({selected['aspect_ratio']}, {selected['recommended_resolution']}).\n"
                 f"Topic: {run['topic']}\nRole: {role}\nMission: {pair.get('mission','Perform your specialist task.')}\n"
+                + research_context_instruction
                 + (
                     "You are a senior management agent. Review completed specialist deliverables and earlier management reports; identify missing hand-offs, contradictions, risks and release blockers. Do not claim media was rendered or uploaded.\n"
                     "Current production evidence: " + json.dumps({**deliverables, **management_reports}, ensure_ascii=False) + "\n"
@@ -342,8 +377,9 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                     "copyright safety and actionable production detail. Return ONLY JSON with keys: "
                     "decision (PASS or FAIL), evidence (array), issues (array), revision_instructions (array).\n"
                     f"Topic: {run['topic']}\nSpecialist: {role}\n"
-                    f"Revision attempt: {attempt + 1} of {MAX_REVISION_ATTEMPTS + 1}\n"
-                    f"Submitted work:\n{worker['output']}"
+                    + research_context_instruction
+                    + f"Revision attempt: {attempt + 1} of {MAX_REVISION_ATTEMPTS + 1}\n"
+                    + f"Submitted work:\n{worker['output']}"
                 )
                 checked = generate_text(checker_prompt, "content", "local")
                 verdict = _checker_payload(checked["output"])
@@ -375,7 +411,8 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 "issues (array), and revision_instructions (array). PASS only when evidence supports every "
                 "critical acceptance criterion. Do not claim a rendered video.\n"
                 f"Reviewer: {reviewer}\nTopic: {run['topic']}\n"
-                f"Package summary: {json.dumps({k:v[:3500] for k,v in {**deliverables, **management_reports}.items()}, ensure_ascii=False)}"
+                + research_context_instruction
+                + f"Package summary: {json.dumps({k:v[:3500] for k,v in {**deliverables, **management_reports}.items()}, ensure_ascii=False)}"
             )
             review = generate_text(review_prompt, "content", "local")
             verdict = _review_payload(review["output"])
@@ -404,7 +441,8 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 "items and a clear READY or NOT READY conclusion. Never claim the video "
                 "was uploaded. Never treat your recommendation as human owner approval.\n"
                 f"Topic: {run['topic']}\n"
-                "Production deliverables: " + json.dumps(deliverables, ensure_ascii=False) + "\n"
+                + research_context_instruction
+                + "Production deliverables: " + json.dumps(deliverables, ensure_ascii=False) + "\n"
                 "Senior management reports: " + json.dumps(management_reports, ensure_ascii=False) + "\n"
                 "Final reviewer reports: " + json.dumps(review_results, ensure_ascii=False)
             )
@@ -461,6 +499,13 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
         result = {
             "format": selected,
             "deliverables": deliverables,
+            "research_evidence": ({
+                "sha256": research_record["sha256"],
+                "source_count": research_record["validation"]["source_count"],
+                "claim_count": research_record["validation"]["claim_count"],
+                "status": "STRUCTURAL_TRACEABILITY_VALIDATED_NOT_FACT_VERIFIED",
+                "human_fact_check_required": True,
+            } if research_record else None),
             "reviewer_reports": review_results,
             "management_reports": management_reports,
             "management_hierarchy": management_hierarchy(),
