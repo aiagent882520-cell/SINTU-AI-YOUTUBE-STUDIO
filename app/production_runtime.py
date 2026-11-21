@@ -115,6 +115,23 @@ def list_runs(owner_username: str = "local", limit: int = 20) -> list[dict[str, 
 
 
 
+def _claim_run(run_id: str, owner_username: str | None = None) -> bool:
+    """Atomically claim one queued/paused run across all worker processes."""
+    init_runtime_db()
+    where = "id=? AND status IN ('queued','paused')"
+    params: list[Any] = ["running", None, None, _now(), run_id]
+    if owner_username is not None:
+        where += " AND owner_username=?"
+        params.append(owner_username)
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        changed = conn.execute(
+            "UPDATE production_runs SET status=?,current_role=?,error=?,updated_at=? WHERE " + where,
+            params,
+        ).rowcount
+    return changed == 1
+
+
 def get_run(run_id: str, owner_username: str | None = None) -> dict[str, Any] | None:
     init_runtime_db()
     with _connect() as conn:
@@ -246,16 +263,15 @@ def _review_payload(text: str) -> dict:
 
 
 def execute_run(run_id: str, owner_username: str | None = None) -> None:
+    if not _claim_run(run_id, owner_username):
+        return
     run = get_run(run_id, owner_username)
     if not run:
-        return
-    if run["status"] not in {"queued", "paused"}:
         return
     selected = _selected_format(run["format_id"])
     if not selected:
         _set_run(run_id, "failed", error="Video format no longer exists.")
         return
-    _set_run(run_id, "running")
     try:
         team = format_team(run["format_id"])
         pairs = [item for item in team if item.get("role_type") == "specialist"]
