@@ -210,6 +210,23 @@ def _renew_worker_lease(run_id: str, token: str) -> bool:
         ).rowcount
     return changed == 1
 
+def _audit_worker_event(run_id: str, owner_username: str | None, token: str,
+                        event_type: str, details: str) -> None:
+    """Append an event only while this worker still owns a live, uncancelled lease."""
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT owner_username,status,worker_token,cancel_requested,lease_expires_at "
+            "FROM production_runs WHERE id=?", (run_id,)
+        ).fetchone()
+        if (not row or (owner_username is not None and row["owner_username"] != owner_username)
+                or row["worker_token"] != token or row["cancel_requested"]
+                or not row["lease_expires_at"] or row["lease_expires_at"] < _now()):
+            raise ProductionRunCancelled("Worker ownership lost before audit event.")
+        _event(conn, run_id, row["owner_username"], row["status"], row["status"],
+               event_type, details)
+
+
 def _cancellation_requested(run_id: str, owner_username: str | None, token: str) -> bool:
     with _connect() as conn:
         if owner_username is None:
@@ -551,20 +568,37 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
         return save_step_impl(*args, worker_token=worker_token, **kwargs)
 
     def run_generate(prompt, workflow, provider):
-        if _cancellation_requested(run_id, owner_username, worker_token):
-            raise ProductionRunCancelled("Cancellation requested before model call.")
-        if not _renew_worker_lease(run_id, worker_token):
-            raise ProductionRunCancelled("Worker lease lost before model call.")
-        started = time.monotonic()
-        generated = generate_impl(prompt, workflow, provider)
-        elapsed = time.monotonic() - started
-        if elapsed > MODEL_CALL_TIMEOUT_SECONDS:
-            raise ProductionRunTimeout(f"Model call exceeded {MODEL_CALL_TIMEOUT_SECONDS} seconds.")
-        if _cancellation_requested(run_id, owner_username, worker_token):
-            raise ProductionRunCancelled("Cancellation requested during model call.")
-        if not _renew_worker_lease(run_id, worker_token):
-            raise ProductionRunCancelled("Worker lease lost after model call.")
-        return generated
+        retry_limit = max(0, min(3, int(os.getenv("SINTU_MODEL_RETRY_ATTEMPTS", "2"))))
+        for retry_index in range(retry_limit + 1):
+            if _cancellation_requested(run_id, owner_username, worker_token):
+                raise ProductionRunCancelled("Cancellation requested before model call.")
+            if not _renew_worker_lease(run_id, worker_token):
+                raise ProductionRunCancelled("Worker lease lost before model call.")
+            started = time.monotonic()
+            try:
+                generated = generate_impl(prompt, workflow, provider)
+            except ProviderRequestError as exc:
+                message = str(exc)
+                retryable = bool(re.search(r"\\bHTTP (?:429|500|502|503|504)\\b", message, re.IGNORECASE)) or "empty response" in message.casefold()
+                if not retryable or retry_index >= retry_limit:
+                    raise
+                _audit_worker_event(
+                    run_id, owner_username, worker_token, "model_call_retry",
+                    f"attempt={retry_index + 1}; reason={message[:240]}"
+                )
+                if _cancellation_requested(run_id, owner_username, worker_token):
+                    raise ProductionRunCancelled("Cancellation requested before provider retry.")
+                time.sleep(min(4.0, 0.5 * (2 ** retry_index)))
+                continue
+            elapsed = time.monotonic() - started
+            if elapsed > MODEL_CALL_TIMEOUT_SECONDS:
+                raise ProductionRunTimeout(f"Model call exceeded {MODEL_CALL_TIMEOUT_SECONDS} seconds.")
+            if _cancellation_requested(run_id, owner_username, worker_token):
+                raise ProductionRunCancelled("Cancellation requested during model call.")
+            if not _renew_worker_lease(run_id, worker_token):
+                raise ProductionRunCancelled("Worker lease lost after model call.")
+            return generated
+        raise ProviderRequestError("Local model retry budget exhausted.")
 
     run = get_run(run_id, owner_username)
     if not run:
