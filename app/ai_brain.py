@@ -186,7 +186,7 @@ def _generate_openai_compatible(user_input: str, backend: dict) -> str:
 
 def provider_status(selected_override=None):
     selected = (selected_override or os.getenv("AI_PROVIDER", "local")).strip().lower()
-    if selected not in {"auto", "local", "openai", "gemini", "deepseek"}:
+    if selected not in {"auto", "local", "openai", "gemini", "deepseek", "claude"}:
         selected = "auto"
     local_status = _active_local_backend()
     compatible_status = _local_openai_compatible_status()
@@ -220,6 +220,10 @@ def provider_status(selected_override=None):
             "configured": bool(os.getenv("DEEPSEEK_API_KEY")),
             "model": os.getenv("DEEPSEEK_MODEL", "deepseek-flash"),
         },
+        "claude": {
+            "configured": bool(os.getenv("ANTHROPIC_API_KEY")),
+            "model": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5"),
+        },
     }
 
 def _selected_provider(selected_override=None):
@@ -228,8 +232,8 @@ def _selected_provider(selected_override=None):
     if selected in {"auto", "local"}:
         # Free-first: auto always selects the local model. Paid providers are never auto-enabled.
         return "local"
-    if selected not in ("openai", "gemini", "deepseek"):
-        raise ProviderRequestError("AI_PROVIDER must be auto, local, openai, gemini, or deepseek.")
+    if selected not in ("openai", "gemini", "deepseek", "claude"):
+        raise ProviderRequestError("AI_PROVIDER must be auto, local, openai, gemini, deepseek, or claude.")
     if not paid_upgrades_allowed():
         raise ProviderNotConfigured("Paid upgrade locked: SINTU must earn revenue first and the user must explicitly approve paid upgrades.")
     if not status[selected]["configured"]:
@@ -270,8 +274,10 @@ def generate_text(prompt: str, workflow: str, provider_override=None) -> dict:
             output = response.output_text
         elif provider == "gemini":
             output = _generate_gemini(user_input)
-        else:
+        elif provider == "deepseek":
             output = _generate_deepseek(user_input)
+        else:
+            output = _generate_claude(user_input)
     except (ProviderNotConfigured, ProviderRequestError):
         raise
     except Exception as exc:
@@ -341,6 +347,44 @@ def _generate_gemini(user_input: str) -> str:
         raise ProviderRequestError("Gemini API connection timed out or network is unavailable.") from None
     parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
     return "\n".join(part.get("text", "") for part in parts if part.get("text"))
+
+
+
+def _generate_claude(user_input: str) -> str:
+    """Generate text through Anthropic's official Messages API."""
+    model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5-5")
+    api_version = os.getenv("ANTHROPIC_API_VERSION", "2026-10-21")
+    payload = {
+        "model": model,
+        "max_tokens": 8192,
+        "system": SYSTEM_INSTRUCTIONS,
+        "messages": [{"role": "user", "content": user_input}],
+    }
+    request = urllib.request.Request(
+        "https://api.anthropic.com/v1/messages",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "x-api-key": os.environ["ANTHROPIC_API_KEY"],
+            "anthropic-version": api_version,
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise ProviderRequestError(f"Claude API returned HTTP {exc.code}. Check API key, model, and quota.") from None
+    except (urllib.error.URLError, TimeoutError):
+        raise ProviderRequestError("Claude API connection timed out or network is unavailable.") from None
+    blocks = data.get("content", [])
+    output = "\\n".join(
+        block.get("text", "") for block in blocks
+        if isinstance(block, dict) and block.get("type") == "text"
+    )
+    if not output.strip():
+        raise ProviderRequestError("Claude API returned no text content.")
+    return output.strip()
 
 
 def _generate_ollama(user_input: str) -> str:
