@@ -4444,7 +4444,7 @@ def test_principal_ai_council_api_is_owner_scoped_and_fails_closed(tmp_path, mon
     assert client.get("/api/admin/principal-ai/council/status").json()["audit_chain"]["valid"] is True
 
 
-def test_principal_ai_council_rejects_non_owner_admin_account(tmp_path, monkeypatch):
+def test_principal_ai_council_allows_configured_owner_account(tmp_path, monkeypatch):
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
     monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
     monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
