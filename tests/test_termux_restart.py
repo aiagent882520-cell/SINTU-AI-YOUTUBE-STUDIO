@@ -57,3 +57,11 @@ def test_startup_validates_pid_command_identity_and_clears_only_stale_references
     assert 'render-worker.log' in launcher
     assert "Local LLM servers are deliberately not auto-started" in launcher
     assert "llama-server -m" not in launcher
+
+
+
+def test_service_startup_appends_without_truncating_existing_logs():
+    launcher = (ROOT / "scripts" / "start_services.sh").read_text()
+    for log in ("server.log", "bridge-worker.log", "render-worker.log", "github-relay.log"):
+        assert f': > "$LOG_DIR/{log}"' not in launcher
+        assert f'>>"$LOG_DIR/{log}"' in launcher
