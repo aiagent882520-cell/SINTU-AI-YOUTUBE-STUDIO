@@ -1650,3 +1650,32 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Physical Android app install/launch, full device reboot/Termux:Boot recovery and production background-worker recovery remain unverified.
 - 60-format evidence remains generic output/profile coverage for 56 formats; four specialized 360/VR/AR/virtual-production formats remain blocked. The 15-module registry tests are not proof of complete functional UI/API acceptance.
 - Product remains **INCOMPLETE / NOT PRODUCTION READY** until the physical/device, media, real-engine and live-publishing gates are independently verified.
+
+
+## Additional engineering checkpoint — 2026-11-21 (continued)
+
+### Merged changes after the previous checkpoint
+
+- PR #260 merged as `070109d23f9cea7f48c867dccaa9409ea715c04c`; SINTU CI run `44882094461` **8/8 PASS**, Android workflow `44882094491` **PASS**. Native Android Image Studio now provides scene/thumbnail selection, aspect controls, preview, bounded JPEG download and MediaStore save to `Pictures/SINTU`. The backend image endpoint now enforces the production pause server-side and exposes the gate to the UI. This is an APK build/unit-test result, not a physical-phone installation result.
+- PR #261 merged as `7621c97ac8eee820148308984c099ef88f071bba`; SINTU CI run `44882411173` **8/8 PASS**. The existing bounded localStorage draft controller is now wired into the Video Editor with accessible Restore/Clear controls and Chromium refresh/restore/clear coverage. Drafts exclude media bytes, authentication and credentials.
+- PR #262 merged as `3c07f13e548c5f4de4311ea91026f8fe08fca593`; SINTU CI run `44882742362` **8/8 PASS**. AI-clip background music is probed with interruptible FFprobe; it loops only when shorter than the clip timeline. Probe failures/timeouts fail safely.
+- PR #263 merged as `74e8b703a7d1ba353d02b1585779ff94f77c0da5`; SINTU CI run `44882889461` **8/8 PASS**. The ten-fort Hindi storyboard avoids disputed Bhangarh/Mehrangarh claims and aligns Junagarh's date to the Rajasthan Tourism source page. The real offline 60-second Hindi video, subtitle, MP4 metadata, black-frame and continuous-motion audits all passed. CI used the clearly labelled procedural-art fallback; this is not proof of ComfyUI/generative-AI inference.
+- PR #264 merged as `4d70cf64d909b599cb3e6779f431f6558f9b130b`; SINTU CI run `44883245335` **8/8 PASS**. Production runs are now claimed with a SQLite `BEGIN IMMEDIATE` conditional update before execution, owner-scoped when an owner is supplied. Eight concurrent workers can claim one queued run only once; missing, terminal and wrong-owner claims fail closed.
+- PR #259 merged as `4459d893300cccdc66bd54702c9dbba9138cdb64`; it carries the earlier forensic source-match checkpoint and the reliability status for PRs #256–#258.
+
+### Current repository evidence
+
+- Current GitHub main includes backup rollback cleanup, OAuth refresh serialization, YouTube upload worker leases and atomic cancellation-safe state transitions, native Android Image Studio, browser editor draft recovery, AI-clip music duration probing, source-backed ten-fort E2E corrections, and atomic production-run claims.
+- The current offline 60-second Hindi ten-fort E2E is verified in CI with subtitles, black-frame sampling and continuous-motion audit. It uses procedural fallback when ComfyUI is unavailable; it must not be represented as AI image generation.
+- The native Android APK build and unit tests pass in CI, but the APK has not been installed or exercised on the user's physical Android 15 device.
+- User-run Termux regression evidence from the earlier local working tree remains: **254 passed, 0 failed** across worker, YouTube, backup/restore and API targets. This was before these subsequent main merges and is not a physical-device verification of current main.
+- Last known Termux HEAD remains `80f4022`, with modified tracked files and untracked `app/main.py.bak` and `diagnostics/`. No device fast-forward or reconciliation has been verified. Preserve all local changes/user data; never reset/clean or overwrite them.
+
+### Release status — still incomplete
+
+- Live Google OAuth refresh, connected channel, real resumable upload and private/unlisted verification remain untested; no live upload was performed.
+- ComfyUI host/model/inference remains unavailable/unverified. Procedural fallback is the verified offline path.
+- Physical Android install/launch, device API connectivity, Termux reboot/boot recovery and on-device background-worker recovery remain unverified.
+- Black-MP4 forensic issue #95 remains open. Original media and backups must remain untouched until provenance and repair are independently verified.
+- 56/60 generic format outputs are covered; four specialized 360/VR/AR/virtual-production formats remain blocked. Registry tests do not prove every module's full functional acceptance.
+- Product status remains **INCOMPLETE / NOT PRODUCTION READY** pending physical-device, media, real-engine and live-publishing gates.
