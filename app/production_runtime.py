@@ -825,6 +825,10 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                            owner_checked["output"], owner_verdict["evidence"],
                            owner_verdict["issues"], attempts=attempt + 1)
                 if owner_verdict["decision"] == "PASS":
+                    _audit_worker_event(
+                        run_id, owner_username, worker_token, "agent_handoff_approved",
+                        "worker=Owner Agent; checker=Owner Agent Checker; stage=post-review"
+                    )
                     management_reports["Owner Agent"] = owner_output
                     if re.search(r"\bNOT\s+READY\b", owner_output, re.IGNORECASE):
                         set_run(run_id, "paused", current_role="Owner Agent",
