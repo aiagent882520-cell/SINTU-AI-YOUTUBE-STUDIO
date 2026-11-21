@@ -121,6 +121,7 @@ def create_run(format_id: str, topic: str, owner_username: str = "local") -> dic
         conn.execute("""INSERT INTO production_runs
             (id,format_id,topic,status,owner_username,created_at,updated_at) VALUES(?,?,?,?,?,?,?)""",
             (run_id, format_id, topic, "queued", owner_username, now, now))
+        _event(conn, run_id, owner_username, None, "queued", "run_created", "Production run created.")
     return get_run(run_id, owner_username)
 
 
