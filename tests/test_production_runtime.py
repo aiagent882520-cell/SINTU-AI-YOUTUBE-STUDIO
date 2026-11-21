@@ -399,6 +399,7 @@ def test_documentary_runtime_passes_persisted_research_ledger_to_workers_and_rev
     monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
     monkeypatch.setattr(runtime, "RESEARCH_EVIDENCE_DB_PATH", tmp_path / "studio.sqlite3")
     monkeypatch.setattr(runtime, "format_team", lambda _format: [
+        {"role_type": "specialist", "name": "Fact Checker", "mission": "verify each claim against supplied evidence"},
         {"role_type": "specialist", "name": "Script Writer", "mission": "write a researched Hindi script"}
     ])
     package = {
@@ -439,8 +440,10 @@ def test_documentary_runtime_passes_persisted_research_ledger_to_workers_and_rev
     assert result["status"] == "completed"
     assert result["result"]["research_evidence"]["sha256"] == validation["sha256"]
     assert result["result"]["research_evidence"]["human_fact_check_required"] is True
-    assert any("DOCUMENTARY RESEARCH EVIDENCE LEDGER" in prompt for prompt in prompts)
-    assert any("claim-1" in prompt and "archive-a.example" in prompt for prompt in prompts)
+    ledger_prompts = [prompt for prompt in prompts if "DOCUMENTARY RESEARCH EVIDENCE LEDGER" in prompt]
+    assert len(ledger_prompts) >= 2
+    assert any("Fact Checker" in prompt and "claim-1" in prompt for prompt in ledger_prompts)
+    assert any("Script Writer" in prompt and "archive-a.example" in prompt for prompt in ledger_prompts)
 
 
 def test_documentary_runtime_pauses_when_research_evidence_is_missing(tmp_path, monkeypatch):
