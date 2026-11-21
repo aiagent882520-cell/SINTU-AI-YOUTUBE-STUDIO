@@ -249,6 +249,8 @@ def _finish_cancel(run_id: str, owner_username: str | None, token: str | None = 
 def request_cancel(run_id: str, owner_username: str) -> dict[str, Any] | None:
     """Owner-scoped, idempotent cancellation request; running providers stop at safe boundaries."""
     init_runtime_db()
+    terminal = False
+    target = None
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT status,owner_username,cancel_requested FROM production_runs WHERE id=? AND owner_username=?",
@@ -257,30 +259,32 @@ def request_cancel(run_id: str, owner_username: str) -> dict[str, Any] | None:
             return None
         status = row["status"]
         if status in {"completed", "failed", "blocked", "cancelled"}:
-            return get_run(run_id, owner_username)
-        if status in {"queued", "paused"}:
-            target = "cancelled"
-            conn.execute(
-                """UPDATE production_runs SET status='cancelled',cancel_requested=1,
-                   current_role=NULL,error='Cancelled by owner.',worker_token=NULL,
-                   lease_expires_at=NULL,updated_at=? WHERE id=? AND owner_username=?""",
-                (_now(), run_id, owner_username),
-            )
+            terminal = True
         else:
-            target = "cancelling"
-            conn.execute(
-                """UPDATE production_runs SET status='cancelling',cancel_requested=1,
-                   error='Cancellation requested; waiting for the active worker safe point.',
-                   updated_at=? WHERE id=? AND owner_username=? AND status IN ('running','reviewing','cancelling')""",
-                (_now(), run_id, owner_username),
-            )
-        if not row["cancel_requested"]:
-            _event(conn, run_id, owner_username, status, target, "cancel_requested",
-                   "Owner requested cancellation; no completed outputs are deleted.")
+            if status in {"queued", "paused"}:
+                target = "cancelled"
+                conn.execute(
+                    """UPDATE production_runs SET status='cancelled',cancel_requested=1,
+                       current_role=NULL,error='Cancelled by owner.',worker_token=NULL,
+                       lease_expires_at=NULL,updated_at=? WHERE id=? AND owner_username=?""",
+                    (_now(), run_id, owner_username),
+                )
+            else:
+                target = "cancelling"
+                conn.execute(
+                    """UPDATE production_runs SET status='cancelling',cancel_requested=1,
+                       error='Cancellation requested; waiting for the active worker safe point.',
+                       updated_at=? WHERE id=? AND owner_username=? AND status IN ('running','reviewing','cancelling')""",
+                    (_now(), run_id, owner_username),
+                )
+            if not row["cancel_requested"]:
+                _event(conn, run_id, owner_username, status, target, "cancel_requested",
+                       "Owner requested cancellation; no completed outputs are deleted.")
+    if terminal:
+        return get_run(run_id, owner_username)
     if target == "cancelled":
         _finish_cancel(run_id, owner_username)
     return get_run(run_id, owner_username)
-
 
 def list_run_events(run_id: str, owner_username: str) -> list[dict[str, Any]] | None:
     init_runtime_db()
