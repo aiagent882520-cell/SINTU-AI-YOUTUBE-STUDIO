@@ -24,7 +24,8 @@ except ImportError:
 BASE_URL = os.getenv("SINTU_BRIDGE_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 TOKEN = os.getenv("SINTU_BRIDGE_WORKER_TOKEN", "").strip()
 AUTOMATION_ONLY = os.getenv("SINTU_AUTOMATION_ONLY", "true").strip().lower() in {"1", "true", "yes", "on"}
-AUTOMATION_PAUSED_ACTIONS = {"offline_video_e2e", "full_self_test", "full_studio_e2e", "media_repair"}
+PRODUCTION_ACTIONS = {"offline_video_e2e", "full_self_test", "full_studio_e2e"}
+AUTOMATION_PAUSED_ACTIONS = PRODUCTION_ACTIONS | {"media_repair"}
 PYTHON = str(ROOT / ".venv" / "bin" / "python")
 if not Path(PYTHON).exists():
     PYTHON = sys.executable
