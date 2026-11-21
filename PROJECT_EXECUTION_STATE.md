@@ -1780,3 +1780,37 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Historical issue #42 is a valid Termux `operational_readiness` SUCCESS (10 pass / 2 warnings / 0 failed), but that action does not establish current GitHub relay liveness. Issue #38's full self-test actually failed at pytest and media-quality audit; #39–#41 were rejected for unsupported action/field combinations, as recorded above.
 - The issue relay's main-code contract was rechecked: owner-only `SINTU-CMD:` issues, exact queue/running/done/failed labels, JSON keys limited to `action`, `topic`, `test_path`, 17 fixed actions, 30-minute command timeout, 40-minute stale-claim recovery, FIFO queueing, and 20,000-character output cap. No new device command was queued because #268 is already the correct pending read-only probe.
 - GitHub cloud CI is separate from Termux. No device claim/result was fabricated; current Termux relay/worker liveness remains **UNVERIFIED**. Preserve the user's local modified/untracked files and private media.
+
+
+## PR #281 merged and production runtime cancellation/recovery implementation — 2026-11-21
+
+### Documentary evidence gate — PR #281
+
+- PR #281 merged to main as `003de81b440984742ea7dbdbab0ccb77efd22d03`.
+- Exact final PR head: `9a533e487e09885f1f1d767dc5be8bf40a220c3a`; exact-head CI run [#44912731409](https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44912731409) passed **8/8 jobs**: Python 3.11–3.14, dependency security audit, production Docker build, real Chromium Video Editor browser tests, and offline branded-video E2E/motion audit.
+- The initial PR CI exposed a missing test import; it was corrected in the final PR head and all eight checks then passed.
+- The documentary research evidence package is structurally validated, owner-scoped, stored with SHA-256 integrity checks, passed to sequential workers/checkers/reviewers, and rechecked before documentary render.
+- Acceptance boundary remains explicit: no automatic URL fetching, publisher authentication, proof of source independence, or semantic fact verification. Human fact-checking remains mandatory.
+
+### Post-merge main verification
+
+- Verified main HEAD immediately after merge: `003de81b440984742ea7dbdbab0ccb77efd22d03`.
+- The GitHub connector available in this session exposes PR-triggered workflow runs but not push-triggered main workflow runs. Combined commit status returned no status contexts for this merge commit. Therefore **post-merge main CI is not yet independently verified in this checkpoint**; do not infer it from PR CI.
+
+### Runtime cancellation/recovery branch — in progress
+
+- Branch: `feat/production-runtime-cancel-recovery-20261121`, based on the PR #281 merge commit.
+- Added durable cancellation fields, worker fencing tokens, 15-minute worker leases, atomic claim/recovery transitions, append-only run event audit, owner-scoped cancellation and event APIs, safe cancellation checks around model calls, stale-lease recovery and restart recovery.
+- Added focused tests for owner isolation, queued cancellation, cancellation during a model call, concurrent/idempotent cancellation, stale worker fencing, restart recovery, partial-output preservation, completed-run protection and model response-time limits.
+- Added `docs/PRODUCTION_RUNTIME_CANCELLATION.md` documenting behavior and limits.
+- **These changes are not yet CI-verified or merged.** In-flight provider calls cannot be forcibly interrupted; cancellation is honored when a call returns or fails. The 300-second guard pauses after a late provider response; it does not kill a provider process. Model calls remain at-least-once across a crash before checkpoint persistence; no exactly-once provider guarantee is claimed. Specialist orchestration remains sequential.
+
+### Remaining release gates
+
+- ComfyUI real host/workflow/model/GPU inference: not verified; user host/model resources still required.
+- Natural Hindi TTS: local executable/model and actual Hindi audio quality still not verified.
+- Three pixel-confirmed full-duration black MP4 originals remain unresolved in Issue #95; two additional dark-visible files were false positives in the old detector. No original or backup was modified; source-based repair remains blocked pending exact source provenance/assets.
+- YouTube live OAuth/channel/upload remains unverified; no live publishing performed.
+- Android physical-device E2E and current Termux relay liveness remain unverified; Issue #268 has no current device claim/result. Preserve all local modified/untracked Termux data.
+- 360/VR/AR/virtual-production specialized formats, all-module end-to-end acceptance, full website E2E and final real-topic documentary MP4 acceptance remain outstanding.
+- Product remains **INCOMPLETE / NOT PRODUCTION READY**. PR CI and the offline demo do not prove real ComfyUI inference, natural Hindi voice quality, physical Android acceptance or professional documentary quality.
