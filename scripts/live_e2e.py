@@ -47,8 +47,15 @@ from app.voice_generator import voice_status
 
 def _safe_engine(status: dict) -> dict:
     diagnostics = status.get("local_diagnostics") or {}
+    # Image status has a procedural local fallback; it must never be reported as ComfyUI availability.
+    comfyui_available = status.get("comfyui_available")
+    if comfyui_available is None:
+        comfyui_available = status.get("local_available", status.get("available", False))
     return {
-        "available": bool(status.get("local_available", status.get("available", False))),
+        "available": bool(comfyui_available),
+        "local_fallback_available": bool(status.get("local_available", False))
+        if "comfyui_available" in status else False,
+        "local_engine": status.get("local_engine"),
         "workflow_configured": status.get("local_workflow_configured"),
         "server_reachable": diagnostics.get("server_reachable"),
         "workflow_valid": diagnostics.get("workflow_valid"),
