@@ -4871,11 +4871,15 @@ def get_video(video_id: str):
 
 @app.get("/api/images/capabilities")
 def image_capabilities():
-    return image_status()
+    status = image_status()
+    status["production_enabled"] = production_actions_allowed()
+    return status
 
 
 @app.post("/api/images")
 def create_image(payload: ImageInput, media_token: str = Header(default="", alias="X-Media-Token")):
+    if not production_actions_allowed():
+        raise HTTPException(status_code=503, detail="Production is paused by the SINTU safety gate.")
     import hmac, os
     status = image_status()
     if (not status.get("local_available")
