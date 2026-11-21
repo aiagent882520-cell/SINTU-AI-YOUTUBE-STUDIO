@@ -1421,6 +1421,7 @@ def test_admin_provider_settings_persist_and_never_expose_secrets(tmp_path, monk
     monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-secret")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-secret")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-anthropic-secret")
     monkeypatch.setenv("SINTU_REVENUE_CONFIRMED", "true")
     monkeypatch.setenv("ALLOW_PAID_UPGRADES", "true")
     client = client_for_test(tmp_path, monkeypatch)
@@ -1431,11 +1432,15 @@ def test_admin_provider_settings_persist_and_never_expose_secrets(tmp_path, monk
     assert settings.json()["providers"]["openai"]["configured"] is True
     assert "test-openai-secret" not in settings.text
     assert "test-gemini-secret" not in settings.text
+    assert settings.json()["providers"]["claude"]["configured"] is True
+    assert "test-anthropic-secret" not in settings.text
     changed = client.patch("/api/admin/provider-settings", json={"selected_provider":"gemini"})
     assert changed.status_code == 200
     assert changed.json()["selected_provider"] == "gemini"
     assert client.get("/api/providers").json()["selected"] == "gemini"
-    assert client.patch("/api/admin/provider-settings", json={"selected_provider":"claude"}).status_code == 422
+    changed_claude = client.patch("/api/admin/provider-settings", json={"selected_provider":"claude"})
+    assert changed_claude.status_code == 200
+    assert changed_claude.json()["selected_provider"] == "claude"
     integrations = client.get("/api/admin/integrations")
     assert integrations.status_code == 200
     assert integrations.json()["analytics"]["status"] == "needs_youtube_connection"
@@ -1455,6 +1460,7 @@ def test_admin_integrations_reports_truthful_engine_readiness(tmp_path, monkeypa
             "openai": {"configured": True, "model": "test"},
             "gemini": {"configured": False, "model": "test"},
             "deepseek": {"configured": False, "model": "deepseek-flash"},
+            "claude": {"configured": False, "model": "claude-sonnet-5-5"},
         },
     })
     monkeypatch.setattr(main, "paid_upgrades_allowed", lambda: False)
