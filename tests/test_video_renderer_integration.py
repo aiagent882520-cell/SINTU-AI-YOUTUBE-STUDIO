@@ -625,5 +625,5 @@ def test_portrait_hindi_subtitles_wrap_to_safe_width(tmp_path, monkeypatch):
         if line and not line.isdigit() and "-->" not in line
     ]
     assert len(caption_lines) >= 2
-    assert max(map(len, caption_lines)) <= 21
+    assert max(map(len, caption_lines)) <= 15
 

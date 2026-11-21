@@ -215,7 +215,7 @@ def _create_subtitle_track(work: Path, subtitles: list[str] | None,
     font_size = max(22, round(height * 0.027))
     horizontal_margin = max(28, round(width * 0.06))
     available_width = max(1, width - 2 * horizontal_margin)
-    wrap_width = max(16, min(48, int(available_width / (font_size * 0.85))))
+    wrap_width = max(12, min(48, int(available_width / (font_size * 1.2))))
     cues = []
     cursor = 0.0
     cue_index = 1
