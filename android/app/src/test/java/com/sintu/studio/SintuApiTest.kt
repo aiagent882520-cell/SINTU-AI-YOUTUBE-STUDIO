@@ -1,6 +1,9 @@
 package com.sintu.studio
 
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import com.google.gson.Gson
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.fail
@@ -196,4 +199,31 @@ class SintuApiTest {
         assertEquals(null, store.value)
         assertEquals(null, store.origin)
     }
+    @Test
+    fun imageRequestUsesServerFieldNamesAndKeepsSelectedAspect() {
+        val json = Gson().toJson(ImageGenerateRequest(
+            prompt = "A fort at sunrise",
+            kind = "scene",
+            aspect = "portrait"
+        ))
+        assertTrue(json.contains("\"prompt\":\"A fort at sunrise\""))
+        assertTrue(json.contains("\"kind\":\"scene\""))
+        assertTrue(json.contains("\"aspect\":\"portrait\""))
+    }
+
+    @Test
+    fun imageResponsePreservesProviderAndNoticeForHonestUiLabeling() {
+        val response = Gson().fromJson(
+            """{"image_id":"0123456789abcdef0123456789abcdef","url":"/api/images/0123456789abcdef0123456789abcdef","kind":"scene","aspect":"portrait","width":768,"height":1360,"format":"JPEG","size_bytes":12345,"provider":"SINTU Procedural Art (offline)","local":true,"notice":"not a generative-AI image"}""",
+            ImageGenerationResponse::class.java
+        )
+        assertEquals("0123456789abcdef0123456789abcdef", response.image_id)
+        assertEquals("SINTU Procedural Art (offline)", response.provider)
+        assertTrue(response.local)
+        assertTrue(response.notice.contains("not a generative-AI image"))
+        assertFalse(response.provider.contains("ComfyUI"))
+        assertEquals(768, response.width)
+        assertEquals(1360, response.height)
+    }
+
 }
