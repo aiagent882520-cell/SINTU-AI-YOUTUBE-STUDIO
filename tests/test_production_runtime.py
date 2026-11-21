@@ -606,3 +606,27 @@ def test_concurrent_cancel_requests_are_idempotent(tmp_path, monkeypatch):
     assert all(item and item["status"] == "cancelled" for item in results)
     events = runtime.list_run_events(run["id"], "alice")
     assert [event["event_type"] for event in events].count("cancel_requested") == 1
+
+
+def test_stale_cancelling_worker_is_recovered_by_run_poll(tmp_path, monkeypatch):
+    import sqlite3
+    from datetime import datetime, timedelta, timezone
+    import app.production_runtime as runtime
+
+    database = tmp_path / "runtime.sqlite3"
+    monkeypatch.setattr(runtime, "DB_PATH", database)
+    run = runtime.create_run("youtube-shorts", "cancel then worker crash", "alice")
+    assert runtime._claim_run(run["id"], "alice") is True
+    token = runtime._worker_token(run["id"], "alice")
+    runtime._save_step(run["id"], 1, "Script Writer", "builder", "completed",
+                       "prompt", "safe checkpoint", worker_token=token)
+    assert runtime.request_cancel(run["id"], "alice")["status"] == "cancelling"
+
+    expired = (datetime.now(timezone.utc) - timedelta(seconds=10)).isoformat()
+    with sqlite3.connect(database) as conn:
+        conn.execute("UPDATE production_runs SET lease_expires_at=? WHERE id=?", (expired, run["id"]))
+
+    recovered = runtime.get_run(run["id"], "alice")
+    assert recovered["status"] == "cancelled"
+    assert recovered["steps"][0]["output_text"] == "safe checkpoint"
+    assert runtime.list_run_events(run["id"], "alice")[-1]["event_type"] == "stale_worker_recovered"
