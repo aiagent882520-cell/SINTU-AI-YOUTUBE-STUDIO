@@ -411,6 +411,9 @@ def init_db():
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_youtube_uploads_status ON youtube_uploads(status,updated_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_youtube_uploads_channel_hash ON youtube_uploads(channel_id,file_sha256)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS youtube_upload_locks (
+            calendar_id INTEGER PRIMARY KEY, owner TEXT NOT NULL, lease_until INTEGER NOT NULL
+        )""")
         upload_columns = {row["name"] for row in conn.execute("PRAGMA table_info(youtube_uploads)")}
         if "public_approval_hash" not in upload_columns:
             conn.execute("ALTER TABLE youtube_uploads ADD COLUMN public_approval_hash TEXT")
@@ -2010,6 +2013,105 @@ def _youtube_connection():
     return dict(row) if row else None
 
 
+YOUTUBE_UPLOAD_LOCK_LEASE_SECONDS = 300
+
+
+def _claim_youtube_upload_lock(calendar_id: int) -> str:
+    owner = secrets.token_urlsafe(24)
+    now = int(time.time())
+    with db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        current = conn.execute(
+            "SELECT owner,lease_until FROM youtube_upload_locks WHERE calendar_id=?",
+            (calendar_id,),
+        ).fetchone()
+        if current and int(current["lease_until"]) > now:
+            raise HTTPException(status_code=409, detail="A YouTube upload worker is already active for this calendar item.")
+        if current:
+            changed = conn.execute(
+                """UPDATE youtube_upload_locks SET owner=?,lease_until=?
+                   WHERE calendar_id=? AND lease_until<=?""",
+                (owner, now + YOUTUBE_UPLOAD_LOCK_LEASE_SECONDS, calendar_id, now),
+            ).rowcount
+            if changed != 1:
+                raise HTTPException(status_code=409, detail="YouTube upload worker lease changed; retry safely.")
+        else:
+            conn.execute(
+                "INSERT INTO youtube_upload_locks(calendar_id,owner,lease_until) VALUES(?,?,?)",
+                (calendar_id, owner, now + YOUTUBE_UPLOAD_LOCK_LEASE_SECONDS),
+            )
+    return owner
+
+
+def _renew_youtube_upload_lock(calendar_id: int, owner: str) -> None:
+    now = int(time.time())
+    with db() as conn:
+        changed = conn.execute(
+            """UPDATE youtube_upload_locks SET lease_until=?
+               WHERE calendar_id=? AND owner=? AND lease_until>?""",
+            (now + YOUTUBE_UPLOAD_LOCK_LEASE_SECONDS, calendar_id, owner, now),
+        ).rowcount
+    if changed != 1:
+        raise HTTPException(status_code=409, detail="YouTube upload worker lease expired or was replaced; retry safely.")
+
+
+def _release_youtube_upload_lock(calendar_id: int, owner: str) -> None:
+    try:
+        with db() as conn:
+            conn.execute(
+                "DELETE FROM youtube_upload_locks WHERE calendar_id=? AND owner=?",
+                (calendar_id, owner),
+            )
+    except sqlite3.Error:
+        # A dead worker's lease is reclaimed after its bounded expiry.
+        pass
+
+
+def _youtube_upload_transition(
+    calendar_id: int,
+    next_state: str,
+    *,
+    offset: int | None = None,
+    encrypted_uri: str | None = None,
+    youtube_id: str | None = None,
+    processing: str | None = None,
+) -> None:
+    with db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        current = conn.execute(
+            "SELECT status FROM youtube_uploads WHERE calendar_id=?",
+            (calendar_id,),
+        ).fetchone()
+        if not current:
+            raise HTTPException(status_code=409, detail="Persistent upload job disappeared.")
+        previous = current["status"]
+        try:
+            validate_state_transition(previous, next_state)
+        except UploadProtocolError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+        fields = ["status=?", "updated_at=?"]
+        values = [next_state, datetime.now(timezone.utc).isoformat()]
+        if offset is not None:
+            fields.append("acknowledged_offset=?")
+            values.append(offset)
+        if encrypted_uri is not None:
+            fields.append("encrypted_session_uri=?")
+            values.append(encrypted_uri)
+        if youtube_id is not None:
+            fields.append("youtube_video_id=?")
+            values.append(youtube_id)
+        if processing is not None:
+            fields.append("processing_status=?")
+            values.append(processing)
+        values.extend([calendar_id, previous])
+        changed = conn.execute(
+            "UPDATE youtube_uploads SET " + ",".join(fields) + " WHERE calendar_id=? AND status=?",
+            values,
+        ).rowcount
+        if changed != 1:
+            raise HTTPException(status_code=409, detail="Upload state changed concurrently; stale update rejected.")
+
+
 def _youtube_access_token(
     force_refresh: bool = False, *, stale_access_token: str | None = None
 ):
@@ -2498,6 +2600,25 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
                     description: str = Query(default="", max_length=5000),
                     privacy_status: str = Query(default="private", pattern=r"^(private|unlisted|public)$"),
                     public_approval_token: str | None = Header(default=None, alias="X-SINTU-Public-Approval")):
+    owner = _claim_youtube_upload_lock(calendar_id)
+    try:
+        return _youtube_publish_impl(
+            calendar_id, video_id, title, description, privacy_status,
+            public_approval_token, owner,
+        )
+    finally:
+        _release_youtube_upload_lock(calendar_id, owner)
+
+
+def _youtube_publish_impl(
+    calendar_id: int,
+    video_id: str,
+    title: str,
+    description: str,
+    privacy_status: str,
+    public_approval_token: str | None,
+    upload_lock_owner: str,
+):
     if not re.fullmatch(r"[a-f0-9]{32}", video_id):
         raise HTTPException(status_code=400, detail="Invalid rendered video ID.")
     with db() as conn:
@@ -2623,30 +2744,11 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
 
     def set_state(next_state: str, offset: int | None = None, encrypted_uri: str | None = None,
                   youtube_id: str | None = None, processing: str | None = None):
-        with db() as conn:
-            current = conn.execute("SELECT status FROM youtube_uploads WHERE calendar_id=?", (calendar_id,)).fetchone()
-            if not current:
-                raise HTTPException(status_code=409, detail="Persistent upload job disappeared.")
-            try:
-                validate_state_transition(current["status"], next_state)
-            except UploadProtocolError as exc:
-                raise HTTPException(status_code=409, detail=str(exc)) from None
-            fields = ["status=?", "updated_at=?"]
-            values = [next_state, datetime.now(timezone.utc).isoformat()]
-            if offset is not None:
-                fields.append("acknowledged_offset=?")
-                values.append(offset)
-            if encrypted_uri is not None:
-                fields.append("encrypted_session_uri=?")
-                values.append(encrypted_uri)
-            if youtube_id is not None:
-                fields.append("youtube_video_id=?")
-                values.append(youtube_id)
-            if processing is not None:
-                fields.append("processing_status=?")
-                values.append(processing)
-            values.append(calendar_id)
-            conn.execute("UPDATE youtube_uploads SET " + ",".join(fields) + " WHERE calendar_id=?", values)
+        _renew_youtube_upload_lock(calendar_id, upload_lock_owner)
+        _youtube_upload_transition(
+            calendar_id, next_state, offset=offset, encrypted_uri=encrypted_uri,
+            youtube_id=youtube_id, processing=processing,
+        )
 
     def verify_and_apply_visibility(youtube_id: str, access_token: str) -> dict:
         verified = _youtube_verify_uploaded_video(youtube_id, access_token)
@@ -2716,6 +2818,10 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
         set_state("ERROR")
         raise HTTPException(status_code=503, detail="Stored YouTube upload session cannot be decrypted safely; session reset required.") from None
 
+    def locked_resumable_request(method, url, data, headers):
+        _renew_youtube_upload_lock(calendar_id, upload_lock_owner)
+        return _youtube_resumable_http_request(method, url, data, headers)
+
     def persist_progress(offset: int, state: str):
         if privacy_status == "public":
             try:
@@ -2728,14 +2834,14 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
     try:
         try:
             uploaded = transfer_resumable_upload(
-                path, session_uri, access_token, request=_youtube_resumable_http_request,
+                path, session_uri, access_token, request=locked_resumable_request,
                 on_progress=persist_progress, probe_first=bool(saved.get("encrypted_session_uri")))
         except UploadProtocolError as exc:
             if exc.status == 401:
                 access_token = _youtube_access_token(force_refresh=True, stale_access_token=access_token)
                 set_state("RESUMING")
                 uploaded = transfer_resumable_upload(
-                    path, session_uri, access_token, request=_youtube_resumable_http_request,
+                    path, session_uri, access_token, request=locked_resumable_request,
                     on_progress=persist_progress, probe_first=True)
             else:
                 set_state(exc.state)
@@ -2766,6 +2872,7 @@ def youtube_publish(calendar_id: int, video_id: str = Query(..., min_length=32, 
 @app.post("/api/admin/youtube/uploads/{calendar_id}/cancel")
 def youtube_upload_cancel(calendar_id: int):
     with db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT status FROM youtube_uploads WHERE calendar_id=?", (calendar_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="YouTube upload job not found.")
@@ -2776,8 +2883,12 @@ def youtube_upload_cancel(calendar_id: int):
             validate_state_transition(current, "CANCELLED")
         except UploadProtocolError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from None
-        conn.execute("UPDATE youtube_uploads SET status='CANCELLED',updated_at=? WHERE calendar_id=?",
-                     (datetime.now(timezone.utc).isoformat(), calendar_id))
+        changed = conn.execute(
+            "UPDATE youtube_uploads SET status='CANCELLED',updated_at=? WHERE calendar_id=? AND status=?",
+            (datetime.now(timezone.utc).isoformat(), calendar_id, current),
+        ).rowcount
+        if changed != 1:
+            raise HTTPException(status_code=409, detail="Upload state changed concurrently; cancellation was not applied.")
     _record_publish_event(calendar_id, "youtube", "Cancelled", None,
                           "Local resumable upload cancelled; Google session may expire server-side.")
     return {"calendar_id": calendar_id, "status": "CANCELLED",
