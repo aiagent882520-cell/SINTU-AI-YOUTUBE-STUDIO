@@ -1,3 +1,26 @@
+# LIVE EXECUTION CHECKPOINT — 2026-11-21 (runtime + agent catalog follow-up)
+
+- PR #281 is merged at main commit `003de81b440984742ea7dbdbab0ccb77efd22d03`. Its exact-head CI was 8/8 PASS. Post-merge main push CI run `44912974430` passed 8/8 jobs (Python 3.11–3.14, dependency audit, Chromium browser, Docker build, offline video/motion E2E).
+- PR #282 remains open and mergeable after GitHub recalculation; no merge approval has been given. Its previous exact head `3623980120bf03b1f15a978404b600d910494427` passed 8/8 jobs (Python 3.11–3.14 each 991 passed/5 warnings; security audit, Chromium browser, offline Hindi video/motion E2E, Docker build). New follow-up commits invalidate that older exact-head PASS until the current head's CI finishes. An intermediate exact head `8d07f6494cf97773a2ebf2fc93191e9e8321b31f` failed Python 3.12 due stale tests still expecting 66 roles; the failure was traced to outdated assertions, and tests were updated to the actual 158-role union. The corrected current head is awaiting its own CI.
+- Runtime follow-up on this branch: startup recovery no longer steals a fresh lease from another live API/worker process; worker-token state transitions reject cancellation-to-success races; transient local provider HTTP 429/500/502/503/504 and empty outputs retry with bounded backoff and audit events; model output is non-empty and capped at 80,000 characters; every checker-approved worker handoff (including post-review Owner Agent) is audited.
+- Agent catalog correction: previous full-catalog path exercised only 66 workers (61 core + 5 managers), despite the broader specialist registry. It now covers the union of 61 core roles and 112 computed specialist roles, 15 overlaps = 158 unique worker roles, each with an independent checker, then five final reviewers. The Owner Agent remains after reviewers. Updated tests assert full catalog coverage and approved-handoff events; live Ollama execution has not been run. These are shared local-model role invocations, not 158 continuously running autonomous agents.
+- Added `docs/AGENT_HANDOFF_EXECUTION.md`; updated `scripts/live_e2e.py` catalog coverage and runtime cancellation/retry documentation.
+- Consent-based voice cloning remains opt-in only. No YouTube upload, publishing, external service access, or media deletion occurred.
+- External live acceptance remains blocked pending ComfyUI host/workflow/models/resources, Hindi TTS executable/model, three black-video source assets/production records, YouTube OAuth/channel authorization, and physical Android access.
+- Full production acceptance and final documentary MP4 are not verified; SINTU is NOT RELEASE READY.
+
+---
+
+# LIVE EXECUTION CHECKPOINT — 2026-11-21
+
+- PR #281 is already merged: merge commit / current main at the time of verification `003de81b440984742ea7dbdbab0ccb77efd22d03`; its exact-head CI had passed 8/8 in the previous verified checkpoint. The main SHA has no PR-triggered workflow run returned by the current GitHub workflow-runs query, so a distinct post-merge main CI run is not claimed.
+- PR #282 carries runtime cancellation/recovery. Its earlier exact head `3623980120bf03b1f15a978404b600d910494427` passed 8/8 jobs, including Python 3.11–3.14 (991 passed, 5 warnings each), dependency audit, Chromium browser tests, offline Hindi video/motion E2E and Docker build. PR #282 remains open pending explicit human merge approval.
+- Follow-up runtime hardening in this branch: startup recovery now leaves a fresh fenced lease alone (avoids a second API process stealing a live worker); legacy or expired active rows remain recoverable. Worker-token state transitions are constrained so cancellation cannot be overwritten by success. Added tests for multi-process lease preservation and cancel-vs-success race; updated runtime docs. These follow-up changes have not yet been CI-verified.
+- Agent inventory: 61 core registry roles; 112 specialist roles including feature/senior-manager roles; 21 feature worker/checker pairs; 5 senior managers; 5 final reviewers. The production runtime invokes selected format roles sequentially with distinct checker calls and management handoffs. This is shared-model role execution, not 163 independent autonomous agents. Existing format presets include common feature workers/checkers plus format-specific specialists; full real-model role E2E remains unverified.
+- External acceptance remains blocked: ComfyUI host/workflow/models/resources, local Hindi TTS executable/model/audio review, three black-video source assets and production records, YouTube OAuth/channel authorization, physical Android access. No real-topic documentary final MP4 is accepted yet.
+
+---
+
 # DOCUMENTARY AUTOMATION EXECUTION — 2026-11-21
 
 ## Current code change (PR #278)
@@ -1780,3 +1803,38 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Historical issue #42 is a valid Termux `operational_readiness` SUCCESS (10 pass / 2 warnings / 0 failed), but that action does not establish current GitHub relay liveness. Issue #38's full self-test actually failed at pytest and media-quality audit; #39–#41 were rejected for unsupported action/field combinations, as recorded above.
 - The issue relay's main-code contract was rechecked: owner-only `SINTU-CMD:` issues, exact queue/running/done/failed labels, JSON keys limited to `action`, `topic`, `test_path`, 17 fixed actions, 30-minute command timeout, 40-minute stale-claim recovery, FIFO queueing, and 20,000-character output cap. No new device command was queued because #268 is already the correct pending read-only probe.
 - GitHub cloud CI is separate from Termux. No device claim/result was fabricated; current Termux relay/worker liveness remains **UNVERIFIED**. Preserve the user's local modified/untracked files and private media.
+
+
+## PR #281 merged and production runtime cancellation/recovery implementation — 2026-11-21
+
+### Documentary evidence gate — PR #281
+
+- PR #281 merged to main as `003de81b440984742ea7dbdbab0ccb77efd22d03`.
+- Exact final PR head: `9a533e487e09885f1f1d767dc5be8bf40a220c3a`; exact-head CI run [#44912731409](https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44912731409) passed **8/8 jobs**: Python 3.11–3.14, dependency security audit, production Docker build, real Chromium Video Editor browser tests, and offline branded-video E2E/motion audit.
+- The initial PR CI exposed a missing test import; it was corrected in the final PR head and all eight checks then passed.
+- The documentary research evidence package is structurally validated, owner-scoped, stored with SHA-256 integrity checks, passed to sequential workers/checkers/reviewers, and rechecked before documentary render.
+- Acceptance boundary remains explicit: no automatic URL fetching, publisher authentication, proof of source independence, or semantic fact verification. Human fact-checking remains mandatory.
+
+### Post-merge main verification
+
+- Verified main HEAD immediately after merge: `003de81b440984742ea7dbdbab0ccb77efd22d03`.
+- The GitHub connector available in this session exposes PR-triggered workflow runs but not push-triggered main workflow runs. Combined commit status returned no status contexts for this merge commit. Therefore **post-merge main CI is not yet independently verified in this checkpoint**; do not infer it from PR CI.
+
+### Runtime cancellation/recovery branch — in progress
+
+- Branch: `feat/production-runtime-cancel-recovery-20261121`, based on the PR #281 merge commit.
+- Added durable cancellation fields, worker fencing tokens, 15-minute worker leases, atomic claim/recovery transitions, append-only run event audit, owner-scoped cancellation and event APIs, safe cancellation checks around model calls, stale-lease recovery and restart recovery.
+- Added focused tests for owner isolation, queued cancellation, cancellation during a model call, concurrent/idempotent cancellation, stale worker fencing, restart recovery, partial-output preservation, completed-run protection and model response-time limits.
+- Added `docs/PRODUCTION_RUNTIME_CANCELLATION.md` documenting behavior and limits.
+- Exact PR head `95bc06d51ca8c72a850e4ff51fb89482eb2dab04`; CI run [#44913492897](https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44913492897) passed **8/8 jobs**. Python 3.11–3.14 each report **991 passed, 5 warnings**; dependency audit, real Chromium Video Editor tests, offline Hindi-video E2E/motion audit and production Docker build passed. PR #282 remains open and is **not merged**, pending explicit user approval.
+- In-flight provider calls cannot be forcibly interrupted; cancellation is honored when a call returns or fails. The 300-second guard pauses after a late provider response; it does not kill a provider process. Model calls remain at-least-once across a crash before checkpoint persistence; no exactly-once provider guarantee is claimed. Specialist orchestration remains sequential.
+
+### Remaining release gates
+
+- ComfyUI real host/workflow/model/GPU inference: not verified; user host/model resources still required.
+- Natural Hindi TTS: local executable/model and actual Hindi audio quality still not verified.
+- Three pixel-confirmed full-duration black MP4 originals remain unresolved in Issue #95; two additional dark-visible files were false positives in the old detector. No original or backup was modified; source-based repair remains blocked pending exact source provenance/assets.
+- YouTube live OAuth/channel/upload remains unverified; no live publishing performed.
+- Android physical-device E2E and current Termux relay liveness remain unverified; Issue #268 has no current device claim/result. Preserve all local modified/untracked Termux data.
+- 360/VR/AR/virtual-production specialized formats, all-module end-to-end acceptance, full website E2E and final real-topic documentary MP4 acceptance remain outstanding.
+- Product remains **INCOMPLETE / NOT PRODUCTION READY**. PR CI and the offline demo do not prove real ComfyUI inference, natural Hindi voice quality, physical Android acceptance or professional documentary quality.

@@ -65,12 +65,11 @@ def test_deployment_health_accepts_https_and_checks_health_payload(monkeypatch):
     }
 
 def test_live_agent_catalog_requires_every_registered_worker_checker_and_reviewer(monkeypatch):
-    from app.agents import AGENTS
-    from app.management_hierarchy import SENIOR_MANAGER_NAMES
+    from app.agent_orchestrator import CATALOG_WORKER_ROLES
     from app.production_runtime import REVIEWERS
 
     steps = []
-    expected_workers = list(AGENTS) + list(SENIOR_MANAGER_NAMES)
+    expected_workers = list(CATALOG_WORKER_ROLES)
     for role in expected_workers:
         steps.append({"step_type": "builder", "role": role, "status": "completed"})
         steps.append({"step_type": "checker", "role": role + " Checker", "status": "pass"})
@@ -85,25 +84,25 @@ def test_live_agent_catalog_requires_every_registered_worker_checker_and_reviewe
     })
 
     result = live_e2e._live_agent_catalog("Role coverage test")
-    assert result["registered_agent_roles"] == 66
+    assert result["registered_agent_roles"] == len(CATALOG_WORKER_ROLES) == 158
     assert result["core_agent_roles"] == 61
+    assert result["specialist_roles"] == 112
     assert result["senior_manager_roles"] == 5
-    assert result["completed_workers"] == 66
-    assert result["passed_checkers"] == 66
+    assert result["completed_workers"] == len(CATALOG_WORKER_ROLES)
+    assert result["passed_checkers"] == len(CATALOG_WORKER_ROLES)
     assert result["final_reviewers"] == 5
-    assert result["worker_role_coverage"] == 66
-    assert result["checker_role_coverage"] == 66
+    assert result["worker_role_coverage"] == len(CATALOG_WORKER_ROLES)
+    assert result["checker_role_coverage"] == len(CATALOG_WORKER_ROLES)
     assert result["reviewer_role_coverage"] == 5
 
 
 
 def test_live_agent_catalog_rejects_missing_senior_manager_coverage(monkeypatch):
-    from app.agents import AGENTS
-    from app.management_hierarchy import SENIOR_MANAGER_NAMES
+    from app.agent_orchestrator import CATALOG_WORKER_ROLES
     from app.production_runtime import REVIEWERS
 
     steps = []
-    for role in list(AGENTS) + list(SENIOR_MANAGER_NAMES[:-1]):
+    for role in [name for name in CATALOG_WORKER_ROLES if name != "Owner Agent"]:
         steps.append({"step_type": "builder", "role": role, "status": "completed"})
         steps.append({"step_type": "checker", "role": role + " Checker", "status": "pass"})
     steps.extend(
@@ -120,10 +119,10 @@ def test_live_agent_catalog_rejects_missing_senior_manager_coverage(monkeypatch)
         live_e2e._live_agent_catalog("Missing senior manager test")
 
 def test_live_agent_catalog_rejects_incomplete_role_coverage(monkeypatch):
-    from app.agents import AGENTS
+    from app.agent_orchestrator import CATALOG_WORKER_ROLES
 
     steps = []
-    for role in AGENTS[:-1]:
+    for role in CATALOG_WORKER_ROLES[:-1]:
         steps.append({"step_type": "builder", "role": role, "status": "completed"})
         steps.append({"step_type": "checker", "role": role + " Checker", "status": "pass"})
     monkeypatch.setattr(live_e2e, "create_run", lambda *args: {"id": "incomplete-run"})
@@ -160,7 +159,7 @@ def test_full_studio_e2e_uses_approved_scene_and_attaches_branded_render(monkeyp
         "result": {"deliverables": {"AI Video Generator": scene_section}},
     }
     monkeypatch.setattr(live_e2e, "_live_agent_catalog", lambda topic, include_result=False: (
-        {"status": "completed", "registered_agent_roles": 66}, package
+        {"status": "completed", "registered_agent_roles": 158}, package
     ))
     generated = []
     monkeypatch.setattr(live_e2e, "_live_video", lambda prompt: (

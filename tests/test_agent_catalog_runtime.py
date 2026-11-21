@@ -1,17 +1,21 @@
 import json
 
 from app.agents import AGENTS, list_agents
-from app.agent_orchestrator import catalog_team
+from app.agent_orchestrator import catalog_team, CATALOG_WORKER_ROLES
 import app.production_runtime as runtime
 
 
-def test_catalog_contains_61_specialists_and_five_senior_managers_with_distinct_checkers():
+def test_catalog_contains_every_unique_core_and_specialist_role_with_distinct_checkers():
     team = catalog_team()
     workers = [item for item in team if item["role_type"] == "specialist"]
     checkers = [item for item in team if item["role_type"] == "independent_checker"]
     assert len(AGENTS) == 61
-    assert len(workers) == len(checkers) == 66
-    assert [item["name"] for item in workers] == AGENTS + list(runtime.SENIOR_MANAGER_NAMES)
+    assert len(workers) == len(checkers) == len(CATALOG_WORKER_ROLES)
+    assert len(CATALOG_WORKER_ROLES) > len(AGENTS) + len(runtime.SENIOR_MANAGER_NAMES) - 1
+    assert [item["name"] for item in workers] == list(CATALOG_WORKER_ROLES)
+    assert set(AGENTS).issubset({item["name"] for item in workers})
+    from app.studio_scope import SPECIALIST_ROLES
+    assert set(SPECIALIST_ROLES).issubset({item["name"] for item in workers})
     assert all(item["checks"] == worker["name"] for worker, item in zip(workers, checkers))
     assert all(item["name"] != item["checks"] for item in checkers)
     assert all(item["status"] == "Registered role; not a continuously running agent" for item in list_agents())
@@ -40,14 +44,17 @@ def test_full_catalog_run_executes_each_worker_checker_and_final_review(tmp_path
     result = runtime.get_run(run["id"], "test-owner")
 
     assert result["status"] == "completed"
-    assert len([step for step in result["steps"] if step["step_type"] == "builder"]) == 66
-    assert len([step for step in result["steps"] if step["step_type"] == "checker"]) == 66
+    assert len([step for step in result["steps"] if step["step_type"] == "builder"]) == len(CATALOG_WORKER_ROLES)
+    assert len([step for step in result["steps"] if step["step_type"] == "checker"]) == len(CATALOG_WORKER_ROLES)
     assert len([step for step in result["steps"] if step["step_type"] == "reviewer"]) == 5
-    assert len(result["result"]["deliverables"]) == 61
+    assert len(result["result"]["deliverables"]) == len(CATALOG_WORKER_ROLES) - len(runtime.SENIOR_MANAGER_NAMES)
     assert result["result"]["video_rendered"] is False
     assert result["result"]["published"] is False
     assert set(result["result"]["management_reports"]) == set(runtime.SENIOR_MANAGER_NAMES)
-    assert len(calls) == 137
+    assert len(calls) == len(CATALOG_WORKER_ROLES) * 2 + len(runtime.REVIEWERS)
+    handoffs = [event for event in runtime.list_run_events(run["id"], "test-owner")
+                if event["event_type"] == "agent_handoff_approved"]
+    assert len(handoffs) == len(CATALOG_WORKER_ROLES)
 
 
 def test_full_catalog_run_pauses_on_first_failed_independent_checker(tmp_path, monkeypatch):
