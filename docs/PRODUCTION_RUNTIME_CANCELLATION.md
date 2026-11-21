@@ -23,7 +23,7 @@ Queued and paused runs become cancelled immediately. Running and reviewing runs 
 ## Recovery and safety
 
 - Worker claims are atomic and fenced by a unique token. A worker whose token is no longer current cannot persist a step or change the run state.
-- Leases are renewed before and after model calls. Expired leases are recovered to paused, or cancelled if cancellation was requested. Reading/polling a run triggers the stale-lease scan, so a crashed worker is not left reported as running indefinitely when the run is next inspected.
+- Leases are renewed before and after model calls. Expired leases are recovered to paused, or cancelled if cancellation was requested. Reading/polling a run triggers the stale-lease scan, so a crashed worker is not left reported as running indefinitely when the run is next inspected. Startup recovery immediately handles legacy active rows without fencing metadata, but does not steal a fresh lease from another live worker process; fenced rows are recovered only after lease expiry.
 - Application restart converts interrupted active runs to paused, or to cancelled when a cancellation was pending.
 - Approved builder/checker checkpoints remain in SQLite and are reused when a paused run resumes.
 - Cancellation never deletes partial outputs, completed checkpoints, user media or source assets.
