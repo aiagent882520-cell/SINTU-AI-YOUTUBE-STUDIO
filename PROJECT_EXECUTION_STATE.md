@@ -1,6 +1,6 @@
 # SINTU AI YOUTUBE STUDIO — execution state
 
-Last updated: 2026-11-17 15:52 UTC
+Last updated: 2026-11-21 07:45 UTC
 
 ## Current verified snapshot
 
@@ -1586,3 +1586,67 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Local backend `127.0.0.1:8000/api/health` is unreachable; no APK files found; automation self-test was explicitly NOT RUN. This diagnostic did not start a service, worker, model, renderer or upload.
 - Engine probe confirms no local ComfyUI endpoint/workflow and no model assets. Current available RAM is below the configured 8 GiB ComfyUI manual-review threshold; do not install ComfyUI or diffusion models on this Android device. Use procedural offline fallback until a separate compatible host is configured.
 - Physical worker restart/recovery, Android app installation/launch, real ComfyUI inference, YouTube OAuth/channel/upload and original-media forensic review remain unverified/blocked. Production remains paused; no public publishing.
+
+
+## Follow-up execution evidence (2026-11-20 — media source investigation)
+
+### Repository / CI baseline
+
+- Current main baseline used for this update: `80f4022da1f6f215488db07f46d5321be6e42176` (PR #254 merge commit).
+- PR #254 exact-head CI run `44756952214`: 8/8 jobs passed (Python 3.11–3.14, dependency security audit, production Docker build, offline branded-video E2E/motion audit, and real Chromium Video Editor browser tests).
+- Owner-reported Termux targeted regression on the synced checkout: 27 passed, 5 warnings. This is not a full Android device E2E or reboot/recovery acceptance.
+
+### Five MP4 forensic investigation — read-only
+
+- Five target MP4s were examined with the forensic script and human-reviewed contact sheets. Three are confirmed full-duration black by the calibrated multi-signal check: `3f4c2151e8e640109f464b2c2e9b7569.mp4`, `59430f1fb7fd4bdf80cf8b7d9f456098.mp4`, and `8cfe9da88d5c43d184f3572e371ff4a6.mp4`.
+- Two targets (`adf9268e5d5543a587defdde5d4c4edd.mp4`, `afa4c87e3c1e42a197b7092e0e24040d.mp4`) are dark-visible, not full-black under the calibrated pixel checks; they are not approved for production quality.
+- Twelve source-image entries resolve to seven unique contents by SHA-256. A read-only resized RGB pixel comparison ranked `afc9fd540cc74dbdbc82fc986d267eed.jpg` closest to both dark-visible MP4s at five sampled timestamps (mean pixel difference 11.65 at 96x170). This is a similarity candidate only, not provenance evidence. The three black MP4s cannot be attributed by visual comparison of black decoded frames.
+- No matching production manifest/log/database provenance was found in the available forensic scan. Mtime proximity and pixel similarity do not prove source provenance.
+- No MP4, source image, backup, database, or other user data was modified, moved, deleted, repaired, quarantined, or published. The black-media publish gate must remain in force pending verified provenance and owner-reviewed remediation.
+- The owner ran a further read-only timestamp-frame hash comparison command, but its output has not yet been supplied; do not claim static-frame hash results.
+
+### Current blockers (do not overstate)
+
+- Three confirmed full-black MP4s remain unresolved; two dark-visible clips remain unapproved. Source attribution is not established.
+- ComfyUI real inference remains blocked by absent compatible host/models/workflows; Android device RAM is not suitable for installing a large diffusion stack.
+- Android physical restart/recovery and full device E2E remain unverified. Current Termux test count is only the targeted 27-pass result above.
+- Live YouTube OAuth/channel authorization/upload remains unverified. No upload or public publishing was performed.
+- Four specialized 360/VR/AR/virtual-production formats still lack native engines; 15-module registry checks are not functional acceptance.
+- Video Editor, Website, and Android native integration are not complete end-to-end.
+
+### Immediate next engineering steps
+
+1. Keep forensic media read-only until a defensible source match or render manifest is found; do not regenerate or overwrite the originals speculatively.
+2. Continue code-side work on durable YouTube resumable upload and exact-content owner approval, with mocked/interruption tests only; no live upload/public publish.
+3. Keep updating this checkpoint only with evidence-backed changes and exact-head CI results.
+
+
+## Engineering checkpoint — 2026-11-21
+
+### Merged reliability fixes
+
+- PR #256 merged as `38dfd6e6b0fae43ccc320bc95de15f58fabcaeec`; exact-head CI run `44880822227`: **8/8 PASS**. Backup restore now removes unused pre-restore safety copies after a completely successful rollback, while preserving remaining recovery copies if any rollback step fails. Added a three-database install-failure injection test that verifies original database contents/integrity and media/staging cleanup.
+- PR #257 merged as `bf127b59f427e393a3b07d1f1041c466b14d3e87`; exact-head CI run `44881071879`: **8/8 PASS**. YouTube OAuth refresh now uses a SQLite lease lock shared across worker processes, re-reads encrypted credentials after lock acquisition, coalesces concurrent upload-401 refreshes, preserves rotated refresh tokens, conditionally persists credentials, and maps `invalid_grant` to a sanitized reconnect-required response.
+- PR #258 merged as `2f041f214a2e732412255de2448ddd1f98188ec3`; exact-head CI run `44881492479`: **8/8 PASS**. YouTube uploads now have a per-calendar SQLite worker lease with expiry/reclaim and renewal before each chunk/probe. Upload state changes use atomic status-conditional updates. Cancellation remains independently callable while a worker holds the upload lease; stale progress cannot overwrite terminal `CANCELLED`.
+- Each of the three exact-head CI runs passed Python 3.11, 3.12, 3.13 and 3.14 test suites, dependency security audit, production Docker build/health, real Chromium Video Editor browser tests, and offline Hindi video E2E with subtitle, black-frame and motion checks. These are repository CI results, not physical Android deployment or live YouTube evidence.
+
+### User-executed Termux regression evidence
+
+- Targeted production worker atomic-claim suite: **25 passed**.
+- YouTube OAuth/upload concurrency/recovery/history suite: **22 passed**.
+- Backup API round-trip + restore tests: **10 passed**; expanded API/restore regression: **207 passed**.
+- Three-database rollback failure-injection test: **1 passed** after the source cleanup fix.
+- Combined worker + YouTube + backup/restore/API regression: **254 passed, 0 failed**.
+- Warnings in the local runs were FastAPI `@app.on_event` and Starlette TestClient/httpx deprecations. These remain cleanup work, not test failures.
+- The Termux working tree previously showed modified `app/main.py`, `app/production_runtime.py`, their tests and `app/backup_restore.py`, plus untracked `app/main.py.bak` and `diagnostics/`. Preserve these local changes and user data. The latest known Termux base HEAD was `80f4022`; there is no verified device fast-forward to the three newer main merges. Do not reset, clean, overwrite or assume the local working tree is synchronized.
+
+### Remaining release gates — NOT COMPLETE
+
+- Physical Termux deployment/regression against current main remains pending. GitHub CI does not prove the Android device is running the merged code.
+- Full local `.venv/bin/pytest -q` was not reported from Termux; the complete repository suite did pass in GitHub CI on Python 3.11–3.14 for each PR.
+- Live Google OAuth credentials, token-encryption configuration, connected channel and real private/unlisted upload remain unverified. No real upload was performed by these changes. Public publishing remains separately owner-gated.
+- Real ComfyUI host/model/inference remains unavailable/unverified; do not install large diffusion models on the Android device under the previously measured RAM constraints. Keep procedural offline fallback.
+- The original black-MP4 forensic/remediation boundary remains open. Preserve originals and backups; no automatic repair, overwrite, delete or publish.
+- Physical Android app install/launch, full device reboot/Termux:Boot recovery and production background-worker recovery remain unverified.
+- 60-format evidence remains generic output/profile coverage for 56 formats; four specialized 360/VR/AR/virtual-production formats remain blocked. The 15-module registry tests are not proof of complete functional UI/API acceptance.
+- Product remains **INCOMPLETE / NOT PRODUCTION READY** until the physical/device, media, real-engine and live-publishing gates are independently verified.
