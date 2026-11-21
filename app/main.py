@@ -63,6 +63,8 @@ from .flow_auto_import import start_flow_auto_import, stop_flow_auto_import, flo
 from .termux_bridge import router as termux_bridge_router
 from .youtube_upload import transfer_resumable_upload, sha256_file as youtube_sha256_file, validate_session_uri, validate_state_transition, UploadProtocolError, UPLOAD_STATES
 from .offline_media import (OfflineMediaError, MAX_MEDIA_BYTES, import_media_file, list_offline_media, get_offline_media_path)
+from .documentary_research import DOCUMENTARY_FORMAT_IDS, validate_documentary_evidence_for_production
+from .research_evidence_store import save_research_evidence, get_research_evidence
 from .resumable_media_upload import (ResumableUploadError, create_upload, get_upload, append_upload_chunk, complete_upload)
 
 ROOT = Path(__file__).resolve().parent
@@ -5003,17 +5005,65 @@ def status():
 class ProductionRunInput(BaseModel):
     format_id: str = Field(min_length=1, max_length=80)
     topic: str = Field(min_length=1, max_length=5000)
+    research_evidence: dict | None = None
 
 
 @app.post("/api/production/runs")
 def start_production_run(payload: ProductionRunInput, background_tasks: BackgroundTasks, request: Request):
     owner = _production_project_owner(request)
+    evidence_validation = None
+    if payload.format_id in DOCUMENTARY_FORMAT_IDS:
+        if not isinstance(payload.research_evidence, dict):
+            raise HTTPException(
+                status_code=422,
+                detail="Documentary production requires a source-linked research_evidence package before any agent run starts.",
+            )
+        if str(payload.research_evidence.get("topic", "")).strip().casefold() != payload.topic.strip().casefold():
+            raise HTTPException(status_code=422, detail="Research evidence topic must exactly match the production topic.")
+        evidence_validation = validate_documentary_evidence_for_production(payload.research_evidence)
+        if not evidence_validation["valid"]:
+            raise HTTPException(status_code=422, detail={
+                "message": "Documentary research evidence failed the structural production gate.",
+                "validation": evidence_validation,
+            })
     try:
         run = create_production_run(payload.format_id, payload.topic, owner)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
+    if evidence_validation is not None:
+        try:
+            save_research_evidence(DB_PATH, run["id"], owner, payload.research_evidence, evidence_validation)
+        except (OSError, ValueError, sqlite3.Error):
+            # Do not schedule the worker if its evidence ledger was not durably persisted.
+            raise HTTPException(status_code=503, detail="Research evidence could not be persisted; production worker was not started.") from None
     background_tasks.add_task(execute_production_run, run["id"], owner)
-    return {"run_id": run["id"], "status": run["status"], "detail": "Format-specific builder/checker production run queued."}
+    return {
+        "run_id": run["id"], "status": run["status"],
+        "detail": "Format-specific builder/checker production run queued.",
+        "research_evidence": ({
+            "status": "STRUCTURAL_TRACEABILITY_VALIDATED",
+            "source_count": evidence_validation["source_count"],
+            "claim_count": evidence_validation["claim_count"],
+            "human_fact_check_required": True,
+            "acceptance_boundary": evidence_validation["acceptance_boundary"],
+        } if evidence_validation is not None else None),
+    }
+
+
+@app.get("/api/production/runs/{run_id}/research-evidence")
+def production_run_research_evidence(run_id: str, request: Request):
+    if not re.fullmatch(r"[a-f0-9]{32}", run_id):
+        raise HTTPException(status_code=400, detail="Invalid production run ID.")
+    owner = _production_project_owner(request)
+    if not get_production_run(run_id, owner):
+        raise HTTPException(status_code=404, detail="Production run not found.")
+    try:
+        record = get_research_evidence(DB_PATH, run_id, owner)
+    except ValueError:
+        raise HTTPException(status_code=409, detail="Stored research evidence failed its integrity check.") from None
+    if not record:
+        raise HTTPException(status_code=404, detail="Research evidence package not found.")
+    return record
 
 
 class ProductionRenderInput(RenderInput):
@@ -5110,6 +5160,17 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=404, detail="Production run not found.")
     if run.get("status") != "completed" or not isinstance(run.get("result"), dict):
         raise HTTPException(status_code=409, detail="Production package must pass all builder/checker/reviewer gates first.")
+    research_record = None
+    if run.get("format_id") in DOCUMENTARY_FORMAT_IDS:
+        try:
+            research_record = get_research_evidence(DB_PATH, run_id, owner)
+        except ValueError:
+            raise HTTPException(status_code=409, detail="Documentary render is blocked: persisted research evidence integrity check failed.") from None
+        if not research_record:
+            raise HTTPException(status_code=409, detail="Documentary render is blocked: persisted source-linked research evidence is missing.")
+        evidence_validation = validate_documentary_evidence_for_production(research_record["package"])
+        if not evidence_validation["valid"] or evidence_validation["sha256"] != research_record["sha256"]:
+            raise HTTPException(status_code=409, detail="Documentary render is blocked: research evidence failed integrity or structural validation.")
     try:
         profile = format_render_profile(run["format_id"])
     except KeyError:
@@ -5221,6 +5282,8 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                     "scene_count": len(scene_prompts),
                     "subtitles_burned_in": bool(subtitle_lines),
                     "animation_report": animation_report if use_procedural_2d else None,
+                    "research_evidence_sha256": research_record["sha256"] if research_record else None,
+                    "research_evidence_status": "STRUCTURAL_TRACEABILITY_VALIDATED_NOT_FACT_VERIFIED" if research_record else None,
                 },
                 engines={
                     "image": str((image_result.get("provider") if not use_procedural_2d else "SINTU Scene-aware 2D Animation") or "local"),
@@ -5241,6 +5304,11 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
             "generated_images": created_images, "voiceover": voice_result,
             "background_music": music_result, "subtitles": subtitle_lines,
             "render": rendered, "video_rendered": True, "published": False,
+            "research_evidence": ({
+                "sha256": research_record["sha256"],
+                "status": "STRUCTURAL_TRACEABILITY_VALIDATED_NOT_FACT_VERIFIED",
+                "human_fact_check_required": True,
+            } if research_record else None),
             "detail": "Local media generated and final MP4 verified. YouTube publishing still requires separate human approval.",
         }
     except (ImageUnavailable, VoiceUnavailable, MusicUnavailable, RendererUnavailable, RuntimeError) as exc:

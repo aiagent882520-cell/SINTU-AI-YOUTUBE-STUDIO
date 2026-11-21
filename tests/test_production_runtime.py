@@ -388,3 +388,81 @@ def test_resumed_run_reuses_passed_final_reviewer_checkpoint(tmp_path, monkeypat
     assert not any("Reviewer: Audio Quality Reviewer" in prompt for prompt in calls)
     assert len([step for step in runtime.get_run(run["id"])["steps"]
                 if step["role"] == "Audio Quality Reviewer" and step["step_type"] == "reviewer"]) == 1
+
+
+
+def test_documentary_runtime_passes_persisted_research_ledger_to_workers_and_reviewers(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+    from app.documentary_research import validate_documentary_evidence_for_production
+    from app.research_evidence_store import save_research_evidence
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    monkeypatch.setattr(runtime, "RESEARCH_EVIDENCE_DB_PATH", tmp_path / "studio.sqlite3")
+    monkeypatch.setattr(runtime, "format_team", lambda _format: [
+        {"role_type": "specialist", "name": "Fact Checker", "mission": "verify each claim against supplied evidence"},
+        {"role_type": "specialist", "name": "Script Writer", "mission": "write a researched Hindi script"}
+    ])
+    package = {
+        "schema_version": 1,
+        "topic": "भारत का इतिहास",
+        "researched_at": "2026-11-21T10:00:00+05:30",
+        "sources": [
+            {"id": "a", "title": "Archive", "publisher": "Archive A",
+             "url": "https://archive-a.example/record", "accessed_at": "2026-11-21",
+             "published_at": None, "source_type": "primary"},
+            {"id": "b", "title": "Paper", "publisher": "University B",
+             "url": "https://university-b.example/paper", "accessed_at": "2026-11-21",
+             "published_at": "2020-01-01", "source_type": "academic"},
+        ],
+        "claims": [
+            {"id": "claim-1", "text": "एक ऐतिहासिक घटना दर्ज है।",
+             "claim_type": "factual", "status": "corroborated",
+             "source_ids": ["a", "b"], "evidence_notes": "दोनों स्रोतों को स्वतंत्र रूप से पढ़ना आवश्यक है।"}
+        ],
+    }
+    validation = validate_documentary_evidence_for_production(package)
+    run = runtime.create_run("documentary", package["topic"], "owner")
+    save_research_evidence(runtime.RESEARCH_EVIDENCE_DB_PATH, run["id"], "owner", package, validation)
+    prompts = []
+
+    def fake_generate(prompt, workflow, provider):
+        prompts.append(prompt)
+        if "independent quality checker" in prompt.lower() or "final video production reviewer" in prompt.lower():
+            output = '{"decision":"PASS","evidence":["reviewed against supplied evidence ledger"],"issues":[],"revision_instructions":[]}'
+        elif "Role: Fact Checker" in prompt:
+            output = "FACT CHECK RESULT: claim-1 is traceable to source IDs a and b; source contents still require human review."
+        else:
+            output = "भारत के इतिहास पर स्रोत-संदर्भित हिंदी स्क्रिप्ट।"
+        return {"output": output, "provider": "test", "model": "fixture"}
+
+    monkeypatch.setattr(runtime, "generate_text", fake_generate)
+    runtime.execute_run(run["id"], "owner")
+    result = runtime.get_run(run["id"], "owner")
+
+    assert result["status"] == "completed"
+    assert result["result"]["research_evidence"]["sha256"] == validation["sha256"]
+    assert result["result"]["research_evidence"]["human_fact_check_required"] is True
+    ledger_prompts = [prompt for prompt in prompts if "DOCUMENTARY RESEARCH EVIDENCE LEDGER" in prompt]
+    assert len(ledger_prompts) >= 2
+    assert any("Fact Checker" in prompt and "claim-1" in prompt for prompt in ledger_prompts)
+    script_prompt = next(prompt for prompt in ledger_prompts if "Role: Script Writer" in prompt)
+    assert "archive-a.example" in script_prompt
+    assert "FACT CHECK RESULT" in script_prompt
+
+
+def test_documentary_runtime_pauses_when_research_evidence_is_missing(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    monkeypatch.setattr(runtime, "RESEARCH_EVIDENCE_DB_PATH", tmp_path / "studio.sqlite3")
+    monkeypatch.setattr(runtime, "format_team", lambda _format: [
+        {"role_type": "specialist", "name": "Script Writer", "mission": "write a researched Hindi script"}
+    ])
+    calls = []
+    monkeypatch.setattr(runtime, "generate_text", lambda *args: calls.append(args))
+    run = runtime.create_run("documentary", "भारत का इतिहास", "owner")
+    runtime.execute_run(run["id"], "owner")
+    result = runtime.get_run(run["id"], "owner")
+    assert result["status"] == "paused"
+    assert result["current_role"] == "Documentary Research Evidence"
+    assert calls == []

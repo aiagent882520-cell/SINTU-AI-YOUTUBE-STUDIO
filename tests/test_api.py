@@ -4290,3 +4290,107 @@ def test_instagram_remote_url_route_is_fail_closed(tmp_path, monkeypatch):
     )
     assert response.status_code == 409
     assert "blocked" in response.json()["detail"].lower()
+
+
+
+def _documentary_research_package():
+    return {
+        "schema_version": 1,
+        "topic": "भारतीय स्वतंत्रता आंदोलन",
+        "researched_at": "2026-11-21T12:00:00+05:30",
+        "sources": [
+            {"id": "archive", "title": "Archive record", "publisher": "National Archives",
+             "url": "https://archives.example.org/record/1", "published_at": None,
+             "accessed_at": "2026-11-21", "source_type": "primary"},
+            {"id": "university", "title": "Research paper", "publisher": "University Research",
+             "url": "https://university.example.org/paper/2", "published_at": "2020-01-01",
+             "accessed_at": "2026-11-21", "source_type": "academic"},
+        ],
+        "claims": [
+            {"id": "event", "text": "A documented historical event occurred.",
+             "claim_type": "factual", "status": "corroborated",
+             "source_ids": ["archive", "university"],
+             "evidence_notes": "Both records are cited for independent editorial review."}
+        ],
+    }
+
+
+def test_documentary_run_requires_research_evidence_before_workers_start(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    called = []
+    monkeypatch.setattr(main, "create_production_run", lambda *args: called.append(args))
+    response = client.post("/api/production/runs", json={
+        "format_id": "documentary", "topic": "भारतीय स्वतंत्रता आंदोलन"
+    })
+    assert response.status_code == 422
+    assert called == []
+
+
+def test_documentary_run_rejects_unverified_factual_claims_before_workers_start(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    called = []
+    monkeypatch.setattr(main, "create_production_run", lambda *args: called.append(args))
+    package = _documentary_research_package()
+    package["claims"][0]["status"] = "single_source"
+    response = client.post("/api/production/runs", json={
+        "format_id": "documentary", "topic": "भारतीय स्वतंत्रता आंदोलन",
+        "research_evidence": package,
+    })
+    assert response.status_code == 422
+    assert called == []
+
+
+def test_documentary_run_persists_evidence_before_scheduling_workers(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    run_id = "a" * 32
+    scheduled = []
+    monkeypatch.setattr(main, "create_production_run", lambda fmt, topic, owner: {
+        "id": run_id, "status": "queued", "format_id": fmt, "topic": topic,
+    })
+    monkeypatch.setattr(main, "get_production_run", lambda value, owner=None: {
+        "id": run_id, "status": "queued", "owner_username": owner,
+    } if value == run_id and owner == "local" else None)
+    def execute(value, owner):
+        scheduled.append((value, owner, main.get_research_evidence(main.DB_PATH, value, owner)))
+    monkeypatch.setattr(main, "execute_production_run", execute)
+    response = client.post("/api/production/runs", json={
+        "format_id": "documentary", "topic": "भारतीय स्वतंत्रता आंदोलन",
+        "research_evidence": _documentary_research_package(),
+    })
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["research_evidence"]["status"] == "STRUCTURAL_TRACEABILITY_VALIDATED"
+    assert body["research_evidence"]["human_fact_check_required"] is True
+    assert len(scheduled) == 1
+    assert scheduled[0][0:2] == (run_id, "local")
+    assert scheduled[0][2]["package"]["topic"] == "भारतीय स्वतंत्रता आंदोलन"
+    fetched = client.get(f"/api/production/runs/{run_id}/research-evidence")
+    assert fetched.status_code == 200
+    assert fetched.json()["sha256"] == scheduled[0][2]["sha256"]
+
+
+def test_documentary_research_evidence_is_owner_scoped_and_integrity_checked(tmp_path):
+    from app.research_evidence_store import save_research_evidence, get_research_evidence
+    from app.documentary_research import validate_documentary_evidence_for_production
+
+    package = _documentary_research_package()
+    validation = validate_documentary_evidence_for_production(package)
+    db_path = tmp_path / "research.sqlite3"
+    save_research_evidence(db_path, "b" * 32, "alice", package, validation)
+    assert get_research_evidence(db_path, "b" * 32, "alice")["sha256"] == validation["sha256"]
+    assert get_research_evidence(db_path, "b" * 32, "bob") is None
+
+
+
+def test_documentary_run_rejects_evidence_for_a_different_topic(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    called = []
+    monkeypatch.setattr(main, "create_production_run", lambda *args: called.append(args))
+    response = client.post("/api/production/runs", json={
+        "format_id": "documentary",
+        "topic": "भारत का इतिहास",
+        "research_evidence": _documentary_research_package(),
+    })
+    assert response.status_code == 422
+    assert "topic" in response.json()["detail"].lower()
+    assert called == []
