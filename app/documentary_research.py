@@ -47,6 +47,10 @@ def _public_http_url(value):
         if parsed.username is not None or parsed.password is not None:
             return False
         host = parsed.hostname.rstrip(".").lower()
+        if not host or any(char.isspace() for char in host):
+            return False
+        if parsed.port is not None and not 1 <= parsed.port <= 65535:
+            return False
         if host in {"localhost", "localhost.localdomain"} or host.endswith(".localhost"):
             return False
         try:
@@ -72,7 +76,7 @@ def validate_research_package(package):
                 "claim_count": 0, "source_count": 0,
                 "acceptance_boundary": "Structural validation only; no live research or semantic fact verification."}
 
-    if package.get("schema_version") != 1:
+    if type(package.get("schema_version")) is not int or package.get("schema_version") != 1:
         errors.append("schema_version: expected integer 1")
     if not _text(package.get("topic"), maximum=1000):
         errors.append("topic: required non-empty string (max 1000 characters)")
@@ -114,7 +118,8 @@ def validate_research_package(package):
         published = source.get("published_at")
         if published not in (None, "") and not _date(published):
             errors.append(f"{prefix}.published_at: expected ISO date or null")
-        if source.get("source_type") not in SOURCE_TYPES:
+        source_type = source.get("source_type")
+        if not isinstance(source_type, str) or source_type not in SOURCE_TYPES:
             errors.append(f"{prefix}.source_type: unsupported source classification")
         excerpt = source.get("evidence_excerpt")
         if excerpt not in (None, "") and not _text(excerpt, maximum=2000):
@@ -137,9 +142,9 @@ def validate_research_package(package):
             errors.append(f"{prefix}.text: required non-empty claim")
         kind = claim.get("claim_type")
         status = claim.get("status")
-        if kind not in CLAIM_TYPES:
+        if not isinstance(kind, str) or kind not in CLAIM_TYPES:
             errors.append(f"{prefix}.claim_type: unsupported claim type")
-        if status not in CLAIM_STATUSES:
+        if not isinstance(status, str) or status not in CLAIM_STATUSES:
             errors.append(f"{prefix}.status: unsupported evidence status")
         refs = claim.get("source_ids")
         if not isinstance(refs, list) or any(not isinstance(item, str) for item in refs):
@@ -152,7 +157,7 @@ def validate_research_package(package):
             errors.append(f"{prefix}.source_ids: unknown source IDs {missing}")
         if refs and not _text(claim.get("evidence_notes"), maximum=2000):
             errors.append(f"{prefix}.evidence_notes: explain how the cited source relates to the claim")
-        if kind == "factual":
+        if kind == "factual" and status in CLAIM_STATUSES:
             if status in {"corroborated", "single_source", "disputed"} and not refs:
                 errors.append(f"{prefix}: factual claim marked {status} must cite at least one source")
             if status == "corroborated" and not missing:
@@ -167,7 +172,7 @@ def validate_research_package(package):
                 warnings.append(f"{prefix}: disputed factual claim must be presented with its disagreement")
             if status == "unverified":
                 warnings.append(f"{prefix}: unverified factual claim must not be narrated as established fact")
-        elif status in {"corroborated", "single_source"} and not refs:
+        elif isinstance(kind, str) and kind in CLAIM_TYPES and status in {"corroborated", "single_source"} and not refs:
             errors.append(f"{prefix}: sourced status requires at least one source")
 
     return {
