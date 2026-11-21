@@ -366,11 +366,19 @@ def _set_run(run_id: str, status: str, current_role: str | None = None,
             return False
         if row["status"] == "cancelling" and status != "cancelled":
             return False
-        if worker_token is not None and (
-            row["worker_token"] != worker_token or not row["lease_expires_at"]
-            or row["lease_expires_at"] < _now()
-        ):
-            return False
+        if worker_token is not None:
+            allowed = {
+                "queued": {"running", "cancelled"},
+                "paused": {"running", "cancelled"},
+                "running": {"running", "reviewing", "paused", "blocked", "failed", "completed", "cancelling", "cancelled"},
+                "reviewing": {"reviewing", "running", "paused", "blocked", "failed", "completed", "cancelling", "cancelled"},
+                "cancelling": {"cancelled"},
+            }
+            if status not in allowed.get(row["status"], set()):
+                return False
+            if (row["worker_token"] != worker_token or not row["lease_expires_at"]
+                    or row["lease_expires_at"] < _now()):
+                return False
         terminal = status in {"completed", "failed", "blocked", "paused", "cancelled"}
         changed = conn.execute(
             """UPDATE production_runs SET status=?,current_role=?,error=?,
@@ -450,14 +458,21 @@ def _approved_reviewer_report(steps: list[dict], reviewer: str) -> dict | None:
 
 
 def recover_interrupted_runs() -> int:
-    """Recover active jobs after restart without reviving cancelled work."""
+    """Recover legacy or expired jobs after restart without stealing live worker leases."""
     init_runtime_db()
     now = _now()
     recovered = 0
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
+        # A process startup must not steal a still-live worker's lease when
+        # multiple API/worker processes share the same database. Legacy runs
+        # without fencing metadata are recoverable immediately; fenced runs
+        # are recovered only after their lease expires.
         rows = conn.execute(
-            "SELECT id,owner_username,status,cancel_requested FROM production_runs WHERE status IN ('running','reviewing','cancelling')"
+            """SELECT id,owner_username,status,cancel_requested FROM production_runs
+               WHERE status IN ('running','reviewing','cancelling')
+               AND (worker_token IS NULL OR lease_expires_at IS NULL OR lease_expires_at < ?)""",
+            (now,),
         ).fetchall()
         for row in rows:
             target = "cancelled" if row["cancel_requested"] or row["status"] == "cancelling" else "paused"
