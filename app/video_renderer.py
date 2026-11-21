@@ -244,7 +244,8 @@ def _create_subtitle_track(work: Path, subtitles: list[str] | None,
     style = (
         f"FontName={font},FontSize={font_size},PrimaryColour=&H00FFFFFF,"
         "OutlineColour=&H80000000,BackColour=&H50000000,BorderStyle=1,"
-        f"Outline=2,Shadow=1,Alignment=2,MarginV={margin},WrapStyle=2"
+        f"Outline=2,Shadow=1,Alignment=2,MarginL={horizontal_margin},"
+        f"MarginR={horizontal_margin},MarginV={margin},WrapStyle=2"
     )
     return subtitle_path, f"subtitles=filename='{raw_path}':force_style='{style}'"
 
