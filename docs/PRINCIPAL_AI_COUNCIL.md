@@ -36,4 +36,6 @@ Supported decision types: `major`, `security`, `architecture`, `production_relea
 
 ## Not yet implemented / not verified
 
+In this increment, Owner-only means the configured `SINTU_ADMIN_USERNAME` admin account under the existing authentication system. A separate Owner role, mobile/email OTP, and feature-level RBAC are not included yet.
+
 This increment does **not** complete the entire four-agent platform. Separate private memories and the shared verified Knowledge Base, agent-specific authentication keys/digital signatures, isolated per-agent code sandboxes, automatic research/re-vote rounds, disputes, per-agent task dashboards, and live API connectivity still require implementation and verification. The status dashboard is a readiness view, not proof that all four agents are operational.
