@@ -283,8 +283,6 @@ def request_cancel(run_id: str, owner_username: str) -> dict[str, Any] | None:
                        "Owner requested cancellation; no completed outputs are deleted.")
     if terminal:
         return get_run(run_id, owner_username)
-    if target == "cancelled":
-        _finish_cancel(run_id, owner_username)
     return get_run(run_id, owner_username)
 
 def list_run_events(run_id: str, owner_username: str) -> list[dict[str, Any]] | None:
