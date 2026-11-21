@@ -18,9 +18,9 @@ Each worker must return a non-empty deliverable no longer than 80,000 characters
 ## Catalog coverage
 
 - 61 core registry roles.
-- 130 unique specialist catalog roles after combining base specialist roles, common format roles, all format presets, 21 feature checker worker roles, and five senior managers.
+- 112 unique specialist catalog roles after combining base specialist roles, common format roles, all format presets, 21 feature checker worker roles, and five senior managers.
 - 15 roles overlap between core and specialist catalogs.
-- 176 unique core/specialist worker roles are included in the full catalog execution, each with a distinct checker.
+- 158 unique core/specialist worker roles are included in the full catalog execution, each with a distinct checker.
 - Five independent final reviewers run after the worker/checker catalog.
 - Full catalog test uses mocked model output and verifies execution plumbing, persistence, checker gates, and audit events. It does not prove real-model quality or that 176 independent autonomous agents are running.
 - Consent-based Voice Cloning Agent remains a separately gated capability and must not execute without explicit voice-owner consent and valid rights.
