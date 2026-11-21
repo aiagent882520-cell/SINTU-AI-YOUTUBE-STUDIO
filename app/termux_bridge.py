@@ -41,7 +41,8 @@ ALLOWED_ACTIONS = {
 }
 MAX_OUTPUT_CHARS = 20000
 AUTOMATION_ONLY = os.getenv("SINTU_AUTOMATION_ONLY", "true").strip().lower() in {"1", "true", "yes", "on"}
-AUTOMATION_PAUSED_ACTIONS = {"offline_video_e2e", "full_self_test", "full_studio_e2e", "media_repair"}
+PRODUCTION_ACTIONS = {"offline_video_e2e", "full_self_test", "full_studio_e2e"}
+AUTOMATION_PAUSED_ACTIONS = PRODUCTION_ACTIONS | {"media_repair"}
 
 
 def _now() -> str:
