@@ -894,3 +894,28 @@ def test_runtime_dispatches_existing_roles_in_stage_order_and_persists_checkpoin
     assert result["result"]["pipeline_dispatch"]["full_21_stage_execution"] is False
     assert "render" in result["result"]["pipeline_dispatch"]["deferred_stage_ids"]
 
+def test_legacy_completed_runs_are_backfilled_without_false_stage_completion(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    runtime.init_runtime_db()
+    now = runtime._now()
+    with runtime._connect() as conn:
+        conn.execute(
+            """INSERT INTO production_runs
+               (id,format_id,topic,status,owner_username,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?)""",
+            ("c" * 32, "youtube-shorts", "legacy completed run", "completed", "owner", now, now),
+        )
+
+    run = runtime.get_run("c" * 32, "owner")
+    assert len(run["pipeline_stages"]) == 21
+    stages = {stage["stage_id"]: stage for stage in run["pipeline_stages"]}
+    assert stages["intake"]["status"] == "skipped"
+    assert stages["quality"]["status"] == "skipped"
+    assert stages["owner_review"]["status"] == "awaiting_owner"
+    assert stages["render"]["status"] == "pending"
+    assert "no per-stage evidence" in stages["intake"]["issues"][0]
+    events = runtime.list_run_events("c" * 32, "owner")
+    assert any(event["event_type"] == "pipeline_ledger_backfilled" for event in events)
+
