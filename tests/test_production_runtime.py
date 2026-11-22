@@ -40,7 +40,7 @@ def test_pipeline_stage_transitions_require_evidence_lease_and_owner_approval(tm
     assert runtime._claim_run(run["id"], "owner-a") is True
     token = runtime._worker_token(run["id"], "owner-a")
     runtime.transition_pipeline_stage(
-        run["id"], "planning", "running", owner_username="owner-a",
+        run["id"], "planning", "running", owner_username="owner-a", worker_token=token,
     )
     with pytest.raises(runtime.ProductionRunCancelled, match="live fenced worker lease"):
         runtime.transition_pipeline_stage(
