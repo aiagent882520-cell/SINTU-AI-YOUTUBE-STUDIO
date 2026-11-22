@@ -242,3 +242,43 @@ def test_factory_dashboard_labels_the_live_stage_count():
     assert "Build 21-stage plan" in html
     assert "plan.pipeline_stage_count" in script
     assert "11-stage factory plan" not in script
+
+def test_produce_media_requires_owner_review_and_rejects_blocked_package(monkeypatch):
+    import pytest
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(main, "_production_project_owner", lambda request: "owner-1")
+    monkeypatch.setattr(main, "get_production_run", lambda run_id, owner: {
+        "id": run_id, "owner_username": owner, "status": "completed",
+        "result": {"deliverables": {}}, "format_id": "educational", "topic": "Hindi science",
+        "pipeline_stages": [{"stage_id": "owner_review", "status": "blocked"}],
+    })
+    payload = main.ProductionMediaInput()
+    with pytest.raises(HTTPException) as exc:
+        main.produce_approved_run_media("a" * 32, payload, object())
+    assert exc.value.status_code == 409
+    assert "Owner Review is blocked" in exc.value.detail
+
+
+def test_authenticated_media_request_completes_owner_review_gate(monkeypatch):
+    import pytest
+    from fastapi import HTTPException
+
+    calls = []
+    monkeypatch.setattr(main, "_production_project_owner", lambda request: "owner-1")
+    monkeypatch.setattr(main, "get_production_run", lambda run_id, owner: {
+        "id": run_id, "owner_username": owner, "status": "completed",
+        "result": {"deliverables": {}}, "format_id": "educational", "topic": "Hindi science",
+        "pipeline_stages": [{"stage_id": "owner_review", "status": "awaiting_owner"}],
+    })
+    monkeypatch.setattr(main, "transition_pipeline_stage", lambda *args, **kwargs: calls.append((args, kwargs)))
+    monkeypatch.setattr(main, "image_status", lambda: {"local_available": False})
+    with pytest.raises(HTTPException) as exc:
+        main.produce_approved_run_media("a" * 32, main.ProductionMediaInput(), object())
+    assert exc.value.status_code == 503
+    assert len(calls) == 1
+    assert calls[0][0][2] == "completed"
+    assert calls[0][1]["owner_username"] == "owner-1"
+    assert calls[0][1]["owner_approved"] is True
+    assert "explicitly initiated" in calls[0][1]["evidence"]
+
