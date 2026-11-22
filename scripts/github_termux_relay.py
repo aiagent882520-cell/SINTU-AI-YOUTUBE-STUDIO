@@ -228,6 +228,26 @@ def command_for(action: str, payload: dict) -> list[str]:
     raise ValueError("Action is not on the SINTU allowlist.")
 
 
+def parse_issue_payload(raw_body: str | None) -> dict:
+    """Read the machine-readable first line; allow human instructions below it.
+
+    Queue issues intentionally contain a one-line JSON command followed by
+    explanatory prose. Parsing the entire Markdown body rejects that format
+    with JSONDecodeError: Extra data.
+    """
+    body = (raw_body or "").strip()
+    if not body:
+        return {}
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        first_line = body.splitlines()[0].strip()
+        payload = json.loads(first_line)
+    if not isinstance(payload, dict):
+        raise ValueError("Issue command must be a JSON object on the first line.")
+    return payload
+
+
 def process_issue(github: GitHub, issue: dict) -> bool:
     number = int(issue["number"])
     action = None
@@ -235,7 +255,7 @@ def process_issue(github: GitHub, issue: dict) -> bool:
     github.update_issue(number, labels=[RUNNING_LABEL])
     github.comment(number, "🤖 SINTU Termux worker claimed this job. Execution started.")
     try:
-        body = json.loads(issue.get("body") or "{}")
+        body = parse_issue_payload(issue.get("body"))
         if not isinstance(body, dict) or set(body) - {"action", "topic", "test_path"}:
             raise ValueError("Issue body must be JSON with only action, topic, and test_path fields.")
         action = body.get("action")
