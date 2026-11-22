@@ -313,6 +313,12 @@ def test_runtime_revises_once_then_continues_after_checker_pass(tmp_path, monkey
 
     assert result["status"] == "completed"
     assert result["result"]["deliverables"]["Script Writer"].startswith("Revised")
+    stages = {stage["stage_id"]: stage for stage in result["pipeline_stages"]}
+    assert stages["script"]["status"] == "completed"
+    assert stages["intake"]["status"] == "skipped"
+    assert stages["quality"]["status"] == "skipped"
+    assert stages["owner_review"]["status"] == "awaiting_owner"
+    assert result["pipeline_stage_execution_implemented"] is False
     assert [step["step_type"] for step in result["steps"][:4]] == ["builder", "checker", "builder", "checker"]
     assert result["steps"][0]["attempts"] == 1
     assert result["steps"][2]["attempts"] == 2
@@ -425,6 +431,9 @@ def test_owner_agent_not_ready_pauses_even_when_its_checker_passes(tmp_path, mon
     assert result["status"] == "paused"
     assert result["current_role"] == "Owner Agent"
     assert "release blockers" in result["error"]
+    stages = {stage["stage_id"]: stage for stage in result["pipeline_stages"]}
+    assert stages["script"]["status"] == "completed"
+    assert stages["owner_review"]["status"] == "blocked"
     assert result["steps"][-2]["role"] == "Owner Agent"
     assert result["steps"][-1]["role"] == "Owner Agent Checker"
 
