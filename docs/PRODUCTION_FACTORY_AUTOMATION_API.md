@@ -35,9 +35,12 @@ not yet a stage-by-stage executor. Each new run now persists an ordered 21-row
 stage ledger in the runtime SQLite database, including department, approval policy,
 status, evidence, issues and timestamps. `GET /api/production/runs/{run_id}` returns the full Owner-scoped ledger; the Factory run-details panel displays all 21 rows, while the recent-runs summary exposes only stage counts by status. The ledger has fenced worker completion,
 evidence-required completion and explicit Owner gates for Owner review/publishing.
-It is currently an auditable planning/checkpoint foundation: the existing specialist/
-checker worker does not yet advance these 21 stage rows automatically. Provider
-matches are candidates, not installation or health attestations.
+Stage claims are ordered and fenced by the active run lease; expired worker recovery
+returns in-flight stage rows to paused so a new lease can resume them. Owner gates are
+surfaced as `awaiting_owner` and cannot be self-approved by the worker. This is still
+a checkpoint foundation: the existing specialist/checker worker is not yet wired to
+execute the 21 stage handlers automatically. Provider matches are candidates, not
+installation or health attestations.
 
 ## Monitor recent runs
 
