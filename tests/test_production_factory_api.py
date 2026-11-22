@@ -272,10 +272,18 @@ def test_authenticated_media_request_completes_owner_review_gate(monkeypatch):
         "pipeline_stages": [{"stage_id": "owner_review", "status": "awaiting_owner"}],
     })
     monkeypatch.setattr(main, "transition_pipeline_stage", lambda *args, **kwargs: calls.append((args, kwargs)))
-    monkeypatch.setattr(main, "image_status", lambda: {"local_available": False})
+    monkeypatch.setattr(main, "image_status", lambda: {"local_available": True})
+    monkeypatch.setattr(main, "voice_status", lambda: {"local_available": True})
+    def reject_render_start(*args, **kwargs):
+        raise ValueError("render executor fixture stop")
+    monkeypatch.setattr(main, "transition_owner_media_stage", reject_render_start)
+    payload = main.ProductionMediaInput(
+        scene_prompts=["A detailed cinematic scene with a clear subject, setting, lighting and camera composition."],
+        narration="यह एक परीक्षण कथन है।",
+    )
     with pytest.raises(HTTPException) as exc:
-        main.produce_approved_run_media("a" * 32, main.ProductionMediaInput(), object())
-    assert exc.value.status_code == 503
+        main.produce_approved_run_media("a" * 32, payload, object())
+    assert exc.value.status_code == 409
     assert len(calls) == 1
     assert calls[0][0][2] == "completed"
     assert calls[0][1]["owner_username"] == "owner-1"
