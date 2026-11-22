@@ -17,6 +17,7 @@ def test_production_factory_plan_endpoint_returns_non_executing_plan():
     assert result["topic"] == "Hindi space explainer"
     assert result["execution_started"] is False
     assert result["stage_execution_implemented"] is False
+    assert result["stage_role_dispatch_integrated"] is True
     assert result["publishing_enabled"] is False
     assert len(result["stages"]) == 21
     assert result["pipeline_stage_count"] == 21
@@ -67,6 +68,7 @@ def test_factory_runs_dashboard_is_owner_scoped_and_summarized(monkeypatch):
     assert result["runs"][0]["pipeline_stage_count"] == 2
     assert result["runs"][0]["pipeline_stage_status"] == {"completed": 1, "pending": 1}
     assert result["runs"][0]["pipeline_stage_execution_implemented"] is False
+    assert result["runs"][0]["pipeline_stage_role_dispatch_integrated"] is True
     assert result["runs"][0]["video_url"] == "/api/videos/" + "b" * 32
     assert "result" not in result["runs"][0]
     assert "script" not in str(result)
@@ -228,7 +230,7 @@ def test_factory_run_details_show_the_persisted_pipeline_ledger():
     source = script.read_text(encoding="utf-8")
     assert "21-stage pipeline ledger" in source
     assert "run.pipeline_stages||[]" in source
-    assert "automatic stage-by-stage execution is not wired yet" in source
+    assert "Mapped specialist/checker roles advance applicable stages through quality." in source
 
 
 def test_factory_dashboard_labels_the_live_stage_count():
