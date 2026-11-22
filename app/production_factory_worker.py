@@ -32,6 +32,12 @@ class ProductionRunSupervisor:
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
 
+    @property
+    def is_running(self) -> bool:
+        """Whether the background supervisor thread is currently alive."""
+        with self._lock:
+            return self._thread is not None and self._thread.is_alive()
+
     def start(self) -> bool:
         """Start one daemon worker loop; repeated startup calls are harmless."""
         with self._lock:
