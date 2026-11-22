@@ -5896,11 +5896,29 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput, 
         raise HTTPException(status_code=404, detail="Production run not found.")
     if run["status"] != "completed":
         raise HTTPException(status_code=409, detail="Production run must pass all builder/checker and final reviewer gates before rendering.")
+    _approve_owner_review_for_media(run_id, owner, run)
+    render_stage = next(
+        (stage for stage in run.get("pipeline_stages", []) if stage.get("stage_id") == "render"),
+        None,
+    )
+    if not render_stage or render_stage.get("status") in {"completed", "running", "blocked", "skipped"}:
+        raise HTTPException(status_code=409, detail="Render stage is unavailable or already completed.")
     if run["format_id"] != payload.format_id:
         raise HTTPException(status_code=400, detail="Render format must match the approved production run format.")
     if not payload.image_ids and not payload.video_ids and not payload.timeline and not payload.timeline_items:
         raise HTTPException(status_code=400, detail="Final production render requires supplied scene images, AI video clips or a mixed media timeline; scene descriptions alone are not visuals.")
-    rendered = render_video(payload)
+    try:
+        transition_owner_media_stage(run_id, "render", "running", owner_username=owner)
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    try:
+        rendered = render_video(payload)
+    except Exception as exc:
+        transition_owner_media_stage(
+            run_id, "render", "paused", owner_username=owner,
+            issues=[f"Renderer exited before producing a verified artifact: {type(exc).__name__}"],
+        )
+        raise
     render_data = rendered.get("render", rendered) if isinstance(rendered, dict) else rendered
     asset_paths = []
     for image_id in payload.image_ids:
@@ -5959,12 +5977,30 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput, 
         filename = render_data.get("filename") if isinstance(render_data, dict) else None
         if isinstance(filename, str) and filename and Path(filename).name == filename:
             (OUTPUT_DIR / filename).unlink(missing_ok=True)
+        transition_owner_media_stage(
+            run_id, "render", "paused", owner_username=owner,
+            issues=["Render provenance could not be persisted."],
+        )
         raise HTTPException(status_code=502, detail="Render provenance could not be saved; MP4 result is withheld.") from exc
     render_data["provenance_manifest"] = manifest["manifest_path"]
     try:
         updated = attach_render_result(run_id, rendered, owner)
     except ValueError as exc:
+        transition_owner_media_stage(
+            run_id, "render", "paused", owner_username=owner,
+            issues=["Verified render could not be attached to its production run."],
+        )
         raise HTTPException(status_code=409, detail=str(exc)) from None
+    transition_owner_media_stage(
+        run_id, "render", "completed", owner_username=owner,
+        evidence=f"Verified render attached with provenance manifest {manifest['manifest_path']}.",
+    )
+    transition_owner_media_stage(run_id, "package", "running", owner_username=owner)
+    transition_owner_media_stage(
+        run_id, "package", "completed", owner_username=owner,
+        evidence=f"Owner-scoped render package attached with provenance manifest {manifest['manifest_path']}.",
+    )
+    updated = get_production_run(run_id, owner)
     return {"run_id": run_id, "status": updated["status"], "render": rendered,
             "published": False, "detail": "Final MP4 rendered, provenance recorded and attached. YouTube publishing still requires separate approval."}
 
