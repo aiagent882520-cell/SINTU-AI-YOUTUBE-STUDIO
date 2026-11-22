@@ -58,7 +58,7 @@ _ROLE_STAGE_RULES = (
     ("editing", ("video editor", "editing specialist", "motion graphics editor")),
     ("localization", ("subtitle creator", "localization", "translator", "caption specialist")),
     ("branding", ("thumbnail designer", "title generator", "description writer", "hashtag", "tag expert", "ctr optimizer")),
-    ("quality", ("quality enhancer", "testing & qa", "quality reviewer", "compliance reviewer")),
+    ("quality", ("quality enhancer", "testing & qa", "quality reviewer", "compliance reviewer", "hr agent", "manager agent", "gm agent", "ho agent")),
 )
 
 
