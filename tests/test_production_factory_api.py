@@ -290,3 +290,25 @@ def test_authenticated_media_request_completes_owner_review_gate(monkeypatch):
     assert calls[0][1]["owner_approved"] is True
     assert "explicitly initiated" in calls[0][1]["evidence"]
 
+def test_general_renderer_cannot_bypass_blocked_owner_review(monkeypatch):
+    import pytest
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(main, "_production_project_owner", lambda request: "owner-1")
+    monkeypatch.setattr(main, "get_production_run", lambda run_id, owner: {
+        "id": run_id, "owner_username": owner, "status": "completed",
+        "result": {"deliverables": {}}, "format_id": "educational", "topic": "Hindi science",
+        "pipeline_stages": [
+            {"stage_id": "owner_review", "status": "blocked"},
+            {"stage_id": "render", "status": "pending"},
+        ],
+    })
+    payload = main.ProductionRenderInput(
+        format_id="educational", title="Hindi science", scenes=["A scene"],
+        image_ids=["b" * 32],
+    )
+    with pytest.raises(HTTPException) as exc:
+        main.render_approved_production_run("a" * 32, payload, object())
+    assert exc.value.status_code == 409
+    assert "Owner Review is blocked" in exc.value.detail
+
