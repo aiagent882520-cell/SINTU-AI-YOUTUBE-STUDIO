@@ -193,3 +193,15 @@ def test_factory_runs_dashboard_rejects_unsafe_render_video_id(monkeypatch):
     result = main.production_factory_runs(object(), limit=10)
     assert result["runs"][0]["has_render"] is False
     assert result["runs"][0]["video_url"] is None
+
+
+
+def test_factory_health_dashboard_distinguishes_local_from_remote_engines():
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[1] / "app" / "static" / "factory.js"
+    source = script.read_text(encoding="utf-8")
+    assert "item.local_available" in source
+    assert '"local "+(localReady?"READY":"NOT READY")' in source
+    assert "optional remote provider configured, not used for free local rendering" in source
+    assert "Remote provider configuration does not count as local readiness" in source
