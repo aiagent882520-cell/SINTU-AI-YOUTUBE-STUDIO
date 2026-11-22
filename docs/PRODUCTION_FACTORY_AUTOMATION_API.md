@@ -88,7 +88,9 @@ local background music, renders with FFmpeg, checks the render quality report,
 writes a provenance manifest and attaches the result to the run.
 
 The Production Factory dashboard exposes this action only for completed runs and
-asks for confirmation before starting. The dashboard requests `burn_subtitles=false`
+asks for confirmation before starting. Once a render is attached, the run summary exposes only a validated video ID
+and safe local video URL, so the dashboard can reopen the MP4 after refresh without
+re-running media generation. The dashboard requests `burn_subtitles=false`
 to respect the clean-frame video policy. A successful result includes the renderer's
 video URL. A missing local engine returns an explicit unavailable response; the
 dashboard does not fall back to paid providers.
