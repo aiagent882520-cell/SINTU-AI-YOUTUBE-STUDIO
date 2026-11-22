@@ -1,5 +1,8 @@
 import copy
-from app.documentary_research import validate_research_package
+from app.documentary_research import (
+    validate_documentary_evidence_for_production,
+    validate_research_package,
+)
 
 
 def package():
@@ -158,3 +161,12 @@ def test_invalid_url_port_is_rejected():
     result = validate_research_package(data)
     assert result["valid"] is False
     assert any(".url:" in item for item in result["errors"])
+
+
+
+def test_documentary_production_gate_rejects_unbounded_prompt_context():
+    data = package()
+    data["claims"][0]["evidence_notes"] = "x" * 25000
+    result = validate_documentary_evidence_for_production(data)
+    assert result["valid"] is False
+    assert any("model-context limit" in item for item in result["errors"])
