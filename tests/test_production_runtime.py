@@ -699,3 +699,16 @@ def test_transient_provider_errors_retry_with_audited_backoff(tmp_path, monkeypa
     retry_events = [event for event in runtime.list_run_events(run["id"], "alice")
                     if event["event_type"] == "model_call_retry"]
     assert len(retry_events) == 2
+
+
+def test_durable_queue_exposes_only_queued_runs_not_human_paused_work(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "queued-runtime.sqlite3")
+    queued = runtime.create_run("youtube-shorts", "Queued work")
+    paused = runtime.create_run("youtube-shorts", "Human review required")
+    assert runtime._set_run(paused["id"], "paused", error="Independent checker requires human review.")
+
+    rows = runtime.list_queued_runs(limit=10)
+    assert rows == [{"id": queued["id"], "owner_username": "local"}]
+    assert runtime.get_run(paused["id"])["status"] == "paused"
