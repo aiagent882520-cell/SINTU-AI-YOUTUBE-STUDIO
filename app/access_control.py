@@ -53,6 +53,8 @@ _ROUTE_FEATURES = (
     ("/api/rendering", "video_editor"),
     ("/api/render", "video_editor"),
     ("/api/music", "video_editor"),
+    ("/api/ai-videos", "video_editor"),
+    ("/api/videos", "video_editor"),
     ("/api/video", "video_editor"),
     ("/api/images", "video_editor"),
     ("/api/voice", "video_editor"),
