@@ -52,7 +52,7 @@ data class ImageGenerationResponse(
 
 data class LoginRequest(val username: String, val password: String, val otp_code: String? = null)
 data class LoginResponse(val authenticated: Boolean = false, val username: String = "", val role: String = "")
-data class SessionResponse(val authenticated: Boolean = false, val username: String? = null, val role: String? = null)
+data class SessionResponse(val authenticated: Boolean = false, val username: String? = null, val role: String? = null, val is_owner: Boolean = false, val features: List<String> = emptyList())
 data class ConversationCreateRequest(val title: String = "", val workflow: String = "content")
 data class ConversationCreateResponse(val id: Int, val title: String, val workflow: String)
 data class ConversationDto(val id: Int, val title: String, val workflow: String, val last_message: String? = null)
