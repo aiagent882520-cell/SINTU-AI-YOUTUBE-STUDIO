@@ -147,6 +147,18 @@
       const pipelineNote=document.createElement("p");pipelineNote.className="factory-meta";
       pipelineNote.textContent="Mapped specialist/checker roles advance applicable stages through quality. The authenticated Owner's confirmed Generate final MP4 action records Owner Review approval and advances verified render/package stages; publishing, analytics and learning still need separate executors.";
       panel.append(pipelineNote);
+      const dispatch=run.result?.pipeline_dispatch||{};
+      const deferredRoles=Array.isArray(dispatch.deferred_worker_roles)?dispatch.deferred_worker_roles:[];
+      const deferredTitle=document.createElement("b");deferredTitle.textContent="Deferred specialist executors";panel.append(deferredTitle);
+      const deferredNote=document.createElement("p");deferredNote.className="factory-meta";
+      deferredNote.textContent=deferredRoles.length
+        ? deferredRoles.join(" · ")+" — visible but not executed by the text-only worker loop."
+        : "No deferred specialist roles recorded for this run.";
+      panel.append(deferredNote);
+      const deferredStages=Array.isArray(dispatch.deferred_stage_ids)?dispatch.deferred_stage_ids:[];
+      const deferredStageNote=document.createElement("p");deferredStageNote.className="factory-meta";
+      deferredStageNote.textContent="Deferred stages: "+(deferredStages.join(" · ")||"none reported");
+      panel.append(deferredStageNote);
       for(const stage of run.pipeline_stages||[]){
         const row=document.createElement("p");row.className="factory-meta";
         row.textContent=stage.sequence+" · "+stage.stage_id+" · "+stage.department+" · "+stage.status+
