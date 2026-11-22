@@ -231,6 +231,9 @@ def test_factory_run_details_show_the_persisted_pipeline_ledger():
     assert "21-stage pipeline ledger" in source
     assert "run.pipeline_stages||[]" in source
     assert "records Owner Review approval" in source
+    assert "Deferred specialist executors" in source
+    assert "deferred_worker_roles" in source
+    assert "not executed by the text-only worker loop" in source
 
 
 def test_factory_dashboard_labels_the_live_stage_count():
