@@ -170,6 +170,9 @@ def generate_image_bytes(prompt, width, height, timeout_seconds=240):
             time.sleep(1)
             history = json.loads(_request(base + "/history/" + urllib.parse.quote(prompt_id), timeout=20))
             item = history.get(prompt_id, {})
+            failure = _video_history_error(item)
+            if failure:
+                raise ComfyUIUnavailable("ComfyUI image workflow execution failed: " + failure)
             outputs = item.get("outputs", {})
             for node in outputs.values():
                 images = node.get("images", []) if isinstance(node, dict) else []
