@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from .provider_registry import list_providers
+from .policy import paid_upgrades_allowed as _paid_upgrades_allowed
 
 PIPELINE_VERSION = "1.0"
 
@@ -123,13 +124,12 @@ def validate_execution_policy(
     action: str,
     owner_approved: bool = False,
     paid_provider: bool = False,
-    paid_upgrades_allowed: bool = False,
 ) -> None:
     """Fail closed for publishing, paid-provider use, and external side effects."""
     normalized = (action or "").strip().lower()
     if not normalized:
         raise ValueError("Action is required.")
-    if paid_provider and not (paid_upgrades_allowed and owner_approved):
+    if paid_provider and not (_paid_upgrades_allowed() and owner_approved):
         raise PermissionError("Paid provider activation requires earned-revenue policy and explicit Owner approval.")
     if normalized in {"publish", "upload", "schedule", "share_externally", "delete_source"} and not owner_approved:
         raise PermissionError(f"{normalized} requires explicit Owner approval.")
