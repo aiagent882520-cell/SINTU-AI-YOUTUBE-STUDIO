@@ -17,7 +17,9 @@ def test_production_factory_plan_endpoint_returns_non_executing_plan():
     assert result["topic"] == "Hindi space explainer"
     assert result["execution_started"] is False
     assert result["publishing_enabled"] is False
-    assert len(result["stages"]) >= 10
+    assert len(result["stages"]) == 21
+    assert result["pipeline_stage_count"] == 21
+    assert result["pipeline_version"] == "2.0"
 
 
 def test_factory_run_api_delegates_to_persistent_worker(monkeypatch):
@@ -209,3 +211,14 @@ def test_factory_health_dashboard_distinguishes_local_from_remote_engines():
     assert 'localReady?"LOCAL READY":"NOT READY"' in source
     assert "optional remote provider configured, not used for free local rendering" in source
     assert "Remote provider configuration does not count as local readiness" in source
+
+
+def test_factory_dashboard_labels_the_live_stage_count():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "app" / "static"
+    html = (root / "factory.html").read_text(encoding="utf-8")
+    script = (root / "factory.js").read_text(encoding="utf-8")
+    assert "Build 21-stage plan" in html
+    assert "plan.pipeline_stage_count" in script
+    assert "11-stage factory plan" not in script
