@@ -230,7 +230,7 @@ def test_factory_run_details_show_the_persisted_pipeline_ledger():
     source = script.read_text(encoding="utf-8")
     assert "21-stage pipeline ledger" in source
     assert "run.pipeline_stages||[]" in source
-    assert "Mapped specialist/checker roles advance applicable stages through quality." in source
+    assert "records Owner Review approval" in source
 
 
 def test_factory_dashboard_labels_the_live_stage_count():
