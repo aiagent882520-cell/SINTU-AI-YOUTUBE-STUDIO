@@ -37,6 +37,18 @@ def probe(url: str, timeout: float = 3.0) -> tuple[bool, str]:
         return False, type(exc).__name__
 
 
+def worker_process_matches(pid: int, proc_root: Path = Path("/proc")) -> bool:
+    """Reject stale/reused PID files unless the process is the SINTU bridge worker."""
+    if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        raw = (proc_root / str(pid) / "cmdline").read_bytes()
+    except OSError:
+        return False
+    arguments = [part.decode("utf-8", errors="replace") for part in raw.split(b"\0") if part]
+    return any(Path(argument).name == "termux_bridge_worker.py" for argument in arguments)
+
+
 def check(name: str, ok: bool, detail: str, required: bool = True) -> dict:
     return {"name": name, "status": "pass" if ok else ("fail" if required else "warn"),
             "detail": detail, "required": required}
@@ -73,8 +85,7 @@ def build_report(root: Path = ROOT, env: dict[str, str] | None = None,
     if worker_pid.is_file():
         try:
             pid = int(worker_pid.read_text().strip())
-            os.kill(pid, 0)
-            worker_alive = True
+            worker_alive = worker_process_matches(pid)
         except (ValueError, OSError):
             pass
     checks.append(check("termux_bridge_worker", worker_alive,
