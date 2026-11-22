@@ -462,6 +462,10 @@ def test_compact_forensic_summary_preserves_five_targets_under_relay_tail_cap():
         ],
         "safety": {"files_modified": False, "files_deleted": False},
     }
+    # The full forensic report retains every decoded black-frame sample;
+    # only the compact relay footer is intentionally reduced to 12 values.
+    assert all(len(target["black_frame_metrics"]["pblack_values"]) == 30 for target in report["targets"])
+    assert all(target["black_frame_metrics"]["sampled_frame_count"] == 30 for target in report["targets"])
     footer = media_forensics.compact_forensic_summary(report)
     assert len(footer["targets"]) == 5
     assert all(len(target["samples"]) == 5 for target in footer["targets"])
