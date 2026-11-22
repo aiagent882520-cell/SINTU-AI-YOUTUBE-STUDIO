@@ -117,6 +117,8 @@ def build_pipeline_plan(
         "format_id": clean_format,
         "execution_started": False,
         "execution_allowed": False,
+        "stage_execution_implemented": False,
+        "stage_execution_note": "The 21-stage map is planning-only; production runs still execute through the existing durable specialist/checker worker.",
         "free_first": True,
         "paid_auto_activation": False,
         "publishing_enabled": False,
