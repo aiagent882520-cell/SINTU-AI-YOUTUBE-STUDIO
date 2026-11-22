@@ -3,6 +3,15 @@
 The production factory is a free-first orchestration layer over the existing durable
 specialist/builder/checker runtime.
 
+## Check live host readiness
+
+`GET /api/production-factory/health`
+
+Returns a secret-free snapshot of the selected Master Brain, local model availability,
+optional remote-provider configuration flags, and image/voice/music/video engine
+readiness on the current server. It does not make paid API calls or claim that a
+configured credential has been tested against the vendor.
+
 ## Plan a workflow
 
 `POST /api/production-factory/plan`
