@@ -845,6 +845,44 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
         pairs = [item for item in team if item.get("role_type") == "specialist"]
         owner_pair = next((item for item in pairs if item["name"] == "Owner Agent"), None)
         pairs = [item for item in pairs if item["name"] != "Owner Agent"]
+        from .production_factory_orchestrator import route_specialist_roles
+        role_routing = route_specialist_roles([item["name"] for item in pairs])
+        role_to_stage = {role: stage["stage_id"] for stage in role_routing["stages"] for role in stage["roles"]}
+        stage_order = {stage["stage_id"]: stage["sequence"] for stage in run.get("pipeline_stages", [])}
+        original_role_order = {item["name"]: index for index, item in enumerate(pairs)}
+        pairs.sort(key=lambda item: (stage_order.get(role_to_stage.get(item["name"], ""), 999), original_role_order[item["name"]]))
+        _audit_worker_event(
+            run_id, owner_username, worker_token, "pipeline_role_routing",
+            "mapped=" + json.dumps(role_routing["stages"], ensure_ascii=False)[:3000]
+            + "; unmapped=" + json.dumps(role_routing["unmapped_roles"], ensure_ascii=False)[:1000],
+        )
+        for stage in role_routing["stages"]:
+            stage_id = stage["stage_id"]
+            if stage_order.get(stage_id, 99) > 15 or stage["roles"]:
+                continue
+            current = next((row for row in run.get("pipeline_stages", []) if row["stage_id"] == stage_id), None)
+            if current and current["status"] in {"pending", "paused"}:
+                transition_pipeline_stage(
+                    run_id, stage_id, "skipped", owner_username=owner_username or "local",
+                    worker_token=worker_token, issues=["No matching specialist is assigned by this format preset."],
+                )
+        active_pipeline_stage = None
+        def stage_status(stage_id):
+            current_run = get_run(run_id, owner_username)
+            return next((row["status"] for row in (current_run or {}).get("pipeline_stages", []) if row["stage_id"] == stage_id), None)
+        def start_pipeline_stage(stage_id):
+            current_status = stage_status(stage_id)
+            if current_status in {"pending", "paused"}:
+                transition_pipeline_stage(
+                    run_id, stage_id, "running", owner_username=owner_username or "local",
+                    worker_token=worker_token,
+                )
+        def complete_pipeline_stage(stage_id, evidence):
+            if stage_status(stage_id) == "running":
+                transition_pipeline_stage(
+                    run_id, stage_id, "completed", owner_username=owner_username or "local",
+                    worker_token=worker_token, evidence=evidence,
+                )
         existing_steps = run.get("steps", [])
         deliverables: dict[str, str] = {}
         management_reports: dict[str, str] = {}
@@ -860,6 +898,13 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                     deliverables[pair["name"]] = saved_output
         for pair in pairs:
             role = pair["name"]
+            next_stage = role_to_stage.get(role)
+            if next_stage != active_pipeline_stage:
+                if active_pipeline_stage and active_pipeline_stage != "quality":
+                    complete_pipeline_stage(active_pipeline_stage, "All assigned specialist deliverables passed their independent checkers.")
+                active_pipeline_stage = next_stage
+                if active_pipeline_stage:
+                    start_pipeline_stage(active_pipeline_stage)
             if role in approved_roles:
                 continue
             checker = role + " Checker"
@@ -936,6 +981,12 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                         deliverables[role] = worker["output"]
                     break
             if verdict["decision"] != "PASS":
+                if active_pipeline_stage and stage_status(active_pipeline_stage) == "running":
+                    transition_pipeline_stage(
+                        run_id, active_pipeline_stage, "paused",
+                        owner_username=owner_username or "local", worker_token=worker_token,
+                        issues=verdict["issues"],
+                    )
                 set_run(run_id, "paused", current_role=checker,
                          error="Independent checker failed after the bounded revision attempt. Run paused for human review.")
                 return
@@ -969,9 +1020,15 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             save_step(run_id, sequence, reviewer, "reviewer", verdict["decision"].lower(),
                        review_prompt, review["output"], verdict["evidence"], verdict["issues"])
             if verdict["decision"] != "PASS":
+                if stage_status("quality") == "running":
+                    transition_pipeline_stage(
+                        run_id, "quality", "paused", owner_username=owner_username or "local",
+                        worker_token=worker_token, issues=verdict["issues"],
+                    )
                 set_run(run_id, "paused", current_role=reviewer,
                          error=f"Final reviewer failed: {reviewer}. Production run paused for correction.")
                 return
+        complete_pipeline_stage("quality", "All configured specialist checkers and final reviewers returned PASS.")
         # Owner Agent runs after all five independent final reviewers so it can
         # evaluate their actual reports. Its checker is separate, and it cannot
         # replace the authenticated human owner's publishing approval.
