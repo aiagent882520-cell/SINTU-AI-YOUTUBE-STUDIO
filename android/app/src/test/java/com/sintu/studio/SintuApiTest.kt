@@ -227,3 +227,18 @@ class SintuApiTest {
     }
 
 }
+
+
+    @Test
+    fun ownerMobileOtpIsIncludedInLoginRequest() {
+        val json = Gson().toJson(LoginRequest("owner", "strong-password", "123456"))
+        assertTrue(json.contains("\\\"username\\\":\\\"owner\\\""))
+        assertTrue(json.contains("\\\"otp_code\\\":\\\"123456\\\""))
+    }
+
+    @Test
+    fun teamLoginCanOmitOwnerOtp() {
+        val json = Gson().toJson(LoginRequest("team_user", "strong-password"))
+        assertTrue(json.contains("\\\"username\\\":\\\"team_user\\\""))
+        assertFalse(json.contains("otp_code"))
+    }
