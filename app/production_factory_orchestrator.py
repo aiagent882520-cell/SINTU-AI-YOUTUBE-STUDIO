@@ -11,7 +11,7 @@ from typing import Any
 from .provider_registry import list_providers
 from .policy import paid_upgrades_allowed as _paid_upgrades_allowed
 
-PIPELINE_VERSION = "1.0"
+PIPELINE_VERSION = "1.0"  # Stable contract version for persisted/client-visible plans.
 
 _STAGE_DEFINITIONS = (
     ("intake", "Brief and format validation", "planning", (), "automatic"),
