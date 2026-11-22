@@ -709,6 +709,13 @@ def recover_interrupted_runs() -> int:
                 (target, error, now, row["id"]),
             ).rowcount
             if changed:
+                paused_stages = conn.execute(
+                    """UPDATE production_pipeline_stages SET status='paused',updated_at=?
+                       WHERE run_id=? AND status='running'""", (now, row["id"])
+                ).rowcount
+                if paused_stages:
+                    _event(conn, row["id"], row["owner_username"], "running", "paused",
+                           "pipeline_checkpoint_recovered", f"paused_stage_count={paused_stages}")
                 _event(conn, row["id"], row["owner_username"], row["status"], target,
                        "restart_recovery", error)
                 recovered += 1
