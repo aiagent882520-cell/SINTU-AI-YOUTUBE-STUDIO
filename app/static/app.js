@@ -346,7 +346,7 @@ async function loadYouTubeAnalytics(){
  button.disabled=true;notice.textContent="YouTube se official analytics load ho rahe hain…";
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const end=$("youtubeAnalyticsEnd").value,start=$("youtubeAnalyticsStart").value;
   const params=new URLSearchParams();if(start)params.set("start_date",start);if(end)params.set("end_date",end);
@@ -367,7 +367,7 @@ async function loadYouTubeReach(){
  const notice=$("youtubeReachNotice");
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const data=await request("/api/admin/youtube/reach");
   const setup=$("youtubeReachSetup");setup.hidden=!!data.configured;
@@ -403,7 +403,7 @@ async function loadYouTubeComments(loadMore=false){
  notice.textContent=loadMore?"Aur comments load ho rahe hain…":"Recent YouTube comments analyze ho rahe hain…";
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   if(!loadMore){youtubeCommentsNextPageToken="";youtubeCommentsCounts={total:0,possible_spam:0,positive:0,negative:0,questions:0,other:0};youtubeCommentsItems=[];}
   const query="/api/admin/youtube/comments?limit=50"+(loadMore?"&page_token="+encodeURIComponent(youtubeCommentsNextPageToken):"");
@@ -682,7 +682,7 @@ async function loadYouTubeRetention(){
  button.disabled=true;notice.textContent="Audience retention load ho rahi hai…";
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const data=await request("/api/admin/youtube/retention?video_id="+encodeURIComponent(videoId));
   const points=data.points||[];
@@ -702,7 +702,7 @@ async function loadAnalyticsOverview(){
  const panel=$("analyticsOverviewPanel");if(!panel)return;
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const data=await request("/api/admin/publishing/history?limit=250");
   const items=data.items||[];
@@ -722,7 +722,7 @@ async function loadSchedulerQueue(){
  const panel=$("schedulerQueuePanel");if(!panel)return;
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const data=await request("/api/admin/scheduler/queue?hours=24"),s=data.summary||{};
   $("schedulerQueueTotals").innerHTML=[["Awaiting approval",s.awaiting_approval||0],["Due — manual action",s.due_for_manual_action||0],["Next 24 hours",s.approved_next_window||0],["Later",s.approved_later||0]]
@@ -741,7 +741,7 @@ async function loadPublishingHistory(){
  const panel=$("publishingHistoryPanel");if(!panel)return;
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const params=new URLSearchParams(),platform=$("publishingPlatformFilter")?.value||"",status=$("publishingStatusFilter")?.value||"";
   if(platform)params.set("platform",platform);if(status)params.set("status",status);
@@ -1524,7 +1524,7 @@ async function loadPrincipalAICouncilPanel() {
   if (!panel) return;
   try {
     const session = await request("/api/auth/session");
-    if (!session.authenticated || session.role !== "admin") { panel.hidden = true; return; }
+    if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
     panel.hidden = false;
     const data = await request("/api/admin/principal-ai/council/status");
     const eligible = data.all_principals_eligible_to_call ? "All four provider credentials are configured and policy-eligible; live health is still unverified." : "Council is blocked or incomplete. Missing credentials and paid-policy locks are shown below.";
@@ -1545,7 +1545,7 @@ async function loadPublishingConnections(){
  const panel=$("publishingConnectionsPanel");if(!panel)return;
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const [youtube,meta,tiktok]=await Promise.all([
    request("/api/admin/youtube/status"),request("/api/admin/meta/status"),request("/api/admin/tiktok/status")
@@ -1569,7 +1569,7 @@ async function loadYouTubeAdminPanel() {
  const panel = $("youtubeAdminPanel"); if (!panel) return;
  try {
   const session = await request("/api/auth/session");
-  if (!session.authenticated || session.role !== "admin") { panel.hidden = true; return; }
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden = false;
   const data = await request("/api/admin/youtube/status");
   $("youtubeConnectionStatus").textContent = data.connected
@@ -1597,7 +1597,7 @@ async function loadMetaAdminPanel(){
  const panel=$("metaAdminPanel");if(!panel)return;
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const data=await request("/api/admin/meta/status");
   const ig=data.instagram?" · Instagram: @"+(data.instagram.username||data.instagram.id):" · Instagram Professional account not linked";
@@ -1624,7 +1624,7 @@ async function loadTikTokAdminPanel(){
  const panel=$("tiktokAdminPanel");if(!panel)return;
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const data=await request("/api/admin/tiktok/status");
   $("tiktokConnectionStatus").textContent=data.connected
