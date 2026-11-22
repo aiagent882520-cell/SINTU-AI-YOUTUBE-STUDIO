@@ -93,9 +93,34 @@
     }catch(error){notice(error.message,true);}
   }
   async function viewRun(id) {
-    try{const run=await api("/api/production/runs/"+encodeURIComponent(id));const details=(run.steps||[]).map(x=>x.role+": "+x.status).join("\n");
-      window.alert("Run "+id+"\nStatus: "+run.status+"\nCurrent role: "+(run.current_role||"—")+"\n\n"+details);}
-    catch(error){notice(error.message,true);}
+    try{
+      const [run, timeline]=await Promise.all([
+        api("/api/production/runs/"+encodeURIComponent(id)),
+        api("/api/production/runs/"+encodeURIComponent(id)+"/events")
+      ]);
+      const card=[...$("factoryRuns").querySelectorAll(".factory-run")].find(node=>node.textContent.includes(id));
+      if(!card) return;
+      let panel=card.querySelector(".factory-run-details");
+      if(panel){panel.remove();return;}
+      panel=document.createElement("section");panel.className="factory-run-details factory-stage";
+      const heading=document.createElement("h3");heading.textContent="Run execution details · "+run.status;panel.append(heading);
+      const current=document.createElement("p");current.className="factory-meta";current.textContent="Current role: "+(run.current_role||"—")+" · Attempts: "+(run.attempt_count||0);panel.append(current);
+      const stepsTitle=document.createElement("b");stepsTitle.textContent="Specialist and checker steps";panel.append(stepsTitle);
+      for(const step of run.steps||[]){
+        const row=document.createElement("p");row.className="factory-meta";
+        row.textContent=(step.sequence??"")+" · "+step.role+" · "+step.step_type+" · "+step.status+" · Attempts: "+(step.attempts||0);
+        panel.append(row);
+      }
+      const eventsTitle=document.createElement("b");eventsTitle.textContent="Run event timeline";panel.append(eventsTitle);
+      const events=timeline.events||[];
+      if(!events.length){const empty=document.createElement("p");empty.textContent="No lifecycle events recorded yet.";panel.append(empty);}
+      for(const event of events){
+        const row=document.createElement("p");row.className="factory-meta";
+        row.textContent=event.created_at+" · "+event.event_type+" · "+(event.from_status||"start")+" → "+event.to_status;
+        panel.append(row);
+      }
+      card.append(panel);
+    }catch(error){notice(error.message,true);}
   }
   $("factoryPlan").addEventListener("click",buildPlan);
   $("factoryStart").addEventListener("click",startRun);
