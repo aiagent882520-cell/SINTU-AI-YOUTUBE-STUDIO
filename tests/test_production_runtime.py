@@ -642,6 +642,7 @@ def test_cancellation_during_model_call_wins_and_preserves_partial_outputs(tmp_p
     assert len(calls) == 1
     assert result["steps"] == []
     assert result["result"] is None
+    assert result["pipeline_stages"][0]["status"] == "paused"
     events = runtime.list_run_events(run["id"], "alice")
     assert any(event["to_status"] == "cancelling" for event in events)
     assert events[-1]["to_status"] == "cancelled"
