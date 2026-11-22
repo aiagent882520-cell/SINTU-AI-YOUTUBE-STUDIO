@@ -82,7 +82,7 @@ def test_factory_runs_dashboard_route_is_feature_gated():
 
 def test_factory_health_reports_host_capabilities_without_secrets(monkeypatch):
     monkeypatch.setattr(main, "_production_project_owner", lambda request: "owner-1")
-    monkeypatch.setattr(main.production_factory_supervisor, "is_running", True)
+    monkeypatch.setattr(type(main.production_factory_supervisor), "is_running", property(lambda self: True))
     monkeypatch.setattr(main, "provider_status", lambda: {
         "selected": "local",
         "paid_upgrades_allowed": False,
