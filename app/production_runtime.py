@@ -641,7 +641,7 @@ def transition_owner_media_stage(
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         run = conn.execute(
-            "SELECT owner_username,status,cancel_requested FROM production_runs WHERE id=?",
+            "SELECT owner_username,status,cancel_requested,result_json FROM production_runs WHERE id=?",
             (run_id,),
         ).fetchone()
         stage = conn.execute(
@@ -690,6 +690,20 @@ def transition_owner_media_stage(
             "owner_media_stage_transition",
             f"stage={stage_id}; executor=authenticated_owner_local_media_action; evidence_present={bool(evidence)}",
         )
+        if status == "completed" and run["result_json"]:
+            result_payload = json.loads(run["result_json"])
+            dispatch = result_payload.get("pipeline_dispatch")
+            if isinstance(dispatch, dict):
+                completed_ids = list(dispatch.get("completed_stage_ids") or [])
+                if stage_id not in completed_ids:
+                    completed_ids.append(stage_id)
+                deferred_ids = [item for item in dispatch.get("deferred_stage_ids", []) if item != stage_id]
+                dispatch["completed_stage_ids"] = completed_ids
+                dispatch["deferred_stage_ids"] = deferred_ids
+                conn.execute(
+                    "UPDATE production_runs SET result_json=?,updated_at=? WHERE id=? AND owner_username=?",
+                    (json.dumps(result_payload, ensure_ascii=False), now, run_id, owner_username),
+                )
     return get_run(run_id, owner_username)
 
 
