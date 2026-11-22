@@ -234,17 +234,49 @@ def _totp_code(secret: str, timestamp: float | None = None) -> str:
     return f"{binary % 1_000_000:06d}"
 
 
-def _verify_owner_otp(secret: str, code: str | None, timestamp: float | None = None) -> bool:
+def _matching_owner_otp_counter(secret: str, code: str | None,
+                                   timestamp: float | None = None) -> int | None:
     if not isinstance(code, str) or not re.fullmatch(r"\d{6}", code):
-        return False
+        return None
     now = time.time() if timestamp is None else timestamp
+    current_counter = int(now // 30)
     try:
-        return any(
-            hmac.compare_digest(_totp_code(secret, now + (step * 30)), code)
-            for step in (-1, 0, 1)
-        )
+        for counter in range(max(0, current_counter - 1), current_counter + 2):
+            if hmac.compare_digest(_totp_code(secret, counter * 30), code):
+                return counter
     except (ValueError, TypeError):
-        return False
+        return None
+    return None
+
+
+def _verify_owner_otp(secret: str, code: str | None, timestamp: float | None = None) -> bool:
+    return _matching_owner_otp_counter(secret, code, timestamp) is not None
+
+
+def _consume_owner_otp_counter(owner_user_id: int, counter: int) -> bool:
+    """Atomically reject re-use of an already accepted TOTP time step."""
+    with db() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS owner_otp_state (
+                owner_user_id INTEGER PRIMARY KEY,
+                last_counter INTEGER NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT last_counter FROM owner_otp_state WHERE owner_user_id=?",
+            (owner_user_id,),
+        ).fetchone()
+        if row and counter <= row["last_counter"]:
+            return False
+        conn.execute("""
+            INSERT INTO owner_otp_state(owner_user_id,last_counter,updated_at)
+            VALUES(?,?,?)
+            ON CONFLICT(owner_user_id) DO UPDATE SET
+                last_counter=excluded.last_counter, updated_at=excluded.updated_at
+        """, (owner_user_id, counter, datetime.now(timezone.utc).isoformat()))
+    return True
 
 
 def _ensure_bootstrap_admin():
@@ -711,8 +743,9 @@ def admin_login(payload: AdminLoginInput, request: Request):
         otp_secret = os.getenv("SINTU_OWNER_TOTP_SECRET", "").strip()
         if not otp_secret:
             raise HTTPException(status_code=503, detail="Owner mobile OTP is not enrolled. Run scripts/setup_owner_otp.py on the SINTU host.")
-        if not _verify_owner_otp(otp_secret, payload.otp_code):
-            raise HTTPException(status_code=401, detail="Owner mobile OTP galat ya expire ho gaya hai.")
+        otp_counter = _matching_owner_otp_counter(otp_secret, payload.otp_code)
+        if otp_counter is None or not _consume_owner_otp_counter(user["id"], otp_counter):
+            raise HTTPException(status_code=401, detail="Owner mobile OTP galat, expire, ya pehle use ho chuka hai.")
     _LOGIN_LIMITER.reset(client_ip)
     actor = dict(user)
     request.state.user = actor
