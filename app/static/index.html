@@ -27,6 +27,14 @@
       <p>Ek hi workspace mein video scripts, research, thumbnails, courses aur social content.</p>
       <p class="install-hint">Mobile par browser menu se “Add to Home screen” karke app ki tarah install karein.</p>
     </section>
+    <section class="panel" id="adminWorkspacePanel" hidden>
+      <div class="panel-head"><div><h2>Admin Panel</h2><p>Owner ne jo features grant kiye hain, Admin sirf wahi modules manage kar sakta hai.</p></div></div>
+      <p id="adminWorkspaceIdentity" class="muted"></p><div id="adminWorkspaceFeatures" class="integration-cards"></div>
+    </section>
+    <section class="panel" id="userWorkspacePanel" hidden>
+      <div class="panel-head"><div><h2>User Panel</h2><p>Aapko sirf Owner-granted features dikhaye jaate hain. Access revoke hote hi agla API request block ho jayega.</p></div></div>
+      <p id="userWorkspaceIdentity" class="muted"></p><div id="userWorkspaceFeatures" class="integration-cards"></div>
+    </section>
     <section class="stats" data-feature="dashboard">
       <article><strong id="agentCount">0</strong><span>Specialists + Checkers</span></article>
       <article><strong id="workflowCount">8</strong><span>AI workflows</span></article>
