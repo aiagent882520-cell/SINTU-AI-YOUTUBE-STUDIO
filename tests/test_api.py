@@ -4581,6 +4581,10 @@ def test_owner_login_requires_valid_mobile_totp_but_team_accounts_do_not(tmp_pat
     })
     assert created.status_code == 200
     client.post("/api/auth/logout")
+    replay = client.post("/api/auth/login", json={
+        "username":"owner", "password":"a-strong-test-password", "otp_code":code
+    })
+    assert replay.status_code == 401
     team_login = client.post("/api/auth/login", json={
         "username":"team_admin", "password":"team-admin-password"
     })
