@@ -18,7 +18,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageStat
+from PIL import Image, ImageDraw, ImageOps, ImageStat
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(ROOT))).expanduser().resolve()
@@ -118,6 +118,75 @@ def inspect_environment() -> dict:
         "frame_sampling": "Five FFprobe timestamp samples plus FFmpeg-extracted 64x64 PNG pixel verification; temporary thumbnails are removed after analysis",
         "temporary_storage": temp_storage,
     }
+
+
+def normalized_visual_pixels(image: Image.Image) -> bytes:
+    """Normalize image geometry to a centered 64x64 letterboxed grayscale plane."""
+    resampling = getattr(Image, "Resampling", Image).LANCZOS
+    normalized = ImageOps.pad(
+        image.convert("L"), (64, 64), method=resampling, color=0, centering=(0.5, 0.5)
+    )
+    return normalized.tobytes()
+
+
+def visual_dhash(image: Image.Image) -> str:
+    """Return a 64-bit difference hash after aspect-preserving 64x64 normalization."""
+    resampling = getattr(Image, "Resampling", Image).LANCZOS
+    normalized = ImageOps.pad(
+        image.convert("L"), (64, 64), method=resampling, color=0, centering=(0.5, 0.5)
+    )
+    tiny = normalized.resize((9, 8), resampling)
+    pixels = list(tiny.tobytes())
+    value = 0
+    for y in range(8):
+        for x in range(8):
+            value = (value << 1) | int(pixels[y * 9 + x] > pixels[y * 9 + x + 1])
+    return f"{value:016x}"
+
+
+def visual_dhash_distance(left: str, right: str) -> int:
+    """Hamming distance between two validated 64-bit hexadecimal dHashes."""
+    if (not isinstance(left, str) or not isinstance(right, str)
+            or len(left) != 16 or len(right) != 16
+            or any(char not in "0123456789abcdefABCDEF" for char in left + right)):
+        raise ValueError("visual dHash values must be 16 hexadecimal characters")
+    return (int(left, 16) ^ int(right, 16)).bit_count()
+
+
+def rank_source_image_candidates(videos: list[dict], assets: list[dict]) -> None:
+    """Attach weak visual-similarity candidates; this is never source provenance proof."""
+    candidates = [
+        asset for asset in assets
+        if asset.get("visual_dhash") and not asset.get("near_black")
+        and str(asset.get("path", "")).lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
+    ]
+    for video in videos:
+        for sample in video.get("decoded_frame_samples", []):
+            pixel = sample.get("pixel_verification") or {}
+            if pixel.get("status") != "PASS" or pixel.get("near_black"):
+                continue
+            frame_hash = pixel.get("visual_dhash")
+            if not frame_hash:
+                continue
+            ranked = []
+            for asset in candidates:
+                candidate_hash = asset["visual_dhash"]
+                ranked.append({
+                    "path": asset.get("path"),
+                    "dhash_distance": visual_dhash_distance(frame_hash, candidate_hash),
+                    "exact_normalized_pixel_match": (
+                        pixel.get("visual_pixel_sha256") is not None
+                        and pixel.get("visual_pixel_sha256") == asset.get("visual_pixel_sha256")
+                    ),
+                    "basis": "aspect_preserving_64x64_letterboxed_dhash_candidate_only",
+                })
+            ranked.sort(key=lambda item: (
+                not item["exact_normalized_pixel_match"],
+                item["dhash_distance"],
+                str(item["path"] or ""),
+            ))
+            pixel["source_image_candidates"] = ranked[:5]
+            pixel["source_attribution_confirmed"] = False
 
 
 def sha256_file(path: Path) -> str:
@@ -243,9 +312,13 @@ def inspect_asset(path: Path) -> dict:
             with Image.open(path) as image:
                 gray = image.convert("L").resize((32, 32))
                 stats = ImageStat.Stat(gray)
+                normalized_pixels = normalized_visual_pixels(image)
                 item.update({"image_size": list(image.size), "mean_luma": round(stats.mean[0], 2),
                              "luma_stddev": round(stats.stddev[0], 2),
-                             "near_black": stats.mean[0] < 12 and stats.stddev[0] < 8})
+                             "near_black": stats.mean[0] < 12 and stats.stddev[0] < 8,
+                             "visual_dhash": visual_dhash(image),
+                             "visual_pixel_sha256": hashlib.sha256(normalized_pixels).hexdigest(),
+                             "visual_fingerprint_method": "aspect-preserving 64x64 grayscale letterbox; candidate matching only"})
         except (OSError, ValueError):
             item["image_error"] = "unreadable"
     elif path.suffix.lower() == ".wav":
@@ -519,7 +592,7 @@ def extract_frame_pixel_verification(path: Path, timestamp: str, label: str) -> 
             result = run([
                 "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(path),
                 "-ss", f"{seek:.6f}", "-frames:v", "1",
-                "-vf", "scale=64:64:flags=area", "-an", "-y", str(frame_path),
+                "-vf", "scale=64:64:force_original_aspect_ratio=decrease:flags=area,pad=64:64:(ow-iw)/2:(oh-ih)/2:color=black", "-an", "-y", str(frame_path),
             ], timeout=120)
             if result["returncode"] != 0 or not frame_path.is_file() or frame_path.stat().st_size <= 0:
                 detail = (result.get("stderr") or "FFmpeg did not create a decoded frame thumbnail")[:220]
@@ -548,7 +621,9 @@ def extract_frame_pixel_verification(path: Path, timestamp: str, label: str) -> 
                     "black_pixel_percentage": round(black_percentage, 3),
                     "near_black": bool(mean_luma <= 2.0 and luma_stddev <= 2.0
                                        and black_percentage >= 99.5),
-                    "method": "FFmpeg sequential timestamp decode -> 64x64 grayscale PNG -> Pillow pixel histogram",
+                    "visual_dhash": visual_dhash(gray),
+                    "visual_pixel_sha256": hashlib.sha256(normalized_visual_pixels(gray)).hexdigest(),
+                    "method": "FFmpeg aspect-preserving timestamp decode -> 64x64 grayscale letterbox -> Pillow pixel histogram and visual fingerprint",
                 }
     except (OSError, TypeError, ValueError) as exc:
         return {"status": "FAIL", "extraction_exit": None, "error": str(exc)[:220]}
@@ -932,7 +1007,7 @@ def compact_forensic_summary(report: dict) -> dict:
                 "black": metrics.get("black_frame_count"),
                 "pct": metrics.get("black_frame_percentage"),
                 "mean": metrics.get("mean_black_pixel_percentage"),
-                "pblack": metrics.get("pblack_values", [])[:30],
+                "pblack": metrics.get("pblack_values", [])[:12],
                 "err": str(item.get("blackframe_error", ""))[:60],
             },
             "samples": [
@@ -941,7 +1016,14 @@ def compact_forensic_summary(report: dict) -> dict:
                  (sample.get("pixel_verification") or {}).get("status"),
                  (sample.get("pixel_verification") or {}).get("mean_luma"),
                  (sample.get("pixel_verification") or {}).get("black_pixel_percentage"),
-                 (sample.get("pixel_verification") or {}).get("near_black")]
+                 (sample.get("pixel_verification") or {}).get("near_black"),
+                 (sample.get("pixel_verification") or {}).get("visual_dhash"),
+                 str((sample.get("pixel_verification") or {}).get("visual_pixel_sha256") or "")[:12],
+                 [
+                     [candidate.get("path"), candidate.get("dhash_distance"),
+                      candidate.get("exact_normalized_pixel_match")]
+                     for candidate in (sample.get("pixel_verification") or {}).get("source_image_candidates", [])[:2]
+                 ]]
                 for sample in item.get("decoded_frame_samples", [])
             ],
             "backups": [
@@ -1030,6 +1112,7 @@ def main() -> int:
             reference_time = video.get("asset_reference_time_utc") or video["modified_utc"]
             for asset in nearby_assets(datetime.fromisoformat(reference_time).timestamp()):
                 assets[asset["path"]] = asset
+    rank_source_image_candidates(videos, list(assets.values()))
     needles = tuple(value for name in TARGETS for value in (name, Path(name).stem))
     asset_needles = source_asset_needles(list(assets.values()))
     tool_failures = sum(1 for item in videos if has_forensic_tool_failure(item))

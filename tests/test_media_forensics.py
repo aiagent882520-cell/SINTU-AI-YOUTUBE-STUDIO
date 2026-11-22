@@ -39,6 +39,62 @@ def test_forensics_measures_nearby_source_image_brightness(tmp_path, monkeypatch
     assert black_stats["near_black"] is True
     assert visible_stats["near_black"] is False
     assert black_stats["mean_luma"] < visible_stats["mean_luma"]
+    assert len(black_stats["visual_dhash"]) == 16
+    assert len(visible_stats["visual_pixel_sha256"]) == 64
+
+def test_visual_dhash_is_stable_and_uses_hamming_distance():
+    from PIL import Image
+
+    gradient = Image.new("L", (64, 64))
+    gradient.putdata([x * 4 for _y in range(64) for x in range(64)])
+    same = gradient.copy()
+    inverted = Image.eval(gradient, lambda value: 255 - value)
+
+    fingerprint = media_forensics.visual_dhash(gradient)
+    assert len(fingerprint) == 16
+    assert media_forensics.visual_dhash(same) == fingerprint
+    assert media_forensics.visual_dhash_distance(fingerprint, fingerprint) == 0
+    assert media_forensics.visual_dhash_distance(
+        fingerprint, media_forensics.visual_dhash(inverted)
+    ) > 0
+
+
+def test_visual_dhash_rejects_malformed_fingerprints():
+    with pytest.raises(ValueError, match="16 hexadecimal"):
+        media_forensics.visual_dhash_distance("bad", "0" * 16)
+
+
+def test_forensic_source_image_ranking_is_candidate_only(tmp_path, monkeypatch):
+    from PIL import Image
+
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    images = tmp_path / "generated_images"
+    images.mkdir()
+    source = images / "source.jpg"
+    other = images / "other.jpg"
+    Image.new("RGB", (160, 90), (20, 140, 220)).save(source)
+    Image.new("RGB", (90, 160), (230, 40, 10)).save(other)
+    source_asset = media_forensics.inspect_asset(source)
+    other_asset = media_forensics.inspect_asset(other)
+    sample = {
+        "sample": "middle",
+        "pixel_verification": {
+            "status": "PASS",
+            "near_black": False,
+            "visual_dhash": source_asset["visual_dhash"],
+            "visual_pixel_sha256": source_asset["visual_pixel_sha256"],
+        },
+    }
+    videos = [{"file": "clip.mp4", "decoded_frame_samples": [sample]}]
+
+    media_forensics.rank_source_image_candidates(videos, [other_asset, source_asset])
+
+    pixel = sample["pixel_verification"]
+    assert pixel["source_image_candidates"][0]["path"] == "generated_images/source.jpg"
+    assert pixel["source_image_candidates"][0]["exact_normalized_pixel_match"] is True
+    assert pixel["source_attribution_confirmed"] is False
+    assert "candidate_only" in pixel["source_image_candidates"][0]["basis"]
+
 
 def test_forensics_prefers_pre_repair_backup_mtime_for_asset_correlation(tmp_path, monkeypatch):
     import os
@@ -144,7 +200,7 @@ def test_inspect_video_builds_report_from_five_frame_probes(tmp_path, monkeypatc
             return {"returncode": 0, "stdout": "", "stderr": ""}
         if command[0] == "ffmpeg" and any("blackframe=" in part for part in command):
             return {"returncode": 0, "stdout": "", "stderr": "pblack:0\n" * 30}
-        if command[0] == "ffmpeg" and any("scale=64:64:flags=area" in part for part in command):
+        if command[0] == "ffmpeg" and any("scale=64:64:force_original_aspect_ratio=decrease" in part for part in command):
             media_forensics.Image.new("RGB", (64, 64), "white").save(command[-1])
             return {"returncode": 0, "stdout": "", "stderr": ""}
         return {"returncode": 0, "stdout": "", "stderr": ""}
@@ -406,11 +462,15 @@ def test_compact_forensic_summary_preserves_five_targets_under_relay_tail_cap():
         ],
         "safety": {"files_modified": False, "files_deleted": False},
     }
+    # The full forensic report retains every decoded black-frame sample;
+    # only the compact relay footer is intentionally reduced to 12 values.
+    assert all(len(target["black_frame_metrics"]["pblack_values"]) == 30 for target in report["targets"])
+    assert all(target["black_frame_metrics"]["sampled_frame_count"] == 30 for target in report["targets"])
     footer = media_forensics.compact_forensic_summary(report)
     assert len(footer["targets"]) == 5
     assert all(len(target["samples"]) == 5 for target in footer["targets"])
     assert all(target["backups"][0][2] == "b" * 64 for target in footer["targets"])
-    assert all(len(target["black_frames"]["pblack"]) == 30 for target in footer["targets"])
+    assert all(len(target["black_frames"]["pblack"]) == 12 for target in footer["targets"])
     import json as json_module
     assert len(json_module.dumps(footer, separators=(",", ":"))) < 7000
 

@@ -51,6 +51,18 @@ Attach `sintu-forensics-report.txt` from the Termux home directory to the SINTU 
 
 The scanner redacts common token/secret fields and bounds log excerpts, but inspect the report before sharing. Do not send your `.env`, OAuth credentials, access tokens, refresh tokens, private keys or model files.
 
+## Visual fingerprint and source-image candidate ranking
+
+The read-only scanner also records a normalized visual fingerprint for every decoded sample and every nearby image candidate:
+
+- Frames and images are converted to grayscale, aspect-preserving letterboxed to 64×64, and assigned a 64-bit difference hash (dHash) plus a SHA-256 hash of the normalized pixel plane.
+- The report ranks non-black nearby image candidates by exact normalized-pixel match first and dHash Hamming distance second.
+- Repeated normalized pixel SHA-256 values across a video's five timestamps indicate identical sampled pixels at those points; this is a static-frame clue, not proof that every intervening frame is static.
+- Candidate ranking is similarity evidence only. It does not prove that an image was used by a renderer, establish job ownership, or authorize regeneration or repair. Exact provenance still requires a matching render manifest/log/job ID and source hashes.
+- Full-black video samples are excluded from image ranking because their similarity scores are meaningless.
+
+The comparison uses the same 64×64 letterbox geometry for source images and decoded frames. It is deliberately a compact candidate-ranking aid, not a full-resolution forensic or perceptual-quality verdict.
+
 ## Interpretation rules
 
 - Timestamp-nearby image/audio assets are candidates, not proof of source mapping.
