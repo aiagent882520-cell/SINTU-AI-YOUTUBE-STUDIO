@@ -893,7 +893,9 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
         )
         for stage in role_routing["stages"]:
             stage_id = stage["stage_id"]
-            if stage_order.get(stage_id, 99) > 15 or stage["roles"]:
+            if (stage_order.get(stage_id, 99) > 15 or stage["roles"]
+                    or (stage_id == "quality" and REVIEWERS)
+                    or (stage_id == "research" and research_record)):
                 continue
             current = next((row for row in run.get("pipeline_stages", []) if row["stage_id"] == stage_id), None)
             if current and current["status"] in {"pending", "paused"}:
@@ -1031,6 +1033,8 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 active_pipeline_stage,
                 "All assigned specialist deliverables passed their independent checkers.",
             )
+        if REVIEWERS:
+            start_pipeline_stage("quality")
         review_results = {}
         for reviewer in REVIEWERS:
             saved_report = _approved_reviewer_report(existing_steps, reviewer)
