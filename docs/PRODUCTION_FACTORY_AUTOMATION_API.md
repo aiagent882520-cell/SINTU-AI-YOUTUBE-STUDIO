@@ -25,8 +25,10 @@ Request JSON:
 }
 ```
 
-The response contains an ordered 11-stage plan: intake, research, strategy, writing,
-visuals, audio, assembly, quality, Owner review, publishing and analytics. Planning
+The response contains an ordered 21-stage plan: intake, planning, research, fact-check,
+strategy, script, storyboard, character bible, visual development, generation, audio,
+editing, localization, branding, quality, Owner review, render, package, publishing,
+analytics/earnings and learning. Planning
 does not enqueue work or perform external actions. Provider matches are candidates,
 not installation or health attestations.
 
