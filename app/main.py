@@ -47,6 +47,7 @@ from .policy import paid_upgrades_allowed, production_actions_allowed, external_
 from .blender_renderer import BLENDER_DIR, blender_status, render_scene, BlenderUnavailable, BlenderRenderFailed
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
+from .provider_registry import list_providers, provider_summary
 from . import principal_ai_council, principal_knowledge_graph
 from . import access_control
 from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, verify_publishable_mp4, RendererUnavailable, RenderFailed, OUTPUT_DIR
@@ -5312,6 +5313,12 @@ def create_subtitles(payload: SubtitleInput):
         media_type="application/x-subrip; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="sintu-subtitles.srt"'},
     )
+
+
+@app.get("/api/production-factory/providers")
+def production_factory_providers():
+    """Return sanitized capability/provider catalogue; never exposes secrets."""
+    return {"summary": provider_summary(), "providers": list_providers()}
 
 
 @app.get("/api/status")
