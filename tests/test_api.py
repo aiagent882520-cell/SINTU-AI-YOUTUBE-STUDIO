@@ -1381,6 +1381,7 @@ def test_admin_user_management_roles_and_audit(tmp_path, monkeypatch):
     assert "password_hash" not in listed[0]
     assert client.get("/api/admin/audit").status_code == 200
     assert client.patch(f"/api/admin/users/{viewer_id}", json={"role":"editor"}).json()["role"] == "editor"
+    assert client.put(f"/api/admin/users/{viewer_id}/features", json={"features":["ai_assistant"]}).json()["features"] == ["ai_assistant"]
     client.post("/api/auth/logout")
     assert client.post("/api/auth/login", json={"username":"viewer_one","password":"viewer-password-long"}).json()["role"] == "editor"
     assert client.post("/api/tasks", json={"prompt":"editor can create","workflow":"shorts"}).status_code == 200
@@ -1409,8 +1410,8 @@ def test_admin_cannot_disable_last_admin_or_self(tmp_path, monkeypatch):
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
     client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"})
     admin_id = client.get("/api/admin/users").json()["users"][0]["id"]
-    assert client.patch(f"/api/admin/users/{admin_id}", json={"is_active":False}).status_code == 400
-    assert client.patch(f"/api/admin/users/{admin_id}", json={"role":"viewer"}).status_code == 400
+    assert client.patch(f"/api/admin/users/{admin_id}", json={"is_active":False}).status_code == 403
+    assert client.patch(f"/api/admin/users/{admin_id}", json={"role":"viewer"}).status_code == 403
 
 
 def test_admin_provider_settings_persist_and_never_expose_secrets(tmp_path, monkeypatch):
@@ -4483,3 +4484,60 @@ def test_production_run_cancel_rejects_malformed_run_id(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     assert client.post("/api/production/runs/not-a-run-id/cancel").status_code == 400
     assert client.get("/api/production/runs/not-a-run-id/events").status_code == 400
+
+
+def test_owner_feature_grants_are_scoped_and_revoked_immediately(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    assert client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"}).status_code == 200
+
+    created = client.post("/api/admin/users", json={
+        "username":"youtube_admin", "password":"youtube-admin-password", "role":"admin"
+    })
+    assert created.status_code == 200
+    user_id = created.json()["id"]
+    catalog = client.get("/api/admin/features")
+    assert catalog.status_code == 200
+    assert "youtube" in [item["key"] for item in catalog.json()["features"]]
+    granted = client.put(f"/api/admin/users/{user_id}/features", json={"features":["youtube"]})
+    assert granted.status_code == 200
+    assert granted.json()["features"] == ["youtube"]
+    assert client.get("/api/admin/users").json()["users"][-1]["features"] == ["youtube"]
+
+    client.post("/api/auth/logout")
+    login = client.post("/api/auth/login", json={"username":"youtube_admin","password":"youtube-admin-password"})
+    assert login.status_code == 200
+    assert login.json()["role"] == "admin"
+    assert client.get("/api/admin/youtube/status").status_code == 200
+    assert client.get("/api/admin/provider-settings").status_code == 403
+    assert client.get("/api/tasks").status_code == 403
+
+    client.post("/api/auth/logout")
+    assert client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"}).status_code == 200
+    assert client.put(f"/api/admin/users/{user_id}/features", json={"features":[]}).status_code == 200
+    client.post("/api/auth/logout")
+    assert client.post("/api/auth/login", json={"username":"youtube_admin","password":"youtube-admin-password"}).status_code == 200
+    assert client.get("/api/admin/youtube/status").status_code == 403
+
+
+def test_unknown_feature_routes_fail_closed_for_non_owner(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"})
+    created = client.post("/api/admin/users", json={
+        "username":"restricted_admin", "password":"restricted-admin-password", "role":"admin"
+    })
+    client.post("/api/auth/logout")
+    client.post("/api/auth/login", json={"username":"restricted_admin","password":"restricted-admin-password"})
+    assert client.get("/api/unknown-new-feature").status_code == 403
+    assert client.get("/api/admin/users").status_code == 403
