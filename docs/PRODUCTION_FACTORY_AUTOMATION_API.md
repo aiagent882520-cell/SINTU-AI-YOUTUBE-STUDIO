@@ -75,3 +75,25 @@ it can mean an independent checker failed, documentary evidence is missing or co
 or a human-review gate was reached. Such a run must be explicitly resumed by an Owner
 after reviewing its checkpoint. Shutdown stops queue polling without forcibly interrupting
 an active model call; an interrupted lease is recovered on a later startup.
+
+## Generate a final local MP4 from an approved run
+
+`POST /api/production/runs/{run_id}/produce-media`
+
+The endpoint is Owner-scoped and accepts only a run whose specialist builders,
+independent checkers and final reviewers completed successfully. If scene prompts
+and narration are omitted, it extracts them from the approved deliverables. It
+then requires the free local image and Hindi voice engines, generates original
+local background music, renders with FFmpeg, checks the render quality report,
+writes a provenance manifest and attaches the result to the run.
+
+The Production Factory dashboard exposes this action only for completed runs and
+asks for confirmation before starting. The dashboard requests `burn_subtitles=false`
+to respect the clean-frame video policy. A successful result includes the renderer's
+video URL. A missing local engine returns an explicit unavailable response; the
+dashboard does not fall back to paid providers.
+
+This action creates a local MP4 only. It does not upload or publish to YouTube.
+Publishing remains a separate Owner-approved operation. Documentary runs still
+require intact source-linked research evidence, and structural traceability is not
+a substitute for human fact-checking.
