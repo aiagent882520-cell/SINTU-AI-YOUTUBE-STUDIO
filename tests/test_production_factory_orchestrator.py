@@ -54,14 +54,16 @@ def test_external_side_effects_require_owner_approval(action):
     validate_execution_policy(action=action, owner_approved=True)
 
 
-def test_paid_provider_requires_policy_and_owner_approval():
+def test_paid_provider_requires_policy_and_owner_approval(monkeypatch):
+    from app import production_factory_orchestrator as factory
+
+    monkeypatch.setattr(factory, "_paid_upgrades_allowed", lambda: False)
     with pytest.raises(PermissionError):
         validate_execution_policy(action="generate", paid_provider=True, owner_approved=True)
+    monkeypatch.setattr(factory, "_paid_upgrades_allowed", lambda: True)
     with pytest.raises(PermissionError):
-        validate_execution_policy(action="generate", paid_provider=True, paid_upgrades_allowed=True)
-    validate_execution_policy(
-        action="generate", paid_provider=True, paid_upgrades_allowed=True, owner_approved=True
-    )
+        validate_execution_policy(action="generate", paid_provider=True)
+    validate_execution_policy(action="generate", paid_provider=True, owner_approved=True)
 
 
 def test_input_limits_are_enforced():
