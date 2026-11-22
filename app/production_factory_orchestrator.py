@@ -70,7 +70,7 @@ _ROLE_STAGE_RULES = (
                     "ai avatar agent", "lip sync agent", "vfx agent")),
     ("audio", ("voice generator", "voice generation agent", "voice artist", "voice actor", "voice director",
                "narrator", "recording agent", "consent-based voice cloning", "music composer",
-               "background music agent", "sound effects agent", "sound designer", "audio editor", "audio mixer")),
+               "background music agent", "hindi narration agent", "sound effects agent", "sound designer", "audio editor", "audio mixer")),
     ("editing", ("video editor", "visual editor", "cinematic editor", "colorist", "color correction agent",
                  "editing specialist", "motion graphics editor", "compositing agent", "green screen compositor",
                  "vfx compositor", "2d vfx agent", "transition designer")),
