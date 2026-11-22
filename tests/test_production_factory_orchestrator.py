@@ -110,3 +110,18 @@ def test_existing_specialist_roles_route_to_pipeline_stages_without_false_comple
     assert stages["render"]["status"] == "not_applicable"
     assert routed["unmapped_roles"] == ["Final Render Agent", "Unmapped Experimental Agent"]
 
+def test_all_sixty_format_roles_are_routed_or_explicitly_unmapped_without_fake_side_effect_stages():
+    from app.production_factory_orchestrator import route_specialist_roles
+    from app.studio_scope import video_formats
+
+    for format_item in video_formats():
+        routed = route_specialist_roles(format_item["roles"])
+        stages = {row["stage_id"]: row for row in routed["stages"]}
+        assigned = [role for row in routed["stages"] for role in row["roles"]]
+        assert sorted(assigned + routed["unmapped_roles"]) == sorted(format_item["roles"])
+        assert stages["render"]["roles"] == []
+        assert stages["package"]["roles"] == []
+        assert stages["publishing"]["roles"] == []
+        assert stages["analytics_earnings"]["roles"] == []
+        assert stages["learning"]["roles"] == []
+
