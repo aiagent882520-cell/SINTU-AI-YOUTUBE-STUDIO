@@ -5918,9 +5918,19 @@ def production_factory_runs(request: Request, limit: int = 20):
         status = str(run.get("status") or "unknown")
         if status in counts:
             counts[status] += 1
+        result_payload = run.get("result") if isinstance(run.get("result"), dict) else {}
+        render_payload = result_payload.get("render") if isinstance(result_payload.get("render"), dict) else {}
+        rendered_video_id = render_payload.get("video_id")
+        safe_video_url = (
+            f"/api/videos/{rendered_video_id}"
+            if isinstance(rendered_video_id, str) and re.fullmatch(r"[a-f0-9]{32}", rendered_video_id)
+            else None
+        )
         summaries.append({
             "run_id": run.get("id"),
             "status": status,
+            "has_render": bool(result_payload.get("video_rendered") and safe_video_url),
+            "video_url": safe_video_url,
             "format_id": run.get("format_id"),
             "topic": run.get("topic"),
             "current_role": run.get("current_role"),
