@@ -37,10 +37,15 @@ status, evidence, issues and timestamps. `GET /api/production/runs/{run_id}` ret
 evidence-required completion and explicit Owner gates for Owner review/publishing.
 Stage claims are ordered and fenced by the active run lease; expired worker recovery
 returns in-flight stage rows to paused so a new lease can resume them. Owner gates are
-surfaced as `awaiting_owner` and cannot be self-approved by the worker. This is still
-a checkpoint foundation: the existing specialist/checker worker is not yet wired to
-execute the 21 stage handlers automatically. Provider matches are candidates, not
-installation or health attestations.
+surfaced as `awaiting_owner` and cannot be self-approved by the worker. The existing specialist/checker worker now routes matched specialist roles into
+applicable stages (intake through quality), orders those role groups by stage, and
+advances a stage only after its assigned workers pass independent checkers. Stages
+with no matching role in the selected format are explicitly marked `skipped` rather
+than falsely completed. The Owner Agent can only place Owner Review into
+`awaiting_owner`; its recommendation is not human approval. Render, package,
+publishing, analytics and learning remain pending for their separate executors.
+Therefore this is partial stage dispatch, not full 21-stage execution. Provider
+matches are candidates, not installation or health attestations.
 
 ## Monitor recent runs
 
