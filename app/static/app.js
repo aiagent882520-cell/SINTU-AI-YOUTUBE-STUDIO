@@ -1482,6 +1482,30 @@ $("providerSettingsForm")?.addEventListener("submit", async event => {
 });
 $("providerRefresh")?.addEventListener("click", loadProviderAdminPanel);
 
+
+
+async function loadPrincipalAICouncilPanel() {
+  const panel = $("principalAICouncilPanel");
+  if (!panel) return;
+  try {
+    const session = await request("/api/auth/session");
+    if (!session.authenticated || session.role !== "admin") { panel.hidden = true; return; }
+    panel.hidden = false;
+    const data = await request("/api/admin/principal-ai/council/status");
+    const eligible = data.all_principals_eligible_to_call ? "All four provider credentials are configured and policy-eligible; live health is still unverified." : "Council is blocked or incomplete. Missing credentials and paid-policy locks are shown below.";
+    $("principalAiCouncilSummary").textContent = eligible + " Audit chain: " + (data.audit_chain?.valid ? "valid" : "FAILED") + " · " + (data.audit_chain?.events_checked || 0) + " events checked.";
+    const cards = (data.principal_ais || []).map(item => '<div class="integration-card"><strong>' + adminEscape(item.name) + (item.id === "chatgpt" ? " · Master Director" : "") + '</strong><span>' + adminEscape(item.status.replaceAll("_", " ")) + '</span><small>Provider: ' + adminEscape(item.provider) + ' · Model: ' + adminEscape(item.model || "not configured") + '</small></div>');
+    const local = data.local_fallback || {};
+    cards.push('<div class="integration-card"><strong>Local Fallback</strong><span>' + (local.configured ? "Configured · advisory only" : "Not configured") + '</span><small>Model: ' + adminEscape(local.model || "not configured") + ' · Does not count as a Principal vote</small></div>');
+    $("principalAiCouncilCards").innerHTML = cards.join("");
+    $("principalAiCouncilNotice").textContent = data.note || "Council status loaded. No decision or provider call was started by this refresh.";
+  } catch (error) {
+    panel.hidden = false;
+    $("principalAiCouncilSummary").textContent = "Principal AI Council status unavailable: " + error.message;
+  }
+}
+$("principalAiCouncilRefresh")?.addEventListener("click", loadPrincipalAICouncilPanel);
+
 async function loadPublishingConnections(){
  const panel=$("publishingConnectionsPanel");if(!panel)return;
  try{
@@ -1589,6 +1613,7 @@ $("tiktokRefresh")?.addEventListener("click",loadTikTokAdminPanel);
 loadTikTokAdminPanel();
 loadAdminPanel();
 loadProviderAdminPanel();
+loadPrincipalAICouncilPanel();
 
 
 async function checkBlenderStudio(){
