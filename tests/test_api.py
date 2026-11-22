@@ -4520,6 +4520,8 @@ def test_owner_feature_grants_are_scoped_and_revoked_immediately(tmp_path, monke
     assert login.status_code == 200
     assert login.json()["role"] == "admin"
     assert client.get("/api/admin/youtube/status").status_code == 200
+    assert client.get("/").status_code == 200
+    assert client.get("/docs").status_code == 403
     assert client.get("/api/admin/provider-settings").status_code == 403
     assert client.get("/api/tasks").status_code == 403
 
