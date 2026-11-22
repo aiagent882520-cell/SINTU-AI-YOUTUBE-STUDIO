@@ -293,7 +293,7 @@ async def admin_access_control(request, call_next):
                 from fastapi.responses import RedirectResponse
                 return RedirectResponse("/login", status_code=303)
             return JSONResponse(status_code=401, content={"detail": "Admin login required."})
-        public_api_paths = {"/api/auth/session", "/api/access/features", "/api/health"}
+        public_api_paths = {"/api/auth/login", "/api/auth/logout", "/api/auth/session", "/api/access/features", "/api/health"}
         if user and not user.get("is_owner") and path.startswith("/api/admin/"):
             feature = access_control.feature_for_path(path)
             with db() as conn:
