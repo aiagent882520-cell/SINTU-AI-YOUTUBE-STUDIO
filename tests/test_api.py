@@ -4618,7 +4618,10 @@ def test_bootstrap_owner_identity_cannot_be_demoted_or_disabled(tmp_path, monkey
     monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "false")
     client = client_for_test(tmp_path, monkeypatch)
     with main.db() as conn:
-        conn.execute("UPDATE admin_users SET role='viewer', is_active=0 WHERE username='owner'")
+        conn.execute(
+            "INSERT INTO admin_users(username,password_hash,role,is_active,created_at) VALUES(?,?,?,?,?)",
+            ("owner", main._hash_password("a-strong-test-password"), "viewer", 0, "now"),
+        )
     main._ensure_bootstrap_admin()
     with main.db() as conn:
         owner = conn.execute("SELECT role,is_active,is_owner FROM admin_users WHERE username='owner'").fetchone()
