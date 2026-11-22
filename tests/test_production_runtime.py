@@ -913,6 +913,8 @@ def test_runtime_dispatches_existing_roles_in_stage_order_and_persists_checkpoin
     assert "intake" in result["result"]["pipeline_dispatch"]["skipped_stage_ids"]
     assert result["result"]["pipeline_dispatch"]["awaiting_owner_stage_ids"] == ["owner_review"]
     assert "render" in result["result"]["pipeline_dispatch"]["deferred_stage_ids"]
+    assert "Final Render Agent" in result["result"]["pipeline_dispatch"]["deferred_worker_roles"]
+    assert "Upload Agent" in result["result"]["pipeline_dispatch"]["deferred_worker_roles"]
 
 def test_legacy_completed_runs_are_backfilled_without_false_stage_completion(tmp_path, monkeypatch):
     import app.production_runtime as runtime
