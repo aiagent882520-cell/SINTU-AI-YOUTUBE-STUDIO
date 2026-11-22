@@ -1878,3 +1878,16 @@ Run the read-only forensic scanner and Android diagnostic on the actual Termux p
 - Android physical-device E2E and current Termux relay liveness remain unverified; Issue #268 has no current device claim/result. Preserve all local modified/untracked Termux data.
 - 360/VR/AR/virtual-production specialized formats, all-module end-to-end acceptance, full website E2E and final real-topic documentary MP4 acceptance remain outstanding.
 - Product remains **INCOMPLETE / NOT PRODUCTION READY**. PR CI and the offline demo do not prove real ComfyUI inference, natural Hindi voice quality, physical Android acceptance or professional documentary quality.
+
+
+# VERIFIED EXECUTION CHECKPOINT — 2026-11-22 (PR #303/#304 follow-up)
+
+- Main HEAD: `78b90b2e6f5c563a06084b8709c3c88d74a7aae6`.
+- Main SINTU CI run [#45005587992](https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/45005587992): completed successfully on the exact current main HEAD.
+- PR #303 merged: Android download progress percentage overflow fixed; exact-head SINTU CI and Native Android App checks passed.
+- PR #304 merged: Termux-safe exclusive media copy/remux replaces `os.link`; exact-head SINTU CI passed. Source files remain preserved and destination overwrite is rejected.
+- Native Android App run [#45005574261](https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/45005574261) passed on intermediate main SHA `af8c8b40604f32ae9f6cd25144e4792dd9d54a95`. It predates PR #304; PR #304 changes Python media helpers, not Android source. A fresh Android workflow run on current main is still desirable.
+- Termux audit previously reported 909 passed and 5 failures caused by its local checkout using the old `os.link` path. Do not treat this as proof the latest main has the same failures. Issues #310 (fast-forward-only Termux update) and #311 (read-only health audit after update) are queued; execution requires the Termux GitHub relay to be online.
+- Engine probe: local Android/Termux device is not an approved ComfyUI host; Ollama/ComfyUI and YouTube OAuth are not configured/verified. No model installation, paid service activation, render, upload, or publishing was performed.
+- Historical MP4 forensics remain unchanged: three full-black files and two dark-visible candidates were observed; no source provenance has been established. Preserve originals; no repair/quarantine/delete/upload/publish without owner-reviewed provenance.
+- Overall status remains **INCOMPLETE / NOT PRODUCTION READY**. GitHub CI success is not physical Android acceptance, live AI generation, complete editor acceptance, OAuth/upload proof, or public deployment readiness.
