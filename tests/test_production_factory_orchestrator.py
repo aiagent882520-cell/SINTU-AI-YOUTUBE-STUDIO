@@ -118,6 +118,8 @@ def test_all_sixty_format_roles_are_routed_or_explicitly_unmapped_without_fake_s
         stages = {row["stage_id"]: row for row in routed["stages"]}
         assigned = [role for row in routed["stages"] for role in row["roles"]]
         assert sorted(assigned + routed["unmapped_roles"]) == sorted(format_item["roles"])
+        assert set(routed["deferred_roles"]).issubset(set(routed["unmapped_roles"]))
+        assert all(role in format_item["roles"] for role in routed["deferred_roles"])
         assert stages["render"]["roles"] == []
         assert stages["package"]["roles"] == []
         assert stages["publishing"]["roles"] == []
