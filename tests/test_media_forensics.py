@@ -39,6 +39,62 @@ def test_forensics_measures_nearby_source_image_brightness(tmp_path, monkeypatch
     assert black_stats["near_black"] is True
     assert visible_stats["near_black"] is False
     assert black_stats["mean_luma"] < visible_stats["mean_luma"]
+    assert len(black_stats["visual_dhash"]) == 16
+    assert len(visible_stats["visual_pixel_sha256"]) == 64
+
+def test_visual_dhash_is_stable_and_uses_hamming_distance():
+    from PIL import Image
+
+    gradient = Image.new("L", (64, 64))
+    gradient.putdata([x * 4 for _y in range(64) for x in range(64)])
+    same = gradient.copy()
+    inverted = Image.eval(gradient, lambda value: 255 - value)
+
+    fingerprint = media_forensics.visual_dhash(gradient)
+    assert len(fingerprint) == 16
+    assert media_forensics.visual_dhash(same) == fingerprint
+    assert media_forensics.visual_dhash_distance(fingerprint, fingerprint) == 0
+    assert media_forensics.visual_dhash_distance(
+        fingerprint, media_forensics.visual_dhash(inverted)
+    ) > 0
+
+
+def test_visual_dhash_rejects_malformed_fingerprints():
+    with pytest.raises(ValueError, match="16 hexadecimal"):
+        media_forensics.visual_dhash_distance("bad", "0" * 16)
+
+
+def test_forensic_source_image_ranking_is_candidate_only(tmp_path, monkeypatch):
+    from PIL import Image
+
+    monkeypatch.setattr(media_forensics, "DATA_DIR", tmp_path)
+    images = tmp_path / "generated_images"
+    images.mkdir()
+    source = images / "source.jpg"
+    other = images / "other.jpg"
+    Image.new("RGB", (160, 90), (20, 140, 220)).save(source)
+    Image.new("RGB", (90, 160), (230, 40, 10)).save(other)
+    source_asset = media_forensics.inspect_asset(source)
+    other_asset = media_forensics.inspect_asset(other)
+    sample = {
+        "sample": "middle",
+        "pixel_verification": {
+            "status": "PASS",
+            "near_black": False,
+            "visual_dhash": source_asset["visual_dhash"],
+            "visual_pixel_sha256": source_asset["visual_pixel_sha256"],
+        },
+    }
+    videos = [{"file": "clip.mp4", "decoded_frame_samples": [sample]}]
+
+    media_forensics.rank_source_image_candidates(videos, [other_asset, source_asset])
+
+    pixel = sample["pixel_verification"]
+    assert pixel["source_image_candidates"][0]["path"] == "generated_images/source.jpg"
+    assert pixel["source_image_candidates"][0]["exact_normalized_pixel_match"] is True
+    assert pixel["source_attribution_confirmed"] is False
+    assert "candidate_only" in pixel["source_image_candidates"][0]["basis"]
+
 
 def test_forensics_prefers_pre_repair_backup_mtime_for_asset_correlation(tmp_path, monkeypatch):
     import os
