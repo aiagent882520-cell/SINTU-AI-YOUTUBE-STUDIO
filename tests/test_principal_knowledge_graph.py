@@ -58,3 +58,46 @@ def test_limits_and_invalid_status_filters_fail_closed():
         graph.create_node(conn, "owner", "chatgpt", "private", " ", "content")
     with pytest.raises(ValueError):
         graph.list_nodes(conn, "owner", status="approved")
+
+
+def test_knowledge_changes_are_recorded_in_owner_scoped_hash_chain():
+    conn = connection()
+    node = graph.create_node(conn, "owner", "chatgpt", "shared", "Claim", "Evidence pending")
+    graph.verify_node(conn, "owner", "owner", node["id"], True, "Checked source A and B.")
+    other = graph.create_node(conn, "owner", "gemini", "private", "Context", "Private context")
+    graph.link_nodes(conn, "owner", node["id"], other["id"], "context_for")
+
+    events = graph.list_audit_events(conn, "owner")
+    assert [event["event_type"] for event in events] == [
+        "knowledge.linked", "knowledge.created", "knowledge.verified", "knowledge.created"
+    ]
+    assert graph.verify_audit_chain(conn, "owner") == {
+        "valid": True, "checked_events": 4, "invalid_sequence": None
+    }
+    assert graph.list_audit_events(conn, "someone-else") == []
+
+
+def test_audit_chain_detects_tampering_and_database_blocks_update_delete():
+    conn = connection()
+    node = graph.create_node(conn, "owner", "deepseek", "shared", "Claim", "Pending")
+    event = graph.list_audit_events(conn, "owner")[0]
+    with pytest.raises(sqlite3.IntegrityError, match="append-only"):
+        conn.execute("UPDATE principal_knowledge_audit SET actor='forged' WHERE id=?", (event["id"],))
+    with pytest.raises(sqlite3.IntegrityError, match="append-only"):
+        conn.execute("DELETE FROM principal_knowledge_audit WHERE id=?", (event["id"],))
+    conn.execute("DROP TRIGGER principal_knowledge_audit_no_update")
+    conn.execute("UPDATE principal_knowledge_audit SET actor='forged' WHERE id=?", (event["id"],))
+    result = graph.verify_audit_chain(conn, "owner")
+    assert result["valid"] is False
+    assert result["invalid_sequence"] == event["sequence"]
+
+
+def test_disputed_decision_is_audited_with_previous_status():
+    conn = connection()
+    node = graph.create_node(conn, "owner", "claude", "shared", "Claim", "Conflicting sources")
+    graph.verify_node(conn, "owner", "owner", node["id"], False, "Sources disagree.")
+    events = graph.list_audit_events(conn, "owner")
+    assert events[0]["event_type"] == "knowledge.disputed"
+    assert events[0]["details"]["previous_status"] == "unverified"
+    assert events[0]["details"]["status"] == "disputed"
+    assert graph.verify_audit_chain(conn, "owner")["valid"] is True
