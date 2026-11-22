@@ -416,6 +416,69 @@ def get_run(run_id: str, owner_username: str | None = None) -> dict[str, Any] | 
     return result
 
 
+def claim_next_pipeline_stage(
+    run_id: str,
+    *,
+    owner_username: str,
+    worker_token: str,
+) -> dict[str, Any] | None:
+    """Atomically claim the next ordered stage or surface its explicit Owner gate."""
+    if not owner_username or not worker_token:
+        raise ValueError("Owner and worker lease are required.")
+    init_runtime_db()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        run = conn.execute(
+            """SELECT owner_username,status,worker_token,cancel_requested,lease_expires_at
+               FROM production_runs WHERE id=?""", (run_id,)
+        ).fetchone()
+        now = _now()
+        if (not run or run["owner_username"] != owner_username
+                or run["status"] not in {"running", "reviewing"}
+                or run["worker_token"] != worker_token or run["cancel_requested"]
+                or not run["lease_expires_at"] or run["lease_expires_at"] < now):
+            raise ProductionRunCancelled("A live fenced run lease is required to claim a pipeline stage.")
+        stage = conn.execute(
+            """SELECT sequence,stage_id,department,status,approval
+               FROM production_pipeline_stages WHERE run_id=? AND status!='completed'
+               ORDER BY sequence LIMIT 1""", (run_id,)
+        ).fetchone()
+        if not stage:
+            return None
+        if stage["status"] in {"blocked", "awaiting_owner", "running"}:
+            return dict(stage)
+        previous = conn.execute(
+            """SELECT stage_id FROM production_pipeline_stages
+               WHERE run_id=? AND sequence<? AND status!='completed'
+               ORDER BY sequence LIMIT 1""", (run_id, stage["sequence"])
+        ).fetchone()
+        if previous:
+            raise ValueError("Pipeline order violation; earlier stage is not complete.")
+        if stage["approval"] == "owner_required":
+            conn.execute(
+                """UPDATE production_pipeline_stages SET status='awaiting_owner',updated_at=?
+                   WHERE run_id=? AND stage_id=? AND status IN ('pending','paused')""",
+                (now, run_id, stage["stage_id"]),
+            )
+            _event(conn, run_id, owner_username, stage["status"], "awaiting_owner",
+                   "pipeline_owner_gate", f"stage={stage['stage_id']}; worker cannot self-approve")
+            stage = dict(stage)
+            stage["status"] = "awaiting_owner"
+            return stage
+        changed = conn.execute(
+            """UPDATE production_pipeline_stages SET status='running',
+               started_at=COALESCE(started_at,?),updated_at=?
+               WHERE run_id=? AND stage_id=? AND status IN ('pending','paused')""",
+            (now, now, run_id, stage["stage_id"]),
+        ).rowcount
+        if changed:
+            _event(conn, run_id, owner_username, stage["status"], "running",
+                   "pipeline_stage_claimed", f"stage={stage['stage_id']}; sequence={stage['sequence']}")
+            stage = dict(stage)
+            stage["status"] = "running"
+        return stage
+
+
 def transition_pipeline_stage(
     run_id: str,
     stage_id: str,
@@ -452,8 +515,18 @@ def transition_pipeline_stage(
             return None
         if run["status"] in {"cancelled", "cancelling"} or run["cancel_requested"]:
             raise ProductionRunCancelled("Pipeline stage cannot change after cancellation.")
-        if stage["approval"] == "owner_required" and status == "completed" and not owner_approved:
-            raise PermissionError("Owner approval is required to complete this pipeline stage.")
+        if stage["approval"] == "owner_required" and status == "completed":
+            if not owner_approved or stage["status"] != "awaiting_owner":
+                raise PermissionError("An explicitly awaiting Owner gate is required before Owner approval.")
+        if status in {"running", "awaiting_owner", "completed"}:
+            earlier = conn.execute(
+                """SELECT stage_id,status FROM production_pipeline_stages
+                   WHERE run_id=? AND sequence<? ORDER BY sequence""",
+                (run_id, stage["sequence"]),
+            ).fetchall()
+            incomplete = [item["stage_id"] for item in earlier if item["status"] != "completed"]
+            if incomplete:
+                raise ValueError("Earlier pipeline stages are incomplete: " + ", ".join(incomplete[:5]))
         if stage["approval"] != "owner_required":
             now = _now()
             if (not worker_token or run["worker_token"] != worker_token
