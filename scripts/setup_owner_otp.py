@@ -46,7 +46,7 @@ def write_secret(path: Path, lines: list[str], secret: str) -> None:
     fd, temp_name = tempfile.mkstemp(prefix=".sintu-owner-otp-", dir=str(path.parent))
     try:
         os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\\n") as handle:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             handle.write("\\n".join(updated).rstrip() + "\\n")
             handle.flush()
             os.fsync(handle.fileno())
