@@ -75,8 +75,22 @@
         const title=document.createElement("b");title.textContent=run.topic+" · "+run.status;card.append(title);
         const detail=document.createElement("p");detail.className="factory-meta";detail.textContent=run.format_id+" · "+run.run_id+" · Attempts: "+run.attempt_count+" · Steps: "+run.step_count;card.append(detail);
         const open=document.createElement("button");open.type="button";open.className="secondary";open.textContent="View run details";
-        open.addEventListener("click",()=>viewRun(run.run_id));card.append(open);root.append(card);}
+        open.addEventListener("click",()=>viewRun(run.run_id));card.append(open);
+        if(!["completed","failed","cancelled"].includes(run.status)){
+          const cancel=document.createElement("button");cancel.type="button";cancel.className="secondary";cancel.textContent="Cancel run";
+          cancel.addEventListener("click",()=>cancelRun(run.run_id));card.append(cancel);
+        }
+        root.append(card);}
     }catch(error){root.textContent=error.message;root.className="factory-error";}
+  }
+  async function cancelRun(id) {
+    if(!window.confirm("Is production run ko cancel karein? Completed partial outputs preserve rahenge.")) return;
+    notice("Cancellation request bhej rahe hain…");
+    try{
+      const result=await api("/api/production/runs/"+encodeURIComponent(id)+"/cancel",{method:"POST"});
+      notice(result.detail||("Run status: "+result.status));
+      await loadRuns();
+    }catch(error){notice(error.message,true);}
   }
   async function viewRun(id) {
     try{const run=await api("/api/production/runs/"+encodeURIComponent(id));const details=(run.steps||[]).map(x=>x.role+": "+x.status).join("\n");
