@@ -943,6 +943,8 @@ def test_owner_media_executor_advances_render_and_package_after_owner_review(tmp
         result={"pipeline_dispatch": {
             "mode": "existing_specialist_checker_roles",
             "completed_stage_ids": [],
+            "skipped_stage_ids": [],
+            "awaiting_owner_stage_ids": ["owner_review"],
             "deferred_stage_ids": ["render", "package", "publishing", "analytics_earnings", "learning"],
             "full_21_stage_execution": False,
         }},
@@ -953,9 +955,16 @@ def test_owner_media_executor_advances_render_and_package_after_owner_review(tmp
         )
     with runtime._connect() as conn:
         conn.execute(
-            "UPDATE production_pipeline_stages SET status='completed' WHERE run_id=? AND sequence<=16",
+            "UPDATE production_pipeline_stages SET status='completed' WHERE run_id=? AND sequence<16",
             (run["id"],),
         )
+    runtime.transition_pipeline_stage(
+        run["id"], "owner_review", "awaiting_owner", owner_username="owner",
+    )
+    runtime.transition_pipeline_stage(
+        run["id"], "owner_review", "completed", owner_username="owner",
+        evidence="Owner explicitly approved the package", owner_approved=True,
+    )
 
     runtime.transition_owner_media_stage(
         run["id"], "render", "running", owner_username="owner",
@@ -981,7 +990,8 @@ def test_owner_media_executor_advances_render_and_package_after_owner_review(tmp
     assert stages["package"]["status"] == "completed"
     assert stages["publishing"]["status"] == "pending"
     dispatch = updated["result"]["pipeline_dispatch"]
-    assert dispatch["completed_stage_ids"] == ["render", "package"]
+    assert dispatch["completed_stage_ids"] == ["owner_review", "render", "package"]
+    assert dispatch["awaiting_owner_stage_ids"] == []
     assert dispatch["deferred_stage_ids"] == ["publishing", "analytics_earnings", "learning"]
     assert runtime.transition_owner_media_stage(
         run["id"], "render", "running", owner_username="other",
