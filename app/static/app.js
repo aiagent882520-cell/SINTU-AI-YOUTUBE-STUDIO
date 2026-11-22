@@ -1280,16 +1280,41 @@ function adminEscape(value) {
 async function applyFeatureAccessUI() {
   try {
     const session = await request("/api/auth/session");
-    if (!session.authenticated || session.is_owner) return;
-    const allowed = new Set(session.features || []);
+    if (!session.authenticated) return;
+    if (session.is_owner) {
+      if ($("adminWorkspacePanel")) $("adminWorkspacePanel").hidden = true;
+      if ($("userWorkspacePanel")) $("userWorkspacePanel").hidden = true;
+      return;
+    }
+    const access = await request("/api/access/features");
+    const allowed = new Set(access.granted_features || []);
     document.querySelectorAll("[data-feature]").forEach(panel => {
       panel.hidden = !allowed.has(panel.dataset.feature);
     });
-    const ownerPanel = $("adminPanel");
-    if (ownerPanel) ownerPanel.hidden = true;
+    if ($("adminPanel")) $("adminPanel").hidden = true;
+    const catalog = new Map((access.features || []).map(item => [item.key, item.name]));
+    const grants = [...allowed].map(key => catalog.get(key) || key);
+    const target = session.role === "admin" ? "admin" : "user";
+    const adminPanel = $("adminWorkspacePanel"), userPanel = $("userWorkspacePanel");
+    if (adminPanel) adminPanel.hidden = target !== "admin";
+    if (userPanel) userPanel.hidden = target !== "user";
+    const identity = (session.username || "account") + " · " +
+      (session.role === "admin" ? "Admin" : session.role === "editor" ? "User / Editor" : "User / Viewer");
+    const featureMarkup = grants.length
+      ? grants.map(name => '<div class="integration-card"><strong>' + escapeHtml(name) + '</strong><span>Granted</span></div>').join("")
+      : '<p class="muted">Abhi koi feature access grant nahi hai. Owner se access request karein.</p>';
+    if (target === "admin") {
+      $("adminWorkspaceIdentity").textContent = identity;
+      $("adminWorkspaceFeatures").innerHTML = featureMarkup;
+    } else {
+      $("userWorkspaceIdentity").textContent = identity;
+      $("userWorkspaceFeatures").innerHTML = featureMarkup;
+    }
   } catch (_) {
     document.querySelectorAll("[data-feature]").forEach(panel => { panel.hidden = true; });
     if ($("adminPanel")) $("adminPanel").hidden = true;
+    if ($("adminWorkspacePanel")) $("adminWorkspacePanel").hidden = true;
+    if ($("userWorkspacePanel")) $("userWorkspacePanel").hidden = true;
   }
 }
 
