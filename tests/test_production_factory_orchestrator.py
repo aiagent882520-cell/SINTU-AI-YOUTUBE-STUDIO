@@ -50,8 +50,8 @@ def test_custom_provider_candidates_are_capability_matched():
          "pricing": "paid_optional", "capabilities": ["video"]},
     ]
     plan = build_pipeline_plan("topic", "format", providers=providers)
-    writing = next(stage for stage in plan["stages"] if stage["id"] == "writing")
-    assembly = next(stage for stage in plan["stages"] if stage["id"] == "assembly")
+    writing = next(stage for stage in plan["stages"] if stage["id"] == "script")
+    assembly = next(stage for stage in plan["stages"] if stage["id"] == "render")
     assert any(item["id"] == "local_writer" for item in writing["provider_candidates"])
     assert any(item["id"] == "paid_video" for item in assembly["provider_candidates"])
     assert next(item for item in assembly["provider_candidates"] if item["id"] == "paid_video")["selection"] == "verify_before_use"
