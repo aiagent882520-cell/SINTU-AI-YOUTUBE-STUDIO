@@ -141,7 +141,7 @@ def create_run(format_id: str, topic: str, owner_username: str = "local") -> dic
                 (run_id, sequence, stage_id, department, "pending", approval, now),
             )
         _event(conn, run_id, owner_username, None, "queued", "pipeline_ledger_created",
-               "Persisted 21-stage planning ledger; stage execution is not yet wired.")
+               "Persisted 21-stage ledger; existing specialist/checker roles advance mapped stages, while media and post-production stages remain pending.")
     return get_run(run_id, owner_username)
 
 
