@@ -47,6 +47,20 @@ def test_safe_remux_writes_new_file_and_preserves_source(tmp_path, monkeypatch):
     assert destination.read_bytes() == b"remuxed-container"
 
 
+def test_safe_remux_works_without_os_link(tmp_path, monkeypatch):
+    _fake_tools(monkeypatch)
+    monkeypatch.delattr(remux.os, "link", raising=False)
+    source = tmp_path / "source.mp4"
+    destination = tmp_path / "copy.mp4"
+    source.write_bytes(b"original-container")
+
+    report = remux.safe_remux(source, destination, ffmpeg="ffmpeg", ffprobe="ffprobe")
+
+    assert report["status"] == "REMUXED_TO_NEW_FILE"
+    assert destination.read_bytes() == b"remuxed-container"
+    assert source.read_bytes() == b"original-container"
+
+
 def test_safe_remux_refuses_existing_destination(tmp_path):
     source = tmp_path / "source.mp4"
     destination = tmp_path / "existing.mp4"
