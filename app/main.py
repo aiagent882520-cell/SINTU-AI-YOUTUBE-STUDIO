@@ -5376,6 +5376,12 @@ def production_factory_health(request: Request):
             "paid_upgrades_allowed": bool(brain.get("paid_upgrades_allowed")),
         },
         "engines": engines,
+        "worker": {
+            "running": production_factory_supervisor.is_running,
+            "poll_interval_seconds": production_factory_supervisor.poll_interval,
+            "batch_size": production_factory_supervisor.batch_size,
+            "mode": "single-process-internal-queue-supervisor",
+        },
         "background_worker": {
             "running": production_factory_supervisor.is_running,
             "mode": "single in-process worker with persistent queue",
