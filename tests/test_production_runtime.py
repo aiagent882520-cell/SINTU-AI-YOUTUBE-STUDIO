@@ -900,6 +900,12 @@ def test_runtime_dispatches_existing_roles_in_stage_order_and_persists_checkpoin
     assert result["pipeline_stage_role_dispatch_integrated"] is True
     assert result["pipeline_stage_execution_implemented"] is False
     assert result["result"]["pipeline_dispatch"]["mode"] == "existing_specialist_checker_roles"
+    role_stage_map = result["result"]["role_stage_map"]
+    routed_stages = {item["stage_id"]: item for item in role_stage_map["stages"]}
+    assert "Web Research" in routed_stages["research"]["roles"]
+    assert "Fact Checker" in routed_stages["fact_check"]["roles"]
+    assert "Script Writer" in routed_stages["script"]["roles"]
+    assert isinstance(role_stage_map["unmapped_roles"], list)
     assert result["result"]["pipeline_dispatch"]["full_21_stage_execution"] is False
     assert {"research", "fact_check", "script", "quality"}.issubset(
         set(result["result"]["pipeline_dispatch"]["completed_stage_ids"])
