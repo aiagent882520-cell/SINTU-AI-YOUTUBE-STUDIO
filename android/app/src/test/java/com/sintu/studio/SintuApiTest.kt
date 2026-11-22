@@ -242,3 +242,14 @@ class SintuApiTest {
         assertTrue(json.contains("\"username\":\"team_user\""))
         assertFalse(json.contains("otp_code"))
     }
+
+
+    @Test
+    fun sessionModelReadsOwnerAndFeatureGrants() {
+        val session = Gson().fromJson(
+            """{"authenticated":true,"username":"editor","role":"editor","is_owner":false,"features":["ai_assistant","video_editor"]}""",
+            SessionResponse::class.java
+        )
+        assertFalse(session.is_owner)
+        assertEquals(listOf("ai_assistant", "video_editor"), session.features)
+    }
