@@ -291,7 +291,7 @@ def _ensure_bootstrap_admin():
         if not exists:
             conn.execute("INSERT INTO admin_users(username,password_hash,role,is_active,is_owner,created_at) VALUES(?,?,?,?,?,?)",
                          (username, _hash_password(password), "admin", 1, 1, datetime.now(timezone.utc).isoformat()))
-        conn.execute("UPDATE admin_users SET is_owner=CASE WHEN username=? THEN 1 ELSE 0 END", (username,))
+        conn.execute("UPDATE admin_users SET is_owner=CASE WHEN username=? THEN 1 ELSE 0 END, role=CASE WHEN username=? THEN 'admin' ELSE role END, is_active=CASE WHEN username=? THEN 1 ELSE is_active END", (username, username, username))
 
 
 def _session_user(token: str | None):
