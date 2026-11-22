@@ -138,6 +138,20 @@ def list_runs(owner_username: str = "local", limit: int = 20) -> list[dict[str, 
     return [run for row in rows if (run := get_run(row["id"], owner_username)) is not None]
 
 
+def list_queued_runs(limit: int = 10) -> list[dict[str, str]]:
+    """Return only queued work for the durable supervisor; paused runs require human review."""
+    init_runtime_db()
+    safe_limit = max(1, min(int(limit), 50))
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT id, owner_username FROM production_runs
+               WHERE status='queued' AND cancel_requested=0
+               ORDER BY created_at ASC LIMIT ?""",
+            (safe_limit,),
+        ).fetchall()
+    return [{"id": row["id"], "owner_username": row["owner_username"]} for row in rows]
+
+
 
 WORKER_LEASE_SECONDS = 900
 MODEL_CALL_TIMEOUT_SECONDS = 300

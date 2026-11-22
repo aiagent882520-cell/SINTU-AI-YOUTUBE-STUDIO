@@ -60,6 +60,7 @@ from .video_generator import generate_video, video_status, VideoUnavailable, Vid
 from .media_provenance import write_render_manifest
 from .publishing_quality_gate import PublishingQualityError, require_publishable_provenance
 from .production_runtime import create_run as create_production_run, get_run as get_production_run, list_runs as list_production_runs, execute_run as execute_production_run, attach_render_result, recover_interrupted_runs, request_cancel as cancel_production_run, list_run_events as list_production_run_events
+from .production_factory_worker import supervisor as production_factory_supervisor
 from .earning_system import router as earning_router, sync_youtube_estimate
 from .security import RequestRateLimiter, client_address_allowed, same_origin_request
 from .backup_restore import verify_backup, BackupValidationError, snapshot_database
@@ -86,14 +87,16 @@ app.include_router(termux_bridge_router)
 
 @app.on_event("startup")
 def start_google_flow_auto_import():
-    """Recover interrupted production jobs, then watch Android Downloads."""
+    """Recover interrupted jobs, supervise queued production, then watch Android Downloads."""
     recover_interrupted_runs()
     durable_render_queue.recover_expired_leases()
+    production_factory_supervisor.start()
     start_flow_auto_import(DATA_DIR, AI_VIDEO_DIR)
 
 
 @app.on_event("shutdown")
 def stop_google_flow_auto_import():
+    production_factory_supervisor.stop()
     stop_flow_auto_import()
 
 
