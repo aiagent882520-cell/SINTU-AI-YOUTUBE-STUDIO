@@ -1391,6 +1391,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                     and not (stage["stage_id"] == "research" and research_record)
                 ],
                 "unmapped_worker_roles": role_routing["unmapped_roles"],
+                "deferred_worker_roles": role_routing.get("deferred_roles", []),
                 "deferred_stage_ids": ["render", "package", "publishing", "analytics_earnings", "learning"],
                 "full_21_stage_execution": False,
             },
