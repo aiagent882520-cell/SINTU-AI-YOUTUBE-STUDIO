@@ -47,7 +47,7 @@ def write_secret(path: Path, lines: list[str], secret: str) -> None:
     try:
         os.fchmod(fd, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
-            handle.write("\\n".join(updated).rstrip() + "\\n")
+            handle.write("\n".join(updated).rstrip() + "\n")
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temp_name, path)
