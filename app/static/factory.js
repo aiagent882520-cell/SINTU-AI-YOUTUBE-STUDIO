@@ -59,7 +59,19 @@
     const root=$("factoryHealth");root.textContent="Checking…";
     try{const data=await api("/api/production-factory/health");root.replaceChildren();
       const brain=document.createElement("p");brain.textContent="Master AI: "+data.master_brain.selected+" · Local model: "+(data.master_brain.local.model_available?"available":"not available")+" · Service: "+(data.master_brain.local.service_running?"running":"stopped");root.append(brain);
-      for(const [name,item] of Object.entries(data.engines)){const row=document.createElement("p");row.textContent=name+": "+(item.available?"available":"not available")+" · "+(item.engine||"No local engine");root.append(row);}
+      for(const [name,item] of Object.entries(data.engines)){
+        const row=document.createElement("p");row.className="factory-meta";
+        const localReady=Boolean(item.local_available);
+        const readiness=name==="image"
+          ? (item.comfyui_available?"LOCAL AI READY":(localReady?"PROCEDURAL FALLBACK ONLY":"NOT READY"))
+          : (localReady?"LOCAL READY":"NOT READY");
+        row.textContent=name+": "+readiness+" · "+(item.engine||"No local engine")+
+          (item.available && !localReady?" · optional remote provider configured, not used for free local rendering":"");
+        row.dataset.localReady=String(localReady);root.append(row);
+      }
+      const renderNote=document.createElement("p");renderNote.className="factory-meta";
+      renderNote.textContent="Final MP4 generation uses local engines only. Remote provider configuration does not count as local readiness; paid fallback is disabled.";
+      root.append(renderNote);
       const worker=document.createElement("p");worker.textContent="Background worker: "+(data.background_worker?.running?"running":"not running")+" · Queue pickup: "+(data.background_worker?.auto_pickup_status||"unknown")+" · Paused jobs need Owner review";root.append(worker);
       const policy=document.createElement("p");policy.textContent="Paid auto-activation: OFF · Publishing: OFF";root.append(policy);
       const note=document.createElement("p");note.className="factory-meta";note.textContent=data.notice;root.append(note);
