@@ -50,9 +50,9 @@ data class ImageGenerationResponse(
     val notice: String = ""
 )
 
-data class LoginRequest(val username: String, val password: String)
+data class LoginRequest(val username: String, val password: String, val otp_code: String? = null)
 data class LoginResponse(val authenticated: Boolean = false, val username: String = "", val role: String = "")
-data class SessionResponse(val authenticated: Boolean = false, val username: String? = null, val role: String? = null)
+data class SessionResponse(val authenticated: Boolean = false, val username: String? = null, val role: String? = null, val is_owner: Boolean = false, val features: List<String> = emptyList())
 data class ConversationCreateRequest(val title: String = "", val workflow: String = "content")
 data class ConversationCreateResponse(val id: Int, val title: String, val workflow: String)
 data class ConversationDto(val id: Int, val title: String, val workflow: String, val last_message: String? = null)
@@ -241,8 +241,8 @@ class SintuApi(context: Context, baseUrl: String) {
             .create(SintuService::class.java)
     }
 
-    suspend fun login(username: String, password: String): LoginResponse =
-        service.login(LoginRequest(username, password)).bodyOrThrow()
+    suspend fun login(username: String, password: String, otpCode: String? = null): LoginResponse =
+        service.login(LoginRequest(username, password, otpCode)).bodyOrThrow()
 
     suspend fun logout() {
         try { service.logout() } finally { sessionStore.clear() }

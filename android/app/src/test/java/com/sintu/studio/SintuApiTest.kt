@@ -226,4 +226,28 @@ class SintuApiTest {
         assertEquals(1360, response.height)
     }
 
+    @Test
+    fun ownerMobileOtpIsIncludedInLoginRequest() {
+        val json = Gson().toJson(LoginRequest("owner", "strong-password", "123456"))
+        assertTrue(json.contains("\"username\":\"owner\""))
+        assertTrue(json.contains("\"otp_code\":\"123456\""))
+    }
+
+    @Test
+    fun teamLoginCanOmitOwnerOtp() {
+        val json = Gson().toJson(LoginRequest("team_user", "strong-password"))
+        assertTrue(json.contains("\"username\":\"team_user\""))
+        assertFalse(json.contains("otp_code"))
+    }
+
+
+    @Test
+    fun sessionModelReadsOwnerAndFeatureGrants() {
+        val session = Gson().fromJson(
+            """{"authenticated":true,"username":"editor","role":"editor","is_owner":false,"features":["ai_assistant","video_editor"]}""",
+            SessionResponse::class.java
+        )
+        assertFalse(session.is_owner)
+        assertEquals(listOf("ai_assistant", "video_editor"), session.features)
+    }
 }

@@ -11,6 +11,8 @@ from app import main, video_renderer
 
 def client_for_test(tmp_path, monkeypatch):
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "false")
+    # Existing auth-flow tests focus on password/session policy; OTP has dedicated tests below.
+    monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "false")
     # Ordinary endpoint contract tests opt in explicitly; dedicated policy tests
     # remove these flags to verify the production-safe default is deny.
     monkeypatch.setenv("SINTU_PRODUCTION_ENABLED", "true")
@@ -1325,6 +1327,7 @@ def test_admin_auth_requires_credentials_and_protects_dashboard(tmp_path, monkey
     assert protected.headers["location"] == "/login"
     assert client.get("/api/tasks").status_code == 401
     assert client.get("/api/health").status_code == 200
+    assert client.get("/sw.js").status_code == 200
     assert client.post("/api/auth/login", json={"username": "owner", "password": "wrong-password"}).status_code == 401
     login = client.post("/api/auth/login", json={"username": "owner", "password": "a-strong-test-password"})
     assert login.status_code == 200
@@ -1380,7 +1383,9 @@ def test_admin_user_management_roles_and_audit(tmp_path, monkeypatch):
     listed = client.get("/api/admin/users").json()["users"]
     assert "password_hash" not in listed[0]
     assert client.get("/api/admin/audit").status_code == 200
+    assert client.get("/api/access/features").json()["is_owner"] is True
     assert client.patch(f"/api/admin/users/{viewer_id}", json={"role":"editor"}).json()["role"] == "editor"
+    assert client.put(f"/api/admin/users/{viewer_id}/features", json={"features":["ai_assistant"]}).json()["features"] == ["ai_assistant"]
     client.post("/api/auth/logout")
     assert client.post("/api/auth/login", json={"username":"viewer_one","password":"viewer-password-long"}).json()["role"] == "editor"
     assert client.post("/api/tasks", json={"prompt":"editor can create","workflow":"shorts"}).status_code == 200
@@ -1409,8 +1414,8 @@ def test_admin_cannot_disable_last_admin_or_self(tmp_path, monkeypatch):
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
     client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"})
     admin_id = client.get("/api/admin/users").json()["users"][0]["id"]
-    assert client.patch(f"/api/admin/users/{admin_id}", json={"is_active":False}).status_code == 400
-    assert client.patch(f"/api/admin/users/{admin_id}", json={"role":"viewer"}).status_code == 400
+    assert client.patch(f"/api/admin/users/{admin_id}", json={"is_active":False}).status_code == 403
+    assert client.patch(f"/api/admin/users/{admin_id}", json={"role":"viewer"}).status_code == 403
 
 
 def test_admin_provider_settings_persist_and_never_expose_secrets(tmp_path, monkeypatch):
@@ -4483,3 +4488,172 @@ def test_production_run_cancel_rejects_malformed_run_id(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     assert client.post("/api/production/runs/not-a-run-id/cancel").status_code == 400
     assert client.get("/api/production/runs/not-a-run-id/events").status_code == 400
+
+
+def test_owner_feature_grants_are_scoped_and_revoked_immediately(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    assert client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"}).status_code == 200
+
+    created = client.post("/api/admin/users", json={
+        "username":"youtube_admin", "password":"youtube-admin-password", "role":"admin"
+    })
+    assert created.status_code == 200
+    user_id = created.json()["id"]
+    catalog = client.get("/api/admin/features")
+    assert catalog.status_code == 200
+    assert "youtube" in [item["key"] for item in catalog.json()["features"]]
+    granted = client.put(f"/api/admin/users/{user_id}/features", json={"features":["youtube"]})
+    assert granted.status_code == 200
+    assert granted.json()["features"] == ["youtube"]
+    audit = client.get("/api/admin/audit").json()
+    assert any(event["action"] == "feature_permissions_updated" for event in audit["events"])
+    assert client.get("/api/admin/users").json()["users"][-1]["features"] == ["youtube"]
+
+    client.post("/api/auth/logout")
+    login = client.post("/api/auth/login", json={"username":"youtube_admin","password":"youtube-admin-password"})
+    assert login.status_code == 200
+    assert login.json()["role"] == "admin"
+    assert client.get("/api/admin/youtube/status").status_code == 200
+    assert client.get("/").status_code == 200
+    assert client.get("/docs").status_code == 403
+    assert client.get("/api/admin/provider-settings").status_code == 403
+    assert client.get("/api/tasks").status_code == 403
+
+    client.post("/api/auth/logout")
+    assert client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"}).status_code == 200
+    assert client.put(f"/api/admin/users/{user_id}/features", json={"features":[]}).status_code == 200
+    client.post("/api/auth/logout")
+    assert client.post("/api/auth/login", json={"username":"youtube_admin","password":"youtube-admin-password"}).status_code == 200
+    assert client.get("/api/admin/youtube/status").status_code == 403
+
+
+def test_unknown_feature_routes_fail_closed_for_non_owner(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    client.post("/api/auth/login", json={"username":"owner","password":"a-strong-test-password"})
+    created = client.post("/api/admin/users", json={
+        "username":"restricted_admin", "password":"restricted-admin-password", "role":"admin"
+    })
+    client.post("/api/auth/logout")
+    client.post("/api/auth/login", json={"username":"restricted_admin","password":"restricted-admin-password"})
+    assert client.get("/api/unknown-new-feature").status_code == 403
+    assert client.get("/api/admin/users").status_code == 403
+
+
+def test_owner_login_requires_valid_mobile_totp_but_team_accounts_do_not(tmp_path, monkeypatch):
+    import base64
+
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    secret = base64.b32encode(b"01234567890123456789").decode("ascii").rstrip("=")
+    monkeypatch.setenv("SINTU_OWNER_TOTP_SECRET", secret)
+    monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "true")
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "true")
+    assert client.post("/api/auth/login", json={
+        "username":"owner", "password":"a-strong-test-password"
+    }).status_code == 401
+    assert client.post("/api/auth/login", json={
+        "username":"owner", "password":"a-strong-test-password", "otp_code":"000000"
+    }).status_code == 401
+    code = main._totp_code(secret)
+    login = client.post("/api/auth/login", json={
+        "username":"owner", "password":"a-strong-test-password", "otp_code":code
+    })
+    assert login.status_code == 200
+    assert client.get("/api/auth/session").json()["is_owner"] is True
+
+    created = client.post("/api/admin/users", json={
+        "username":"team_admin", "password":"team-admin-password", "role":"admin"
+    })
+    assert created.status_code == 200
+    client.post("/api/auth/logout")
+    replay = client.post("/api/auth/login", json={
+        "username":"owner", "password":"a-strong-test-password", "otp_code":code
+    })
+    assert replay.status_code == 401
+    team_login = client.post("/api/auth/login", json={
+        "username":"team_admin", "password":"team-admin-password"
+    })
+    assert team_login.status_code == 200
+    assert team_login.json()["role"] == "admin"
+
+
+def test_owner_login_fails_closed_until_mobile_totp_is_enrolled(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "true")
+    monkeypatch.delenv("SINTU_OWNER_TOTP_SECRET", raising=False)
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "true")
+    response = client.post("/api/auth/login", json={
+        "username":"owner", "password":"a-strong-test-password"
+    })
+    assert response.status_code == 503
+    assert "setup_owner_otp.py" in response.json()["detail"]
+
+
+def test_bootstrap_owner_identity_cannot_be_demoted_or_disabled(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "false")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "false")
+    client = client_for_test(tmp_path, monkeypatch)
+    with main.db() as conn:
+        conn.execute("UPDATE admin_users SET role='viewer', is_active=0 WHERE username='owner'")
+    main._ensure_bootstrap_admin()
+    with main.db() as conn:
+        owner = conn.execute("SELECT role,is_active,is_owner FROM admin_users WHERE username='owner'").fetchone()
+    assert owner["role"] == "admin"
+    assert owner["is_active"] == 1
+    assert owner["is_owner"] == 1
+
+
+def test_rotating_owner_totp_secret_allows_new_code_in_same_time_step(tmp_path, monkeypatch):
+    import base64
+
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    first_secret = base64.b32encode(b"01234567890123456789").decode("ascii").rstrip("=")
+    second_secret = base64.b32encode(b"98765432109876543210").decode("ascii").rstrip("=")
+    monkeypatch.setenv("SINTU_OWNER_TOTP_SECRET", first_secret)
+    monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "true")
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "true")
+    first = client.post("/api/auth/login", json={
+        "username":"owner", "password":"a-strong-test-password",
+        "otp_code":main._totp_code(first_secret)
+    })
+    assert first.status_code == 200
+    client.post("/api/auth/logout")
+
+    monkeypatch.setenv("SINTU_OWNER_TOTP_SECRET", second_secret)
+    rotated = client.post("/api/auth/login", json={
+        "username":"owner", "password":"a-strong-test-password",
+        "otp_code":main._totp_code(second_secret)
+    })
+    assert rotated.status_code == 200

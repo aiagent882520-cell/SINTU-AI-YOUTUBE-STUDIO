@@ -1,14 +1,17 @@
 # CURRENT EXECUTION CHECKPOINT — 2026-11-22 (verified GitHub state)
 
-- Main HEAD at this checkpoint: `a4d2ed392ae930c94535bd7cda8d0d7d5138a662`.
-- Post-merge main CI run [#44973915032](https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44973915032) completed **8/8 PASS** after the approved merges.
-- Merged to main: PRs #282, #283, #287, #288, #289 and #290. PR #286 was merged into the Principal AI knowledge-graph feature branch and is included in the combined Principal AI integration PR #285; it is not represented as merged to main yet.
-- Remaining integration PRs at checkpoint time: #279 (documentary research evidence), #284 (four-provider Principal AI Council), and #285 (Council + owner-governed knowledge graph/audit). Their exact-head CI runs were in progress; no PASS is claimed here.
-- PR #277 updates this checkpoint only. This section supersedes stale historical statements below about the repository's open PR count and pre-merge status; older entries remain as historical records.
+- Main HEAD at this checkpoint: `62eb01e6b77876401aed8ac15256a2b051927196`.
+- Main CI run [#44975555741](https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44975555741) completed **8/8 PASS** after PR #291 merged.
+- PRs merged to main: #277, #279, #282, #283, #284, #285, #287, #288, #289, #290 and #291. PR #286 was merged into the Principal AI integration branch and its changes are included in PR #285.
+- PR #291 hardens operational readiness by checking the actual `termux_bridge_worker.py` process command line instead of trusting a live/reused PID. Its exact-head CI completed **8/8 PASS**.
+- PR #279 documentary research evidence contract merged after exact-head CI **8/8 PASS**.
+- PR #292 is the active Owner/Admin/User access-control increment: separate Owner identity, explicit per-feature grants, immediate revocation, fail-closed unknown API routes, Owner mobile TOTP and Owner panel controls. It is not merged yet; only claim completion after its latest exact-head CI passes and merge is verified.
 - Product/release status remains **INCOMPLETE / NOT PRODUCTION READY**. CI PASS is not physical Android acceptance, live ComfyUI inference, YouTube OAuth/upload proof, or final human-reviewed documentary acceptance.
 - No production deployment, public publishing, paid-service activation, or private-media mutation was performed by these merges.
 
 ---
+
+
 
 # LIVE EXECUTION CHECKPOINT — 2026-11-21 (runtime + agent catalog follow-up)
 

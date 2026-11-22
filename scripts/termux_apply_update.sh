@@ -35,6 +35,14 @@ for _ in $(seq 1 30); do
   if curl -fsS http://127.0.0.1:8000/api/health >/dev/null 2>&1; then
     echo "SINTU update applied; API health check passed."
     echo "Automation-only mode remains enabled; video production is paused."
+    if ! grep -Eq '^SINTU_OWNER_TOTP_SECRET=.{16,}  fi
+  sleep 2
+done
+echo "SINTU API health check failed; inspect $LOG_DIR/server.log" >&2
+exit 1
+ .env; then
+      echo "Owner mobile OTP is not enrolled. Before Owner login, run: .venv/bin/python scripts/setup_owner_otp.py"
+    fi
     exit 0
   fi
   sleep 2

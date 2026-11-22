@@ -34,8 +34,10 @@ The ChatGPT consumer subscription is not an OpenAI API credential. Each provider
 
 Supported decision types: `major`, `security`, `architecture`, `production_release`, `paid_action`, `public_publish`, `external_data_sharing`, and `code_integration`.
 
-## Not yet implemented / not verified
+## Owner-governed knowledge and remaining work
 
-In this increment, Owner-only means the configured `SINTU_ADMIN_USERNAME` admin account under the existing authentication system. A separate Owner role, mobile/email OTP, and feature-level RBAC are not included yet.
-
-This increment does **not** complete the entire four-agent platform. Separate private memories and the shared verified Knowledge Base, agent-specific authentication keys/digital signatures, isolated per-agent code sandboxes, automatic research/re-vote rounds, disputes, per-agent task dashboards, and live API connectivity still require implementation and verification. The status dashboard is a readiness view, not proof that all four agents are operational.
+- The Owner-scoped Knowledge Graph is implemented in `app/principal_knowledge_graph.py`: each Principal can have private nodes; shared nodes are visible across the Council; new nodes default to `unverified`; the Owner can verify or dispute entries; edges connect related nodes.
+- Knowledge audit events are append-only and hash-chained. The audit chain is tamper-evident within the SINTU database, not an external immutable ledger.
+- Owner identity is a separate `is_owner` account flag, bootstrapped from `SINTU_OWNER_USERNAME` (defaults to `SINTU_ADMIN_USERNAME`). Owner mobile TOTP enrollment is provided by `scripts/setup_owner_otp.py`; the Owner login requires a six-digit authenticator code by default.
+- Per-agent authentication keys/digital signatures, isolated per-agent code sandboxes, automatic research/re-vote rounds, per-agent task dashboards, and live provider connectivity still require implementation or live verification.
+- The Council status dashboard remains a readiness view, not proof that all four providers are operational. Paid provider calls remain locked until revenue is confirmed and the Owner explicitly enables them.

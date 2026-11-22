@@ -346,7 +346,7 @@ async function loadYouTubeAnalytics(){
  button.disabled=true;notice.textContent="YouTube se official analytics load ho rahe hain…";
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const end=$("youtubeAnalyticsEnd").value,start=$("youtubeAnalyticsStart").value;
   const params=new URLSearchParams();if(start)params.set("start_date",start);if(end)params.set("end_date",end);
@@ -367,7 +367,7 @@ async function loadYouTubeReach(){
  const notice=$("youtubeReachNotice");
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const data=await request("/api/admin/youtube/reach");
   const setup=$("youtubeReachSetup");setup.hidden=!!data.configured;
@@ -403,7 +403,7 @@ async function loadYouTubeComments(loadMore=false){
  notice.textContent=loadMore?"Aur comments load ho rahe hain…":"Recent YouTube comments analyze ho rahe hain…";
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   if(!loadMore){youtubeCommentsNextPageToken="";youtubeCommentsCounts={total:0,possible_spam:0,positive:0,negative:0,questions:0,other:0};youtubeCommentsItems=[];}
   const query="/api/admin/youtube/comments?limit=50"+(loadMore?"&page_token="+encodeURIComponent(youtubeCommentsNextPageToken):"");
@@ -682,7 +682,7 @@ async function loadYouTubeRetention(){
  button.disabled=true;notice.textContent="Audience retention load ho rahi hai…";
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const data=await request("/api/admin/youtube/retention?video_id="+encodeURIComponent(videoId));
   const points=data.points||[];
@@ -702,7 +702,7 @@ async function loadAnalyticsOverview(){
  const panel=$("analyticsOverviewPanel");if(!panel)return;
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const data=await request("/api/admin/publishing/history?limit=250");
   const items=data.items||[];
@@ -722,7 +722,7 @@ async function loadSchedulerQueue(){
  const panel=$("schedulerQueuePanel");if(!panel)return;
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const data=await request("/api/admin/scheduler/queue?hours=24"),s=data.summary||{};
   $("schedulerQueueTotals").innerHTML=[["Awaiting approval",s.awaiting_approval||0],["Due — manual action",s.due_for_manual_action||0],["Next 24 hours",s.approved_next_window||0],["Later",s.approved_later||0]]
@@ -741,7 +741,7 @@ async function loadPublishingHistory(){
  const panel=$("publishingHistoryPanel");if(!panel)return;
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const params=new URLSearchParams(),platform=$("publishingPlatformFilter")?.value||"",status=$("publishingStatusFilter")?.value||"";
   if(platform)params.set("platform",platform);if(status)params.set("status",status);
@@ -1250,7 +1250,7 @@ async function loadProviderAdminPanel() {
   if (!panel) return;
   try {
     const session = await request("/api/auth/session");
-    if (!session.authenticated || session.role !== "admin") { panel.hidden = true; return; }
+    if (!session.authenticated || (!session.is_owner && (!(session.features||[]).includes("ai_settings") || !(session.features||[]).includes("integrations")))) { panel.hidden = true; return; }
     panel.hidden = false;
     const [settings, integrations] = await Promise.all([
       request("/api/admin/provider-settings"), request("/api/admin/integrations")
@@ -1277,25 +1277,74 @@ async function loadProviderAdminPanel() {
 function adminEscape(value) {
   return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
 }
+async function applyFeatureAccessUI() {
+  try {
+    const session = await request("/api/auth/session");
+    if (!session.authenticated) return;
+    if (session.is_owner) {
+      if ($("adminWorkspacePanel")) $("adminWorkspacePanel").hidden = true;
+      if ($("userWorkspacePanel")) $("userWorkspacePanel").hidden = true;
+      return;
+    }
+    const access = await request("/api/access/features");
+    const allowed = new Set(access.granted_features || []);
+    document.querySelectorAll("[data-feature]").forEach(panel => {
+      panel.hidden = !allowed.has(panel.dataset.feature);
+    });
+    if ($("adminPanel")) $("adminPanel").hidden = true;
+    const catalog = new Map((access.features || []).map(item => [item.key, item.name]));
+    const grants = [...allowed].map(key => catalog.get(key) || key);
+    const target = session.role === "admin" ? "admin" : "user";
+    const adminPanel = $("adminWorkspacePanel"), userPanel = $("userWorkspacePanel");
+    if (adminPanel) adminPanel.hidden = target !== "admin";
+    if (userPanel) userPanel.hidden = target !== "user";
+    const identity = (session.username || "account") + " · " +
+      (session.role === "admin" ? "Admin" : session.role === "editor" ? "User / Editor" : "User / Viewer");
+    const featureMarkup = grants.length
+      ? grants.map(name => '<div class="integration-card"><strong>' + escapeHtml(name) + '</strong><span>Granted</span></div>').join("")
+      : '<p class="muted">Abhi koi feature access grant nahi hai. Owner se access request karein.</p>';
+    if (target === "admin") {
+      $("adminWorkspaceIdentity").textContent = identity;
+      $("adminWorkspaceFeatures").innerHTML = featureMarkup;
+    } else {
+      $("userWorkspaceIdentity").textContent = identity;
+      $("userWorkspaceFeatures").innerHTML = featureMarkup;
+    }
+  } catch (_) {
+    document.querySelectorAll("[data-feature]").forEach(panel => { panel.hidden = true; });
+    if ($("adminPanel")) $("adminPanel").hidden = true;
+    if ($("adminWorkspacePanel")) $("adminWorkspacePanel").hidden = true;
+    if ($("userWorkspacePanel")) $("userWorkspacePanel").hidden = true;
+  }
+}
+
 async function loadAdminPanel() {
   const panel = $("adminPanel");
   if (!panel) return;
   try {
     const session = await request("/api/auth/session");
-    if (!session.authenticated || session.role !== "admin") { panel.hidden = true; return; }
+    if (!session.authenticated || !session.is_owner) { panel.hidden = true; return; }
     panel.hidden = false;
-    const [usersData, auditData] = await Promise.all([request("/api/admin/users"), request("/api/admin/audit?limit=40")]);
+    const [usersData, auditData, featureData] = await Promise.all([request("/api/admin/users"), request("/api/admin/audit?limit=40"), request("/api/admin/features")]);
     $("adminUsers").innerHTML = usersData.users.map(user => `
       <div class="admin-row">
         <div><strong>${adminEscape(user.username)}</strong><small>#${user.id} · ${adminEscape(user.created_at)}</small></div>
-        <select data-user-role="${user.id}" aria-label="Role for ${adminEscape(user.username)}">
-          <option value="viewer" ${user.role==="viewer"?"selected":""}>Viewer</option>
-          <option value="editor" ${user.role==="editor"?"selected":""}>Editor</option>
-          <option value="admin" ${user.role==="admin"?"selected":""}>Admin</option>
-        </select>
-        <span class="role-state">${user.is_active?"Active":"Disabled"}</span>
-        <button class="secondary user-reset" data-user-id="${user.id}" type="button">Reset password</button>
-        <button class="secondary user-toggle" data-user-id="${user.id}" data-active="${user.is_active?0:1}" type="button">${user.is_active?"Disable":"Enable"}</button>
+        ${user.is_owner ? '<strong>Owner · Full control</strong>' : `
+          <select data-user-role="${user.id}" aria-label="Role for ${adminEscape(user.username)}">
+            <option value="viewer" ${user.role==="viewer"?"selected":""}>User · Viewer</option>
+            <option value="editor" ${user.role==="editor"?"selected":""}>User · Editor</option>
+            <option value="admin" ${user.role==="admin"?"selected":""}>Admin · Limited by grants</option>
+          </select>
+          <span class="role-state">${user.is_active?"Active":"Disabled"}</span>
+          <button class="secondary user-reset" data-user-id="${user.id}" type="button">Reset password</button>
+          <button class="secondary user-toggle" data-user-id="${user.id}" data-active="${user.is_active?0:1}" type="button">${user.is_active?"Disable":"Enable"}</button>
+        `}
+        <div class="feature-grants">
+          <small>Feature permissions</small>
+          <div class="feature-grant-grid">${user.is_owner ? 'Owner has all features.' : featureData.features.map(feature => `
+            <label><input type="checkbox" data-user-feature="${user.id}" data-feature-key="${feature.key}" ${(user.features||[]).includes(feature.key)?"checked":""}> ${adminEscape(feature.name)}</label>
+          `).join("")}</div>
+        </div>
       </div>`).join("") || "No users.";
     $("adminAudit").innerHTML = auditData.events.map(event => `
       <div class="admin-row audit-row">
@@ -1304,6 +1353,17 @@ async function loadAdminPanel() {
       </div>`).join("") || "No security events yet.";
     $("adminNotice").textContent = "Users: " + usersData.users.length + " · Recent security events: " + auditData.events.length;
     await loadAdminBackups();
+    document.querySelectorAll("[data-user-feature]").forEach(input => input.addEventListener("change", async () => {
+      const userId = input.dataset.userFeature;
+      const features = [...document.querySelectorAll('[data-user-feature="' + userId + '"]:checked')].map(item => item.dataset.featureKey);
+      try {
+        await request("/api/admin/users/" + userId + "/features", {method:"PUT",body:JSON.stringify({features})});
+        $("adminNotice").textContent = "Feature access updated for user #" + userId + ".";
+      } catch(error) {
+        $("adminNotice").textContent = error.message;
+        await loadAdminPanel();
+      }
+    }));
     document.querySelectorAll("[data-user-role]").forEach(select => select.addEventListener("change", async () => {
       try { await request("/api/admin/users/" + select.dataset.userRole, {method:"PATCH",body:JSON.stringify({role:select.value})}); await loadAdminPanel(); }
       catch(error) { $("adminNotice").textContent = error.message; }
@@ -1489,7 +1549,7 @@ async function loadPrincipalAICouncilPanel() {
   if (!panel) return;
   try {
     const session = await request("/api/auth/session");
-    if (!session.authenticated || session.role !== "admin") { panel.hidden = true; return; }
+    if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
     panel.hidden = false;
     const data = await request("/api/admin/principal-ai/council/status");
     const eligible = data.all_principals_eligible_to_call ? "All four provider credentials are configured and policy-eligible; live health is still unverified." : "Council is blocked or incomplete. Missing credentials and paid-policy locks are shown below.";
@@ -1510,7 +1570,7 @@ async function loadPublishingConnections(){
  const panel=$("publishingConnectionsPanel");if(!panel)return;
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const [youtube,meta,tiktok]=await Promise.all([
    request("/api/admin/youtube/status"),request("/api/admin/meta/status"),request("/api/admin/tiktok/status")
@@ -1534,7 +1594,7 @@ async function loadYouTubeAdminPanel() {
  const panel = $("youtubeAdminPanel"); if (!panel) return;
  try {
   const session = await request("/api/auth/session");
-  if (!session.authenticated || session.role !== "admin") { panel.hidden = true; return; }
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden = false;
   const data = await request("/api/admin/youtube/status");
   $("youtubeConnectionStatus").textContent = data.connected
@@ -1562,7 +1622,7 @@ async function loadMetaAdminPanel(){
  const panel=$("metaAdminPanel");if(!panel)return;
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const data=await request("/api/admin/meta/status");
   const ig=data.instagram?" · Instagram: @"+(data.instagram.username||data.instagram.id):" · Instagram Professional account not linked";
@@ -1589,7 +1649,7 @@ async function loadTikTokAdminPanel(){
  const panel=$("tiktokAdminPanel");if(!panel)return;
  try{
   const session=await request("/api/auth/session");
-  if(!session.authenticated||session.role!=="admin"){panel.hidden=true;return;}
+  if (!session.authenticated || (!session.is_owner && (!panel.dataset.feature || !(session.features||[]).includes(panel.dataset.feature)))) { panel.hidden = true; return; }
   panel.hidden=false;
   const data=await request("/api/admin/tiktok/status");
   $("tiktokConnectionStatus").textContent=data.connected
@@ -1614,6 +1674,7 @@ loadTikTokAdminPanel();
 loadAdminPanel();
 loadProviderAdminPanel();
 loadPrincipalAICouncilPanel();
+applyFeatureAccessUI();
 
 
 async function checkBlenderStudio(){

@@ -48,6 +48,7 @@ from .blender_renderer import BLENDER_DIR, blender_status, render_scene, Blender
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
 from . import principal_ai_council, principal_knowledge_graph
+from . import access_control
 from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, verify_publishable_mp4, RendererUnavailable, RenderFailed, OUTPUT_DIR
 from .format_rendering import all_format_render_profiles, format_render_profile
 from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable, VoiceGenerationFailed, AUDIO_DIR
@@ -219,17 +220,85 @@ def _verify_password(password: str, encoded: str) -> bool:
         return False
 
 
+def _totp_code(secret: str, timestamp: float | None = None) -> str:
+    """Generate a 6-digit RFC 6238 TOTP code using the SHA-1 authenticator profile."""
+    normalized = str(secret or "").replace(" ", "").strip().upper()
+    if not normalized:
+        raise ValueError("Owner OTP secret is not configured.")
+    padding = "=" * ((8 - len(normalized) % 8) % 8)
+    key = base64.b32decode(normalized + padding, casefold=True)
+    counter = int((time.time() if timestamp is None else timestamp) // 30)
+    digest = hmac.new(key, counter.to_bytes(8, "big"), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    binary = int.from_bytes(digest[offset:offset + 4], "big") & 0x7FFFFFFF
+    return f"{binary % 1_000_000:06d}"
+
+
+def _matching_owner_otp_counter(secret: str, code: str | None,
+                                   timestamp: float | None = None) -> int | None:
+    if not isinstance(code, str) or not re.fullmatch(r"\d{6}", code):
+        return None
+    now = time.time() if timestamp is None else timestamp
+    current_counter = int(now // 30)
+    try:
+        for counter in range(max(0, current_counter - 1), current_counter + 2):
+            if hmac.compare_digest(_totp_code(secret, counter * 30), code):
+                return counter
+    except (ValueError, TypeError):
+        return None
+    return None
+
+
+def _verify_owner_otp(secret: str, code: str | None, timestamp: float | None = None) -> bool:
+    return _matching_owner_otp_counter(secret, code, timestamp) is not None
+
+
+def _consume_owner_otp_counter(owner_user_id: int, counter: int, secret: str) -> bool:
+    """Atomically reject TOTP replay; a rotated secret gets a fresh counter namespace."""
+    fingerprint = hashlib.sha256(secret.encode("utf-8")).hexdigest()
+    with db() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS owner_otp_state (
+                owner_user_id INTEGER PRIMARY KEY,
+                last_counter INTEGER NOT NULL,
+                secret_fingerprint TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            )
+        """)
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(owner_otp_state)")}
+        if "secret_fingerprint" not in columns:
+            conn.execute("ALTER TABLE owner_otp_state ADD COLUMN secret_fingerprint TEXT NOT NULL DEFAULT ''")
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT last_counter,secret_fingerprint FROM owner_otp_state WHERE owner_user_id=?",
+            (owner_user_id,),
+        ).fetchone()
+        if row and row["secret_fingerprint"] == fingerprint and counter <= row["last_counter"]:
+            return False
+        conn.execute("""
+            INSERT INTO owner_otp_state(owner_user_id,last_counter,secret_fingerprint,updated_at)
+            VALUES(?,?,?,?)
+            ON CONFLICT(owner_user_id) DO UPDATE SET
+                last_counter=excluded.last_counter,
+                secret_fingerprint=excluded.secret_fingerprint,
+                updated_at=excluded.updated_at
+        """, (owner_user_id, counter, fingerprint, datetime.now(timezone.utc).isoformat()))
+    return True
+
+
 def _ensure_bootstrap_admin():
-    username = os.getenv("SINTU_ADMIN_USERNAME", "admin").strip()
+    username = os.getenv("SINTU_OWNER_USERNAME", os.getenv("SINTU_ADMIN_USERNAME", "admin")).strip()
     password = os.getenv("SINTU_ADMIN_PASSWORD", "")
     secret = _session_secret()
     if not username or len(password) < 12 or len(secret) < 32 or password.startswith("CHANGE-THIS") or secret.startswith("CHANGE-THIS"):
         return
     with db() as conn:
+        access_control.ensure_schema(conn)
         exists = conn.execute("SELECT id FROM admin_users WHERE username = ?", (username,)).fetchone()
         if not exists:
-            conn.execute("INSERT INTO admin_users(username,password_hash,role,is_active,created_at) VALUES(?,?,?,?,?)",
-                         (username, _hash_password(password), "admin", 1, datetime.now(timezone.utc).isoformat()))
+            conn.execute("INSERT INTO admin_users(username,password_hash,role,is_active,is_owner,created_at) VALUES(?,?,?,?,?,?)",
+                         (username, _hash_password(password), "admin", 1, 1, datetime.now(timezone.utc).isoformat()))
+        conn.execute("UPDATE admin_users SET is_owner=CASE WHEN username=? THEN 1 ELSE 0 END, role=CASE WHEN username=? THEN 'admin' ELSE role END, is_active=CASE WHEN username=? THEN 1 ELSE is_active END", (username, username, username))
 
 
 def _session_user(token: str | None):
@@ -244,10 +313,13 @@ def _session_user(token: str | None):
         if int(decoded.get("e", 0)) <= int(time.time()):
             return None
         with db() as conn:
-            row = conn.execute("SELECT id,username,role,is_active FROM admin_users WHERE id=?", (decoded.get("i"),)).fetchone()
-        if not row or not row["is_active"] or row["username"] != decoded.get("u"):
-            return None
-        return dict(row)
+            access_control.ensure_schema(conn)
+            row = conn.execute("SELECT id,username,role,is_active,is_owner FROM admin_users WHERE id=?", (decoded.get("i"),)).fetchone()
+            if not row or not row["is_active"] or row["username"] != decoded.get("u"):
+                return None
+            user = dict(row)
+            user["features"] = access_control.list_user_features(conn, row["id"])
+        return user
     except (ValueError, TypeError, json.JSONDecodeError):
         return None
 
@@ -275,10 +347,10 @@ def _write_audit(user, action: str, method: str, path: str, status: int, ip: str
 @app.middleware("http")
 async def admin_access_control(request, call_next):
     path = request.url.path
-    user = _session_user(request.cookies.get(SESSION_COOKIE)) if _auth_required() else {"id": 0, "username": "local", "role": "admin", "is_active": 1}
+    user = _session_user(request.cookies.get(SESSION_COOKIE)) if _auth_required() else {"id": 0, "username": "local", "role": "admin", "is_active": 1, "is_owner": 1, "features": [item["key"] for item in access_control.FEATURES]}
     request.state.user = user
     if _auth_required():
-        public_paths = {"/login", "/api/auth/login", "/api/auth/logout", "/api/health"}
+        public_paths = {"/login", "/sw.js", "/api/auth/login", "/api/auth/logout", "/api/health"}
         # Bridge routes authenticate independently with dedicated bearer tokens;
         # do not require a browser admin-session cookie for trusted API clients.
         bridge_path = path.startswith("/api/termux-bridge/")
@@ -287,8 +359,26 @@ async def admin_access_control(request, call_next):
                 from fastapi.responses import RedirectResponse
                 return RedirectResponse("/login", status_code=303)
             return JSONResponse(status_code=401, content={"detail": "Admin login required."})
-        if path.startswith("/api/admin/") and (not user or user.get("role") != "admin"):
-            return JSONResponse(status_code=403, content={"detail": "Admin role required."})
+        public_api_paths = {"/api/auth/login", "/api/auth/logout", "/api/auth/session", "/api/access/features", "/api/health"}
+        if user and not user.get("is_owner") and path.startswith("/api/admin/"):
+            feature = access_control.feature_for_path(path)
+            with db() as conn:
+                allowed = bool(feature and access_control.has_feature_access(conn, user["id"], feature))
+            if not allowed:
+                return JSONResponse(status_code=403, content={"detail": "Owner has not granted this feature to your account."})
+        elif user and not user.get("is_owner") and path.startswith("/api/") and path not in public_api_paths and not path.startswith("/api/termux-bridge/"):
+            feature = access_control.feature_for_path(path)
+            with db() as conn:
+                allowed = bool(feature and access_control.has_feature_access(conn, user["id"], feature))
+            if not allowed:
+                return JSONResponse(status_code=403, content={"detail": "Owner has not granted this feature to your account."})
+        elif (user and not user.get("is_owner") and not path.startswith("/api/")
+              and path not in {"/", "/login", "/sw.js"} and not path.startswith("/static/")):
+            feature = access_control.feature_for_path(path)
+            with db() as conn:
+                allowed = bool(feature and access_control.has_feature_access(conn, user["id"], feature))
+            if not allowed:
+                return JSONResponse(status_code=403, content={"detail": "Owner has not granted this page's feature to your account."})
         if request.method not in {"GET", "HEAD", "OPTIONS"} and path != "/api/auth/logout" and user and user.get("role") == "viewer":
             return JSONResponse(status_code=403, content={"detail": "Viewer role is read-only."})
         if request.method in {"PUT", "PATCH", "DELETE"} and user and user.get("role") == "editor":
@@ -378,6 +468,7 @@ def init_db():
             password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','editor','viewer')),
             is_active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL
         )""")
+        access_control.ensure_schema(conn)
         conn.execute("""CREATE TABLE IF NOT EXISTS security_audit (
             id INTEGER PRIMARY KEY AUTOINCREMENT, actor_id INTEGER, actor_username TEXT NOT NULL,
             actor_role TEXT NOT NULL, action TEXT NOT NULL, method TEXT NOT NULL, path TEXT NOT NULL,
@@ -620,6 +711,7 @@ def login_page():
 class AdminLoginInput(BaseModel):
     username: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=1, max_length=256)
+    otp_code: str | None = Field(default=None, pattern=r"^\d{6}$")
 
 
 class AdminUserCreate(BaseModel):
@@ -632,6 +724,10 @@ class AdminUserUpdate(BaseModel):
     role: str | None = Field(default=None, pattern=r"^(admin|editor|viewer)$")
     is_active: bool | None = None
     password: str | None = Field(default=None, min_length=12, max_length=256)
+
+
+class AdminUserFeaturesInput(BaseModel):
+    features: list[str] = Field(default_factory=list, max_length=12)
 
 
 @app.post("/api/auth/login")
@@ -648,9 +744,16 @@ def admin_login(payload: AdminLoginInput, request: Request):
     if not allowed:
         raise HTTPException(status_code=429, detail=f"Too many login attempts. {retry_after} seconds baad try karein.")
     with db() as conn:
-        user = conn.execute("SELECT id,username,password_hash,role,is_active FROM admin_users WHERE username=?", (payload.username,)).fetchone()
+        user = conn.execute("SELECT id,username,password_hash,role,is_active,is_owner FROM admin_users WHERE username=?", (payload.username,)).fetchone()
     if not user or not user["is_active"] or not _verify_password(payload.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Username ya password galat hai.")
+    if user["is_owner"] and os.getenv("SINTU_OWNER_OTP_REQUIRED", "true").strip().lower() == "true":
+        otp_secret = os.getenv("SINTU_OWNER_TOTP_SECRET", "").strip()
+        if not otp_secret:
+            raise HTTPException(status_code=503, detail="Owner mobile OTP is not enrolled. Run scripts/setup_owner_otp.py on the SINTU host.")
+        otp_counter = _matching_owner_otp_counter(otp_secret, payload.otp_code)
+        if otp_counter is None or not _consume_owner_otp_counter(user["id"], otp_counter, otp_secret):
+            raise HTTPException(status_code=401, detail="Owner mobile OTP galat, expire, ya pehle use ho chuka hai.")
     _LOGIN_LIMITER.reset(client_ip)
     actor = dict(user)
     request.state.user = actor
@@ -672,14 +775,70 @@ def admin_logout(request: Request):
 @app.get("/api/auth/session")
 def admin_session(request: Request):
     user = _session_user(request.cookies.get(SESSION_COOKIE))
-    return {"authenticated": bool(user), "username": user["username"] if user else None, "role": user["role"] if user else None}
+    return {
+        "authenticated": bool(user),
+        "username": user["username"] if user else None,
+        "role": user["role"] if user else None,
+        "is_owner": bool(user and user.get("is_owner")),
+        "features": user.get("features", []) if user else [],
+    }
+
+
+@app.get("/api/access/features")
+def access_features(request: Request):
+    user = getattr(request.state, "user", None) or {}
+    return {
+        "is_owner": bool(user.get("is_owner")),
+        "role": user.get("role"),
+        "features": list(access_control.FEATURES),
+        "granted_features": user.get("features", []),
+    }
+
+
+@app.get("/api/admin/features")
+def admin_feature_catalog(request: Request):
+    _require_principal_ai_owner(request)
+    return {"features": list(access_control.FEATURES)}
+
+
+@app.put("/api/admin/users/{user_id}/features")
+def admin_update_user_features(user_id: int, payload: AdminUserFeaturesInput, request: Request):
+    owner = _require_principal_ai_owner(request)
+    if len(payload.features) != len(set(payload.features)):
+        raise HTTPException(status_code=400, detail="Duplicate feature keys are not allowed.")
+    unknown = sorted(set(payload.features) - access_control.FEATURE_KEYS)
+    if unknown:
+        raise HTTPException(status_code=400, detail="Unknown feature key: " + ", ".join(unknown))
+    with db() as conn:
+        access_control.ensure_schema(conn)
+        target = conn.execute("SELECT id,is_owner FROM admin_users WHERE id=?", (user_id,)).fetchone()
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found.")
+        if target["is_owner"]:
+            raise HTTPException(status_code=400, detail="Owner permissions are always full and cannot be edited.")
+        conn.execute("DELETE FROM user_feature_permissions WHERE user_id=?", (user_id,))
+        now = datetime.now(timezone.utc).isoformat()
+        conn.executemany(
+            "INSERT INTO user_feature_permissions(user_id,feature_key,granted_by,created_at) VALUES(?,?,?,?)",
+            [(user_id, key, owner, now) for key in payload.features],
+        )
+    actor = getattr(request.state, "user", {}) or {}
+    _write_audit(actor, "feature_permissions_updated", "PUT", request.url.path, 200,
+                 request.client.host if request.client else "unknown")
+    return {"user_id": user_id, "features": sorted(payload.features)}
 
 
 @app.get("/api/admin/users")
 def admin_list_users():
     with db() as conn:
-        rows = conn.execute("SELECT id,username,role,is_active,created_at FROM admin_users ORDER BY id").fetchall()
-    return {"users": [dict(row) for row in rows]}
+        access_control.ensure_schema(conn)
+        rows = conn.execute("SELECT id,username,role,is_active,is_owner,created_at FROM admin_users ORDER BY id").fetchall()
+        users = []
+        for row in rows:
+            item = dict(row)
+            item["features"] = access_control.list_user_features(conn, row["id"])
+            users.append(item)
+    return {"users": users}
 
 
 @app.post("/api/admin/users")
@@ -702,9 +861,11 @@ def admin_update_user(user_id: int, payload: AdminUserUpdate, request: Request):
         raise HTTPException(status_code=400, detail="At least one user field is required.")
     actor = getattr(request.state, "user", {}) or {}
     with db() as conn:
-        target = conn.execute("SELECT id,username,role,is_active FROM admin_users WHERE id=?", (user_id,)).fetchone()
+        target = conn.execute("SELECT id,username,role,is_active,is_owner FROM admin_users WHERE id=?", (user_id,)).fetchone()
         if not target:
             raise HTTPException(status_code=404, detail="User not found.")
+        if target["is_owner"]:
+            raise HTTPException(status_code=403, detail="The Owner account cannot be changed through team management.")
         if actor.get("id") == user_id and (changes.get("is_active") is False or changes.get("role", target["role"]) != "admin"):
             raise HTTPException(status_code=400, detail="You cannot disable or demote your own active admin account.")
         next_role = changes.get("role", target["role"])
@@ -802,10 +963,8 @@ def update_admin_provider_settings(payload: ProviderSettingsInput):
 def _require_principal_ai_owner(request: Request) -> str:
     user = getattr(request.state, "user", None) or {}
     username = str(user.get("username") or "")
-    if user.get("role") != "admin":
+    if not user.get("is_owner"):
         raise HTTPException(status_code=403, detail="Owner account required.")
-    if _auth_required() and username != os.getenv("SINTU_ADMIN_USERNAME", "admin").strip():
-        raise HTTPException(status_code=403, detail="Only the configured Owner account may control the Principal AI Council.")
     return username or "local"
 
 

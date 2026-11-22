@@ -399,6 +399,9 @@ fi
 if [ -n "$SMOKE_VIDEO_PATH" ]; then
   say "Verified sample video: $SMOKE_VIDEO_PATH"
 fi
+if ! grep -Eq '^SINTU_OWNER_TOTP_SECRET=.{16,}$' .env; then
+  say "Owner mobile OTP is not enrolled. Before Owner login, run: .venv/bin/python scripts/setup_owner_otp.py"
+fi
 
 cat <<EOF
 
