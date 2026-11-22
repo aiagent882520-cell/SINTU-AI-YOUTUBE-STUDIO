@@ -365,12 +365,13 @@ async def admin_access_control(request, call_next):
                 allowed = bool(feature and access_control.has_feature_access(conn, user["id"], feature))
             if not allowed:
                 return JSONResponse(status_code=403, content={"detail": "Owner has not granted this feature to your account."})
-        elif user and not user.get("is_owner") and path.startswith("/earnings"):
+        elif (user and not user.get("is_owner") and not path.startswith("/api/")
+              and path not in {"/", "/login", "/sw.js"} and not path.startswith("/static/")):
             feature = access_control.feature_for_path(path)
             with db() as conn:
                 allowed = bool(feature and access_control.has_feature_access(conn, user["id"], feature))
             if not allowed:
-                return JSONResponse(status_code=403, content={"detail": "Owner has not granted this feature to your account."})
+                return JSONResponse(status_code=403, content={"detail": "Owner has not granted this page's feature to your account."})
         if request.method not in {"GET", "HEAD", "OPTIONS"} and path != "/api/auth/logout" and user and user.get("role") == "viewer":
             return JSONResponse(status_code=403, content={"detail": "Viewer role is read-only."})
         if request.method in {"PUT", "PATCH", "DELETE"} and user and user.get("role") == "editor":
