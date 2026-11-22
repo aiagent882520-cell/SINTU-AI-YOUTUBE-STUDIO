@@ -47,6 +47,7 @@ from .policy import paid_upgrades_allowed, production_actions_allowed, external_
 from .blender_renderer import BLENDER_DIR, blender_status, render_scene, BlenderUnavailable, BlenderRenderFailed
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
+from . import principal_ai_council
 from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, verify_publishable_mp4, RendererUnavailable, RenderFailed, OUTPUT_DIR
 from .format_rendering import all_format_render_profiles, format_render_profile
 from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable, VoiceGenerationFailed, AUDIO_DIR
@@ -740,6 +741,17 @@ class ProviderSettingsInput(BaseModel):
     selected_provider: str = Field(pattern=r"^(auto|local|openai|gemini|deepseek|claude)$")
 
 
+class PrincipalAICouncilDecisionInput(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    decision_type: str = Field(pattern=r"^(major|security|architecture|production_release|paid_action|public_publish|external_data_sharing|code_integration)$")
+    context: str = Field(min_length=1, max_length=12000)
+
+
+class PrincipalAIOwnerApprovalInput(BaseModel):
+    approved: bool
+    note: str = Field(default="", max_length=4000)
+
+
 @app.get("/api/admin/provider-settings")
 def admin_provider_settings():
     selected = _get_app_setting("selected_provider", os.getenv("AI_PROVIDER", "local").lower())
@@ -763,6 +775,71 @@ def update_admin_provider_settings(payload: ProviderSettingsInput):
         raise HTTPException(status_code=400, detail=f"{payload.selected_provider} API key server par configured nahi hai.")
     _set_app_setting("selected_provider", payload.selected_provider)
     return admin_provider_settings()
+
+
+
+
+def _require_principal_ai_owner(request: Request) -> str:
+    user = getattr(request.state, "user", None) or {}
+    username = str(user.get("username") or "")
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Owner account required.")
+    if _auth_required() and username != os.getenv("SINTU_ADMIN_USERNAME", "admin").strip():
+        raise HTTPException(status_code=403, detail="Only the configured Owner account may control the Principal AI Council.")
+    return username or "local"
+
+
+@app.get("/api/admin/principal-ai/council/status")
+def principal_ai_council_status(request: Request):
+    owner = _require_principal_ai_owner(request)
+    with db() as conn:
+        principal_ai_council.ensure_schema(conn)
+        audit = principal_ai_council.verify_audit_chain(conn, owner)
+    return {**principal_ai_council.council_status(), "audit_chain": audit}
+
+
+@app.post("/api/admin/principal-ai/council/decisions", status_code=201)
+def principal_ai_council_create_decision(payload: PrincipalAICouncilDecisionInput, request: Request):
+    owner = _require_principal_ai_owner(request)
+    try:
+        with db() as conn:
+            return principal_ai_council.run_council_decision(
+                conn, owner, payload.title, payload.context, payload.decision_type
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
+@app.get("/api/admin/principal-ai/council/decisions")
+def principal_ai_council_list_decisions(request: Request, limit: int = Query(default=50, ge=1, le=100)):
+    owner = _require_principal_ai_owner(request)
+    with db() as conn:
+        return {"decisions": principal_ai_council.list_decisions(conn, owner, limit)}
+
+
+@app.get("/api/admin/principal-ai/council/decisions/{decision_id}")
+def principal_ai_council_get_decision(decision_id: str, request: Request):
+    owner = _require_principal_ai_owner(request)
+    with db() as conn:
+        decision = principal_ai_council.get_decision(conn, owner, decision_id)
+    if not decision:
+        raise HTTPException(status_code=404, detail="Council decision not found.")
+    return {"decision": decision}
+
+
+@app.post("/api/admin/principal-ai/council/decisions/{decision_id}/owner-approval")
+def principal_ai_council_owner_approval(decision_id: str, payload: PrincipalAIOwnerApprovalInput, request: Request):
+    owner = _require_principal_ai_owner(request)
+    try:
+        with db() as conn:
+            decision = principal_ai_council.owner_approve_decision(
+                conn, owner, owner, decision_id, payload.approved, payload.note
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    if not decision:
+        raise HTTPException(status_code=404, detail="Council decision not found.")
+    return {"decision": decision}
 
 
 @app.get("/api/admin/integrations")
