@@ -54,7 +54,7 @@ _ROLE_STAGE_RULES = (
     ("character_bible", ("character designer", "character artist", "character consistency")),
     ("visual_development", ("visual effects artist", "image generator", "visual designer", "art director")),
     ("generation", ("ai video generator", "animation director", "animator", "stop motion", "compositor")),
-    ("audio", ("voice generator", "music composer", "sound designer", "audio engineer")),
+    ("audio", ("voice generator", "voice artist", "voice actor", "narrator", "music composer", "sound designer", "audio engineer")),
     ("editing", ("video editor", "editing specialist", "motion graphics editor")),
     ("localization", ("subtitle creator", "localization", "translator", "caption specialist")),
     ("branding", ("thumbnail designer", "title generator", "description writer", "hashtag", "tag expert", "ctr optimizer")),
