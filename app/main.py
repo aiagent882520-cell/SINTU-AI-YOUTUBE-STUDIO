@@ -5681,7 +5681,6 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
     if run.get("status") != "completed" or not isinstance(run.get("result"), dict):
         raise HTTPException(status_code=409, detail="Production package must pass all builder/checker/reviewer gates first.")
     # The AI Owner Agent recommendation cannot approve the human Owner gate.
-    _approve_owner_review_for_media(run_id, owner, run)
     research_record = None
     if run.get("format_id") in DOCUMENTARY_FORMAT_IDS:
         try:
@@ -5729,6 +5728,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
     if payload.fps not in {24, 30, 60} or payload.quality not in {"standard", "high", "maximum"}:
         raise HTTPException(status_code=400, detail="Unsupported FPS or render quality.")
     try:
+        _approve_owner_review_for_media(run_id, owner, run)
         transition_owner_media_stage(
             run_id, "render", "running", owner_username=owner,
         )
@@ -5896,7 +5896,6 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput, 
         raise HTTPException(status_code=404, detail="Production run not found.")
     if run["status"] != "completed":
         raise HTTPException(status_code=409, detail="Production run must pass all builder/checker and final reviewer gates before rendering.")
-    _approve_owner_review_for_media(run_id, owner, run)
     render_stage = next(
         (stage for stage in run.get("pipeline_stages", []) if stage.get("stage_id") == "render"),
         None,
@@ -5908,6 +5907,7 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput, 
     if not payload.image_ids and not payload.video_ids and not payload.timeline and not payload.timeline_items:
         raise HTTPException(status_code=400, detail="Final production render requires supplied scene images, AI video clips or a mixed media timeline; scene descriptions alone are not visuals.")
     try:
+        _approve_owner_review_for_media(run_id, owner, run)
         transition_owner_media_stage(run_id, "render", "running", owner_username=owner)
     except (ValueError, PermissionError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
