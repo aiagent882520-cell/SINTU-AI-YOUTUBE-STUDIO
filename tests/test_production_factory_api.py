@@ -113,6 +113,8 @@ def test_factory_health_reports_host_capabilities_without_secrets(monkeypatch):
     result = main.production_factory_health(object())
     assert result["master_brain"]["local"]["model_available"] is True
     assert result["engines"]["image"]["local_available"] is True
+    assert result["engines"]["image"]["comfyui_available"] is False
+    assert result["engines"]["image"]["engine"] == "Procedural"
     assert result["engines"]["voice"]["available"] is False
     assert result["policy"]["paid_auto_activation"] is False
     assert result["policy"]["publishing_enabled"] is False
