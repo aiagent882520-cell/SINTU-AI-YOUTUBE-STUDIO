@@ -451,6 +451,20 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
             .getWorkInfosForUniqueWorkLiveData("sintu-video-download-$videoId")
     }.observeAsState(initial = emptyList())
     val currentVideoDownload = videoDownloadWork.value.firstOrNull()
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        try {
+            VideoDownloadWorker.enqueue(context, videoId)
+            notice = if (granted) {
+                "MP4 background download queued. Android foreground notification active rahegi."
+            } else {
+                "Notification permission denied. Download phir bhi background mein chalega; active transfer Android task manager mein dikhega."
+            }
+        } catch (error: Exception) {
+            notice = error.message ?: "MP4 download could not be queued."
+        }
+    }
     val videoDownloadActive = currentVideoDownload?.state?.let {
         it == WorkInfo.State.ENQUEUED || it == WorkInfo.State.BLOCKED || it == WorkInfo.State.RUNNING
     } == true
@@ -626,11 +640,20 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
         if (videoId.isNotBlank()) {
             Button(
                 onClick = {
-                    try {
-                        VideoDownloadWorker.enqueue(context, videoId)
-                        notice = "MP4 background download queue mein add ho gaya. App band hone par bhi WorkManager ise continue/retry karega."
-                    } catch (error: Exception) {
-                        notice = error.message ?: "MP4 download could not be queued."
+                    val queueDownload = {
+                        try {
+                            VideoDownloadWorker.enqueue(context, videoId)
+                            notice = "MP4 background download queue mein add ho gaya. Android foreground notification active rahegi."
+                        } catch (error: Exception) {
+                            notice = error.message ?: "MP4 download could not be queued."
+                        }
+                    }
+                    if (android.os.Build.VERSION.SDK_INT >= 33 &&
+                        context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                    ) {
+                        notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        queueDownload()
                     }
                 },
                 enabled = !busy && !videoDownloadActive && downloadedUri.isBlank(),
