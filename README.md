@@ -24,6 +24,8 @@ pkg install -y curl && curl -fsSL https://raw.githubusercontent.com/aiagent88252
 
 The installer is free/local-first, safe to rerun, preserves existing project data and `.env`, creates an isolated Python environment, installs Termux media dependencies, checks the app and starts it on `http://127.0.0.1:8000`. Save the first-run admin password printed in Termux. See [Termux installation details](docs/TERMUX_ONE_COMMAND.md).
 
+After installation, enroll the Owner's mobile authenticator once with `.venv/bin/python scripts/setup_owner_otp.py` before Owner login. See [Owner feature access and OTP setup](docs/OWNER_FEATURE_ACCESS_CONTROL.md).
+
 ## Persistent AI Assistant conversations
 
 The dashboard includes a text-chat panel backed by persistent SQLite conversations. Authenticated users can create, list, read, rename, delete and continue their own conversations. Each message uses the existing local-first provider gateway and a bounded recent-history context. Provider-unavailable and generation-failure states are saved explicitly; they are not reported as successful replies.
