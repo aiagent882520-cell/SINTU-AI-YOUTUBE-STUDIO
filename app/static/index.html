@@ -210,11 +210,11 @@
       <div id="agentSystemRuns" class="admin-list" aria-live="polite">Loading recent runs…</div>
     </section>
     <section class="panel" id="adminPanel" hidden>
-      <div class="panel-head"><div><h2>Security & User Management</h2><p>Admin-only: team accounts, access roles aur security activity.</p></div><button id="adminRefresh" class="secondary" type="button">Refresh</button></div>
+      <div class="panel-head"><div><h2>Owner Control Panel</h2><p>Owner-only: Admin/User accounts, per-feature permissions, access revoke aur security activity.</p></div><button id="adminRefresh" class="secondary" type="button">Refresh</button></div>
       <form id="adminUserForm" class="admin-user-form">
         <div><label for="newUsername">New username</label><input id="newUsername" minlength="3" maxlength="40" pattern="[A-Za-z0-9_.-]+" required placeholder="team_member"></div>
         <div><label for="newPassword">Temporary password (12+ characters)</label><input id="newPassword" type="password" minlength="12" maxlength="256" required autocomplete="new-password"></div>
-        <div><label for="newRole">Access role</label><select id="newRole"><option value="viewer">Viewer — read only</option><option value="editor">Editor — create and edit</option><option value="admin">Admin — full access</option></select></div>
+        <div><label for="newRole">Access role</label><select id="newRole"><option value="viewer">Viewer — read only</option><option value="editor">Editor — create and edit</option><option value="admin">Admin — Owner-granted features only</option></select></div>
         <button type="submit">Create User</button>
       </form>
       <p id="adminNotice" class="muted" role="status" aria-live="polite"></p>
@@ -224,7 +224,7 @@
       <div class="panel-head"><div><h3>Backup & Recovery</h3><p>Database aur generated media ka secure backup banayein. Secrets aur .env archive mein include nahi hote.</p></div><button id="adminBackupRefresh" class="secondary" type="button">Refresh backups</button></div>
       <div class="actions"><button id="adminBackupCreate" type="button">Create verified backup</button></div>
       <div id="adminBackupHealth" class="integration-cards" aria-live="polite"></div>
-      <p id="adminBackupNotice" class="muted" role="status" aria-live="polite">Admin-only backup controls. Maximum five recent archives.</p>
+      <p id="adminBackupNotice" class="muted" role="status" aria-live="polite">Owner-only backup controls. Maximum five recent archives.</p>
       <div id="adminBackups" class="admin-list" aria-live="polite">Loading backups…</div>
     </section>
     <section class="panel" id="providerAdminPanel" hidden data-feature="ai_settings">
