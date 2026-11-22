@@ -28,10 +28,10 @@ Request JSON:
 The response contains an ordered 21-stage plan: intake, planning, research, fact-check,
 strategy, script, storyboard, character bible, visual development, generation, audio,
 editing, localization, branding, quality, Owner review, render, package, publishing,
-analytics/earnings and learning. Planning
-does not enqueue work or perform external actions. The 21-stage map is currently
-planning-only; actual runs still use the existing durable specialist/checker worker,
-not yet a stage-by-stage executor. Each new run now persists an ordered 21-row
+analytics/earnings and learning. Planning does not enqueue work or perform external actions. During
+actual runs, existing specialist/checker roles are mapped to applicable stage
+checkpoints through quality; dedicated media and post-production stage executors
+remain separate follow-up work. Each new run now persists an ordered 21-row
 stage ledger in the runtime SQLite database, including department, approval policy,
 status, evidence, issues and timestamps. `GET /api/production/runs/{run_id}` returns the full Owner-scoped ledger; the Factory run-details panel displays all 21 rows, while the recent-runs summary exposes only stage counts by status. The ledger has fenced worker completion,
 evidence-required completion and explicit Owner gates for Owner review/publishing.
