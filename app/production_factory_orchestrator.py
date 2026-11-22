@@ -11,20 +11,33 @@ from typing import Any
 from .provider_registry import list_providers
 from .policy import paid_upgrades_allowed as _paid_upgrades_allowed
 
-PIPELINE_VERSION = "1.0"  # Stable contract version for persisted/client-visible plans.
+PIPELINE_VERSION = "2.0"  # 21-stage planning contract; planning never starts execution.
 
+# The production lifecycle is intentionally decomposed into small, auditable gates.
+# Character identity and visual development are separate so continuity can be checked
+# before expensive generation. Owner review precedes final rendering and publication.
 _STAGE_DEFINITIONS = (
     ("intake", "Brief and format validation", "planning", (), "automatic"),
+    ("planning", "Scope, deliverables, constraints and acceptance criteria", "planning", ("planning", "text"), "automatic"),
     ("research", "Topic and source research", "research", ("web_research", "research"), "automatic"),
-    ("strategy", "Audience, angle and content strategy", "strategy", ("planning", "text"), "automatic"),
-    ("writing", "Script, storyboard and metadata", "writing", ("script", "text"), "automatic"),
-    ("visuals", "Thumbnail, images and visual assets", "visuals", ("image",), "automatic"),
-    ("audio", "Hindi voice, music and sound design", "audio", ("text_to_speech", "audio"), "automatic"),
-    ("assembly", "Video edit, captions and render", "assembly", ("video", "transcode"), "automatic"),
-    ("quality", "Independent visual, audio and policy checks", "quality", ("quality_check", "analysis"), "automatic"),
-    ("owner_review", "Owner review of final deliverables", "approval", (), "owner_required"),
-    ("publishing", "YouTube and social publishing", "publishing", (), "owner_required"),
-    ("analytics", "Performance and earnings analysis", "analytics", ("business_analytics",), "automatic"),
+    ("fact_check", "Evidence review and claim verification", "compliance", ("research", "analysis"), "automatic"),
+    ("strategy", "Audience, angle, channel and content strategy", "strategy", ("planning", "text"), "automatic"),
+    ("script", "Narration, dialogue and production copy", "writing", ("script", "text"), "automatic"),
+    ("storyboard", "Shot list, scene order and timing", "preproduction", ("script", "planning"), "automatic"),
+    ("character_bible", "Character identity, voice and continuity rules", "preproduction", ("planning", "image"), "automatic"),
+    ("visual_development", "Art direction, locations, props and visual references", "visuals", ("image", "3d", "painting"), "automatic"),
+    ("generation", "Scene images, clips, animation and graphics", "generation", ("image", "video_generation", "animation"), "automatic"),
+    ("audio", "Hindi voice, music, ambience and sound effects", "audio", ("text_to_speech", "audio", "licensed_music", "sound_effects"), "automatic"),
+    ("editing", "Timeline assembly, transitions and audio mix", "editing", ("video_editing", "video", "transcode"), "automatic"),
+    ("localization", "Subtitles, captions, translation and language variants", "localization", ("speech_to_text", "text_to_speech", "text"), "automatic"),
+    ("branding", "Watermark, title cards, thumbnail and channel identity", "branding", ("thumbnail", "social_graphics"), "automatic"),
+    ("quality", "Independent visual, audio, factual and policy checks", "quality", ("quality_check", "analysis", "browser_testing"), "automatic"),
+    ("owner_review", "Owner review and approval of final creative package", "approval", (), "owner_required"),
+    ("render", "Final export at a verified resolution and codec", "rendering", ("video", "transcode"), "automatic"),
+    ("package", "Manifest, metadata, captions and delivery bundle", "delivery", ("transcode", "documents"), "automatic"),
+    ("publishing", "YouTube and social publishing after per-action approval", "publishing", (), "owner_required"),
+    ("analytics_earnings", "Performance, genuine earnings and cost analysis", "analytics", ("business_analytics", "analysis"), "automatic"),
+    ("learning", "Evidence-backed retrospectives and workflow improvement", "learning", ("analysis", "planning"), "automatic"),
 )
 
 # Only capabilities supplied by a provider that is already part of this repository's
@@ -35,10 +48,6 @@ _RUNTIME_STATUSES = frozenset({
     "adapter_available_credentials_optional",
     "integrated_test_dependency",
 })
-
-
-def _provider_index(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    return {str(row.get("id")): row for row in rows if isinstance(row, dict) and row.get("id")}
 
 
 def _candidate_providers(capability: str, rows: list[dict[str, Any]]) -> list[dict[str, str]]:
@@ -63,7 +72,7 @@ def build_pipeline_plan(
     *,
     providers: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Build a transparent, non-executing production plan."""
+    """Build a transparent, non-executing 21-stage production plan."""
     clean_topic = (topic or "").strip()
     clean_format = (format_id or "").strip()
     if not clean_topic or len(clean_topic) > 5000:
@@ -103,6 +112,7 @@ def build_pipeline_plan(
 
     return {
         "pipeline_version": PIPELINE_VERSION,
+        "pipeline_stage_count": len(stages),
         "topic": clean_topic,
         "format_id": clean_format,
         "execution_started": False,
@@ -114,7 +124,8 @@ def build_pipeline_plan(
         "stages": stages,
         "notice": (
             "This is a plan, not a live health check or execution. Provider catalogue entries "
-            "do not prove installation, credentials, licensing, capacity or availability."
+            "do not prove installation, credentials, licensing, capacity or availability. "
+            "Each stage must pass its own runtime checks before execution."
         ),
     }
 
