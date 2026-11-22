@@ -29,8 +29,10 @@ The response contains an ordered 21-stage plan: intake, planning, research, fact
 strategy, script, storyboard, character bible, visual development, generation, audio,
 editing, localization, branding, quality, Owner review, render, package, publishing,
 analytics/earnings and learning. Planning
-does not enqueue work or perform external actions. Provider matches are candidates,
-not installation or health attestations.
+does not enqueue work or perform external actions. The 21-stage map is currently
+planning-only; actual runs still use the existing durable specialist/checker worker,
+not a persisted stage-by-stage executor. Provider matches are candidates, not
+installation or health attestations.
 
 ## Monitor recent runs
 
