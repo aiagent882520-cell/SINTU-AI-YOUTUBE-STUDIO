@@ -5948,6 +5948,7 @@ def production_factory_runs(request: Request, limit: int = 20):
             "pipeline_stage_count": len(stage_rows),
             "pipeline_stage_status": stage_status_counts,
             "pipeline_stage_execution_implemented": False,
+            "pipeline_stage_role_dispatch_integrated": bool(run.get("pipeline_stage_role_dispatch_integrated", True)),
         })
     return {
         "runs": summaries,
