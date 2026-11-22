@@ -221,6 +221,16 @@ def test_factory_health_dashboard_distinguishes_local_from_remote_engines():
     assert "Remote provider configuration does not count as local readiness" in source
 
 
+def test_factory_run_details_show_the_persisted_pipeline_ledger():
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[1] / "app" / "static" / "factory.js"
+    source = script.read_text(encoding="utf-8")
+    assert "21-stage pipeline ledger" in source
+    assert "run.pipeline_stages||[]" in source
+    assert "automatic stage-by-stage execution is not wired yet" in source
+
+
 def test_factory_dashboard_labels_the_live_stage_count():
     from pathlib import Path
 
