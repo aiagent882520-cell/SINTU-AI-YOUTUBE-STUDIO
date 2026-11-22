@@ -12,6 +12,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import java.io.IOException
+import java.util.concurrent.CancellationException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -42,6 +43,8 @@ class VideoDownloadWorker(appContext: Context, params: WorkerParameters) :
         } catch (error: IOException) {
             if (runAttemptCount < MAX_RETRIES) Result.retry()
             else Result.failure(workDataOf(KEY_ERROR to (error.message ?: "Network download failed.").take(400)))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
             Result.failure(workDataOf(KEY_ERROR to (error.message ?: "MP4 download failed.").take(400)))
         }
