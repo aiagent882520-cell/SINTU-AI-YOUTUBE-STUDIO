@@ -1327,6 +1327,7 @@ def test_admin_auth_requires_credentials_and_protects_dashboard(tmp_path, monkey
     assert protected.headers["location"] == "/login"
     assert client.get("/api/tasks").status_code == 401
     assert client.get("/api/health").status_code == 200
+    assert client.get("/sw.js").status_code == 200
     assert client.post("/api/auth/login", json={"username": "owner", "password": "wrong-password"}).status_code == 401
     login = client.post("/api/auth/login", json={"username": "owner", "password": "a-strong-test-password"})
     assert login.status_code == 200
