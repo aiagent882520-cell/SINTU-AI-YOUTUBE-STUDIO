@@ -1007,7 +1007,7 @@ def compact_forensic_summary(report: dict) -> dict:
                 "black": metrics.get("black_frame_count"),
                 "pct": metrics.get("black_frame_percentage"),
                 "mean": metrics.get("mean_black_pixel_percentage"),
-                "pblack": metrics.get("pblack_values", [])[:30],
+                "pblack": metrics.get("pblack_values", [])[:12],
                 "err": str(item.get("blackframe_error", ""))[:60],
             },
             "samples": [
