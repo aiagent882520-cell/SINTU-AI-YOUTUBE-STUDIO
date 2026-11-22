@@ -644,6 +644,9 @@ def test_stale_worker_lease_is_recovered_and_old_worker_is_fenced(tmp_path, monk
     run = runtime.create_run("youtube-shorts", "recover stale worker", "alice")
     assert runtime._claim_run(run["id"], "alice") is True
     old_token = runtime._worker_token(run["id"], "alice")
+    runtime.transition_pipeline_stage(
+        run["id"], "intake", "running", owner_username="alice", worker_token=old_token,
+    )
     expired = (datetime.now(timezone.utc) - timedelta(seconds=10)).isoformat()
     with sqlite3.connect(database) as conn:
         conn.execute("UPDATE production_runs SET lease_expires_at=? WHERE id=?", (expired, run["id"]))
@@ -652,6 +655,7 @@ def test_stale_worker_lease_is_recovered_and_old_worker_is_fenced(tmp_path, monk
     recovered = runtime.get_run(run["id"], "alice")
     assert recovered["status"] == "paused"
     assert recovered["worker_token"] is None
+    assert recovered["pipeline_stages"][0]["status"] == "paused"
     with pytest.raises(runtime.ProductionRunCancelled):
         runtime._save_step(run["id"], 1, "Script Writer", "builder", "completed",
                            "prompt", "stale output", worker_token=old_token)
