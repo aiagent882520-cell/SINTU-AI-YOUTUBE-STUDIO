@@ -5639,19 +5639,8 @@ def _scene_prompts_from_deliverables(deliverables: dict) -> list[str]:
     return []
 
 
-@app.post("/api/production/runs/{run_id}/produce-media")
-def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, request: Request):
-    """Generate local scene images, Hindi voice, original music and a verified MP4 for an approved run."""
-    if not re.fullmatch(r"[a-f0-9]{32}", run_id):
-        raise HTTPException(status_code=400, detail="Invalid production run ID.")
-    owner = _production_project_owner(request)
-    run = get_production_run(run_id, owner)
-    if not run:
-        raise HTTPException(status_code=404, detail="Production run not found.")
-    if run.get("status") != "completed" or not isinstance(run.get("result"), dict):
-        raise HTTPException(status_code=409, detail="Production package must pass all builder/checker/reviewer gates first.")
-    # This authenticated Owner action is the explicit approval checkpoint before
-    # local media generation; the AI Owner Agent recommendation cannot approve it.
+def _approve_owner_review_for_media(run_id: str, owner: str, run: dict) -> None:
+    """Record the authenticated Owner's explicit approval before a local render action."""
     owner_review = next(
         (stage for stage in run.get("pipeline_stages", []) if stage.get("stage_id") == "owner_review"),
         None,
@@ -5662,7 +5651,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         try:
             transition_pipeline_stage(
                 run_id, "owner_review", "awaiting_owner", owner_username=owner,
-                issues=["Authenticated Owner initiated local media generation."],
+                issues=["Authenticated Owner initiated a local media action."],
             )
         except (ValueError, PermissionError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from None
@@ -5678,6 +5667,21 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
             raise HTTPException(status_code=409, detail=str(exc)) from None
     elif owner_review.get("status") != "completed":
         raise HTTPException(status_code=409, detail="Owner Review must be explicitly approved before media generation.")
+
+
+@app.post("/api/production/runs/{run_id}/produce-media")
+def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, request: Request):
+    """Generate local scene images, Hindi voice, original music and a verified MP4 for an approved run."""
+    if not re.fullmatch(r"[a-f0-9]{32}", run_id):
+        raise HTTPException(status_code=400, detail="Invalid production run ID.")
+    owner = _production_project_owner(request)
+    run = get_production_run(run_id, owner)
+    if not run:
+        raise HTTPException(status_code=404, detail="Production run not found.")
+    if run.get("status") != "completed" or not isinstance(run.get("result"), dict):
+        raise HTTPException(status_code=409, detail="Production package must pass all builder/checker/reviewer gates first.")
+    # The AI Owner Agent recommendation cannot approve the human Owner gate.
+    _approve_owner_review_for_media(run_id, owner, run)
     research_record = None
     if run.get("format_id") in DOCUMENTARY_FORMAT_IDS:
         try:
