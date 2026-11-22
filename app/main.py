@@ -59,7 +59,7 @@ from .music_generator import generate_music, music_status, MusicUnavailable, Mus
 from .video_generator import generate_video, video_status, VideoUnavailable, VideoGenerationFailed, AI_VIDEO_DIR
 from .media_provenance import write_render_manifest
 from .publishing_quality_gate import PublishingQualityError, require_publishable_provenance
-from .production_runtime import create_run as create_production_run, get_run as get_production_run, list_runs as list_production_runs, execute_run as execute_production_run, attach_render_result, recover_interrupted_runs, request_cancel as cancel_production_run, list_run_events as list_production_run_events, transition_pipeline_stage
+from .production_runtime import create_run as create_production_run, get_run as get_production_run, list_runs as list_production_runs, execute_run as execute_production_run, attach_render_result, recover_interrupted_runs, request_cancel as cancel_production_run, list_run_events as list_production_run_events, transition_pipeline_stage, transition_owner_media_stage
 from .production_factory_worker import supervisor as production_factory_supervisor
 from .earning_system import router as earning_router, sync_youtube_estimate
 from .security import RequestRateLimiter, client_address_allowed, same_origin_request
@@ -5724,6 +5724,12 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=400, detail="Unsupported output resolution profile.")
     if payload.fps not in {24, 30, 60} or payload.quality not in {"standard", "high", "maximum"}:
         raise HTTPException(status_code=400, detail="Unsupported FPS or render quality.")
+    try:
+        transition_owner_media_stage(
+            run_id, "render", "running", owner_username=owner,
+        )
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
     created_images, audio_id, music_id = [], None, None
     try:
         if not use_procedural_2d:
@@ -5817,6 +5823,18 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
             raise RenderFailed("Could not persist the render provenance manifest; the MP4 result is withheld.") from exc
         rendered["provenance_manifest"] = manifest["manifest_path"]
         updated = attach_render_result(run_id, rendered, owner)
+        transition_owner_media_stage(
+            run_id, "render", "completed", owner_username=owner,
+            evidence=f"Verified MP4 {rendered.get('video_id', '')}; provenance manifest {manifest['manifest_path']}; quality report PASS.",
+        )
+        transition_owner_media_stage(
+            run_id, "package", "running", owner_username=owner,
+        )
+        transition_owner_media_stage(
+            run_id, "package", "completed", owner_username=owner,
+            evidence=f"Owner-scoped run result, verified MP4 and provenance manifest attached: {manifest['manifest_path']}.",
+        )
+        updated = get_production_run(run_id, owner)
         return {
             "run_id": run_id, "status": updated["status"],
             "generated_images": created_images, "voiceover": voice_result,
@@ -5839,6 +5857,21 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         # Failed attempts must not leave a collection of orphaned partial assets.
         import sys
         if sys.exc_info()[0] is not None:
+            for stage_id in ("package", "render"):
+                try:
+                    current_run = get_production_run(run_id, owner)
+                    current_stage = next(
+                        (stage for stage in (current_run or {}).get("pipeline_stages", [])
+                         if stage.get("stage_id") == stage_id),
+                        None,
+                    )
+                    if current_stage and current_stage.get("status") == "running":
+                        transition_owner_media_stage(
+                            run_id, stage_id, "paused", owner_username=owner,
+                            issues=["Local media operation exited before its stage was verified."],
+                        )
+                except (ValueError, PermissionError):
+                    pass
             for image_id in created_images:
                 (IMAGE_DIR / f"{image_id}.jpg").unlink(missing_ok=True)
             if audio_id:
