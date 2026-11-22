@@ -48,6 +48,7 @@ from .blender_renderer import BLENDER_DIR, blender_status, render_scene, Blender
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
 from .provider_registry import list_providers, provider_summary
+from .production_factory_orchestrator import build_pipeline_plan
 from . import principal_ai_council, principal_knowledge_graph
 from . import access_control
 from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, verify_publishable_mp4, RendererUnavailable, RenderFailed, OUTPUT_DIR
@@ -5319,6 +5320,20 @@ def create_subtitles(payload: SubtitleInput):
 def production_factory_providers():
     """Return sanitized capability/provider catalogue; never exposes secrets."""
     return {"summary": provider_summary(), "providers": list_providers()}
+
+
+class ProductionFactoryPlanInput(BaseModel):
+    topic: str = Field(min_length=1, max_length=5000)
+    format_id: str = Field(min_length=1, max_length=80)
+
+
+@app.post("/api/production-factory/plan")
+def production_factory_plan(payload: ProductionFactoryPlanInput):
+    """Build a free-first end-to-end plan without starting workers or external actions."""
+    try:
+        return build_pipeline_plan(payload.topic, payload.format_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
 
 
 @app.get("/api/status")
