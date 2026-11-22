@@ -143,6 +143,16 @@
       panel=document.createElement("section");panel.className="factory-run-details factory-stage";
       const heading=document.createElement("h3");heading.textContent="Run execution details · "+run.status;panel.append(heading);
       const current=document.createElement("p");current.className="factory-meta";current.textContent="Current role: "+(run.current_role||"—")+" · Attempts: "+(run.attempt_count||0);panel.append(current);
+      const pipelineTitle=document.createElement("b");pipelineTitle.textContent="21-stage pipeline ledger";panel.append(pipelineTitle);
+      const pipelineNote=document.createElement("p");pipelineNote.className="factory-meta";
+      pipelineNote.textContent="Persistent stage tracking is active; automatic stage-by-stage execution is not wired yet.";
+      panel.append(pipelineNote);
+      for(const stage of run.pipeline_stages||[]){
+        const row=document.createElement("p");row.className="factory-meta";
+        row.textContent=stage.sequence+" · "+stage.stage_id+" · "+stage.department+" · "+stage.status+
+          (stage.approval==="owner_required"?" · Owner approval required":"");
+        panel.append(row);
+      }
       const stepsTitle=document.createElement("b");stepsTitle.textContent="Specialist and checker steps";panel.append(stepsTitle);
       for(const step of run.steps||[]){
         const row=document.createElement("p");row.className="factory-meta";
