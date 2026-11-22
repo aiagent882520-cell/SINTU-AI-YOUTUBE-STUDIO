@@ -40,6 +40,13 @@ def test_pipeline_stage_transitions_require_evidence_lease_and_owner_approval(tm
     assert runtime._claim_run(run["id"], "owner-a") is True
     token = runtime._worker_token(run["id"], "owner-a")
     runtime.transition_pipeline_stage(
+        run["id"], "intake", "running", owner_username="owner-a", worker_token=token,
+    )
+    runtime.transition_pipeline_stage(
+        run["id"], "intake", "completed", owner_username="owner-a",
+        worker_token=token, evidence="Format and topic validated",
+    )
+    runtime.transition_pipeline_stage(
         run["id"], "planning", "running", owner_username="owner-a", worker_token=token,
     )
     with pytest.raises(runtime.ProductionRunCancelled, match="live fenced worker lease"):
@@ -55,6 +62,9 @@ def test_pipeline_stage_transitions_require_evidence_lease_and_owner_approval(tm
     assert planning["status"] == "completed"
     assert planning["evidence"] == "Acceptance criteria checked"
 
+    with runtime._connect() as conn:
+        conn.execute("UPDATE production_pipeline_stages SET status='completed' WHERE run_id=? AND sequence<16",
+                     (run["id"],))
     runtime.transition_pipeline_stage(
         run["id"], "owner_review", "awaiting_owner", owner_username="owner-a",
     )
@@ -70,6 +80,49 @@ def test_pipeline_stage_transitions_require_evidence_lease_and_owner_approval(tm
     )
     review = next(stage for stage in updated["pipeline_stages"] if stage["stage_id"] == "owner_review")
     assert review["status"] == "completed"
+
+
+def test_pipeline_claiming_is_ordered_and_owner_gates_are_not_auto_approved(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    run = runtime.create_run("youtube-shorts", "Hindi science explainer", "owner-a")
+    assert runtime._claim_run(run["id"], "owner-a") is True
+    token = runtime._worker_token(run["id"], "owner-a")
+
+    first = runtime.claim_next_pipeline_stage(run["id"], owner_username="owner-a", worker_token=token)
+    assert first["stage_id"] == "intake"
+    assert first["status"] == "running"
+    same = runtime.claim_next_pipeline_stage(run["id"], owner_username="owner-a", worker_token=token)
+    assert same["stage_id"] == "intake"
+    runtime.transition_pipeline_stage(
+        run["id"], "intake", "completed", owner_username="owner-a",
+        worker_token=token, evidence="Input contract validated",
+    )
+    second = runtime.claim_next_pipeline_stage(run["id"], owner_username="owner-a", worker_token=token)
+    assert second["stage_id"] == "planning"
+    assert second["status"] == "running"
+
+    with runtime._connect() as conn:
+        conn.execute(
+            "UPDATE production_pipeline_stages SET status='completed' WHERE run_id=? AND sequence<16",
+            (run["id"],),
+        )
+    with runtime._connect() as conn:
+        conn.execute(
+            "UPDATE production_pipeline_stages SET status='pending' WHERE run_id=? AND stage_id='owner_review'",
+            (run["id"],),
+        )
+    owner_gate = runtime.claim_next_pipeline_stage(
+        run["id"], owner_username="owner-a", worker_token=token,
+    )
+    assert owner_gate["stage_id"] == "owner_review"
+    assert owner_gate["status"] == "awaiting_owner"
+    with pytest.raises(PermissionError, match="explicitly awaiting Owner gate"):
+        runtime.transition_pipeline_stage(
+            run["id"], "owner_review", "completed", owner_username="owner-a",
+            evidence="not approved",
+        )
 
 
 def test_pipeline_stage_ledger_is_owner_scoped(tmp_path, monkeypatch):
