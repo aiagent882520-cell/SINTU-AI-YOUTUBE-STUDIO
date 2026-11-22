@@ -40,6 +40,53 @@ _STAGE_DEFINITIONS = (
     ("learning", "Evidence-backed retrospectives and workflow improvement", "learning", ("analysis", "planning"), "automatic"),
 )
 
+# Existing specialist roles are routed into the closest real production stage.
+# Unmapped roles remain explicitly visible to the legacy worker; they are never silently
+# represented as completed pipeline work.
+_ROLE_STAGE_RULES = (
+    ("intake", ("master ai", "brief analyst")),
+    ("planning", ("task manager", "workflow agent", "content planner", "production planner")),
+    ("research", ("web research", "research", "trend detector", "competitor analyst", "keyword research", "topic predictor")),
+    ("fact_check", ("fact checker", "fact-check", "fact check")),
+    ("strategy", ("audience analyst", "channel strategist", "seo strategist", "content strategist")),
+    ("script", ("script writer", "storytelling", "language specialist", "narration director", "dialogue writer")),
+    ("storyboard", ("filmmaking director", "documentary producer", "storyboard", "shot planner")),
+    ("character_bible", ("character designer", "character artist", "character consistency")),
+    ("visual_development", ("visual effects artist", "image generator", "visual designer", "art director")),
+    ("generation", ("ai video generator", "animation director", "animator", "stop motion", "compositor")),
+    ("audio", ("voice generator", "music composer", "sound designer", "audio engineer")),
+    ("editing", ("video editor", "editing specialist", "motion graphics editor")),
+    ("localization", ("subtitle creator", "localization", "translator", "caption specialist")),
+    ("branding", ("thumbnail designer", "title generator", "description writer", "hashtag", "tag expert", "ctr optimizer")),
+    ("quality", ("quality enhancer", "testing & qa", "quality reviewer", "compliance reviewer")),
+)
+
+
+def route_specialist_roles(role_names: list[str]) -> dict[str, Any]:
+    """Route existing format-team roles to stages without inventing missing work."""
+    routed: dict[str, list[str]] = {stage_id: [] for stage_id, *_ in _STAGE_DEFINITIONS}
+    unmapped: list[str] = []
+    for raw_name in role_names:
+        name = str(raw_name or "").strip()
+        normalized = name.casefold()
+        match = next(
+            (stage_id for stage_id, terms in _ROLE_STAGE_RULES
+             if any(term in normalized for term in terms)),
+            None,
+        )
+        if match:
+            routed[match].append(name)
+        else:
+            unmapped.append(name)
+    return {
+        "stages": [
+            {"stage_id": stage_id, "roles": roles, "status": "assigned" if roles else "not_applicable"}
+            for stage_id, roles in routed.items()
+        ],
+        "unmapped_roles": unmapped,
+    }
+
+
 # Only capabilities supplied by a provider that is already part of this repository's
 # runtime may be selected automatically. Optional engines and catalogue-only vendors
 # require a separate installation/license/health verification.
