@@ -446,12 +446,11 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
     val mediaWork = remember(context) {
         WorkManager.getInstance(context).getWorkInfosByTagLiveData(OfflineMediaUploadWorker.TAG)
     }.observeAsState(initial = emptyList())
-    val videoDownloadWork = remember(context) {
-        WorkManager.getInstance(context).getWorkInfosByTagLiveData(VideoDownloadWorker.TAG)
+    val videoDownloadWork = remember(context, videoId) {
+        WorkManager.getInstance(context)
+            .getWorkInfosForUniqueWorkLiveData("sintu-video-download-$videoId")
     }.observeAsState(initial = emptyList())
-    val currentVideoDownload = videoDownloadWork.value.firstOrNull {
-        it.inputData.getString(VideoDownloadWorker.KEY_VIDEO_ID) == videoId
-    }
+    val currentVideoDownload = videoDownloadWork.value.firstOrNull()
     val videoDownloadActive = currentVideoDownload?.state in setOf(
         WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED, WorkInfo.State.RUNNING
     )
