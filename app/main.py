@@ -5830,6 +5830,46 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput, 
             "published": False, "detail": "Final MP4 rendered, provenance recorded and attached. YouTube publishing still requires separate approval."}
 
 
+@app.get("/api/production-factory/runs")
+def production_factory_runs(request: Request, limit: int = 20):
+    """Owner-scoped production dashboard summary; never returns full script or artifact payloads."""
+    if limit < 1 or limit > 100:
+        raise HTTPException(status_code=400, detail="Limit must be between 1 and 100.")
+    owner = _production_project_owner(request)
+    runs = list_production_runs(owner, limit=limit)
+    counts = {"queued": 0, "running": 0, "reviewing": 0, "paused": 0,
+              "blocked": 0, "failed": 0, "completed": 0, "cancelling": 0, "cancelled": 0}
+    summaries = []
+    for run in runs:
+        status = str(run.get("status") or "unknown")
+        if status in counts:
+            counts[status] += 1
+        summaries.append({
+            "run_id": run.get("id"),
+            "status": status,
+            "format_id": run.get("format_id"),
+            "topic": run.get("topic"),
+            "current_role": run.get("current_role"),
+            "created_at": run.get("created_at"),
+            "updated_at": run.get("updated_at"),
+            "attempt_count": run.get("attempt_count", 0),
+            "cancel_requested": bool(run.get("cancel_requested")),
+            "has_result": isinstance(run.get("result"), dict),
+            "step_count": len(run.get("steps") or []),
+        })
+    return {
+        "runs": summaries,
+        "summary": {
+            "returned": len(summaries),
+            "by_status": counts,
+            "active": counts["queued"] + counts["running"] + counts["reviewing"] + counts["cancelling"],
+            "needs_attention": counts["paused"] + counts["blocked"] + counts["failed"],
+        },
+        "publishing_enabled": False,
+        "paid_auto_activation": False,
+    }
+
+
 @app.get("/api/production/runs/{run_id}")
 def production_run_status(run_id: str, request: Request):
     if not re.fullmatch(r"[a-f0-9]{32}", run_id):
