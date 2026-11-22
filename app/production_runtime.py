@@ -991,6 +991,11 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                          error="Independent checker failed after the bounded revision attempt. Run paused for human review.")
                 return
 
+        if active_pipeline_stage and active_pipeline_stage != "quality":
+            complete_pipeline_stage(
+                active_pipeline_stage,
+                "All assigned specialist deliverables passed their independent checkers.",
+            )
         review_results = {}
         for reviewer in REVIEWERS:
             saved_report = _approved_reviewer_report(existing_steps, reviewer)
@@ -1122,6 +1127,13 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 set_run(run_id, "paused", current_role="Owner Agent Checker",
                          error="Owner Agent report failed its independent checker; human review required.")
                 return
+        else:
+            if stage_status("owner_review") == "pending":
+                transition_pipeline_stage(
+                    run_id, "owner_review", "awaiting_owner",
+                    owner_username=owner_username or "local", worker_token=worker_token,
+                    issues=["Human Owner review is required; no Owner Agent was assigned."],
+                )
 
         result = {
             "format": selected,
