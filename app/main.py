@@ -235,7 +235,7 @@ def _totp_code(secret: str, timestamp: float | None = None) -> str:
 
 
 def _verify_owner_otp(secret: str, code: str | None, timestamp: float | None = None) -> bool:
-    if not isinstance(code, str) or not re.fullmatch(r"\\d{6}", code):
+    if not isinstance(code, str) or not re.fullmatch(r"\d{6}", code):
         return False
     now = time.time() if timestamp is None else timestamp
     try:
@@ -671,7 +671,7 @@ def login_page():
 class AdminLoginInput(BaseModel):
     username: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=1, max_length=256)
-    otp_code: str | None = Field(default=None, pattern=r"^\\d{6}$")
+    otp_code: str | None = Field(default=None, pattern=r"^\d{6}$")
 
 
 class AdminUserCreate(BaseModel):
