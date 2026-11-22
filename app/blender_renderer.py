@@ -4,6 +4,7 @@ Accepts validated JSON scene descriptions only; user input is never executed as 
 """
 from __future__ import annotations
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -54,12 +55,21 @@ def validate_scene(title, objects, duration_seconds, resolution, fps):
         location=item.get("location",[0,0,1])
         scale=item.get("scale",[1,1,1])
         color=item.get("color",[0.2,0.45,0.8,1])
-        if not isinstance(location,list) or len(location)!=3 or any(not isinstance(x,(int,float)) or abs(x)>100 for x in location):
-            raise ValueError("Object location must contain 3 numbers within ±100.")
-        if not isinstance(scale,list) or len(scale)!=3 or any(not isinstance(x,(int,float)) or not 0.05<=x<=20 for x in scale):
-            raise ValueError("Object scale must contain 3 numbers between 0.05 and 20.")
-        if not isinstance(color,list) or len(color) not in {3,4} or any(not isinstance(x,(int,float)) or not 0<=x<=1 for x in color):
-            raise ValueError("Object color must contain 3 or 4 normalized values.")
+        if not isinstance(location,list) or len(location)!=3 or any(
+            isinstance(x,bool) or not isinstance(x,(int,float)) or not math.isfinite(x) or abs(x)>100
+            for x in location
+        ):
+            raise ValueError("Object location must contain 3 finite numbers within ±100.")
+        if not isinstance(scale,list) or len(scale)!=3 or any(
+            isinstance(x,bool) or not isinstance(x,(int,float)) or not math.isfinite(x) or not 0.05<=x<=20
+            for x in scale
+        ):
+            raise ValueError("Object scale must contain 3 finite numbers between 0.05 and 20.")
+        if not isinstance(color,list) or len(color) not in {3,4} or any(
+            isinstance(x,bool) or not isinstance(x,(int,float)) or not math.isfinite(x) or not 0<=x<=1
+            for x in color
+        ):
+            raise ValueError("Object color must contain 3 or 4 finite normalized values.")
         cleaned.append({"shape":shape,"name":name,"location":list(location),"scale":list(scale),"color":list(color)})
     return {"title":title.strip(),"objects":cleaned,"duration_seconds":duration_seconds,
             "resolution":resolution,"fps":fps}
