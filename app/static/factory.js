@@ -145,7 +145,7 @@
       const current=document.createElement("p");current.className="factory-meta";current.textContent="Current role: "+(run.current_role||"—")+" · Attempts: "+(run.attempt_count||0);panel.append(current);
       const pipelineTitle=document.createElement("b");pipelineTitle.textContent="21-stage pipeline ledger";panel.append(pipelineTitle);
       const pipelineNote=document.createElement("p");pipelineNote.className="factory-meta";
-      pipelineNote.textContent="Persistent stage tracking is active; automatic stage-by-stage execution is not wired yet.";
+      pipelineNote.textContent="Mapped specialist/checker roles advance applicable stages through quality. Owner Review still needs human approval; render, package, publishing, analytics and learning need separate executors.";
       panel.append(pipelineNote);
       for(const stage of run.pipeline_stages||[]){
         const row=document.createElement("p");row.className="factory-meta";
