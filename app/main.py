@@ -59,7 +59,7 @@ from .music_generator import generate_music, music_status, MusicUnavailable, Mus
 from .video_generator import generate_video, video_status, VideoUnavailable, VideoGenerationFailed, AI_VIDEO_DIR
 from .media_provenance import write_render_manifest
 from .publishing_quality_gate import PublishingQualityError, require_publishable_provenance
-from .production_runtime import create_run as create_production_run, get_run as get_production_run, list_runs as list_production_runs, execute_run as execute_production_run, attach_render_result, recover_interrupted_runs, request_cancel as cancel_production_run, list_run_events as list_production_run_events
+from .production_runtime import create_run as create_production_run, get_run as get_production_run, list_runs as list_production_runs, execute_run as execute_production_run, attach_render_result, recover_interrupted_runs, request_cancel as cancel_production_run, list_run_events as list_production_run_events, transition_pipeline_stage
 from .production_factory_worker import supervisor as production_factory_supervisor
 from .earning_system import router as earning_router, sync_youtube_estimate
 from .security import RequestRateLimiter, client_address_allowed, same_origin_request
@@ -5650,6 +5650,34 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=404, detail="Production run not found.")
     if run.get("status") != "completed" or not isinstance(run.get("result"), dict):
         raise HTTPException(status_code=409, detail="Production package must pass all builder/checker/reviewer gates first.")
+    # This authenticated Owner action is the explicit approval checkpoint before
+    # local media generation; the AI Owner Agent recommendation cannot approve it.
+    owner_review = next(
+        (stage for stage in run.get("pipeline_stages", []) if stage.get("stage_id") == "owner_review"),
+        None,
+    )
+    if not owner_review or owner_review.get("status") in {"blocked", "paused", "running", "skipped"}:
+        raise HTTPException(status_code=409, detail="Owner Review is blocked or unavailable; resolve its blockers before media generation.")
+    if owner_review.get("status") == "pending":
+        try:
+            transition_pipeline_stage(
+                run_id, "owner_review", "awaiting_owner", owner_username=owner,
+                issues=["Authenticated Owner initiated local media generation."],
+            )
+        except (ValueError, PermissionError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+        owner_review["status"] = "awaiting_owner"
+    if owner_review.get("status") == "awaiting_owner":
+        try:
+            transition_pipeline_stage(
+                run_id, "owner_review", "completed", owner_username=owner,
+                evidence="Authenticated Owner explicitly initiated local media generation.",
+                owner_approved=True,
+            )
+        except (ValueError, PermissionError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+    elif owner_review.get("status") != "completed":
+        raise HTTPException(status_code=409, detail="Owner Review must be explicitly approved before media generation.")
     research_record = None
     if run.get("format_id") in DOCUMENTARY_FORMAT_IDS:
         try:
