@@ -42,8 +42,8 @@ args=()
 if [[ "$COMFYUI_DEVICE" == "cpu" ]]; then
   args+=(--cpu)
 else
-  if ! grep -q 'cuda=True' <<<"$device_info"; then
-    echo "GPU unavailable; selecting ComfyUI CPU fallback."
+  if ! grep -Eq 'cuda=True|mps=True' <<<"$device_info"; then
+    echo "CUDA/MPS accelerator unavailable; selecting ComfyUI CPU fallback."
     args+=(--cpu)
   fi
 fi

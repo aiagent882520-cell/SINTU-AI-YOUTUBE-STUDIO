@@ -24,6 +24,6 @@ On a separately managed Linux host that already has ComfyUI and a compatible PyT
 COMFYUI_ROOT="$HOME/ComfyUI" COMFYUI_DEVICE=cpu bash scripts/start_comfyui_cpu.sh
 ```
 
-The launcher verifies the existing checkout and Python executable, prints the installed PyTorch/CUDA/MPS capability, and starts ComfyUI with `--cpu`. With `COMFYUI_DEVICE=auto`, it selects CPU when CUDA is unavailable. It does not install Python packages, download model weights, modify firewall rules, or claim that inference works. A compatible checkpoint and API-format workflow still need to be installed and verified. CPU inference can be extremely slow and memory-intensive; check the model's license and the host's available RAM before use.
+The launcher verifies the existing checkout and Python executable, prints the installed PyTorch/CUDA/MPS capability, and starts ComfyUI with `--cpu`. With `COMFYUI_DEVICE=auto`, it selects CPU only when both CUDA and Apple MPS are unavailable. It does not install Python packages, download model weights, modify firewall rules, or claim that inference works. A compatible checkpoint and API-format workflow still need to be installed and verified. CPU inference can be extremely slow and memory-intensive; check the model's license and the host's available RAM before use.
 
 The default listener is loopback-only (`127.0.0.1:8188`). Change `COMFYUI_LISTEN` only when a separately secured Docker/host network requires it; never expose the unauthenticated ComfyUI port to the public internet. Termux/Android remains unsupported for this model-host setup.
