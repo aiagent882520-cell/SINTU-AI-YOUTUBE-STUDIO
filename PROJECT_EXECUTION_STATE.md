@@ -1,3 +1,15 @@
+# CURRENT EXECUTION CHECKPOINT — 2026-11-22 (verified GitHub state)
+
+- Main HEAD at this checkpoint: `a4d2ed392ae930c94535bd7cda8d0d7d5138a662`.
+- Post-merge main CI run [#44973915032](https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/actions/runs/44973915032) completed **8/8 PASS** after the approved merges.
+- Merged to main: PRs #282, #283, #287, #288, #289 and #290. PR #286 was merged into the Principal AI knowledge-graph feature branch and is included in the combined Principal AI integration PR #285; it is not represented as merged to main yet.
+- Remaining integration PRs at checkpoint time: #279 (documentary research evidence), #284 (four-provider Principal AI Council), and #285 (Council + owner-governed knowledge graph/audit). Their exact-head CI runs were in progress; no PASS is claimed here.
+- PR #277 updates this checkpoint only. This section supersedes stale historical statements below about the repository's open PR count and pre-merge status; older entries remain as historical records.
+- Product/release status remains **INCOMPLETE / NOT PRODUCTION READY**. CI PASS is not physical Android acceptance, live ComfyUI inference, YouTube OAuth/upload proof, or final human-reviewed documentary acceptance.
+- No production deployment, public publishing, paid-service activation, or private-media mutation was performed by these merges.
+
+---
+
 # LIVE EXECUTION CHECKPOINT — 2026-11-21 (runtime + agent catalog follow-up)
 
 - PR #281 is merged at main commit `003de81b440984742ea7dbdbab0ccb77efd22d03`. Its exact-head CI was 8/8 PASS. Post-merge main push CI run `44912974430` passed 8/8 jobs (Python 3.11–3.14, dependency audit, Chromium browser, Docker build, offline video/motion E2E).
