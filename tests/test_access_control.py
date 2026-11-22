@@ -58,3 +58,25 @@ def test_feature_grants_are_explicit_and_revocable():
     assert access_control.list_user_features(conn, user_id) == ["youtube"]
     conn.execute("DELETE FROM user_feature_permissions WHERE user_id=?", (user_id,))
     assert not access_control.has_feature_access(conn, user_id, "youtube")
+
+
+def test_every_registered_route_is_classified_or_explicitly_owner_public():
+    from app import main
+
+    public = {
+        "/", "/login", "/sw.js", "/api/auth/login", "/api/auth/logout",
+        "/api/auth/session", "/api/access/features", "/api/health",
+    }
+    owner_prefixes = (
+        "/api/admin/users", "/api/admin/audit", "/api/admin/backups",
+        "/api/admin/principal-ai", "/api/admin/features",
+    )
+    for route in main.app.routes:
+        path = getattr(route, "path", "")
+        if not path:
+            continue
+        if path in public or path.startswith("/api/termux-bridge/"):
+            continue
+        if any(path == prefix or path.startswith(prefix + "/") for prefix in owner_prefixes):
+            continue
+        assert access_control.feature_for_path(path), f"Unclassified route must fail closed: {path}"
