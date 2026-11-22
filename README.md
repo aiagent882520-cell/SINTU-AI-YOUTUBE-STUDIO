@@ -7,6 +7,7 @@ Free-first, local-first AI creator workspace for planning, producing, reviewing,
 - FastAPI creator dashboard, admin login, responsive PWA foundation and Hindi-first interface.
 - AI production workflows backed by local Ollama or a loopback OpenAI-compatible server (llama.cpp, LocalAI or LM Studio); the Termux bootstrap attempts a RAM/storage-aware Qwen GGUF setup when the Termux package is available; paid providers remain opt-in and locked by policy.
 - 60 video-format catalog, 15 studio-module catalog, specialist/checker role registry and format-aware production runtime.
+- A 21-stage Production Factory planning contract from intake through research, fact-check, creative production, QA, Owner review, render, package, publishing, analytics and learning. This stage map is planning-only; the durable worker still executes specialist/checker roles.
 - Production runs execute specialist and independent checker model calls, persist evidence and PASS/FAIL results, pause on failed checks, and run five final review roles. This is a sequential orchestrated runtime, not 61 always-running independent services.
 - Local media tools and optional integrations: FFmpeg, Blender, ComfyUI and Piper; availability depends on local installation and hardware.
 - Video renderers add the SINTU branding watermark. Final MP4 export supports optional timed SRT subtitle/lyric burn-in through FFmpeg/libass; generated source imagery is kept text-free where the selected image/video engine honors the prompt.
