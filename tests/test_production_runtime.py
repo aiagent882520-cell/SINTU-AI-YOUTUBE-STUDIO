@@ -851,3 +851,39 @@ def test_durable_queue_exposes_only_queued_runs_not_human_paused_work(tmp_path, 
     rows = runtime.list_queued_runs(limit=10)
     assert rows == [{"id": queued["id"], "owner_username": "local"}]
     assert runtime.get_run(paused["id"])["status"] == "paused"
+
+def test_runtime_dispatches_existing_roles_in_stage_order_and_persists_checkpoints(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    monkeypatch.setattr(runtime, "format_team", lambda _format: [
+        {"role_type": "specialist", "name": "Script Writer", "mission": "write the script"},
+        {"role_type": "specialist", "name": "Fact Checker", "mission": "check claims"},
+        {"role_type": "specialist", "name": "Web Research", "mission": "research sources"},
+    ])
+
+    def fake_generate(prompt, workflow, provider):
+        lower = prompt.lower()
+        if "independent quality checker" in lower or "final video production reviewer" in lower:
+            output = '{"decision":"PASS","evidence":["acceptance criteria checked"],"issues":[],"revision_instructions":[]}'
+        else:
+            output = "Approved specialist deliverable."
+        return {"output": output, "provider": "test", "model": "fixture"}
+
+    monkeypatch.setattr(runtime, "generate_text", fake_generate)
+    run = runtime.create_run("youtube-shorts", "भारत के जल स्रोत", "owner")
+    runtime.execute_run(run["id"], "owner")
+    result = runtime.get_run(run["id"], "owner")
+
+    builders = [step["role"] for step in result["steps"] if step["step_type"] == "builder"]
+    assert builders == ["Web Research", "Fact Checker", "Script Writer"]
+    stages = {stage["stage_id"]: stage for stage in result["pipeline_stages"]}
+    assert stages["research"]["status"] == "completed"
+    assert stages["fact_check"]["status"] == "completed"
+    assert stages["script"]["status"] == "completed"
+    assert stages["intake"]["status"] == "skipped"
+    assert stages["quality"]["status"] == "skipped"
+    assert stages["owner_review"]["status"] == "awaiting_owner"
+    assert result["pipeline_stage_role_dispatch_integrated"] is True
+    assert result["pipeline_stage_execution_implemented"] is False
+
