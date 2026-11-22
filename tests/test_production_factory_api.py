@@ -48,7 +48,7 @@ def test_factory_runs_dashboard_is_owner_scoped_and_summarized(monkeypatch):
             "updated_at": "2026-01-01T00:01:00Z",
             "attempt_count": 1,
             "cancel_requested": 0,
-            "result": {"script": "private script content"},
+            "result": {"script": "private script content", "video_rendered": True, "render": {"video_id": "b" * 32}},
             "steps": [{"role": "writer"}],
         }
     ])
@@ -56,6 +56,8 @@ def test_factory_runs_dashboard_is_owner_scoped_and_summarized(monkeypatch):
     assert result["summary"]["returned"] == 1
     assert result["summary"]["by_status"]["completed"] == 1
     assert result["runs"][0]["has_result"] is True
+    assert result["runs"][0]["has_render"] is True
+    assert result["runs"][0]["video_url"] == "/api/videos/" + "b" * 32
     assert "result" not in result["runs"][0]
     assert "script" not in str(result)
     assert result["publishing_enabled"] is False
@@ -176,3 +178,19 @@ def test_produce_media_route_is_owner_feature_gated():
     )
     assert "POST" in route.methods
     assert access_control.feature_for_path("/api/production/runs/" + "a" * 32 + "/produce-media") == "production"
+
+
+
+def test_factory_runs_dashboard_rejects_unsafe_render_video_id(monkeypatch):
+    monkeypatch.setattr(main, "_production_project_owner", lambda request: "owner-1")
+    monkeypatch.setattr(main, "list_production_runs", lambda owner, limit: [{
+        "id": "a" * 32, "status": "completed", "format_id": "educational",
+        "topic": "Hindi science", "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:01:00Z", "attempt_count": 1,
+        "cancel_requested": 0, "result": {
+            "video_rendered": True, "render": {"video_id": "../private-file"}
+        }, "steps": [],
+    }])
+    result = main.production_factory_runs(object(), limit=10)
+    assert result["runs"][0]["has_render"] is False
+    assert result["runs"][0]["video_url"] is None
