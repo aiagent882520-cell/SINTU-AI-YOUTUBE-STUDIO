@@ -4608,3 +4608,20 @@ def test_owner_login_fails_closed_until_mobile_totp_is_enrolled(tmp_path, monkey
     })
     assert response.status_code == 503
     assert "setup_owner_otp.py" in response.json()["detail"]
+
+
+def test_bootstrap_owner_identity_cannot_be_demoted_or_disabled(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "false")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "false")
+    client = client_for_test(tmp_path, monkeypatch)
+    with main.db() as conn:
+        conn.execute("UPDATE admin_users SET role='viewer', is_active=0 WHERE username='owner'")
+    main._ensure_bootstrap_admin()
+    with main.db() as conn:
+        owner = conn.execute("SELECT role,is_active,is_owner FROM admin_users WHERE username='owner'").fetchone()
+    assert owner["role"] == "admin"
+    assert owner["is_active"] == 1
+    assert owner["is_owner"] == 1
