@@ -55,7 +55,7 @@ from .music_generator import generate_music, music_status, MusicUnavailable, Mus
 from .video_generator import generate_video, video_status, VideoUnavailable, VideoGenerationFailed, AI_VIDEO_DIR
 from .media_provenance import write_render_manifest
 from .publishing_quality_gate import PublishingQualityError, require_publishable_provenance
-from .production_runtime import create_run as create_production_run, get_run as get_production_run, list_runs as list_production_runs, execute_run as execute_production_run, attach_render_result, recover_interrupted_runs
+from .production_runtime import create_run as create_production_run, get_run as get_production_run, list_runs as list_production_runs, execute_run as execute_production_run, attach_render_result, recover_interrupted_runs, request_cancel as cancel_production_run, list_run_events as list_production_run_events
 from .earning_system import router as earning_router, sync_youtube_estimate
 from .security import RequestRateLimiter, client_address_allowed, same_origin_request
 from .backup_restore import verify_backup, BackupValidationError, snapshot_database
@@ -5048,6 +5048,39 @@ def start_production_run(payload: ProductionRunInput, background_tasks: Backgrou
             "acceptance_boundary": evidence_validation["acceptance_boundary"],
         } if evidence_validation is not None else None),
     }
+
+
+@app.post("/api/production/runs/{run_id}/cancel")
+def cancel_production_run_endpoint(run_id: str, request: Request):
+    if not re.fullmatch(r"[a-f0-9]{32}", run_id):
+        raise HTTPException(status_code=400, detail="Invalid production run ID.")
+    owner = _production_project_owner(request)
+    run = cancel_production_run(run_id, owner)
+    if not run:
+        raise HTTPException(status_code=404, detail="Production run not found.")
+    return {
+        "run_id": run_id,
+        "status": run["status"],
+        "cancel_requested": bool(run.get("cancel_requested")),
+        "partial_outputs_preserved": True,
+        "detail": (
+            "Cancellation is complete." if run["status"] == "cancelled"
+            else "Cancellation is pending the active model call reaching a safe checkpoint."
+            if run["status"] == "cancelling"
+            else "Run is already terminal; no outputs were changed."
+        ),
+    }
+
+
+@app.get("/api/production/runs/{run_id}/events")
+def production_run_events(run_id: str, request: Request):
+    if not re.fullmatch(r"[a-f0-9]{32}", run_id):
+        raise HTTPException(status_code=400, detail="Invalid production run ID.")
+    owner = _production_project_owner(request)
+    events = list_production_run_events(run_id, owner)
+    if events is None:
+        raise HTTPException(status_code=404, detail="Production run not found.")
+    return {"run_id": run_id, "events": events}
 
 
 @app.get("/api/production/runs/{run_id}/research-evidence")
