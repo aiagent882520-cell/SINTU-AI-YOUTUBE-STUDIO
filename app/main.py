@@ -48,6 +48,7 @@ from .blender_renderer import BLENDER_DIR, blender_status, render_scene, Blender
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
 from .provider_registry import list_providers, provider_summary
+from .production_factory_orchestrator import build_pipeline_plan
 from . import principal_ai_council, principal_knowledge_graph
 from . import access_control
 from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, verify_publishable_mp4, RendererUnavailable, RenderFailed, OUTPUT_DIR
@@ -5315,10 +5316,89 @@ def create_subtitles(payload: SubtitleInput):
     )
 
 
+@app.get("/api/production-factory/health")
+def production_factory_health(request: Request):
+    """Probe configured model/media engines and return a secret-free Owner dashboard snapshot."""
+    _production_project_owner(request)
+    brain = provider_status()
+    image = image_status()
+    voice = voice_status()
+    music = music_status()
+    video = video_status()
+
+    local = brain.get("local") or {}
+    remote = {
+        key: {"configured": bool((brain.get(key) or {}).get("configured")),
+              "model": (brain.get(key) or {}).get("model")}
+        for key in ("openai", "gemini", "deepseek", "claude")
+    }
+    engines = {
+        "image": {
+            "available": bool(image.get("available")),
+            "local_available": bool(image.get("local_available")),
+            "engine": image.get("local_engine"),
+            "comfyui_available": bool(image.get("comfyui_available")),
+            "workflow_configured": bool(image.get("local_workflow_configured")),
+        },
+        "voice": {
+            "available": bool(voice.get("available")),
+            "local_available": bool(voice.get("local_available")),
+            "engine": voice.get("local_engine"),
+            "model_configured": bool(voice.get("local_model_configured")),
+        },
+        "music": {
+            "available": bool(music.get("available")),
+            "local_available": bool(music.get("local_available")),
+            "engine": music.get("local_engine"),
+        },
+        "video": {
+            "available": bool(video.get("available")),
+            "local_available": bool(video.get("local_available")),
+            "engine": video.get("local_engine"),
+            "workflow_configured": bool(video.get("local_workflow_configured")),
+        },
+    }
+    return {
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "master_brain": {
+            "selected": brain.get("selected"),
+            "local": {
+                "configured": bool(local.get("configured")),
+                "service_running": bool(local.get("service_running")),
+                "model_available": bool(local.get("model_available")),
+                "backend": local.get("backend"),
+                "model": local.get("model"),
+            },
+            "optional_remote_providers": remote,
+            "paid_upgrades_allowed": bool(brain.get("paid_upgrades_allowed")),
+        },
+        "engines": engines,
+        "policy": {"free_first": True, "paid_auto_activation": False, "publishing_enabled": False},
+        "notice": "Configured means credentials/settings exist; it does not prove a successful external API call. Local engine checks reflect the current host only.",
+    }
+
+
 @app.get("/api/production-factory/providers")
 def production_factory_providers():
     """Return sanitized capability/provider catalogue; never exposes secrets."""
     return {"summary": provider_summary(), "providers": list_providers()}
+
+
+class ProductionFactoryPlanInput(BaseModel):
+    topic: str = Field(min_length=1, max_length=5000)
+    format_id: str = Field(min_length=1, max_length=80)
+
+
+@app.post("/api/production-factory/plan")
+def production_factory_plan(payload: ProductionFactoryPlanInput):
+    """Build a free-first end-to-end plan without starting workers or external actions."""
+    valid_formats = {item["id"] for item in production_catalog()["formats"]}
+    if payload.format_id not in valid_formats:
+        raise HTTPException(status_code=400, detail="Unknown production format.")
+    try:
+        return build_pipeline_plan(payload.topic, payload.format_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
 
 
 @app.get("/api/status")
@@ -5392,6 +5472,29 @@ def start_production_run(payload: ProductionRunInput, background_tasks: Backgrou
             "human_fact_check_required": True,
             "acceptance_boundary": evidence_validation["acceptance_boundary"],
         } if evidence_validation is not None else None),
+    }
+
+
+@app.post("/api/production-factory/runs")
+def start_production_factory_run(
+    payload: ProductionRunInput,
+    background_tasks: BackgroundTasks,
+    request: Request,
+):
+    """Start the existing persistent specialist/checker pipeline through the factory API."""
+    plan = build_pipeline_plan(payload.topic, payload.format_id)
+    started = start_production_run(payload, background_tasks, request)
+    return {
+        **started,
+        "factory": {
+            "pipeline_version": plan["pipeline_version"],
+            "execution_started": True,
+            "publishing_enabled": False,
+            "free_first": True,
+            "paid_auto_activation": False,
+            "stages": plan["stages"],
+            "next_gate": "Owner review before any external publishing action",
+        },
     }
 
 
@@ -5790,6 +5893,46 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput, 
         raise HTTPException(status_code=409, detail=str(exc)) from None
     return {"run_id": run_id, "status": updated["status"], "render": rendered,
             "published": False, "detail": "Final MP4 rendered, provenance recorded and attached. YouTube publishing still requires separate approval."}
+
+
+@app.get("/api/production-factory/runs")
+def production_factory_runs(request: Request, limit: int = 20):
+    """Owner-scoped production dashboard summary; never returns full script or artifact payloads."""
+    if limit < 1 or limit > 100:
+        raise HTTPException(status_code=400, detail="Limit must be between 1 and 100.")
+    owner = _production_project_owner(request)
+    runs = list_production_runs(owner, limit=limit)
+    counts = {"queued": 0, "running": 0, "reviewing": 0, "paused": 0,
+              "blocked": 0, "failed": 0, "completed": 0, "cancelling": 0, "cancelled": 0}
+    summaries = []
+    for run in runs:
+        status = str(run.get("status") or "unknown")
+        if status in counts:
+            counts[status] += 1
+        summaries.append({
+            "run_id": run.get("id"),
+            "status": status,
+            "format_id": run.get("format_id"),
+            "topic": run.get("topic"),
+            "current_role": run.get("current_role"),
+            "created_at": run.get("created_at"),
+            "updated_at": run.get("updated_at"),
+            "attempt_count": run.get("attempt_count", 0),
+            "cancel_requested": bool(run.get("cancel_requested")),
+            "has_result": isinstance(run.get("result"), dict),
+            "step_count": len(run.get("steps") or []),
+        })
+    return {
+        "runs": summaries,
+        "summary": {
+            "returned": len(summaries),
+            "by_status": counts,
+            "active": counts["queued"] + counts["running"] + counts["reviewing"] + counts["cancelling"],
+            "needs_attention": counts["paused"] + counts["blocked"] + counts["failed"],
+        },
+        "publishing_enabled": False,
+        "paid_auto_activation": False,
+    }
 
 
 @app.get("/api/production/runs/{run_id}")

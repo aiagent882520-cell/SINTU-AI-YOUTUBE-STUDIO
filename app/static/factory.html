@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101827">
+  <title>SINTU Production Factory</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/production_studio.css">
+  <style>
+    .factory-wrap{max-width:1100px;margin:24px auto;padding:0 16px}
+    .factory-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+    .factory-card{background:var(--panel,#172235);border:1px solid var(--border,#334155);border-radius:14px;padding:18px;margin:14px 0}
+    .factory-card h2{margin-top:0}.factory-stage,.factory-run{padding:12px;border:1px solid var(--border,#334155);border-radius:10px;margin:8px 0}
+    .factory-meta{color:var(--muted,#9ca3af);font-size:.9rem}.factory-pill{display:inline-block;border-radius:99px;padding:3px 9px;background:#26364d;font-size:.8rem}
+    .factory-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    .factory-actions button{min-height:42px}.factory-error{color:#ff9d9d}.factory-good{color:#8ee0ae}
+    #factoryHealth,#factoryPlan,#factoryRuns{overflow-wrap:anywhere}
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div><img src="/static/brand-logo.svg" alt="SINTU" style="width:60px;height:48px;object-fit:contain;margin-right:10px"><div><h1>SINTU PRODUCTION FACTORY</h1><p>Master AI · Free-first automation</p></div></div>
+    <div class="actions"><a class="secondary" href="/">Studio Home</a><button id="factoryLogout" class="secondary" type="button">Logout</button></div>
+  </header>
+  <main class="factory-wrap">
+    <section class="hero"><p class="eyebrow">END-TO-END PRODUCTION</p><h2>Idea se <em>Factory Run</em> tak.</h2><p>Plan banayein, existing persistent production worker start karein, aur jobs ki progress monitor karein. Publishing aur paid activation band rahenge.</p></section>
+    <section class="factory-card">
+      <h2>New production run</h2>
+      <label for="factoryTopic">Topic / Brief</label>
+      <textarea id="factoryTopic" rows="4" maxlength="5000" placeholder="Hindi mein video ka topic aur brief likhein"></textarea>
+      <label for="factoryFormat">Production format</label>
+      <select id="factoryFormat"><option value="">Formats loading…</option></select>
+      <div class="factory-actions"><button id="factoryPlan" type="button">Build 11-stage plan</button><button id="factoryStart" type="button" disabled>Start internal production run</button></div>
+      <p id="factoryNotice" role="status" aria-live="polite" class="factory-meta">Server se formats load ho rahe hain…</p>
+      <div id="factoryPlanOutput"></div>
+    </section>
+    <div class="factory-grid">
+      <section class="factory-card"><h2>Live host health</h2><div id="factoryHealth" class="factory-meta">Checking current host…</div><div class="factory-actions"><button id="factoryRefreshHealth" class="secondary" type="button">Refresh health</button></div></section>
+      <section class="factory-card"><h2>Automation policy</h2><ul><li>Local/free-first provider selection</li><li>Paid providers require revenue policy + Owner approval</li><li>External publishing is disabled</li><li>Source media is preserved</li><li>Catalogue entries are not live-health proof</li></ul><p class="factory-meta">Factory run starts the existing internal worker only. It does not publish to YouTube.</p></section>
+    </div>
+    <section class="factory-card"><div class="panel-head"><div><h2>Recent production runs</h2><p class="factory-meta">Owner-scoped persistent worker state</p></div><button id="factoryRefreshRuns" class="secondary" type="button">Refresh runs</button></div><div id="factoryRuns">Loading runs…</div></section>
+  </main>
+  <script src="/static/factory.js" defer></script>
+</body>
+</html>
