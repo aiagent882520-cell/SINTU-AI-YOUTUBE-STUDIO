@@ -5376,6 +5376,12 @@ def production_factory_health(request: Request):
             "paid_upgrades_allowed": bool(brain.get("paid_upgrades_allowed")),
         },
         "engines": engines,
+        "background_worker": {
+            "running": production_factory_supervisor.is_running,
+            "mode": "single in-process worker with persistent queue",
+            "auto_pickup_status": "queued_only",
+            "paused_runs_require_owner_review": True,
+        },
         "policy": {"free_first": True, "paid_auto_activation": False, "publishing_enabled": False},
         "notice": "Configured means credentials/settings exist; it does not prove a successful external API call. Local engine checks reflect the current host only.",
     }
