@@ -99,6 +99,42 @@ def init_runtime_db() -> None:
             FOREIGN KEY(run_id) REFERENCES production_runs(id)
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pipeline_stages_run ON production_pipeline_stages(run_id, sequence)")
+        # Backfill pre-ledger runs without inventing historical stage completion.
+        from .production_factory_orchestrator import _STAGE_DEFINITIONS
+        legacy_runs = conn.execute(
+            """SELECT id,owner_username,status,updated_at FROM production_runs
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM production_pipeline_stages s
+                   WHERE s.run_id=production_runs.id
+               )"""
+        ).fetchall()
+        for legacy in legacy_runs:
+            for sequence, (stage_id, _name, department, _capabilities, approval) in enumerate(_STAGE_DEFINITIONS, 1):
+                if legacy["status"] == "completed" and sequence < 16:
+                    stage_status = "skipped"
+                    issues = ["Legacy run predates stage-level tracking; no per-stage evidence is available."]
+                elif legacy["status"] == "completed" and sequence == 16:
+                    stage_status = "awaiting_owner"
+                    issues = ["Legacy run requires explicit Owner approval before local media generation."]
+                else:
+                    stage_status = "pending"
+                    issues = []
+                conn.execute(
+                    """INSERT INTO production_pipeline_stages
+                       (run_id,sequence,stage_id,department,status,approval,issues_json,updated_at)
+                       VALUES(?,?,?,?,?,?,?,?)""",
+                    (legacy["id"], sequence, stage_id, department, stage_status,
+                     approval, json.dumps(issues, ensure_ascii=False), legacy["updated_at"]),
+                )
+            conn.execute(
+                """INSERT INTO production_run_events
+                   (run_id,owner_username,from_status,to_status,event_type,details,created_at)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (legacy["id"], legacy["owner_username"], legacy["status"], legacy["status"],
+                 "pipeline_ledger_backfilled",
+                 "Legacy run received a 21-stage ledger; historical stage completion was not inferred.",
+                 legacy["updated_at"]),
+            )
 
 
 def _selected_format(format_id: str) -> dict[str, Any] | None:
