@@ -65,6 +65,21 @@ def _stream_signature(metadata: dict) -> list[tuple]:
     return sorted(signature, key=lambda item: (str(item[0]), str(item[1])))
 
 
+def _publish_exclusive(source: Path, destination: Path, expected_sha256: str) -> None:
+    """Copy a completed temporary file without hard links or destination overwrite."""
+    descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(descriptor, "wb") as output, Path(source).open("rb") as incoming:
+            shutil.copyfileobj(incoming, output, length=1024 * 1024)
+            output.flush()
+            os.fsync(output.fileno())
+        if sha256_file(destination) != expected_sha256:
+            raise RuntimeError("Published remux failed SHA-256 verification.")
+    except BaseException:
+        destination.unlink(missing_ok=True)
+        raise
+
+
 def safe_remux(source: Path, destination: Path, *,
                ffmpeg: str | None = None, ffprobe: str | None = None) -> dict:
     """Copy streams into a new MP4, verifying output and source integrity.
@@ -123,9 +138,9 @@ def safe_remux(source: Path, destination: Path, *,
         if sha256_file(source) != original_hash:
             raise RuntimeError("Source checksum changed during remux; output was discarded.")
         output_hash = sha256_file(temporary)
-        # Hard-link publication is atomic and fails if another process created
-        # the destination after the initial existence check (no overwrite).
-        os.link(temporary, destination)
+        # Exclusive creation prevents overwriting a destination, including on
+        # Android/Termux builds where os.link may be unavailable.
+        _publish_exclusive(temporary, destination, output_hash)
         temporary.unlink()
         return {
             "status": "REMUXED_TO_NEW_FILE",
