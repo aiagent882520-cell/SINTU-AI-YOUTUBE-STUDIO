@@ -17,7 +17,7 @@ class VideoDownloadWorkerTest {
 
     @Test
     fun progressPercentageDoesNotOverflowForLargeLongValues() {
-        assertEquals(50, downloadProgressPercent(Long.MAX_VALUE / 2, Long.MAX_VALUE))
+        assertEquals(50, downloadProgressPercent(Long.MAX_VALUE / 2 + 1, Long.MAX_VALUE))
         assertEquals(99, downloadProgressPercent(Long.MAX_VALUE - 1, Long.MAX_VALUE))
         assertEquals(100, downloadProgressPercent(Long.MAX_VALUE, Long.MAX_VALUE))
     }
