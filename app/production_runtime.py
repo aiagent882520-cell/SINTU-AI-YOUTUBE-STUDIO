@@ -577,6 +577,26 @@ def transition_pipeline_stage(
     return get_run(run_id, owner_username)
 
 
+def _pause_active_pipeline_stage(
+    run_id: str,
+    owner_username: str | None,
+    worker_token: str | None,
+    stage_id: str | None,
+    reason: str,
+) -> None:
+    """Persist a resumable checkpoint when a stage executor exits unexpectedly."""
+    if not stage_id or not worker_token:
+        return
+    run = get_run(run_id, owner_username)
+    stage = next((item for item in (run or {}).get("pipeline_stages", [])
+                  if item["stage_id"] == stage_id), None)
+    if stage and stage["status"] == "running":
+        transition_pipeline_stage(
+            run_id, stage_id, "paused", owner_username=owner_username or "local",
+            worker_token=worker_token, issues=[reason[:500]],
+        )
+
+
 def _set_run(run_id: str, status: str, current_role: str | None = None,
              error: str | None = None, result: dict | None = None,
              worker_token: str | None = None) -> bool:
@@ -1174,16 +1194,23 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
     except ProductionRunCancelled:
         _finish_cancel(run_id, owner_username, worker_token)
     except ProductionRunTimeout as exc:
+        _pause_active_pipeline_stage(run_id, owner_username, worker_token,
+                                     locals().get("active_pipeline_stage"), str(exc))
         set_run(run_id, "paused", error=str(exc))
     except (ProviderNotConfigured, ProviderRequestError) as exc:
         if _cancellation_requested(run_id, owner_username, worker_token):
             _finish_cancel(run_id, owner_username, worker_token)
         else:
+            _pause_active_pipeline_stage(run_id, owner_username, worker_token,
+                                         locals().get("active_pipeline_stage"), str(exc))
             set_run(run_id, "blocked", error=str(exc))
     except Exception as exc:
         if _cancellation_requested(run_id, owner_username, worker_token):
             _finish_cancel(run_id, owner_username, worker_token)
         else:
+            _pause_active_pipeline_stage(run_id, owner_username, worker_token,
+                                         locals().get("active_pipeline_stage"),
+                                         f"Runtime error: {type(exc).__name__}")
             set_run(run_id, "failed", error=f"Production runtime error: {type(exc).__name__}")
 
 
