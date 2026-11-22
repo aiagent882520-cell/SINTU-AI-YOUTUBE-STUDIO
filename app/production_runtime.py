@@ -569,6 +569,10 @@ def transition_pipeline_stage(
             return None
         if run["status"] in {"cancelled", "cancelling"} or run["cancel_requested"]:
             raise ProductionRunCancelled("Pipeline stage cannot change after cancellation.")
+        if stage["approval"] == "owner_required" and status == "skipped":
+            raise PermissionError("Owner-gated stages cannot be skipped.")
+        if stage["approval"] == "owner_required" and status == "running":
+            raise PermissionError("Owner-gated stages are not worker-executable.")
         if stage["approval"] == "owner_required" and status == "completed":
             if not owner_approved or stage["status"] != "awaiting_owner":
                 raise PermissionError("An explicitly awaiting Owner gate is required before Owner approval.")
@@ -1241,14 +1245,16 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             "pipeline_dispatch": {
                 "mode": "existing_specialist_checker_roles",
                 "applicable_stage_ids": [
-                    stage["stage_id"] for stage in role_routing["stages"] if stage["roles"]
+                    stage["stage_id"] for stage in role_routing["stages"]
+                    if stage["roles"] or (stage["stage_id"] == "quality" and REVIEWERS)
+                    or (stage["stage_id"] == "research" and research_record)
                 ],
                 "not_applicable_stage_ids": [
                     stage["stage_id"] for stage in role_routing["stages"]
                     if not stage["roles"] and not (stage["stage_id"] == "quality" and REVIEWERS)
                     and not (stage["stage_id"] == "research" and research_record)
                 ],
-                "unmapped_specialist_roles": role_routing["unmapped_roles"],
+                "unmapped_worker_roles": role_routing["unmapped_roles"],
                 "deferred_stage_ids": ["render", "package", "publishing", "analytics_earnings", "learning"],
                 "full_21_stage_execution": False,
             },
