@@ -21,6 +21,14 @@ visuals, audio, assembly, quality, Owner review, publishing and analytics. Plann
 does not enqueue work or perform external actions. Provider matches are candidates,
 not installation or health attestations.
 
+## Monitor recent runs
+
+`GET /api/production-factory/runs?limit=20`
+
+Returns an Owner-scoped dashboard summary of recent runs, grouped by status, with
+topic, format, current role, timestamps, attempts and safe result-presence metadata.
+It deliberately omits full scripts and artifact payloads. The limit is capped at 100.
+
 ## Start an internal production run
 
 `POST /api/production-factory/runs`
