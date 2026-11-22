@@ -202,6 +202,6 @@ def test_factory_health_dashboard_distinguishes_local_from_remote_engines():
     script = Path(__file__).resolve().parents[1] / "app" / "static" / "factory.js"
     source = script.read_text(encoding="utf-8")
     assert "item.local_available" in source
-    assert '"local "+(localReady?"READY":"NOT READY")' in source
+    assert '": local "+(localReady?"READY":"NOT READY")' in source
     assert "optional remote provider configured, not used for free local rendering" in source
     assert "Remote provider configuration does not count as local readiness" in source
