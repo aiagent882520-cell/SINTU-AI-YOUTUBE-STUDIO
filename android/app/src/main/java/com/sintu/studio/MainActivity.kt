@@ -49,6 +49,7 @@ private fun SintuRoot() {
     var api by remember { mutableStateOf<SintuApi?>(null) }
     var username by remember { mutableStateOf("") }
     var loggedIn by remember { mutableStateOf(false) }
+    var sessionInfo by remember { mutableStateOf<SessionResponse?>(null) }
     var busy by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf("Connect to your SINTU server.") }
 
@@ -57,6 +58,7 @@ private fun SintuRoot() {
             val client = SintuApi(context, baseUrl)
             api = client
             val session = client.session()
+            sessionInfo = session
             loggedIn = session.authenticated
             username = session.username.orEmpty()
         } catch (_: Exception) {
@@ -75,11 +77,12 @@ private fun SintuRoot() {
                     scope.launch {
                         try { api?.logout() } catch (_: Exception) {}
                         loggedIn = false
+                        sessionInfo = null
                     }
                 }) { Text("Logout") }
             }
             Spacer(Modifier.height(8.dp))
-            StudioTabs(api!!)
+            StudioTabs(api!!, sessionInfo)
         }
     } else {
         var password by remember { mutableStateOf("") }
@@ -111,12 +114,14 @@ private fun SintuRoot() {
                         try {
                             val normalized = SintuApi.normalizeBaseUrl(baseUrl)
                             val client = SintuApi(context, normalized)
-                            val result = client.login(user.trim(), password, otpCode.takeIf { it.isNotBlank() })
+                            client.login(user.trim(), password, otpCode.takeIf { it.isNotBlank() })
+                            val signedInSession = client.session()
                             prefs.edit().putString("api_base_url", normalized).apply()
                             baseUrl = normalized
                             api = client
-                            username = result.username
-                            loggedIn = result.authenticated
+                            sessionInfo = signedInSession
+                            username = signedInSession.username.orEmpty()
+                            loggedIn = signedInSession.authenticated
                             notice = if (loggedIn) "Connected." else "Login rejected."
                         } catch (error: Exception) {
                             notice = error.message ?: "Connection failed."
@@ -135,18 +140,36 @@ private fun SintuRoot() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun StudioTabs(api: SintuApi) {
+private fun StudioTabs(api: SintuApi, session: SessionResponse?) {
     var tab by remember { mutableIntStateOf(0) }
+    val isOwner = session?.is_owner == true
+    val features = session?.features?.toSet() ?: emptySet()
+    val visibleTabs = buildList {
+        if (isOwner || "ai_assistant" in features) add("Assistant")
+        if (isOwner || "video_editor" in features) add("Images")
+        if (isOwner || ("video_editor" in features && "production" in features)) add("Video")
+        if (isOwner || "projects" in features) add("Projects")
+    }
+    LaunchedEffect(visibleTabs.size) {
+        if (tab >= visibleTabs.size) tab = 0
+    }
+    if (visibleTabs.isEmpty()) {
+        Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.Center) {
+            Text("No studio features are assigned to this account.", fontWeight = FontWeight.Bold)
+            Text("Ask the SINTU Owner to grant the modules you need.")
+        }
+        return
+    }
     TabRow(selectedTabIndex = tab) {
-        listOf("Assistant", "Images", "Video", "Projects").forEachIndexed { i, title ->
+        visibleTabs.forEachIndexed { i, title ->
             Tab(selected = tab == i, onClick = { tab = i }, text = { Text(title) })
         }
     }
-    when (tab) {
-        0 -> AssistantScreen(api, Modifier.fillMaxSize())
-        1 -> ImageStudioScreen(api, Modifier.fillMaxSize())
-        2 -> VideoScreen(api, Modifier.fillMaxSize())
-        else -> ProjectsScreen(api, Modifier.fillMaxSize())
+    when (visibleTabs.getOrNull(tab)) {
+        "Assistant" -> AssistantScreen(api, Modifier.fillMaxSize())
+        "Images" -> ImageStudioScreen(api, Modifier.fillMaxSize())
+        "Video" -> VideoScreen(api, Modifier.fillMaxSize())
+        "Projects" -> ProjectsScreen(api, Modifier.fillMaxSize())
     }
 }
 
