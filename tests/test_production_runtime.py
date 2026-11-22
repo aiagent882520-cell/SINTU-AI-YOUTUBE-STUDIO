@@ -928,3 +928,53 @@ def test_legacy_completed_runs_are_backfilled_without_false_stage_completion(tmp
     events = runtime.list_run_events("c" * 32, "owner")
     assert any(event["event_type"] == "pipeline_ledger_backfilled" for event in events)
 
+def test_owner_media_executor_advances_render_and_package_after_owner_review(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    run = runtime.create_run("youtube-shorts", "स्थानीय मीडिया परीक्षण", "owner")
+    runtime._set_run(
+        run["id"], "completed",
+        result={"pipeline_dispatch": {
+            "mode": "existing_specialist_checker_roles",
+            "completed_stage_ids": [],
+            "deferred_stage_ids": ["render", "package", "publishing", "analytics_earnings", "learning"],
+            "full_21_stage_execution": False,
+        }},
+    )
+    with runtime._connect() as conn:
+        conn.execute(
+            "UPDATE production_pipeline_stages SET status='completed' WHERE run_id=? AND sequence<=16",
+            (run["id"],),
+        )
+
+    runtime.transition_owner_media_stage(
+        run["id"], "render", "running", owner_username="owner",
+    )
+    with pytest.raises(ValueError, match="Earlier pipeline stages are incomplete"):
+        runtime.transition_owner_media_stage(
+            run["id"], "package", "running", owner_username="owner",
+        )
+    runtime.transition_owner_media_stage(
+        run["id"], "render", "completed", owner_username="owner",
+        evidence="Verified MP4 and provenance manifest passed.",
+    )
+    runtime.transition_owner_media_stage(
+        run["id"], "package", "running", owner_username="owner",
+    )
+    updated = runtime.transition_owner_media_stage(
+        run["id"], "package", "completed", owner_username="owner",
+        evidence="Owner-scoped media package attached.",
+    )
+
+    stages = {stage["stage_id"]: stage for stage in updated["pipeline_stages"]}
+    assert stages["render"]["status"] == "completed"
+    assert stages["package"]["status"] == "completed"
+    assert stages["publishing"]["status"] == "pending"
+    dispatch = updated["result"]["pipeline_dispatch"]
+    assert dispatch["completed_stage_ids"] == ["render", "package"]
+    assert dispatch["deferred_stage_ids"] == ["publishing", "analytics_earnings", "learning"]
+    assert runtime.transition_owner_media_stage(
+        run["id"], "render", "running", owner_username="other",
+    ) is None
+
