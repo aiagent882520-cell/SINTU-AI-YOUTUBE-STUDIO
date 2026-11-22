@@ -26,6 +26,7 @@ def test_owner_otp_secret_write_is_atomic_and_private(tmp_path):
     assert parsed["SINTU_ADMIN_USERNAME"] == "owner"
     assert parsed["OTHER"] == "value"
     assert parsed["SINTU_OWNER_TOTP_SECRET"] == secret
+    assert parsed["SINTU_OWNER_OTP_REQUIRED"] == "true"
     assert stat.S_IMODE(env.stat().st_mode) == 0o600
     assert sum(line.startswith("SINTU_OWNER_TOTP_SECRET=") for line in updated) == 1
 
