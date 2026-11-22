@@ -1277,25 +1277,49 @@ async function loadProviderAdminPanel() {
 function adminEscape(value) {
   return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
 }
+async function applyFeatureAccessUI() {
+  try {
+    const session = await request("/api/auth/session");
+    if (!session.authenticated || session.is_owner) return;
+    const allowed = new Set(session.features || []);
+    document.querySelectorAll("[data-feature]").forEach(panel => {
+      panel.hidden = !allowed.has(panel.dataset.feature);
+    });
+    const ownerPanel = $("adminPanel");
+    if (ownerPanel) ownerPanel.hidden = true;
+  } catch (_) {
+    document.querySelectorAll("[data-feature]").forEach(panel => { panel.hidden = true; });
+    if ($("adminPanel")) $("adminPanel").hidden = true;
+  }
+}
+
 async function loadAdminPanel() {
   const panel = $("adminPanel");
   if (!panel) return;
   try {
     const session = await request("/api/auth/session");
-    if (!session.authenticated || session.role !== "admin") { panel.hidden = true; return; }
+    if (!session.authenticated || !session.is_owner) { panel.hidden = true; return; }
     panel.hidden = false;
-    const [usersData, auditData] = await Promise.all([request("/api/admin/users"), request("/api/admin/audit?limit=40")]);
+    const [usersData, auditData, featureData] = await Promise.all([request("/api/admin/users"), request("/api/admin/audit?limit=40"), request("/api/admin/features")]);
     $("adminUsers").innerHTML = usersData.users.map(user => `
       <div class="admin-row">
         <div><strong>${adminEscape(user.username)}</strong><small>#${user.id} · ${adminEscape(user.created_at)}</small></div>
-        <select data-user-role="${user.id}" aria-label="Role for ${adminEscape(user.username)}">
-          <option value="viewer" ${user.role==="viewer"?"selected":""}>Viewer</option>
-          <option value="editor" ${user.role==="editor"?"selected":""}>Editor</option>
-          <option value="admin" ${user.role==="admin"?"selected":""}>Admin</option>
-        </select>
-        <span class="role-state">${user.is_active?"Active":"Disabled"}</span>
-        <button class="secondary user-reset" data-user-id="${user.id}" type="button">Reset password</button>
-        <button class="secondary user-toggle" data-user-id="${user.id}" data-active="${user.is_active?0:1}" type="button">${user.is_active?"Disable":"Enable"}</button>
+        ${user.is_owner ? '<strong>Owner · Full control</strong>' : `
+          <select data-user-role="${user.id}" aria-label="Role for ${adminEscape(user.username)}">
+            <option value="viewer" ${user.role==="viewer"?"selected":""}>User · Viewer</option>
+            <option value="editor" ${user.role==="editor"?"selected":""}>User · Editor</option>
+            <option value="admin" ${user.role==="admin"?"selected":""}>Admin · Limited by grants</option>
+          </select>
+          <span class="role-state">${user.is_active?"Active":"Disabled"}</span>
+          <button class="secondary user-reset" data-user-id="${user.id}" type="button">Reset password</button>
+          <button class="secondary user-toggle" data-user-id="${user.id}" data-active="${user.is_active?0:1}" type="button">${user.is_active?"Disable":"Enable"}</button>
+        `}
+        <div class="feature-grants">
+          <small>Feature permissions</small>
+          <div class="feature-grant-grid">${user.is_owner ? 'Owner has all features.' : featureData.features.map(feature => `
+            <label><input type="checkbox" data-user-feature="${user.id}" data-feature-key="${feature.key}" ${(user.features||[]).includes(feature.key)?"checked":""}> ${adminEscape(feature.name)}</label>
+          `).join("")}</div>
+        </div>
       </div>`).join("") || "No users.";
     $("adminAudit").innerHTML = auditData.events.map(event => `
       <div class="admin-row audit-row">
@@ -1304,6 +1328,17 @@ async function loadAdminPanel() {
       </div>`).join("") || "No security events yet.";
     $("adminNotice").textContent = "Users: " + usersData.users.length + " · Recent security events: " + auditData.events.length;
     await loadAdminBackups();
+    document.querySelectorAll("[data-user-feature]").forEach(input => input.addEventListener("change", async () => {
+      const userId = input.dataset.userFeature;
+      const features = [...document.querySelectorAll('[data-user-feature="' + userId + '"]:checked')].map(item => item.dataset.featureKey);
+      try {
+        await request("/api/admin/users/" + userId + "/features", {method:"PUT",body:JSON.stringify({features})});
+        $("adminNotice").textContent = "Feature access updated for user #" + userId + ".";
+      } catch(error) {
+        $("adminNotice").textContent = error.message;
+        await loadAdminPanel();
+      }
+    }));
     document.querySelectorAll("[data-user-role]").forEach(select => select.addEventListener("change", async () => {
       try { await request("/api/admin/users/" + select.dataset.userRole, {method:"PATCH",body:JSON.stringify({role:select.value})}); await loadAdminPanel(); }
       catch(error) { $("adminNotice").textContent = error.message; }
@@ -1614,6 +1649,7 @@ loadTikTokAdminPanel();
 loadAdminPanel();
 loadProviderAdminPanel();
 loadPrincipalAICouncilPanel();
+applyFeatureAccessUI();
 
 
 async function checkBlenderStudio(){
