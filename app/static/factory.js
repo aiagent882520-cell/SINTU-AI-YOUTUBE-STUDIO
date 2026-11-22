@@ -75,13 +75,52 @@
         const title=document.createElement("b");title.textContent=run.topic+" · "+run.status;card.append(title);
         const detail=document.createElement("p");detail.className="factory-meta";detail.textContent=run.format_id+" · "+run.run_id+" · Attempts: "+run.attempt_count+" · Steps: "+run.step_count;card.append(detail);
         const open=document.createElement("button");open.type="button";open.className="secondary";open.textContent="View run details";
-        open.addEventListener("click",()=>viewRun(run.run_id));card.append(open);root.append(card);}
+        open.addEventListener("click",()=>viewRun(run.run_id));card.append(open);
+        if(!["completed","failed","cancelled"].includes(run.status)){
+          const cancel=document.createElement("button");cancel.type="button";cancel.className="secondary";cancel.textContent="Cancel run";
+          cancel.addEventListener("click",()=>cancelRun(run.run_id));card.append(cancel);
+        }
+        root.append(card);}
     }catch(error){root.textContent=error.message;root.className="factory-error";}
   }
+  async function cancelRun(id) {
+    if(!window.confirm("Is production run ko cancel karein? Completed partial outputs preserve rahenge.")) return;
+    notice("Cancellation request bhej rahe hain…");
+    try{
+      const result=await api("/api/production/runs/"+encodeURIComponent(id)+"/cancel",{method:"POST"});
+      notice(result.detail||("Run status: "+result.status));
+      await loadRuns();
+    }catch(error){notice(error.message,true);}
+  }
   async function viewRun(id) {
-    try{const run=await api("/api/production/runs/"+encodeURIComponent(id));const details=(run.steps||[]).map(x=>x.role+": "+x.status).join("\n");
-      window.alert("Run "+id+"\nStatus: "+run.status+"\nCurrent role: "+(run.current_role||"—")+"\n\n"+details);}
-    catch(error){notice(error.message,true);}
+    try{
+      const [run, timeline]=await Promise.all([
+        api("/api/production/runs/"+encodeURIComponent(id)),
+        api("/api/production/runs/"+encodeURIComponent(id)+"/events")
+      ]);
+      const card=[...$("factoryRuns").querySelectorAll(".factory-run")].find(node=>node.textContent.includes(id));
+      if(!card) return;
+      let panel=card.querySelector(".factory-run-details");
+      if(panel){panel.remove();return;}
+      panel=document.createElement("section");panel.className="factory-run-details factory-stage";
+      const heading=document.createElement("h3");heading.textContent="Run execution details · "+run.status;panel.append(heading);
+      const current=document.createElement("p");current.className="factory-meta";current.textContent="Current role: "+(run.current_role||"—")+" · Attempts: "+(run.attempt_count||0);panel.append(current);
+      const stepsTitle=document.createElement("b");stepsTitle.textContent="Specialist and checker steps";panel.append(stepsTitle);
+      for(const step of run.steps||[]){
+        const row=document.createElement("p");row.className="factory-meta";
+        row.textContent=(step.sequence??"")+" · "+step.role+" · "+step.step_type+" · "+step.status+" · Attempts: "+(step.attempts||0);
+        panel.append(row);
+      }
+      const eventsTitle=document.createElement("b");eventsTitle.textContent="Run event timeline";panel.append(eventsTitle);
+      const events=timeline.events||[];
+      if(!events.length){const empty=document.createElement("p");empty.textContent="No lifecycle events recorded yet.";panel.append(empty);}
+      for(const event of events){
+        const row=document.createElement("p");row.className="factory-meta";
+        row.textContent=event.created_at+" · "+event.event_type+" · "+(event.from_status||"start")+" → "+event.to_status;
+        panel.append(row);
+      }
+      card.append(panel);
+    }catch(error){notice(error.message,true);}
   }
   $("factoryPlan").addEventListener("click",buildPlan);
   $("factoryStart").addEventListener("click",startRun);
