@@ -1322,6 +1322,8 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                     issues=["Human Owner review is required; no Owner Agent was assigned."],
                 )
 
+        pipeline_stage_snapshot = get_run(run_id, owner_username) or {}
+        pipeline_stage_rows = pipeline_stage_snapshot.get("pipeline_stages", [])
         result = {
             "format": selected,
             "deliverables": deliverables,
@@ -1337,6 +1339,15 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             "management_hierarchy": management_hierarchy(),
             "pipeline_dispatch": {
                 "mode": "existing_specialist_checker_roles",
+                "completed_stage_ids": [
+                    stage["stage_id"] for stage in pipeline_stage_rows if stage["status"] == "completed"
+                ],
+                "skipped_stage_ids": [
+                    stage["stage_id"] for stage in pipeline_stage_rows if stage["status"] == "skipped"
+                ],
+                "awaiting_owner_stage_ids": [
+                    stage["stage_id"] for stage in pipeline_stage_rows if stage["status"] == "awaiting_owner"
+                ],
                 "applicable_stage_ids": [
                     stage["stage_id"] for stage in role_routing["stages"]
                     if stage["roles"] or (stage["stage_id"] == "quality" and REVIEWERS)
