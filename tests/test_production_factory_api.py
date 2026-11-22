@@ -31,7 +31,7 @@ def test_factory_run_api_delegates_to_persistent_worker(monkeypatch):
     assert result["factory"]["execution_started"] is True
     assert result["factory"]["publishing_enabled"] is False
     assert result["factory"]["paid_auto_activation"] is False
-    assert result["factory"]["stages"][-1]["id"] == "analytics"
+    assert result["factory"]["stages"][-1]["id"] == "learning"
 
 
 def test_factory_runs_dashboard_is_owner_scoped_and_summarized(monkeypatch):
