@@ -89,7 +89,8 @@ def test_existing_specialist_roles_route_to_pipeline_stages_without_false_comple
         "Master AI", "Web Research", "Fact Checker", "Script Writer",
         "Filmmaking Director", "AI Video Generator", "Voice Generator",
         "Video Editor", "Subtitle Creator", "Thumbnail Designer", "HR Agent",
-        "Unmapped Experimental Agent",
+        "Video Generation Agent", "Hindi Narration Agent", "Tags Researcher",
+        "Final Render Agent", "Unmapped Experimental Agent",
     ])
     stages = {row["stage_id"]: row for row in routed["stages"]}
     assert stages["intake"]["roles"] == ["Master AI"]
@@ -103,6 +104,9 @@ def test_existing_specialist_roles_route_to_pipeline_stages_without_false_comple
     assert stages["localization"]["roles"] == ["Subtitle Creator"]
     assert stages["branding"]["roles"] == ["Thumbnail Designer"]
     assert stages["quality"]["roles"] == ["HR Agent"]
+    assert stages["generation"]["roles"] == ["Video Generation Agent"]
+    assert stages["audio"]["roles"] == ["Hindi Narration Agent"]
+    assert stages["branding"]["roles"] == ["Thumbnail Designer", "Tags Researcher"]
     assert stages["render"]["status"] == "not_applicable"
-    assert routed["unmapped_roles"] == ["Unmapped Experimental Agent"]
+    assert routed["unmapped_roles"] == ["Final Render Agent", "Unmapped Experimental Agent"]
 
