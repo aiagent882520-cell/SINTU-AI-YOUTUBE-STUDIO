@@ -364,8 +364,11 @@ class SintuApi(context: Context, baseUrl: String) {
     suspend fun completeOfflineMediaUpload(uploadId: String): Map<String, Any?> =
         service.completeOfflineMediaUpload(uploadId).bodyOrThrow()
 
-    suspend fun downloadVideoToGallery(context: Context, videoId: String): Uri =
-        withContext(Dispatchers.IO) {
+    suspend fun downloadVideoToGallery(
+        context: Context,
+        videoId: String,
+        onProgress: suspend (downloadedBytes: Long, totalBytes: Long) -> Unit = { _, _ -> }
+    ): Uri = withContext(Dispatchers.IO) {
             require(videoId.matches(Regex("[a-f0-9]{32}"))) { "Invalid SINTU video ID." }
             require(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 "Gallery download requires Android 10 or newer."
@@ -393,6 +396,8 @@ class SintuApi(context: Context, baseUrl: String) {
                         body.byteStream().use { input ->
                             val buffer = ByteArray(64 * 1024)
                             var total = 0L
+                            var lastProgressBytes = 0L
+                            val expectedBytes = body.contentLength().coerceAtLeast(0L)
                             while (true) {
                                 val count = input.read(buffer)
                                 if (count < 0) break
@@ -401,7 +406,14 @@ class SintuApi(context: Context, baseUrl: String) {
                                     throw IllegalStateException("MP4 exceeded the 500 MB download limit.")
                                 }
                                 destination.write(buffer, 0, count)
+                                if (total - lastProgressBytes >= DOWNLOAD_PROGRESS_UPDATE_BYTES ||
+                                    (expectedBytes > 0L && total >= expectedBytes)
+                                ) {
+                                    onProgress(total, expectedBytes)
+                                    lastProgressBytes = total
+                                }
                             }
+                            if (total > lastProgressBytes) onProgress(total, expectedBytes)
                         }
                         destination.flush()
                         destination.fd.sync()
@@ -488,6 +500,7 @@ class SintuApi(context: Context, baseUrl: String) {
 }
 
 private const val MAX_IMAGE_DOWNLOAD_BYTES = 15 * 1024 * 1024
+private const val DOWNLOAD_PROGRESS_UPDATE_BYTES = 512L * 1024L
 
 private fun <T> Response<T>.bodyOrThrow(): T {
     if (!isSuccessful) {
