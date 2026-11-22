@@ -57,6 +57,7 @@ def test_production_ready_requires_every_engine_and_worker(tmp_path, monkeypatch
     worker_pid = worker_dir / "bridge-worker.pid"
     worker_pid.write_text(str(__import__("os").getpid()), encoding="utf-8")
     monkeypatch.setattr(doctor, "probe", lambda url: (True, "HTTP 200"))
+    monkeypatch.setattr(doctor, "worker_process_matches", lambda pid: True)
     report = doctor.build_report(tmp_path, env={}, check_network=True)
     assert report["production_ready"] is True
     assert report["production_blockers"] == []
@@ -68,3 +69,33 @@ def test_missing_required_configuration_fails_closed(tmp_path):
     assert report["production_ready"] is False
     assert "repository" in report["failed_checks"]
     assert "private_environment" in report["failed_checks"]
+
+
+def test_worker_pid_must_identify_the_sintu_bridge_worker(tmp_path):
+    worker = tmp_path / "4321"
+    worker.mkdir()
+    cmdline = worker / "cmdline"
+    cmdline.write_bytes(b"/usr/bin/python\0scripts/termux_bridge_worker.py\0")
+    assert doctor.worker_process_matches(4321, tmp_path) is True
+
+    cmdline.write_bytes(b"/usr/bin/python\0-m\0uvicorn\0app.main:app\0")
+    assert doctor.worker_process_matches(4321, tmp_path) is False
+    assert doctor.worker_process_matches(0, tmp_path) is False
+    assert doctor.worker_process_matches(-1, tmp_path) is False
+
+
+def test_reused_pid_cannot_make_production_ready(tmp_path, monkeypatch):
+    _valid_core_tree(tmp_path)
+    monkeypatch.setattr(doctor.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(doctor.Path, "home", lambda: tmp_path)
+    worker_dir = tmp_path / ".sintu"
+    worker_dir.mkdir()
+    (worker_dir / "bridge-worker.pid").write_text("4321", encoding="utf-8")
+    monkeypatch.setattr(doctor, "probe", lambda url: (True, "HTTP 200"))
+    monkeypatch.setattr(doctor, "worker_process_matches", lambda pid: False)
+
+    report = doctor.build_report(tmp_path, env={}, check_network=True)
+    assert report["production_ready"] is False
+    assert "termux_bridge_worker" in report["production_blockers"]
+    worker_check = next(item for item in report["checks"] if item["name"] == "termux_bridge_worker")
+    assert worker_check["status"] == "warn"
