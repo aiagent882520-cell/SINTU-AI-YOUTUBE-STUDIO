@@ -451,9 +451,9 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
             .getWorkInfosForUniqueWorkLiveData("sintu-video-download-$videoId")
     }.observeAsState(initial = emptyList())
     val currentVideoDownload = videoDownloadWork.value.firstOrNull()
-    val videoDownloadActive = currentVideoDownload?.state in setOf(
-        WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED, WorkInfo.State.RUNNING
-    )
+    val videoDownloadActive = currentVideoDownload?.state?.let {
+        it == WorkInfo.State.ENQUEUED || it == WorkInfo.State.BLOCKED || it == WorkInfo.State.RUNNING
+    } == true
     LaunchedEffect(currentVideoDownload?.id, currentVideoDownload?.state) {
         when (currentVideoDownload?.state) {
             WorkInfo.State.SUCCEEDED -> {
