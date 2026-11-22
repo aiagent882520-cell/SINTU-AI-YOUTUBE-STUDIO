@@ -460,7 +460,9 @@ def get_run(run_id: str, owner_username: str | None = None) -> dict[str, Any] | 
         stage["issues"] = json.loads(stage.pop("issues_json") or "[]")
         result["pipeline_stages"].append(stage)
     result["pipeline_stage_execution_implemented"] = False
-    result["pipeline_stage_role_dispatch_integrated"] = True
+    result["pipeline_stage_role_dispatch_integrated"] = bool(
+        isinstance(result.get("result"), dict) and result["result"].get("pipeline_dispatch")
+    )
     result["steps"] = []
     for item in steps:
         step = dict(item)
