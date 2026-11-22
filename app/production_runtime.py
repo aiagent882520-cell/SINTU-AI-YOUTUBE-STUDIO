@@ -1086,15 +1086,39 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                     )
                     management_reports["Owner Agent"] = owner_output
                     if re.search(r"\bNOT\s+READY\b", owner_output, re.IGNORECASE):
+                        if stage_status("owner_review") == "pending":
+                            transition_pipeline_stage(
+                                run_id, "owner_review", "blocked",
+                                owner_username=owner_username or "local", worker_token=worker_token,
+                                issues=["Owner Agent identified release blockers; human review required."],
+                            )
                         set_run(run_id, "paused", current_role="Owner Agent",
                                  error="Owner Agent identified release blockers; human review is required before continuing.")
                         return
                     if not re.search(r"\bREADY\b", owner_output, re.IGNORECASE):
+                        if stage_status("owner_review") == "pending":
+                            transition_pipeline_stage(
+                                run_id, "owner_review", "blocked",
+                                owner_username=owner_username or "local", worker_token=worker_token,
+                                issues=["Owner Agent did not provide an explicit READY verdict."],
+                            )
                         set_run(run_id, "paused", current_role="Owner Agent",
                                  error="Owner Agent did not provide an explicit READY verdict; human review is required.")
                         return
+                    if stage_status("owner_review") == "pending":
+                        transition_pipeline_stage(
+                            run_id, "owner_review", "awaiting_owner",
+                            owner_username=owner_username or "local", worker_token=worker_token,
+                            issues=["AI Owner Agent recommendation is not human Owner approval."],
+                        )
                     break
             if not owner_verdict or owner_verdict["decision"] != "PASS":
+                if stage_status("owner_review") == "pending":
+                    transition_pipeline_stage(
+                        run_id, "owner_review", "blocked",
+                        owner_username=owner_username or "local", worker_token=worker_token,
+                        issues=["Owner Agent failed its independent checker."],
+                    )
                 set_run(run_id, "paused", current_role="Owner Agent Checker",
                          error="Owner Agent report failed its independent checker; human review required.")
                 return
