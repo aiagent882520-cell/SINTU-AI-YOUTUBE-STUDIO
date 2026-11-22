@@ -53,6 +53,10 @@ def test_factory_runs_dashboard_is_owner_scoped_and_summarized(monkeypatch):
             "cancel_requested": 0,
             "result": {"script": "private script content", "video_rendered": True, "render": {"video_id": "b" * 32}},
             "steps": [{"role": "writer"}],
+            "pipeline_stages": [
+                {"stage_id": "intake", "status": "completed"},
+                {"stage_id": "planning", "status": "pending"},
+            ],
         }
     ])
     result = main.production_factory_runs(object(), limit=10)
@@ -60,6 +64,9 @@ def test_factory_runs_dashboard_is_owner_scoped_and_summarized(monkeypatch):
     assert result["summary"]["by_status"]["completed"] == 1
     assert result["runs"][0]["has_result"] is True
     assert result["runs"][0]["has_render"] is True
+    assert result["runs"][0]["pipeline_stage_count"] == 2
+    assert result["runs"][0]["pipeline_stage_status"] == {"completed": 1, "pending": 1}
+    assert result["runs"][0]["pipeline_stage_execution_implemented"] is False
     assert result["runs"][0]["video_url"] == "/api/videos/" + "b" * 32
     assert "result" not in result["runs"][0]
     assert "script" not in str(result)
