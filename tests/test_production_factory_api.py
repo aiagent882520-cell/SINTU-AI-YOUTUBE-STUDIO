@@ -16,6 +16,7 @@ def test_production_factory_plan_endpoint_returns_non_executing_plan():
     result = main.production_factory_plan(payload)
     assert result["topic"] == "Hindi space explainer"
     assert result["execution_started"] is False
+    assert result["stage_execution_implemented"] is False
     assert result["publishing_enabled"] is False
     assert len(result["stages"]) == 21
     assert result["pipeline_stage_count"] == 21
