@@ -25,7 +25,7 @@ The debug APK is installable for device testing. The release APK produced by thi
 
 ## Current limitations
 
-This native client tranche is not yet a complete parity release. Media uploads run through persistent WorkManager jobs with SHA-256-verified resumable chunks and server-confirmed offsets. MP4 download currently runs in the foreground; download recovery/background transfer is not implemented. Playback is handed to an installed Android player after saving to Movies/SINTU; an in-app video player, media library management, full timeline editing, offline project queueing, notifications, accessibility/device-size test matrix and signed release package remain outstanding. Real chat/generation also depends on the configured SINTU backend and available AI engines.
+This native client tranche is not yet a complete parity release. Media uploads run through persistent WorkManager jobs with SHA-256-verified resumable chunks and server-confirmed offsets. MP4 downloads also run as unique, network-constrained WorkManager jobs, retry transient network/HTTP failures, survive app process death, and save completed files to Movies/SINTU through MediaStore. The app observes queued/running/success/failure state and supports cancelling a download. Playback is handed to an installed Android player after saving; an in-app video player, media library management, full timeline editing, offline project queueing, user-facing download notifications, accessibility/device-size test matrix and signed release package remain outstanding. Real chat/generation also depends on the configured SINTU backend and available AI engines.
 
 ## CI build evidence
 
