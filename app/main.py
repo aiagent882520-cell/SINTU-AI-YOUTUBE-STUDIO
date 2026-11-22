@@ -5410,6 +5410,29 @@ def start_production_run(payload: ProductionRunInput, background_tasks: Backgrou
     }
 
 
+@app.post("/api/production-factory/runs")
+def start_production_factory_run(
+    payload: ProductionRunInput,
+    background_tasks: BackgroundTasks,
+    request: Request,
+):
+    """Start the existing persistent specialist/checker pipeline through the factory API."""
+    plan = build_pipeline_plan(payload.topic, payload.format_id)
+    started = start_production_run(payload, background_tasks, request)
+    return {
+        **started,
+        "factory": {
+            "pipeline_version": plan["pipeline_version"],
+            "execution_started": True,
+            "publishing_enabled": False,
+            "free_first": True,
+            "paid_auto_activation": False,
+            "stages": plan["stages"],
+            "next_gate": "Owner review before any external publishing action",
+        },
+    }
+
+
 @app.post("/api/production/runs/{run_id}/cancel")
 def cancel_production_run_endpoint(run_id: str, request: Request):
     if not re.fullmatch(r"[a-f0-9]{32}", run_id):
