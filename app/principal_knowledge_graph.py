@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 import secrets
+import hashlib
 
 PRINCIPAL_IDS = {"chatgpt", "gemini", "claude", "deepseek"}
 SCOPES = {"private", "shared"}
@@ -51,7 +52,87 @@ def ensure_schema(conn) -> None:
     );
     CREATE INDEX IF NOT EXISTS idx_principal_knowledge_edges_owner
         ON principal_knowledge_edges(owner_username, from_node_id, to_node_id);
+    CREATE TABLE IF NOT EXISTS principal_knowledge_audit (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT NOT NULL UNIQUE,
+        owner_username TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        node_id TEXT,
+        details_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        previous_hash TEXT NOT NULL,
+        event_hash TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_principal_knowledge_audit_owner
+        ON principal_knowledge_audit(owner_username, sequence DESC);
+    CREATE TRIGGER IF NOT EXISTS principal_knowledge_audit_no_update
+        BEFORE UPDATE ON principal_knowledge_audit
+        BEGIN SELECT RAISE(ABORT, 'knowledge audit events are append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS principal_knowledge_audit_no_delete
+        BEFORE DELETE ON principal_knowledge_audit
+        BEGIN SELECT RAISE(ABORT, 'knowledge audit events are append-only'); END;
     """)
+
+
+
+
+def _audit_hash(payload: dict) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _append_audit(conn, owner: str, actor: str, event_type: str,
+                  node_id: str | None, details: dict) -> dict:
+    previous = conn.execute(
+        "SELECT event_hash FROM principal_knowledge_audit "
+        "WHERE owner_username=? ORDER BY sequence DESC LIMIT 1", (owner,)
+    ).fetchone()
+    previous_hash = previous["event_hash"] if previous else "0" * 64
+    event = {
+        "id": secrets.token_urlsafe(18), "owner_username": owner,
+        "actor": str(actor)[:120], "event_type": event_type,
+        "node_id": node_id, "details": details, "created_at": _now(),
+        "previous_hash": previous_hash,
+    }
+    event["event_hash"] = _audit_hash(event)
+    conn.execute("""INSERT INTO principal_knowledge_audit
+        (id,owner_username,actor,event_type,node_id,details_json,created_at,previous_hash,event_hash)
+        VALUES(?,?,?,?,?,?,?,?,?)""",
+        (event["id"], owner, event["actor"], event_type, node_id,
+         json.dumps(details, sort_keys=True, ensure_ascii=False), event["created_at"],
+         previous_hash, event["event_hash"]))
+    return event
+
+
+def list_audit_events(conn, owner: str, limit: int = 100) -> list[dict]:
+    rows = conn.execute("""SELECT * FROM principal_knowledge_audit
+        WHERE owner_username=? ORDER BY sequence DESC LIMIT ?""",
+        (owner, max(1, min(int(limit), 500)))).fetchall()
+    events = []
+    for row in rows:
+        item = dict(row)
+        item["details"] = json.loads(item.pop("details_json"))
+        events.append(item)
+    return events
+
+
+def verify_audit_chain(conn, owner: str) -> dict:
+    rows = conn.execute("""SELECT * FROM principal_knowledge_audit
+        WHERE owner_username=? ORDER BY sequence ASC""", (owner,)).fetchall()
+    previous_hash = "0" * 64
+    for row in rows:
+        item = dict(row)
+        payload = {
+            "id": item["id"], "owner_username": item["owner_username"],
+            "actor": item["actor"], "event_type": item["event_type"],
+            "node_id": item["node_id"], "details": json.loads(item["details_json"]),
+            "created_at": item["created_at"], "previous_hash": item["previous_hash"],
+        }
+        if item["previous_hash"] != previous_hash or _audit_hash(payload) != item["event_hash"]:
+            return {"valid": False, "checked_events": len(rows), "invalid_sequence": item["sequence"]}
+        previous_hash = item["event_hash"]
+    return {"valid": True, "checked_events": len(rows), "invalid_sequence": None}
 
 
 def create_node(conn, owner: str, principal_id: str, scope: str, title: str,
@@ -73,6 +154,8 @@ def create_node(conn, owner: str, principal_id: str, scope: str, title: str,
         VALUES(?,?,?,?,?,?,?,'unverified',?,?,?)""",
         (node_id, owner, scope, principal_id, title, content, category[:80],
          json.dumps(refs, ensure_ascii=False), now, now))
+    _append_audit(conn, owner, owner, "knowledge.created", node_id,
+                   {"principal_id": principal_id, "scope": scope, "status": "unverified"})
     return get_node(conn, owner, node_id)
 
 
@@ -117,11 +200,14 @@ def verify_node(conn, owner: str, actor: str, node_id: str,
         (owner, node_id)).fetchone()
     if not row:
         return None
+    previous_status = row["status"]
     if not approved:
         conn.execute("""UPDATE principal_knowledge_nodes SET status='disputed',
             verification_note=?, updated_at=?, verified_at=NULL, verified_by=NULL
             WHERE owner_username=? AND id=?""",
             (str(note)[:2000], _now(), owner, node_id))
+        _append_audit(conn, owner, actor, "knowledge.disputed", node_id,
+                       {"previous_status": previous_status, "status": "disputed", "note": str(note)[:2000]})
     else:
         if not str(note).strip():
             raise ValueError("Owner verification requires a non-empty evidence/review note.")
@@ -129,6 +215,8 @@ def verify_node(conn, owner: str, actor: str, node_id: str,
             verification_note=?, updated_at=?, verified_at=?, verified_by=?
             WHERE owner_username=? AND id=?""",
             (str(note)[:2000], _now(), _now(), actor, owner, node_id))
+        _append_audit(conn, owner, actor, "knowledge.verified", node_id,
+                       {"previous_status": previous_status, "status": "verified", "note": str(note)[:2000]})
     return get_node(conn, owner, node_id)
 
 
@@ -146,6 +234,9 @@ def link_nodes(conn, owner: str, from_id: str, to_id: str, relation: str) -> dic
     row = conn.execute("""SELECT * FROM principal_knowledge_edges
         WHERE owner_username=? AND from_node_id=? AND to_node_id=? AND relation=?""",
         (owner, from_id, to_id, relation)).fetchone()
+    if row and row["id"] == edge_id:
+        _append_audit(conn, owner, owner, "knowledge.linked", from_id,
+                      {"to_node_id": to_id, "relation": relation})
     return dict(row)
 
 
