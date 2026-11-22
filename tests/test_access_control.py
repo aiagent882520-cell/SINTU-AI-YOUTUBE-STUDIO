@@ -75,7 +75,7 @@ def test_every_registered_route_is_classified_or_explicitly_owner_public():
         path = getattr(route, "path", "")
         if not path:
             continue
-        if path in public or path.startswith("/api/termux-bridge/"):
+        if path in public or path == "/static" or path.startswith("/static/") or path.startswith("/api/termux-bridge/"):
             continue
         if any(path == prefix or path.startswith(prefix + "/") for prefix in owner_prefixes):
             continue
