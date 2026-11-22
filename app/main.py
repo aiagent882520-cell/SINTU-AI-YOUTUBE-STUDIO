@@ -311,7 +311,7 @@ async def admin_access_control(request, call_next):
     user = _session_user(request.cookies.get(SESSION_COOKIE)) if _auth_required() else {"id": 0, "username": "local", "role": "admin", "is_active": 1, "is_owner": 1, "features": [item["key"] for item in access_control.FEATURES]}
     request.state.user = user
     if _auth_required():
-        public_paths = {"/login", "/api/auth/login", "/api/auth/logout", "/api/health"}
+        public_paths = {"/login", "/sw.js", "/api/auth/login", "/api/auth/logout", "/api/health"}
         # Bridge routes authenticate independently with dedicated bearer tokens;
         # do not require a browser admin-session cookie for trusted API clients.
         bridge_path = path.startswith("/api/termux-bridge/")
