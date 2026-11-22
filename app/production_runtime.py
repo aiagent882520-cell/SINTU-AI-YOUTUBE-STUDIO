@@ -1202,6 +1202,20 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             "reviewer_reports": review_results,
             "management_reports": management_reports,
             "management_hierarchy": management_hierarchy(),
+            "pipeline_dispatch": {
+                "mode": "existing_specialist_checker_roles",
+                "applicable_stage_ids": [
+                    stage["stage_id"] for stage in role_routing["stages"] if stage["roles"]
+                ],
+                "not_applicable_stage_ids": [
+                    stage["stage_id"] for stage in role_routing["stages"]
+                    if not stage["roles"] and not (stage["stage_id"] == "quality" and REVIEWERS)
+                    and not (stage["stage_id"] == "research" and research_record)
+                ],
+                "unmapped_specialist_roles": role_routing["unmapped_roles"],
+                "deferred_stage_ids": ["render", "package", "publishing", "analytics_earnings", "learning"],
+                "full_21_stage_execution": False,
+            },
             "publishing_approval_required": True,
             "video_rendered": False,
             "published": False,
