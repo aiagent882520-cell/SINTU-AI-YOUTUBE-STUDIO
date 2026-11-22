@@ -33,7 +33,7 @@
       <article><strong id="taskCount">0</strong><span>Saved tasks</span></article>
       <article><strong id="doneCount">0</strong><span>Completed outputs</span></article>
     </section>
-    <section class="panel" id="create">
+    <section class="panel" id="create" data-feature="ai_assistant">
       <div class="panel-head"><div><h2>AI Production Desk</h2><p>Workflow chunein, topic likhein aur Generate dabayein.</p></div></div>
       <label for="workflow">Aap kya banana chahte hain?</label>
       <select id="workflow">
@@ -59,7 +59,7 @@
       <div class="integration-card"><strong>Google Flow — all video formats</strong><span>Flow creates the visual clips in your Google account. SINTU passes your topic, selected format, target settings and scene list into a ready-to-paste prompt. Download Flow clips and import them into SINTU for voice, music, subtitles, watermark and final MP4 assembly. Flow generation/credits are external; this is not a direct API connection.</span><div class="actions"><button id="openGoogleFlow" type="button">Prepare scene prompts & open Google Flow</button></div><p id="flowHandoffNotice" class="muted" role="status"></p><label for="flowPromptPreview">Google Flow prompt (manual copy if clipboard is blocked)</label><textarea id="flowPromptPreview" rows="8" readonly hidden></textarea></div>
       <div class="integration-card"><strong>Google AI Studio — app, website, software & agent builder</strong><span>Use Build mode to create full-stack web apps, Android apps, software tools, assistants and AI agents from natural-language prompts. SINTU prepares a structured build prompt; project generation runs in Google AI Studio, not inside SINTU.</span><label for="aiStudioBuildPrompt">What should AI Studio build?</label><textarea id="aiStudioBuildPrompt" rows="3" maxlength="6000" placeholder="Example: Build a Hindi AI assistant with login, dashboard, database, admin panel and secure API integration."></textarea><div class="actions"><button id="openAIStudioBuild" type="button">Prepare build prompt & open AI Studio</button></div><p id="aiStudioHandoffNotice" class="muted" role="status"></p></div>
     </section>
-    <section class="panel" id="aiChat">
+    <section class="panel" id="aiChat" data-feature="ai_assistant">
       <div class="panel-head"><div><h2>SINTU AI Assistant</h2><p>Multi-conversation Hindi/English chat. Replies use the configured local-first text model.</p></div></div>
       <div class="grid-two">
         <div><label for="chatConversationSelect">Conversation history</label><select id="chatConversationSelect"><option value="">New conversation</option></select></div>
@@ -203,7 +203,7 @@
       <div class="panel-head"><div><h2>61-Agent Team</h2><p>Registry view — agents are planned; individual autonomous agents are not yet implemented.</p></div></div>
       <div id="agents" class="agents">Loading agent registry…</div>
     </section>
-    <section class="panel" id="agentOperationsPanel">
+    <section class="panel" id="agentOperationsPanel" data-feature="agents">
       <div class="panel-head"><div><h2>Agent Operations & System Health</h2><p>Live execution evidence, checker results aur recent production runs. Registered roles ko running agents nahi maana jayega.</p></div><button id="agentSystemRefresh" class="secondary" type="button">Refresh status</button></div>
       <div id="agentSystemSummary" class="integration-cards" aria-live="polite">System status loading…</div>
       <h3>Recent Production Runs</h3>
@@ -218,7 +218,7 @@
         <button type="submit">Create User</button>
       </form>
       <p id="adminNotice" class="muted" role="status" aria-live="polite"></p>
-      <h3>Team Accounts</h3><div id="adminUsers" class="admin-list">Loading…</div>
+      <h3>Team Accounts & Feature Access</h3><p class="muted">Owner controls each account separately. Unchecked features are blocked immediately; new accounts start with no feature access.</p><div id="adminUsers" class="admin-list">Loading…</div>
       <h3>Security Activity Log</h3><div id="adminAudit" class="admin-list">Loading…</div>
       <hr>
       <div class="panel-head"><div><h3>Backup & Recovery</h3><p>Database aur generated media ka secure backup banayein. Secrets aur .env archive mein include nahi hote.</p></div><button id="adminBackupRefresh" class="secondary" type="button">Refresh backups</button></div>
@@ -227,7 +227,7 @@
       <p id="adminBackupNotice" class="muted" role="status" aria-live="polite">Admin-only backup controls. Maximum five recent archives.</p>
       <div id="adminBackups" class="admin-list" aria-live="polite">Loading backups…</div>
     </section>
-    <section class="panel" id="providerAdminPanel" hidden>
+    <section class="panel" id="providerAdminPanel" hidden data-feature="ai_settings">
       <div class="panel-head"><div><h2>AI Provider Settings</h2><p>Text AI provider choose karein. API keys server ke secure environment mein hi rahengi.</p></div><button id="providerRefresh" class="secondary" type="button">Refresh</button></div>
       <form id="providerSettingsForm" class="provider-settings-form">
         <div><label for="selectedProvider">Preferred text AI provider</label><select id="selectedProvider"><option value="auto">Automatic (configured provider)</option><option value="openai">OpenAI</option><option value="gemini">Google Gemini / AI Studio</option><option value="deepseek">DeepSeek</option><option value="claude">Anthropic Claude</option></select></div>
@@ -245,30 +245,30 @@
       <div id="principalAiCouncilCards" class="integration-cards" aria-live="polite"></div>
       <p id="principalAiCouncilNotice" class="foot">Major decisions fail closed if any required Principal AI vote is missing. Local fallback is advisory only and never counts as a Principal vote.</p>
     </section>
-    <section class="panel" id="publishingConnectionsPanel" hidden>
+    <section class="panel" id="publishingConnectionsPanel" hidden data-feature="integrations">
       <div class="panel-head"><div><h2>Social Publishing Control Center</h2><p>Sabhi social platform connections aur publishing readiness ek jagah.</p></div><button id="publishingConnectionsRefresh" class="secondary" type="button">Refresh all</button></div>
       <div id="publishingConnectionsCards" class="integration-cards" aria-live="polite"></div>
       <p id="publishingConnectionsNotice" class="muted" role="status" aria-live="polite">Checking connections…</p>
     </section>
-    <section class="panel" id="youtubeAdminPanel" hidden>
+    <section class="panel" id="youtubeAdminPanel" hidden data-feature="youtube">
       <div class="panel-head"><div><h2>YouTube Channel Connection</h2><p>Official Google OAuth, channel status aur approved MP4 upload.</p></div><button id="youtubeRefresh" class="secondary" type="button">Refresh</button></div>
       <div id="youtubeConnectionStatus" class="muted" role="status" aria-live="polite">Checking YouTube setup…</div>
       <div class="actions"><button id="youtubeConnect" type="button">Connect YouTube Channel</button><button id="youtubeDisconnect" class="secondary" type="button" hidden>Disconnect</button></div>
       <p class="foot">Connect karne ke liye Google Cloud Console mein YouTube Data API v3 enable karein, OAuth Web Client banayein aur server secrets set karein. Upload default Private rahega; public/unlisted sirf admin ke explicit selection par. YouTube quota limits apply.</p>
     </section>
-    <section class="panel" id="metaAdminPanel" hidden>
+    <section class="panel" id="metaAdminPanel" hidden data-feature="social_publish">
       <div class="panel-head"><div><h2>Instagram & Facebook Connection</h2><p>Meta OAuth, Facebook Page video aur Instagram Reels publishing.</p></div><button id="metaRefresh" class="secondary" type="button">Refresh</button></div>
       <div id="metaConnectionStatus" class="muted" role="status" aria-live="polite">Checking Meta setup…</div>
       <div class="actions"><button id="metaConnect" type="button">Connect Facebook Page</button><button id="metaDisconnect" class="secondary" type="button" hidden>Disconnect</button></div>
       <p class="foot">Instagram ke liye linked Business/Creator account aur public HTTPS MP4 URL chahiye. Facebook upload connected Page par local rendered MP4 bhejta hai. Meta App Review/permissions aur API limits apply.</p>
     </section>
-    <section class="panel" id="tiktokAdminPanel" hidden>
+    <section class="panel" id="tiktokAdminPanel" hidden data-feature="social_publish">
       <div class="panel-head"><div><h2>TikTok Connection</h2><p>Login Kit + Content Posting API direct publishing.</p></div><button id="tiktokRefresh" class="secondary" type="button">Refresh</button></div>
       <div id="tiktokConnectionStatus" class="muted" role="status" aria-live="polite">Checking TikTok setup…</div>
       <div class="actions"><button id="tiktokConnect" type="button">Connect TikTok</button><button id="tiktokDisconnect" class="secondary" type="button" hidden>Disconnect</button></div>
       <p class="foot">Direct Post API approval aur video.publish scope required. Unaudited apps ke posts private-only hote hain. Publish ke baad TikTok processing status check karna zaroori hai.</p>
     </section>
-    <section class="panel" id="youtubeAnalyticsPanel" hidden>
+    <section class="panel" id="youtubeAnalyticsPanel" hidden data-feature="youtube">
       <div class="panel-head"><div><h2>YouTube Channel Analytics</h2><p>Official YouTube Analytics API · actual channel data</p></div><button id="youtubeAnalyticsRefresh" class="secondary" type="button">Load analytics</button></div>
       <div class="task-filters">
         <label for="youtubeAnalyticsStart">From</label><input id="youtubeAnalyticsStart" type="date">
@@ -279,14 +279,14 @@
       <h3>Top videos by views</h3><div id="youtubeAnalyticsVideos" class="calendar-list"></div>
       <p id="youtubeAnalyticsNotice" class="muted" role="status" aria-live="polite">Connect YouTube and load analytics.</p>
     </section>
-    <section class="panel" id="youtubeReachPanel" hidden>
+    <section class="panel" id="youtubeReachPanel" hidden data-feature="youtube">
       <div class="panel-head"><div><h2>Thumbnail Impressions & CTR</h2><p>YouTube Reporting API · official daily reach report</p></div><div><button id="youtubeReachSetup" class="secondary" type="button">Enable reports</button> <button id="youtubeReachRefresh" class="secondary" type="button">Refresh reach</button></div></div>
       <div id="youtubeReachTotals" class="integration-cards" aria-live="polite"></div>
       <h3>Daily thumbnail reach</h3><div id="youtubeReachDaily" class="calendar-list"></div>
       <h3>Top videos by impressions</h3><div id="youtubeReachVideos" class="calendar-list"></div>
       <p id="youtubeReachNotice" class="muted" role="status" aria-live="polite">Enable daily reports to start collecting official thumbnail impressions and CTR.</p>
     </section>
-    <section class="panel" id="youtubeCommentsPanel" hidden>
+    <section class="panel" id="youtubeCommentsPanel" hidden data-feature="youtube">
       <div class="panel-head"><div><h2>YouTube Comments Analyzer</h2><p>Recent comments · spam flags · reply drafts (manual review only)</p></div><div class="button-row"><button id="youtubeCommentsExport" class="secondary" type="button">Export CSV</button><button id="youtubeCommentsRefresh" class="secondary" type="button">Analyze comments</button></div></div>
       <div id="youtubeCommentsTotals" class="integration-cards" aria-live="polite"></div>
       <div class="task-filters"><input id="youtubeCommentsSearch" type="search" placeholder="Search comments, authors or notes…" aria-label="Search comments"><select id="youtubeCommentsFilter" aria-label="Filter comment category"><option value="">All categories</option><option value="possible_spam">Possible spam</option><option value="positive">Positive</option><option value="negative">Negative</option><option value="question">Questions</option><option value="other">Other</option></select><select id="youtubeCommentsReviewFilter" aria-label="Filter review status"><option value="">All review statuses</option><option value="pending">Pending review</option><option value="follow_up">Follow-up</option><option value="reviewed">Reviewed</option><option value="resolved">Resolved</option></select><select id="youtubeCommentsSort" aria-label="Sort comments"><option value="newest">Newest first</option><option value="likes">Most liked</option><option value="spam">Possible spam first</option></select></div>
@@ -304,26 +304,26 @@
       <p id="youtubeSavedReviewsNotice" class="muted" role="status" aria-live="polite"></p>
       <p id="youtubeCommentsNotice" class="muted" role="status" aria-live="polite">Connect YouTube to review recent channel comments.</p>
     </section>
-    <section class="panel" id="youtubeRetentionPanel" hidden>
+    <section class="panel" id="youtubeRetentionPanel" hidden data-feature="youtube">
       <div class="panel-head"><div><h2>Video Audience Retention</h2><p>Official retention curve · one video at a time</p></div><button id="youtubeRetentionLoad" class="secondary" type="button">Load retention</button></div>
       <label for="youtubeRetentionVideoId">YouTube video ID</label><input id="youtubeRetentionVideoId" maxlength="20" placeholder="Example: dQw4w9WgXcQ">
       <div id="youtubeRetentionSummary" class="integration-cards" aria-live="polite"></div>
       <div id="youtubeRetentionPoints" class="calendar-list"></div>
       <p id="youtubeRetentionNotice" class="muted" role="status" aria-live="polite">Video ID daal kar retention curve load karein.</p>
     </section>
-    <section class="panel" id="analyticsOverviewPanel" hidden>
+    <section class="panel" id="analyticsOverviewPanel" hidden data-feature="youtube">
       <div class="panel-head"><div><h2>Publishing Performance Overview</h2><p>Recorded SINTU publishing events only; platform views and revenue are not fabricated.</p></div><button id="analyticsRefresh" class="secondary" type="button">Refresh</button></div>
       <div id="analyticsTotals" class="integration-cards" aria-live="polite"></div>
       <div id="analyticsPlatforms" class="calendar-list"></div>
       <p id="analyticsNotice" class="muted" role="status" aria-live="polite">Loading…</p>
     </section>
-    <section class="panel" id="schedulerQueuePanel" hidden>
+    <section class="panel" id="schedulerQueuePanel" hidden data-feature="social_publish">
       <div class="panel-head"><div><h2>Scheduled Publishing Queue</h2><p>Due, upcoming aur approval-pending posts ka live overview.</p></div><button id="schedulerQueueRefresh" class="secondary" type="button">Refresh queue</button></div>
       <div id="schedulerQueueTotals" class="integration-cards" aria-live="polite"></div>
       <p id="schedulerQueueNotice" class="muted" role="status" aria-live="polite">Loading schedule queue…</p>
       <div id="schedulerQueueItems" class="calendar-list"></div>
     </section>
-    <section class="panel" id="publishingHistoryPanel" hidden>
+    <section class="panel" id="publishingHistoryPanel" hidden data-feature="social_publish">
       <div class="panel-head"><div><h2>Unified Publishing Dashboard</h2><p>YouTube, Facebook, Instagram aur TikTok ke publish events.</p></div><button id="publishingHistoryRefresh" class="secondary" type="button">Refresh</button></div>
       <div class="task-filters">
         <select id="publishingPlatformFilter" aria-label="Filter platform"><option value="">All platforms</option><option value="youtube">YouTube</option><option value="youtube_shorts">YouTube Shorts</option><option value="facebook">Facebook</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option></select>
@@ -333,7 +333,7 @@
       <p id="publishingHistoryNotice" class="muted" role="status" aria-live="polite">Loading publishing history…</p>
       <div id="publishingHistoryItems" class="calendar-list"></div>
     </section>
-    <section class="panel" id="calendarPanel">
+    <section class="panel" id="calendarPanel" data-feature="social_publish">
       <div class="panel-head"><div><h2>Content Calendar & Scheduling</h2><p>Plan YouTube, Shorts, Instagram, Facebook, TikTok and website content.</p></div><button id="calendarRefresh" class="secondary" type="button">Refresh</button></div>
       <form id="calendarForm" class="calendar-form">
         <div><label for="calendarTitle">Content title</label><input id="calendarTitle" maxlength="160" required placeholder="Video title"></div>
@@ -372,7 +372,7 @@
       </div>
     </section>
     <p class="foot">Core planning aur text generation ke liye paid API key zaroori nahi: free local Ollama configure karein. Image/video/voice engines ko alag se install aur configure karna pad sakta hai. Paid APIs revenue ke baad aur owner ki permission se hi unlock honge. Keys ko GitHub ya chat mein share na karein. Text package generate hona video render, upload ya publish hone ke barabar nahi hai.</p>
-  <section class="panel production-studio" id="productionStudio">
+  <section class="panel production-studio" id="productionStudio" data-feature="production">
  <div class="panel-head"><div><h2>Complete Production Studio</h2><p>Video formats, end-to-end pipeline aur reusable project briefs — API keys ke bina planning aur project setup.</p></div><span class="status">Server sync + offline fallback</span></div>
  <p id="catalogNotice" class="muted" role="status"></p>
  <div class="production-grid">
@@ -395,7 +395,7 @@
   <p id="localMediaStatus" class="muted" role="status" aria-live="polite">Free local engines required: validated ComfyUI image workflow, Piper Hindi voice model, FFmpeg and FFprobe. Paid providers are not enabled.</p>
  </section><pre id="productionPackageOutput" class="production-output" hidden></pre><h3>Saved projects</h3><div id="localDrafts" class="draft-grid"></div>
  <h3>Project Memory, Asset Library, Versions & Render Queue</h3><div class="grid-two"><div><label for="studioMemoryKey">Project memory key</label><input id="studioMemoryKey" placeholder="character_style"><label for="studioMemoryValue">Project memory value</label><textarea id="studioMemoryValue" rows="2" placeholder="Character wears a blue jacket in every scene"></textarea><button id="saveStudioMemory" class="secondary" type="button">Save project memory</button></div><div><label for="studioAssetKind">Asset type</label><select id="studioAssetKind"><option value="reference">Reference</option><option value="image">Image</option><option value="video">Video</option><option value="audio">Audio</option><option value="model">3D model</option><option value="render">Render</option><option value="document">Document</option></select><label for="studioAssetName">Asset name</label><input id="studioAssetName" placeholder="Main character reference"><label for="studioAssetUri">Asset URI / local path</label><input id="studioAssetUri" placeholder="local path or generated asset URL"><button id="addStudioAsset" class="secondary" type="button">Add asset metadata</button></div></div><div class="actions"><button id="refreshStudioTools" class="secondary" type="button">Refresh project tools</button></div><p id="studioToolsNotice" class="muted" role="status"></p><div class="grid-two"><div><b>Saved memory & assets</b><div id="studioMemoryList" class="draft-grid"></div><div id="studioAssetList" class="draft-grid"></div></div><div><b>Version history</b><div id="studioVersionList" class="draft-grid"></div><b>Render queue</b><div id="studioRenderQueueList" class="draft-grid"></div></div></div>
- <section class="panel" id="offlineMediaPanel">
+ <section class="panel" id="offlineMediaPanel" data-feature="media_library">
   <h3>Offline Media Library</h3>
   <p class="muted">Phone se image, audio aur video files local IndexedDB queue mein save karein. Internet aane par manual ya automatic retry se server library mein sync hongi. Server duplicate content ko SHA-256 se deduplicate karta hai.</p>
   <label for="offlineMediaFiles">Import local media</label>
@@ -413,7 +413,7 @@
  <p class="muted small-note">Projects login account ke server par sync hote hain; server unavailable ho to local device fallback use hota hai. External OAuth, advanced video/image models, 3D/VR/AR engines aur platform approvals baad mein connect honge. Core project, plans, local rendering, memory, assets, versions aur independent checker queue abhi available hain.</p>
 </section>
 
-<section class="panel" id="blenderStudioPanel">
+<section class="panel" id="blenderStudioPanel" data-feature="video_editor">
  <div class="panel-head"><div><h2>Free Local Blender 3D Studio</h2><p>JSON scene se local Blender 3D animation MP4 render karein. Blender install hone par koi API key nahi chahiye.</p></div></div>
  <p id="blenderStatus" class="muted" role="status">Blender engine status checking…</p>
  <label for="blenderSceneTitle">3D scene title</label><input id="blenderSceneTitle" maxlength="100" value="SINTU 3D Scene">
