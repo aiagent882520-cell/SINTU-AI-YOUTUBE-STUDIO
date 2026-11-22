@@ -1,9 +1,16 @@
 package com.sintu.studio
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.pm.ServiceInfo
+import android.os.Build
+import androidx.core.app.NotificationCompat
 import android.net.Uri
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
+import androidx.work.ForegroundInfo
 import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.NetworkType
@@ -31,6 +38,7 @@ class VideoDownloadWorker(appContext: Context, params: WorkerParameters) :
             ?: "http://127.0.0.1:8000/"
 
         try {
+            setForeground(createForegroundInfo())
             setProgress(workDataOf(KEY_PROGRESS to "Downloading MP4 to Movies/SINTU…"))
             val uri = SintuApi(applicationContext, baseUrl).downloadVideoToGallery(applicationContext, videoId)
             Result.success(workDataOf(KEY_SAVED_URI to uri.toString(), KEY_VIDEO_ID to videoId))
@@ -50,8 +58,55 @@ class VideoDownloadWorker(appContext: Context, params: WorkerParameters) :
         }
     }
 
+    private fun createForegroundInfo(): ForegroundInfo {
+        val context = applicationContext
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    DOWNLOAD_CHANNEL_ID,
+                    "SINTU video downloads",
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Shows active MP4 downloads and their status."
+                    setShowBadge(false)
+                }
+            )
+        }
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        val contentIntent = launchIntent?.let {
+            PendingIntent.getActivity(
+                context,
+                NOTIFICATION_ID,
+                it,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+        val notification = NotificationCompat.Builder(context, DOWNLOAD_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle("SINTU MP4 download")
+            .setContentText("Downloading to Movies/SINTU. You can leave the app open or closed.")
+            .setContentIntent(contentIntent)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ForegroundInfo(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            ForegroundInfo(NOTIFICATION_ID, notification)
+        }
+    }
+
     companion object {
         const val TAG = "sintu-video-download"
+        private const val DOWNLOAD_CHANNEL_ID = "sintu-video-downloads"
+        private const val NOTIFICATION_ID = 29401
         const val KEY_VIDEO_ID = "video_id"
         const val KEY_SAVED_URI = "saved_uri"
         const val KEY_ERROR = "error"
