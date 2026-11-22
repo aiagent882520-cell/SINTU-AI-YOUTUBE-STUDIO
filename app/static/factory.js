@@ -62,7 +62,10 @@
       for(const [name,item] of Object.entries(data.engines)){
         const row=document.createElement("p");row.className="factory-meta";
         const localReady=Boolean(item.local_available);
-        row.textContent=name+": local "+(localReady?"READY":"NOT READY")+" · "+(item.engine||"No local engine")+
+        const readiness=name==="image"
+          ? (item.comfyui_available?"LOCAL AI READY":(localReady?"PROCEDURAL FALLBACK ONLY":"NOT READY"))
+          : (localReady?"LOCAL READY":"NOT READY");
+        row.textContent=name+": "+readiness+" · "+(item.engine||"No local engine")+
           (item.available && !localReady?" · optional remote provider configured, not used for free local rendering":"");
         row.dataset.localReady=String(localReady);root.append(row);
       }
