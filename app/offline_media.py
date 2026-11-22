@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import shutil
 import sqlite3
 import time
 from contextlib import contextmanager
@@ -86,6 +87,21 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _copy_file_exclusive(source: Path, destination: Path, expected_sha256: str) -> None:
+    """Publish a verified copy without hard links or overwriting an existing path."""
+    descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(descriptor, "wb") as output, Path(source).open("rb") as incoming:
+            shutil.copyfileobj(incoming, output, length=1024 * 1024)
+            output.flush()
+            os.fsync(output.fileno())
+        if _sha256_file(destination) != expected_sha256:
+            raise OfflineMediaError("Copied media failed SHA-256 verification.")
+    except BaseException:
+        destination.unlink(missing_ok=True)
+        raise
+
+
 def import_media_file(
     *, data_dir: Path, source_path: Path, filename: str, content_type: str = "application/octet-stream"
 ) -> dict[str, Any]:
@@ -111,13 +127,11 @@ def import_media_file(
             raise OfflineMediaError("Existing content-addressed media file is unsafe or has a hash mismatch.")
     else:
         try:
-            os.link(source, destination)
+            _copy_file_exclusive(source, destination, sha256)
             created = True
         except FileExistsError:
             if destination.is_symlink() or not destination.is_file() or destination.stat().st_size != size or _sha256_file(destination) != sha256:
                 raise OfflineMediaError("Concurrent media import produced an unsafe or mismatched destination.") from None
-    if created:
-        source.unlink(missing_ok=True)
     import datetime
     imported_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
     try:
@@ -143,10 +157,9 @@ def import_media_file(
         if created:
             destination.unlink(missing_ok=True)
         raise
-    if duplicate:
-        source.unlink(missing_ok=True)
-        if created and destination != media_dir / record["stored_name"]:
-            destination.unlink(missing_ok=True)
+    source.unlink(missing_ok=True)
+    if duplicate and created and destination != media_dir / record["stored_name"]:
+        destination.unlink(missing_ok=True)
     record["duplicate"] = duplicate
     record["download_url"] = "/api/offline-media/" + sha256 + "/file"
     return record
