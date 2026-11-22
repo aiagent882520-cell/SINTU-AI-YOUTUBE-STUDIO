@@ -47,7 +47,7 @@ from .policy import paid_upgrades_allowed, production_actions_allowed, external_
 from .blender_renderer import BLENDER_DIR, blender_status, render_scene, BlenderUnavailable, BlenderRenderFailed
 from .agent_orchestrator import workflow_team, orchestration_summary
 from .ai_brain import ProviderNotConfigured, ProviderRequestError, generate_text, provider_status, WORKFLOW_GUIDES
-from . import principal_ai_council
+from . import principal_ai_council, principal_knowledge_graph
 from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, verify_publishable_mp4, RendererUnavailable, RenderFailed, OUTPUT_DIR
 from .format_rendering import all_format_render_profiles, format_render_profile
 from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable, VoiceGenerationFailed, AUDIO_DIR
@@ -741,6 +741,26 @@ class ProviderSettingsInput(BaseModel):
     selected_provider: str = Field(pattern=r"^(auto|local|openai|gemini|deepseek|claude)$")
 
 
+class PrincipalKnowledgeNodeInput(BaseModel):
+    principal_id: str = Field(pattern=r"^(chatgpt|gemini|claude|deepseek)$")
+    scope: str = Field(pattern=r"^(private|shared)$")
+    title: str = Field(min_length=1, max_length=180)
+    content: str = Field(min_length=1, max_length=12000)
+    category: str = Field(default="general", max_length=80)
+    source_refs: list[str] = Field(default_factory=list, max_length=30)
+
+
+class PrincipalKnowledgeVerificationInput(BaseModel):
+    approved: bool
+    note: str = Field(default="", max_length=2000)
+
+
+class PrincipalKnowledgeEdgeInput(BaseModel):
+    from_node_id: str = Field(min_length=1, max_length=100)
+    to_node_id: str = Field(min_length=1, max_length=100)
+    relation: str = Field(min_length=1, max_length=80)
+
+
 class PrincipalAICouncilDecisionInput(BaseModel):
     title: str = Field(min_length=1, max_length=160)
     decision_type: str = Field(pattern=r"^(major|security|architecture|production_release|paid_action|public_publish|external_data_sharing|code_integration)$")
@@ -840,6 +860,86 @@ def principal_ai_council_owner_approval(decision_id: str, payload: PrincipalAIOw
     if not decision:
         raise HTTPException(status_code=404, detail="Council decision not found.")
     return {"decision": decision}
+
+
+@app.get("/api/admin/principal-ai/knowledge")
+def principal_knowledge_list(request: Request, scope: str | None = None,
+                             principal_id: str | None = None, status: str | None = None,
+                             limit: int = Query(default=100, ge=1, le=200)):
+    owner = _require_principal_ai_owner(request)
+    with db() as conn:
+        principal_knowledge_graph.ensure_schema(conn)
+        try:
+            return {"nodes": principal_knowledge_graph.list_nodes(
+                conn, owner, scope=scope, principal_id=principal_id, status=status, limit=limit
+            )}
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
+@app.post("/api/admin/principal-ai/knowledge", status_code=201)
+def principal_knowledge_create(payload: PrincipalKnowledgeNodeInput, request: Request):
+    owner = _require_principal_ai_owner(request)
+    with db() as conn:
+        principal_knowledge_graph.ensure_schema(conn)
+        try:
+            node = principal_knowledge_graph.create_node(
+                conn, owner, payload.principal_id, payload.scope, payload.title,
+                payload.content, payload.category, payload.source_refs
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+    return {"node": node}
+
+
+@app.post("/api/admin/principal-ai/knowledge/{node_id}/verification")
+def principal_knowledge_verify(node_id: str, payload: PrincipalKnowledgeVerificationInput,
+                                request: Request):
+    owner = _require_principal_ai_owner(request)
+    with db() as conn:
+        principal_knowledge_graph.ensure_schema(conn)
+        try:
+            node = principal_knowledge_graph.verify_node(
+                conn, owner, owner, node_id, payload.approved, payload.note
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+    if not node:
+        raise HTTPException(status_code=404, detail="Knowledge node not found.")
+    return {"node": node}
+
+
+@app.post("/api/admin/principal-ai/knowledge/edges", status_code=201)
+def principal_knowledge_link(payload: PrincipalKnowledgeEdgeInput, request: Request):
+    owner = _require_principal_ai_owner(request)
+    with db() as conn:
+        principal_knowledge_graph.ensure_schema(conn)
+        try:
+            edge = principal_knowledge_graph.link_nodes(
+                conn, owner, payload.from_node_id, payload.to_node_id, payload.relation
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+    return {"edge": edge}
+
+
+@app.get("/api/admin/principal-ai/knowledge/audit")
+def principal_knowledge_audit(request: Request, limit: int = Query(default=100, ge=1, le=500)):
+    owner = _require_principal_ai_owner(request)
+    with db() as conn:
+        principal_knowledge_graph.ensure_schema(conn)
+        return {
+            "events": principal_knowledge_graph.list_audit_events(conn, owner, limit),
+            "integrity": principal_knowledge_graph.verify_audit_chain(conn, owner),
+        }
+
+
+@app.get("/api/admin/principal-ai/knowledge/edges")
+def principal_knowledge_edges(request: Request, node_id: str | None = None):
+    owner = _require_principal_ai_owner(request)
+    with db() as conn:
+        principal_knowledge_graph.ensure_schema(conn)
+        return {"edges": principal_knowledge_graph.list_edges(conn, owner, node_id)}
 
 
 @app.get("/api/admin/integrations")
