@@ -5316,6 +5316,68 @@ def create_subtitles(payload: SubtitleInput):
     )
 
 
+@app.get("/api/production-factory/health")
+def production_factory_health(request: Request):
+    """Probe configured model/media engines and return a secret-free Owner dashboard snapshot."""
+    _production_project_owner(request)
+    brain = provider_status()
+    image = image_status()
+    voice = voice_status()
+    music = music_status()
+    video = video_status()
+
+    local = brain.get("local") or {}
+    remote = {
+        key: {"configured": bool((brain.get(key) or {}).get("configured")),
+              "model": (brain.get(key) or {}).get("model")}
+        for key in ("openai", "gemini", "deepseek", "claude")
+    }
+    engines = {
+        "image": {
+            "available": bool(image.get("available")),
+            "local_available": bool(image.get("local_available")),
+            "engine": image.get("local_engine"),
+            "comfyui_available": bool(image.get("comfyui_available")),
+            "workflow_configured": bool(image.get("local_workflow_configured")),
+        },
+        "voice": {
+            "available": bool(voice.get("available")),
+            "local_available": bool(voice.get("local_available")),
+            "engine": voice.get("local_engine"),
+            "model_configured": bool(voice.get("local_model_configured")),
+        },
+        "music": {
+            "available": bool(music.get("available")),
+            "local_available": bool(music.get("local_available")),
+            "engine": music.get("local_engine"),
+        },
+        "video": {
+            "available": bool(video.get("available")),
+            "local_available": bool(video.get("local_available")),
+            "engine": video.get("local_engine"),
+            "workflow_configured": bool(video.get("local_workflow_configured")),
+        },
+    }
+    return {
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "master_brain": {
+            "selected": brain.get("selected"),
+            "local": {
+                "configured": bool(local.get("configured")),
+                "service_running": bool(local.get("service_running")),
+                "model_available": bool(local.get("model_available")),
+                "backend": local.get("backend"),
+                "model": local.get("model"),
+            },
+            "optional_remote_providers": remote,
+            "paid_upgrades_allowed": bool(brain.get("paid_upgrades_allowed")),
+        },
+        "engines": engines,
+        "policy": {"free_first": True, "paid_auto_activation": False, "publishing_enabled": False},
+        "notice": "Configured means credentials/settings exist; it does not prove a successful external API call. Local engine checks reflect the current host only.",
+    }
+
+
 @app.get("/api/production-factory/providers")
 def production_factory_providers():
     """Return sanitized capability/provider catalogue; never exposes secrets."""
