@@ -42,9 +42,7 @@ applicable stages (intake through quality), orders those role groups by stage, a
 advances a stage only after its assigned workers pass independent checkers. Stages
 with no matching role in the selected format are explicitly marked `skipped` rather
 than falsely completed. The Owner Agent can only place Owner Review into
-`awaiting_owner`; its recommendation is not human approval. Render, package,
-publishing, analytics and learning remain pending for their separate executors.
-Therefore this is partial stage dispatch, not full 21-stage execution. Provider
+`awaiting_owner`; its recommendation is not human approval. The authenticated Owner's confirmed local media-generation action advances the render and package stages only after verified MP4/provenance and package attachment. Publishing, analytics and learning remain pending for separate executors. Therefore this is partial stage dispatch, not full 21-stage execution. Provider
 matches are candidates, not installation or health attestations.
 
 ## Monitor recent runs
