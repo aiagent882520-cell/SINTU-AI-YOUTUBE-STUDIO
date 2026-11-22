@@ -101,12 +101,22 @@ def route_specialist_roles(role_names: list[str]) -> dict[str, Any]:
             routed[match].append(name)
         else:
             unmapped.append(name)
+    deferred_tokens = ("final render", "rendering specialist", "final output", "upload agent",
+                       "scheduling agent", "analytics agent", "asset manager", "memory agent",
+                       "automation agent")
+    deferred = [role for role in unmapped
+                if any(token in role.casefold() for token in deferred_tokens)]
     return {
         "stages": [
             {"stage_id": stage_id, "roles": roles, "status": "assigned" if roles else "not_applicable"}
             for stage_id, roles in routed.items()
         ],
         "unmapped_roles": unmapped,
+        "deferred_roles": deferred,
+        "deferred_role_policy": (
+            "Deferred roles are reported for future dedicated executors; they are not run as "
+            "render, package, publishing, analytics or learning work by the text-only specialist loop."
+        ),
     }
 
 
