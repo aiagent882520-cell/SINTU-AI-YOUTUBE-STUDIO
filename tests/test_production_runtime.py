@@ -13,6 +13,75 @@ def test_all_sixty_video_formats_have_independent_worker_checker_pairs():
         assert all(name.endswith(" Checker") for name in item["checker_roles"])
 
 
+def test_each_run_persists_the_ordered_21_stage_ledger(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    run = runtime.create_run("youtube-shorts", "Hindi science explainer", "owner-a")
+
+    assert len(run["pipeline_stages"]) == 21
+    assert [stage["sequence"] for stage in run["pipeline_stages"]] == list(range(1, 22))
+    assert run["pipeline_stages"][0]["stage_id"] == "intake"
+    assert run["pipeline_stages"][-1]["stage_id"] == "learning"
+    assert run["pipeline_stage_execution_implemented"] is False
+    assert all(stage["status"] == "pending" for stage in run["pipeline_stages"])
+
+
+def test_pipeline_stage_transitions_require_evidence_lease_and_owner_approval(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    run = runtime.create_run("youtube-shorts", "Hindi science explainer", "owner-a")
+
+    with pytest.raises(ValueError, match="requires evidence"):
+        runtime.transition_pipeline_stage(
+            run["id"], "planning", "completed", owner_username="owner-a",
+        )
+    assert runtime._claim_run(run["id"], "owner-a") is True
+    token = runtime._worker_token(run["id"], "owner-a")
+    runtime.transition_pipeline_stage(
+        run["id"], "planning", "running", owner_username="owner-a",
+    )
+    with pytest.raises(runtime.ProductionRunCancelled, match="live fenced worker lease"):
+        runtime.transition_pipeline_stage(
+            run["id"], "planning", "completed", owner_username="owner-a",
+            evidence="Acceptance criteria checked",
+        )
+    updated = runtime.transition_pipeline_stage(
+        run["id"], "planning", "completed", owner_username="owner-a",
+        worker_token=token, evidence="Acceptance criteria checked",
+    )
+    planning = next(stage for stage in updated["pipeline_stages"] if stage["stage_id"] == "planning")
+    assert planning["status"] == "completed"
+    assert planning["evidence"] == "Acceptance criteria checked"
+
+    runtime.transition_pipeline_stage(
+        run["id"], "owner_review", "awaiting_owner", owner_username="owner-a",
+    )
+    with pytest.raises(PermissionError, match="Owner approval"):
+        runtime.transition_pipeline_stage(
+            run["id"], "owner_review", "completed", owner_username="owner-a",
+            evidence="Review completed",
+        )
+    updated = runtime.transition_pipeline_stage(
+        run["id"], "owner_review", "completed", owner_username="owner-a",
+        evidence="Owner explicitly approved the creative package",
+        owner_approved=True,
+    )
+    review = next(stage for stage in updated["pipeline_stages"] if stage["stage_id"] == "owner_review")
+    assert review["status"] == "completed"
+
+
+def test_pipeline_stage_ledger_is_owner_scoped(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    run = runtime.create_run("youtube-shorts", "Hindi science explainer", "owner-a")
+    assert runtime.transition_pipeline_stage(
+        run["id"], "intake", "running", owner_username="owner-b",
+    ) is None
+
+
 def test_checker_rejects_invalid_json_instead_of_auto_approving():
     result = _checker_payload("Looks good, approved.")
     assert result["decision"] == "FAIL"
