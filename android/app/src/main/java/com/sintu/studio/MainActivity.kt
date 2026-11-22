@@ -448,8 +448,16 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
         )
         OutlinedTextField(
             resolution, { resolution = it.trim().take(12) },
-            Modifier.fillMaxWidth(), label = { Text("Low-memory output resolution (720x1280 / 1280x720)") },
-            singleLine = true
+            Modifier.fillMaxWidth(), label = { Text("Output resolution") },
+            singleLine = true,
+            isError = !OutputResolutionPolicy.isSupported(resolution)
+        )
+        Text(
+            if (OutputResolutionPolicy.isSupported(resolution))
+                "Supported profile: $resolution"
+            else "Unsupported profile. Choose: " + OutputResolutionPolicy.supported.joinToString(", "),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (OutputResolutionPolicy.isSupported(resolution)) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
         )
         Button(
             onClick = {
@@ -518,6 +526,10 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
                     scope.launch {
                         busy = true
                         try {
+                            if (!OutputResolutionPolicy.isSupported(resolution)) {
+                                notice = "Unsupported output resolution. Choose: " + OutputResolutionPolicy.supported.joinToString(", ")
+                                return@launch
+                            }
                             val result = api.produceApprovedMedia(runId, resolution)
                             runStatus = result["status"]?.toString() ?: runStatus
                             val render = result["render"] as? Map<*, *>
@@ -534,7 +546,7 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
                         } finally { busy = false }
                     }
                 },
-                enabled = !busy && runStatus == "completed",
+                enabled = !busy && runStatus == "completed" && OutputResolutionPolicy.isSupported(resolution),
                 modifier = Modifier.fillMaxWidth()
             ) { Text(if (busy) "Rendering…" else "Generate final MP4 (offline engines)") }
         }
@@ -567,11 +579,29 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
             ) { Text(if (busy) "Downloading…" else "Download MP4 to phone") }
             if (downloadedUri.isNotBlank()) {
                 Text("Saved to Movies/SINTU · " + downloadedUri, style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            val previewIntent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(android.net.Uri.parse(downloadedUri), "video/mp4")
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            if (previewIntent.resolveActivity(context.packageManager) != null) {
+                                context.startActivity(previewIntent)
+                            } else {
+                                notice = "No compatible video player is installed on this device."
+                            }
+                        } catch (error: Exception) {
+                            notice = error.message ?: "Could not open the saved MP4."
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Play saved MP4") }
             }
         }
         Divider()
         Text("Native offline media queue", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text("Files remain in Android document storage. WorkManager keeps upload jobs across app restarts and retries on network restoration. Each file is capped at 256 MiB; chunk-level resume is not supported yet.", style = MaterialTheme.typography.bodySmall)
+        Text("Files remain in Android document storage. WorkManager keeps upload jobs across app restarts and retries on network restoration. Each file is capped at 256 MiB. Uploads use SHA-256-verified resumable chunks; WorkManager retries and resumes from the server-confirmed offset.", style = MaterialTheme.typography.bodySmall)
         Button(
             onClick = { mediaPicker.launch(arrayOf("image/*", "audio/*", "video/*")) },
             enabled = !busy,
