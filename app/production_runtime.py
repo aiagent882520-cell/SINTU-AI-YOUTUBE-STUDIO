@@ -450,7 +450,7 @@ def claim_next_pipeline_stage(
             raise ProductionRunCancelled("A live fenced run lease is required to claim a pipeline stage.")
         stage = conn.execute(
             """SELECT sequence,stage_id,department,status,approval
-               FROM production_pipeline_stages WHERE run_id=? AND status!='completed'
+               FROM production_pipeline_stages WHERE run_id=? AND status NOT IN ('completed','skipped')
                ORDER BY sequence LIMIT 1""", (run_id,)
         ).fetchone()
         if not stage:
@@ -459,7 +459,7 @@ def claim_next_pipeline_stage(
             return dict(stage)
         previous = conn.execute(
             """SELECT stage_id FROM production_pipeline_stages
-               WHERE run_id=? AND sequence<? AND status!='completed'
+               WHERE run_id=? AND sequence<? AND status NOT IN ('completed','skipped')
                ORDER BY sequence LIMIT 1""", (run_id, stage["sequence"])
         ).fetchone()
         if previous:
@@ -501,7 +501,7 @@ def transition_pipeline_stage(
     owner_approved: bool = False,
 ) -> dict[str, Any] | None:
     """Persist an auditable stage transition; this is not yet wired to stage execution."""
-    allowed_statuses = {"pending", "running", "completed", "blocked", "paused", "awaiting_owner"}
+    allowed_statuses = {"pending", "running", "completed", "blocked", "paused", "awaiting_owner", "skipped"}
     if status not in allowed_statuses:
         raise ValueError("Unsupported pipeline stage status.")
     if not owner_username or len(owner_username) > 120:
@@ -534,7 +534,7 @@ def transition_pipeline_stage(
                    WHERE run_id=? AND sequence<? ORDER BY sequence""",
                 (run_id, stage["sequence"]),
             ).fetchall()
-            incomplete = [item["stage_id"] for item in earlier if item["status"] != "completed"]
+            incomplete = [item["stage_id"] for item in earlier if item["status"] not in {"completed", "skipped"}]
             if incomplete:
                 raise ValueError("Earlier pipeline stages are incomplete: " + ", ".join(incomplete[:5]))
         if stage["approval"] != "owner_required":
@@ -543,12 +543,13 @@ def transition_pipeline_stage(
                     or not run["lease_expires_at"] or run["lease_expires_at"] < now):
                 raise ProductionRunCancelled("A live fenced worker lease is required to change this stage.")
         transitions = {
-            "pending": {"running", "blocked", "awaiting_owner"},
+            "pending": {"running", "blocked", "awaiting_owner", "skipped"},
             "running": {"completed", "blocked", "paused", "awaiting_owner"},
             "paused": {"running", "blocked", "awaiting_owner"},
             "blocked": {"pending", "running"},
             "awaiting_owner": {"completed", "paused"},
             "completed": set(),
+            "skipped": set(),
         }
         if status not in transitions.get(stage["status"], set()):
             raise ValueError(f"Invalid pipeline stage transition: {stage['status']} -> {status}.")
