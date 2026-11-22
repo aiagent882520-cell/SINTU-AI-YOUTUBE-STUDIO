@@ -82,6 +82,7 @@ def test_factory_runs_dashboard_route_is_feature_gated():
 
 def test_factory_health_reports_host_capabilities_without_secrets(monkeypatch):
     monkeypatch.setattr(main, "_production_project_owner", lambda request: "owner-1")
+    monkeypatch.setattr(main.production_factory_supervisor, "is_running", True)
     monkeypatch.setattr(main, "provider_status", lambda: {
         "selected": "local",
         "paid_upgrades_allowed": False,
@@ -113,6 +114,9 @@ def test_factory_health_reports_host_capabilities_without_secrets(monkeypatch):
     assert result["engines"]["voice"]["available"] is False
     assert result["policy"]["paid_auto_activation"] is False
     assert result["policy"]["publishing_enabled"] is False
+    assert result["background_worker"]["running"] is True
+    assert result["background_worker"]["auto_pickup_status"] == "queued_only"
+    assert result["background_worker"]["paused_runs_require_owner_review"] is True
     serialized = str(result)
     assert "base_url" not in serialized
     assert "api_key" not in serialized
