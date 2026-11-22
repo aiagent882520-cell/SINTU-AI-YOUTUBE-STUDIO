@@ -64,9 +64,10 @@ production worker. The worker retains its run state, lease fencing, retry limits
 cancellation checkpoints and builder/checker/reviewer quality gates.
 
 A completed script/package is not the same as a rendered video or a published video.
-Media rendering remains behind its existing quality and production gates. External
-publishing remains separately disabled unless the Owner explicitly enables it and
-approves the action.
+The authenticated Owner's explicit local media-generation request completes the
+`owner_review` stage with an evidence record; an AI Owner Agent READY recommendation
+cannot do this. The media endpoint rejects blocked Owner Review checkpoints. External
+publishing remains separately disabled and requires its own explicit Owner approval.
 
 ## Provider and approval policy
 
