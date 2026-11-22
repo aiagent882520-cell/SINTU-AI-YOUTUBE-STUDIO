@@ -26,7 +26,7 @@
   }
   function renderPlan(plan) {
     const root=$("factoryPlanOutput"); root.replaceChildren();
-    const heading=document.createElement("h3"); heading.textContent="11-stage factory plan"; root.append(heading);
+    const heading=document.createElement("h3"); heading.textContent=(plan.pipeline_stage_count||plan.stages?.length||0)+"-stage factory plan"; root.append(heading);
     for(const stage of plan.stages||[]){
       const card=document.createElement("article"); card.className="factory-stage";
       const title=document.createElement("b"); title.textContent=stage.sequence+". "+stage.name; card.append(title);
