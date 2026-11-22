@@ -126,3 +126,13 @@ def test_factory_health_route_is_feature_gated():
     )
     assert "GET" in route.methods
     assert access_control.feature_for_path("/api/production-factory/health") == "production"
+
+
+def test_factory_plan_rejects_unknown_production_format():
+    import pytest
+    from fastapi import HTTPException
+
+    payload = main.ProductionFactoryPlanInput(topic="Hindi science", format_id="not-a-real-format")
+    with pytest.raises(HTTPException) as exc:
+        main.production_factory_plan(payload)
+    assert exc.value.status_code == 400
