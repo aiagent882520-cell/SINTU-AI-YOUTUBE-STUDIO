@@ -702,7 +702,13 @@ def admin_logout(request: Request):
 @app.get("/api/auth/session")
 def admin_session(request: Request):
     user = _session_user(request.cookies.get(SESSION_COOKIE))
-    return {"authenticated": bool(user), "username": user["username"] if user else None, "role": user["role"] if user else None}
+    return {
+        "authenticated": bool(user),
+        "username": user["username"] if user else None,
+        "role": user["role"] if user else None,
+        "is_owner": bool(user and user.get("is_owner")),
+        "features": user.get("features", []) if user else [],
+    }
 
 
 @app.get("/api/access/features")
