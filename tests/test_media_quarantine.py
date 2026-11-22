@@ -95,3 +95,19 @@ def test_existing_quarantine_destination_is_not_overwritten(tmp_path):
     assert report["targets"][0]["status"] == "REJECTED"
     assert destination.read_bytes() == b"do not overwrite"
     assert source.read_bytes() == b"original"
+
+def test_symlinked_quarantine_root_is_rejected_without_touching_source(tmp_path):
+    source = tmp_path / "generated_videos" / "clip.mp4"
+    source.parent.mkdir()
+    source.write_bytes(b"original")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (tmp_path / "media_quarantine").symlink_to(outside, target_is_directory=True)
+
+    report = process_manifest(tmp_path, {
+        "targets": [{"path": "generated_videos/clip.mp4", "sha256": digest(source)}]
+    }, apply=True)
+
+    assert report["targets"][0]["status"] == "REJECTED"
+    assert source.read_bytes() == b"original"
+    assert list(outside.iterdir()) == []
