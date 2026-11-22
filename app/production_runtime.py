@@ -617,6 +617,82 @@ def transition_pipeline_stage(
     return get_run(run_id, owner_username)
 
 
+def transition_owner_media_stage(
+    run_id: str,
+    stage_id: str,
+    status: str,
+    *,
+    owner_username: str,
+    evidence: str | None = None,
+    issues: list[str] | None = None,
+) -> dict[str, Any] | None:
+    """Advance the synchronous local render/package stages from an authenticated Owner action."""
+    if stage_id not in {"render", "package"}:
+        raise ValueError("Owner media action may only advance render or package stages.")
+    if status not in {"running", "completed", "paused"}:
+        raise ValueError("Unsupported Owner media stage status.")
+    if not owner_username or len(owner_username) > 120:
+        raise ValueError("Owner username is invalid.")
+    if status == "completed" and not (isinstance(evidence, str) and evidence.strip()):
+        raise ValueError("Completed media stages require verified evidence.")
+    if issues is not None and (not isinstance(issues, list) or any(not isinstance(item, str) for item in issues)):
+        raise ValueError("Stage issues must be a list of strings.")
+    init_runtime_db()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        run = conn.execute(
+            "SELECT owner_username,status,cancel_requested FROM production_runs WHERE id=?",
+            (run_id,),
+        ).fetchone()
+        stage = conn.execute(
+            "SELECT sequence,status FROM production_pipeline_stages WHERE run_id=? AND stage_id=?",
+            (run_id, stage_id),
+        ).fetchone()
+        owner_review = conn.execute(
+            "SELECT status FROM production_pipeline_stages WHERE run_id=? AND stage_id='owner_review'",
+            (run_id,),
+        ).fetchone()
+        if not run or run["owner_username"] != owner_username or not stage or not owner_review:
+            return None
+        if run["status"] != "completed" or run["cancel_requested"]:
+            raise PermissionError("Local media stages require a completed, uncancelled production package.")
+        if owner_review["status"] != "completed":
+            raise PermissionError("Human Owner Review must be completed before local media stages.")
+        if status == "running":
+            earlier = conn.execute(
+                """SELECT stage_id,status FROM production_pipeline_stages
+                   WHERE run_id=? AND sequence<? ORDER BY sequence""",
+                (run_id, stage["sequence"]),
+            ).fetchall()
+            incomplete = [item["stage_id"] for item in earlier if item["status"] not in {"completed", "skipped"}]
+            if incomplete:
+                raise ValueError("Earlier pipeline stages are incomplete: " + ", ".join(incomplete[:5]))
+        transitions = {
+            "pending": {"running"},
+            "paused": {"running"},
+            "running": {"completed", "paused"},
+            "completed": set(),
+        }
+        if status not in transitions.get(stage["status"], set()):
+            raise ValueError(f"Invalid Owner media stage transition: {stage['status']} -> {status}.")
+        now = _now()
+        conn.execute(
+            """UPDATE production_pipeline_stages SET status=?,evidence=COALESCE(?,evidence),
+               issues_json=?,started_at=COALESCE(?,started_at),
+               completed_at=COALESCE(?,completed_at),updated_at=?
+               WHERE run_id=? AND stage_id=?""",
+            (status, evidence, json.dumps(issues or [], ensure_ascii=False),
+             now if status == "running" else None, now if status == "completed" else None,
+             now, run_id, stage_id),
+        )
+        _event(
+            conn, run_id, owner_username, stage["status"], status,
+            "owner_media_stage_transition",
+            f"stage={stage_id}; executor=authenticated_owner_local_media_action; evidence_present={bool(evidence)}",
+        )
+    return get_run(run_id, owner_username)
+
+
 def _pause_active_pipeline_stage(
     run_id: str,
     owner_username: str | None,
