@@ -79,6 +79,19 @@ publishing remains separately disabled and requires its own explicit Owner appro
 - Do not delete or overwrite original media as part of recovery or automation.
 
 
+## Deferred specialist roles and side-effect boundaries
+
+The role router reports `deferred_worker_roles` separately from general unmapped roles.
+Roles such as Final Render Agent, Final Output Agent, Upload Agent, Scheduling Agent,
+Analytics Agent, Asset Manager, Memory Agent and Automation Agent are not executed
+inside the text-only specialist/checker loop. Their names in a format preset are not
+proof of a render, package, upload, analytics fetch or learning operation.
+
+The run result keeps these roles visible alongside the deferred stage IDs. Dedicated
+executors must be integrated and independently tested before any of these stages can
+be reported as complete. In particular, upload and scheduling remain Owner-approved
+external side effects; a text response from an Upload Agent never performs a publish.
+
 ## Durable queued-run recovery
 
 At application startup, SINTU first recovers expired worker leases, then starts an in-process
