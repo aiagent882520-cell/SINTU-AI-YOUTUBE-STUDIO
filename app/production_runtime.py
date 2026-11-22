@@ -377,6 +377,16 @@ def recover_stale_runs() -> int:
             if changed:
                 _event(conn, row["id"], row["owner_username"], row["status"], target,
                        "stale_worker_recovered", error)
+                if target == "paused":
+                    stage_rows = conn.execute(
+                        """UPDATE production_pipeline_stages SET status='paused',updated_at=?
+                           WHERE run_id=? AND status='running'""",
+                        (now, row["id"]),
+                    ).rowcount
+                    if stage_rows:
+                        _event(conn, row["id"], row["owner_username"], "running", "paused",
+                               "pipeline_checkpoint_recovered",
+                               f"paused_stage_count={stage_rows}; incomplete work must be revalidated")
                 recovered += 1
     return recovered
 
