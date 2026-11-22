@@ -114,6 +114,9 @@ def test_factory_health_reports_host_capabilities_without_secrets(monkeypatch):
     assert result["engines"]["voice"]["available"] is False
     assert result["policy"]["paid_auto_activation"] is False
     assert result["policy"]["publishing_enabled"] is False
+    assert result["worker"]["running"] is main.production_factory_supervisor.is_running
+    assert result["worker"]["mode"] == "single-process-internal-queue-supervisor"
+    assert result["worker"]["poll_interval_seconds"] >= 0.25
     assert result["background_worker"]["running"] is True
     assert result["background_worker"]["auto_pickup_status"] == "queued_only"
     assert result["background_worker"]["paused_runs_require_owner_review"] is True
