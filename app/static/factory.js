@@ -96,8 +96,8 @@
       });
       notice(result.detail||"Verified MP4 ready. Publishing remains disabled.");
       await loadRuns();
-      if(result.render?.filename){
-        const link=document.createElement("a");link.href="/api/videos/"+encodeURIComponent(result.render.filename);
+      if(result.render?.url || result.render?.video_id){
+        const link=document.createElement("a");link.href=result.render.url||("/api/videos/"+encodeURIComponent(result.render.video_id));
         link.textContent="Open rendered video: "+result.render.filename;link.target="_blank";link.rel="noopener";
         $("factoryNotice").append(document.createTextNode(" "),link);
       }
