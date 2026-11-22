@@ -4455,3 +4455,31 @@ def test_principal_ai_council_allows_configured_owner_account(tmp_path, monkeypa
     login = client.post("/api/auth/login", json={"username": "owner", "password": "a-strong-test-password"})
     assert login.status_code == 200
     assert client.get("/api/admin/principal-ai/council/status").status_code == 200
+
+
+def test_production_run_cancel_and_events_are_owner_scoped(tmp_path, monkeypatch):
+    import app.production_runtime as runtime
+
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setattr(runtime, "DB_PATH", tmp_path / "runtime.sqlite3")
+    monkeypatch.setattr(main, "_production_project_owner", lambda _request: "alice")
+    run = runtime.create_run("youtube-shorts", "cancel from API", "alice")
+
+    cancelled = client.post(f"/api/production/runs/{run['id']}/cancel")
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+    assert cancelled.json()["partial_outputs_preserved"] is True
+
+    events = client.get(f"/api/production/runs/{run['id']}/events")
+    assert events.status_code == 200
+    assert events.json()["events"][-1]["to_status"] == "cancelled"
+
+    monkeypatch.setattr(main, "_production_project_owner", lambda _request: "bob")
+    assert client.post(f"/api/production/runs/{run['id']}/cancel").status_code == 404
+    assert client.get(f"/api/production/runs/{run['id']}/events").status_code == 404
+
+
+def test_production_run_cancel_rejects_malformed_run_id(tmp_path, monkeypatch):
+    client = client_for_test(tmp_path, monkeypatch)
+    assert client.post("/api/production/runs/not-a-run-id/cancel").status_code == 400
+    assert client.get("/api/production/runs/not-a-run-id/events").status_code == 400
