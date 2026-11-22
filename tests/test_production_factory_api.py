@@ -77,3 +77,51 @@ def test_factory_runs_dashboard_route_is_feature_gated():
     )
     assert "GET" in route.methods
     assert access_control.feature_for_path("/api/production-factory/runs") == "production"
+
+
+def test_factory_health_reports_host_capabilities_without_secrets(monkeypatch):
+    monkeypatch.setattr(main, "_production_project_owner", lambda request: "owner-1")
+    monkeypatch.setattr(main, "provider_status", lambda: {
+        "selected": "local",
+        "paid_upgrades_allowed": False,
+        "local": {"configured": True, "service_running": True, "model_available": True,
+                  "backend": "ollama", "model": "qwen-local", "base_url": "http://127.0.0.1:11434"},
+        "openai": {"configured": False, "model": "gpt-test"},
+        "gemini": {"configured": False, "model": "gemini-test"},
+        "deepseek": {"configured": False, "model": "deepseek-test"},
+        "claude": {"configured": False, "model": "claude-test"},
+    })
+    monkeypatch.setattr(main, "image_status", lambda: {
+        "available": True, "local_available": True, "local_engine": "Procedural",
+        "comfyui_available": False, "local_workflow_configured": False,
+    })
+    monkeypatch.setattr(main, "voice_status", lambda: {
+        "available": False, "local_available": False, "local_engine": "Not installed",
+        "local_model_configured": False,
+    })
+    monkeypatch.setattr(main, "music_status", lambda: {
+        "available": True, "local_available": True, "local_engine": "Procedural Composer",
+    })
+    monkeypatch.setattr(main, "video_status", lambda: {
+        "available": False, "local_available": False, "local_engine": None,
+        "local_workflow_configured": False,
+    })
+    result = main.production_factory_health(object())
+    assert result["master_brain"]["local"]["model_available"] is True
+    assert result["engines"]["image"]["local_available"] is True
+    assert result["engines"]["voice"]["available"] is False
+    assert result["policy"]["paid_auto_activation"] is False
+    assert result["policy"]["publishing_enabled"] is False
+    serialized = str(result)
+    assert "base_url" not in serialized
+    assert "api_key" not in serialized
+    assert "secret" not in serialized.lower()
+
+
+def test_factory_health_route_is_feature_gated():
+    route = next(
+        route for route in main.app.routes
+        if getattr(route, "path", None) == "/api/production-factory/health"
+    )
+    assert "GET" in route.methods
+    assert access_control.feature_for_path("/api/production-factory/health") == "production"
