@@ -901,6 +901,11 @@ def test_runtime_dispatches_existing_roles_in_stage_order_and_persists_checkpoin
     assert result["pipeline_stage_execution_implemented"] is False
     assert result["result"]["pipeline_dispatch"]["mode"] == "existing_specialist_checker_roles"
     assert result["result"]["pipeline_dispatch"]["full_21_stage_execution"] is False
+    assert {"research", "fact_check", "script", "quality"}.issubset(
+        set(result["result"]["pipeline_dispatch"]["completed_stage_ids"])
+    )
+    assert "intake" in result["result"]["pipeline_dispatch"]["skipped_stage_ids"]
+    assert result["result"]["pipeline_dispatch"]["awaiting_owner_stage_ids"] == ["owner_review"]
     assert "render" in result["result"]["pipeline_dispatch"]["deferred_stage_ids"]
 
 def test_legacy_completed_runs_are_backfilled_without_false_stage_completion(tmp_path, monkeypatch):
