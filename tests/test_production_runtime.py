@@ -39,6 +39,10 @@ def test_pipeline_stage_transitions_require_evidence_lease_and_owner_approval(tm
         )
     assert runtime._claim_run(run["id"], "owner-a") is True
     token = runtime._worker_token(run["id"], "owner-a")
+    with pytest.raises(ValueError, match="Earlier pipeline stages are incomplete"):
+        runtime.transition_pipeline_stage(
+            run["id"], "planning", "running", owner_username="owner-a", worker_token=token,
+        )
     runtime.transition_pipeline_stage(
         run["id"], "intake", "running", owner_username="owner-a", worker_token=token,
     )
