@@ -220,6 +220,11 @@ private interface SintuService {
     suspend fun videoFile(@Path("videoId") videoId: String): Response<ResponseBody>
 }
 
+internal class VideoDownloadHttpException(val statusCode: Int, message: String) : java.io.IOException(message)
+
+internal fun isRetryableVideoDownloadStatus(code: Int): Boolean =
+    code == 408 || code == 429 || code in 500..599
+
 class SintuApi(context: Context, baseUrl: String) {
     val normalizedBaseUrl: String = normalizeBaseUrl(baseUrl)
     private val sessionStore = SecureSessionStore(context.applicationContext)
@@ -368,7 +373,7 @@ class SintuApi(context: Context, baseUrl: String) {
             val response = service.videoFile(videoId)
             if (!response.isSuccessful) {
                 val detail = response.errorBody()?.string()?.take(1000)
-                throw IllegalStateException(detail?.takeIf { it.isNotBlank() }
+                throw VideoDownloadHttpException(response.code(), detail?.takeIf { it.isNotBlank() }
                     ?: "SINTU video download failed with HTTP ${response.code()}.")
             }
             val body = response.body()
