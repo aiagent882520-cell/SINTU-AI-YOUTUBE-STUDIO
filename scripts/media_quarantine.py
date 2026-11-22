@@ -44,9 +44,14 @@ def safe_source(root: Path, relative: str) -> Path:
     return resolved
 
 
-def copy_verified(source: Path, destination: Path, expected_sha256: str) -> None:
+def copy_verified(root: Path, source: Path, destination: Path, expected_sha256: str) -> None:
+    quarantine_root = root / "media_quarantine"
+    if quarantine_root.is_symlink():
+        raise ValueError("quarantine root must not be a symlink")
+    quarantine_root.mkdir(parents=True, exist_ok=True)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.parent.is_symlink() or destination.exists() or destination.is_symlink():
+    if (not destination.parent.resolve().is_relative_to(quarantine_root.resolve())
+            or destination.parent.is_symlink() or destination.exists() or destination.is_symlink()):
         raise FileExistsError("quarantine destination already exists or is unsafe")
     fd, temporary_name = tempfile.mkstemp(prefix=".sintu-quarantine-", dir=destination.parent)
     temporary = Path(temporary_name)
@@ -87,7 +92,7 @@ def process_manifest(root: Path, manifest: dict, *, apply: bool = False) -> dict
                 continue
             destination = root / "media_quarantine" / actual / source.name
             if apply:
-                copy_verified(source, destination, actual)
+                copy_verified(root, source, destination, actual)
                 status = "COPIED_VERIFIED"
             else:
                 status = "WOULD_COPY"
