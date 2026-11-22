@@ -1380,6 +1380,7 @@ def test_admin_user_management_roles_and_audit(tmp_path, monkeypatch):
     listed = client.get("/api/admin/users").json()["users"]
     assert "password_hash" not in listed[0]
     assert client.get("/api/admin/audit").status_code == 200
+    assert client.get("/api/access/features").json()["is_owner"] is True
     assert client.patch(f"/api/admin/users/{viewer_id}", json={"role":"editor"}).json()["role"] == "editor"
     assert client.put(f"/api/admin/users/{viewer_id}/features", json={"features":["ai_assistant"]}).json()["features"] == ["ai_assistant"]
     client.post("/api/auth/logout")
@@ -4507,6 +4508,8 @@ def test_owner_feature_grants_are_scoped_and_revoked_immediately(tmp_path, monke
     granted = client.put(f"/api/admin/users/{user_id}/features", json={"features":["youtube"]})
     assert granted.status_code == 200
     assert granted.json()["features"] == ["youtube"]
+    audit = client.get("/api/admin/audit").json()
+    assert any(event["action"] == "feature_permissions_updated" for event in audit["events"])
     assert client.get("/api/admin/users").json()["users"][-1]["features"] == ["youtube"]
 
     client.post("/api/auth/logout")
