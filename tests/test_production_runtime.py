@@ -577,6 +577,9 @@ def test_documentary_runtime_passes_persisted_research_ledger_to_workers_and_rev
     assert result["status"] == "completed"
     assert result["result"]["research_evidence"]["sha256"] == validation["sha256"]
     assert result["result"]["research_evidence"]["human_fact_check_required"] is True
+    stages = {stage["stage_id"]: stage for stage in result["pipeline_stages"]}
+    assert stages["research"]["status"] == "completed"
+    assert stages["fact_check"]["status"] == "completed"
     ledger_prompts = [prompt for prompt in prompts if "DOCUMENTARY RESEARCH EVIDENCE LEDGER" in prompt]
     assert len(ledger_prompts) >= 2
     assert any("Fact Checker" in prompt and "claim-1" in prompt for prompt in ledger_prompts)
