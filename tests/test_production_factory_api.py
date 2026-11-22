@@ -140,3 +140,39 @@ def test_factory_plan_rejects_unknown_production_format():
     with pytest.raises(HTTPException) as exc:
         main.production_factory_plan(payload)
     assert exc.value.status_code == 400
+
+
+
+def test_produce_media_requires_completed_owner_run(monkeypatch):
+    import pytest
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(main, "_production_project_owner", lambda request: "owner-1")
+    monkeypatch.setattr(main, "get_production_run", lambda run_id, owner: {
+        "id": run_id, "owner_username": owner, "status": "running", "result": None,
+        "format_id": "educational", "topic": "Hindi science",
+    })
+    payload = main.ProductionMediaInput()
+    with pytest.raises(HTTPException) as exc:
+        main.produce_approved_run_media("a" * 32, payload, object())
+    assert exc.value.status_code == 409
+
+
+def test_factory_dashboard_exposes_confirmed_local_media_generation():
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[1] / "app" / "static" / "factory.js"
+    source = script.read_text(encoding="utf-8")
+    assert "/api/production/runs/" in source
+    assert "/produce-media" in source
+    assert "burn_subtitles:false" in source
+    assert "window.confirm" in source
+
+
+def test_produce_media_route_is_owner_feature_gated():
+    route = next(
+        route for route in main.app.routes
+        if getattr(route, "path", None) == "/api/production/runs/{run_id}/produce-media"
+    )
+    assert "POST" in route.methods
+    assert access_control.feature_for_path("/api/production/runs/" + "a" * 32 + "/produce-media") == "production"
