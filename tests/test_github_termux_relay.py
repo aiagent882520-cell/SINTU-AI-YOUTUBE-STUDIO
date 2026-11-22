@@ -13,6 +13,20 @@ relay = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(relay)
 
 
+def test_issue_payload_accepts_json_command_followed_by_markdown_instructions():
+    payload = relay.parse_issue_payload(
+        '{"action":"git_pull_ff_only"}\n\nRun the safe fast-forward-only update. Do not reset or stash.'
+    )
+    assert payload == {"action": "git_pull_ff_only"}
+
+
+def test_issue_payload_rejects_non_object_and_invalid_json():
+    with pytest.raises(ValueError, match="JSON object"):
+        relay.parse_issue_payload('["git_status"]')
+    with pytest.raises(Exception):
+        relay.parse_issue_payload('not-json\nextra text')
+
+
 def test_relay_accepts_only_allowlisted_fixed_commands(monkeypatch):
     monkeypatch.setattr(relay, "AUTOMATION_ONLY", False)
     assert relay.command_for("git_status", []) == ["git", "status", "--short", "--branch"]
