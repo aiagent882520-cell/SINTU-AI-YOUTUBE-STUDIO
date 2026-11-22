@@ -295,8 +295,6 @@ async def admin_access_control(request, call_next):
             return JSONResponse(status_code=401, content={"detail": "Admin login required."})
         public_api_paths = {"/api/auth/session", "/api/access/features", "/api/health"}
         if user and not user.get("is_owner") and path.startswith("/api/admin/"):
-            if user.get("role") != "admin":
-                return JSONResponse(status_code=403, content={"detail": "Admin account required for this control endpoint."})
             feature = access_control.feature_for_path(path)
             with db() as conn:
                 allowed = bool(feature and access_control.has_feature_access(conn, user["id"], feature))
@@ -308,7 +306,7 @@ async def admin_access_control(request, call_next):
                 allowed = bool(feature and access_control.has_feature_access(conn, user["id"], feature))
             if not allowed:
                 return JSONResponse(status_code=403, content={"detail": "Owner has not granted this feature to your account."})
-        elif user and not user.get("is_owner") and (path == "/" or path.startswith("/earnings")):
+        elif user and not user.get("is_owner") and path.startswith("/earnings"):
             feature = access_control.feature_for_path(path)
             with db() as conn:
                 allowed = bool(feature and access_control.has_feature_access(conn, user["id"], feature))
