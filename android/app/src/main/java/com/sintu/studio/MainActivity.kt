@@ -446,6 +446,30 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
     val mediaWork = remember(context) {
         WorkManager.getInstance(context).getWorkInfosByTagLiveData(OfflineMediaUploadWorker.TAG)
     }.observeAsState(initial = emptyList())
+    val videoDownloadWork = remember(context) {
+        WorkManager.getInstance(context).getWorkInfosByTagLiveData(VideoDownloadWorker.TAG)
+    }.observeAsState(initial = emptyList())
+    val currentVideoDownload = videoDownloadWork.value.firstOrNull {
+        it.inputData.getString(VideoDownloadWorker.KEY_VIDEO_ID) == videoId
+    }
+    val videoDownloadActive = currentVideoDownload?.state in setOf(
+        WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED, WorkInfo.State.RUNNING
+    )
+    LaunchedEffect(currentVideoDownload?.id, currentVideoDownload?.state) {
+        when (currentVideoDownload?.state) {
+            WorkInfo.State.SUCCEEDED -> {
+                downloadedUri = currentVideoDownload.outputData.getString(VideoDownloadWorker.KEY_SAVED_URI).orEmpty()
+                if (downloadedUri.isNotBlank()) notice = "MP4 Movies/SINTU mein save ho gaya. App band hone ke baad bhi download complete hua."
+            }
+            WorkInfo.State.FAILED -> {
+                notice = currentVideoDownload.outputData.getString(VideoDownloadWorker.KEY_ERROR)
+                    ?: "Background MP4 download failed."
+            }
+            WorkInfo.State.RUNNING -> notice = "MP4 background mein download ho raha hai…"
+            WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> notice = "MP4 download queued; network available hote hi start hoga."
+            else -> Unit
+        }
+    }
     val mediaPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
@@ -603,20 +627,23 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
         if (videoId.isNotBlank()) {
             Button(
                 onClick = {
-                    scope.launch {
-                        busy = true
-                        try {
-                            val uri = api.downloadVideoToGallery(context, videoId)
-                            downloadedUri = uri.toString()
-                            notice = "MP4 phone gallery mein Movies/SINTU folder mein save ho gaya."
-                        } catch (error: Exception) {
-                            notice = error.message ?: "MP4 download failed."
-                        } finally { busy = false }
+                    try {
+                        VideoDownloadWorker.enqueue(context, videoId)
+                        notice = "MP4 background download queue mein add ho gaya. App band hone par bhi WorkManager ise continue/retry karega."
+                    } catch (error: Exception) {
+                        notice = error.message ?: "MP4 download could not be queued."
                     }
                 },
-                enabled = !busy,
+                enabled = !busy && !videoDownloadActive && downloadedUri.isBlank(),
                 modifier = Modifier.fillMaxWidth()
-            ) { Text(if (busy) "Downloading…" else "Download MP4 to phone") }
+            ) { Text(if (videoDownloadActive) "MP4 download queued/running…" else "Download MP4 to phone (background)") }
+            if (videoDownloadActive) {
+                Text("Background download: " + currentVideoDownload?.state?.name, style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(onClick = {
+                    currentVideoDownload?.let { WorkManager.getInstance(context).cancelWorkById(it.id) }
+                    notice = "MP4 download cancelled."
+                }) { Text("Cancel MP4 download") }
+            }
             if (downloadedUri.isNotBlank()) {
                 Text("Saved to Movies/SINTU · " + downloadedUri, style = MaterialTheme.typography.bodySmall)
                 OutlinedButton(
