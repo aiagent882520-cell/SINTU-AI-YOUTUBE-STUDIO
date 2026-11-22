@@ -155,8 +155,13 @@ private fun StudioTabs(api: SintuApi, session: SessionResponse?) {
     }
     if (visibleTabs.isEmpty()) {
         Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.Center) {
-            Text("No studio features are assigned to this account.", fontWeight = FontWeight.Bold)
-            Text("Ask the SINTU Owner to grant the modules you need.")
+            if (isOwner || features.isNotEmpty()) {
+                Text("Your granted features are not yet available in the Android client.", fontWeight = FontWeight.Bold)
+                Text("Open the SINTU web dashboard to use the modules assigned to this account.")
+            } else {
+                Text("No studio features are assigned to this account.", fontWeight = FontWeight.Bold)
+                Text("Ask the SINTU Owner to grant the modules you need.")
+            }
         }
         return
     }
