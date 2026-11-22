@@ -1250,7 +1250,7 @@ async function loadProviderAdminPanel() {
   if (!panel) return;
   try {
     const session = await request("/api/auth/session");
-    if (!session.authenticated || session.role !== "admin") { panel.hidden = true; return; }
+    if (!session.authenticated || (!session.is_owner && !(session.features||[]).includes("ai_settings"))) { panel.hidden = true; return; }
     panel.hidden = false;
     const [settings, integrations] = await Promise.all([
       request("/api/admin/provider-settings"), request("/api/admin/integrations")
