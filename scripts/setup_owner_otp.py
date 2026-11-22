@@ -27,22 +27,27 @@ def read_env_lines(path: Path) -> tuple[list[str], dict[str, str]]:
 
 
 def write_secret(path: Path, lines: list[str], secret: str) -> None:
-    replacement = f"{KEY_NAME}={secret}"
-    updated, found = [], False
+    replacements = {
+        "SINTU_OWNER_OTP_REQUIRED": "SINTU_OWNER_OTP_REQUIRED=true",
+        KEY_NAME: f"{KEY_NAME}={secret}",
+    }
+    updated, found = [], set()
     for line in lines:
-        if line.strip().startswith(KEY_NAME + "="):
-            if not found:
-                updated.append(replacement)
-                found = True
+        key = line.split("=", 1)[0].strip() if "=" in line else ""
+        if key in replacements:
+            if key not in found:
+                updated.append(replacements[key])
+                found.add(key)
         else:
             updated.append(line)
-    if not found:
-        updated.append(replacement)
+    for key, value in replacements.items():
+        if key not in found:
+            updated.append(value)
     fd, temp_name = tempfile.mkstemp(prefix=".sintu-owner-otp-", dir=str(path.parent))
     try:
         os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
-            handle.write("\n".join(updated).rstrip() + "\n")
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\\n") as handle:
+            handle.write("\\n".join(updated).rstrip() + "\\n")
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temp_name, path)
