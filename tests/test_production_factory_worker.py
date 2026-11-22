@@ -34,7 +34,7 @@ def test_supervisor_claims_queued_runs_and_starts_once():
 
 
 def test_supervisor_stop_is_safe_when_never_started():
-    worker = ProductionRunSupervisor(poll_interval=0.01)
+    worker = ProductionRunSupervisor(poll_interval=0.01, queued_reader=lambda limit: [], run_executor=lambda run_id, owner: None)
     worker.stop()
     assert worker.start() is True
     worker.stop()
