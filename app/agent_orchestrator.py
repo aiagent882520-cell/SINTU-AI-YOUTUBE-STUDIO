@@ -51,13 +51,17 @@ def workflow_team(workflow: str) -> list[dict]:
                        "checks":name,"mission":"Independently evaluate the submitted work; return PASS/FAIL, evidence, issues and revision instructions."})
     return result
 
+CATALOG_WORKER_ROLES = tuple(dict.fromkeys(
+    list(AGENTS) + list(SPECIALIST_ROLES) + list(SENIOR_MANAGER_NAMES)
+))
+
+
 def catalog_team() -> list[dict]:
-    """Build distinct worker/checker instances for every registered top-level agent role."""
+    """Build a worker and independent checker for every unique core/specialist role."""
     result = []
-    # The complete catalog run validates every registered specialist plus all
-    # five senior managers. Owner Agent is retained here so execute_run can
-    # run it after the independent final reviewers.
-    for name in list(dict.fromkeys(list(AGENTS) + list(SENIOR_MANAGER_NAMES))):
+    # Owner Agent is included in the catalog but execute_run deliberately
+    # schedules it after the five independent final reviewers.
+    for name in CATALOG_WORKER_ROLES:
         result.append({
             "name": name,
             "role_type": "specialist",
@@ -94,7 +98,10 @@ def format_team(format_id: str) -> list[dict]:
 def orchestration_summary() -> dict:
     assigned = {name for team in WORKFLOW_TEAMS.values() for name in team}
     return {
-      "catalog_total":len(AGENTS),
+      "catalog_total":len(CATALOG_WORKER_ROLES),
+      "core_agent_total":len(AGENTS),
+      "catalog_worker_total":len(CATALOG_WORKER_ROLES),
+      "core_specialist_overlap":len(set(AGENTS) & set(SPECIALIST_ROLES)),
       "workflow_teams":len(WORKFLOW_TEAMS),
       "roles_routed":len(assigned),
       "execution_mode":"shared_model_gateway_with_distinct_worker_and_checker_roles",
