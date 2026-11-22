@@ -4630,3 +4630,33 @@ def test_bootstrap_owner_identity_cannot_be_demoted_or_disabled(tmp_path, monkey
     assert owner["role"] == "admin"
     assert owner["is_active"] == 1
     assert owner["is_owner"] == 1
+
+
+def test_rotating_owner_totp_secret_allows_new_code_in_same_time_step(tmp_path, monkeypatch):
+    import base64
+
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    first_secret = base64.b32encode(b"01234567890123456789").decode("ascii").rstrip("=")
+    second_secret = base64.b32encode(b"98765432109876543210").decode("ascii").rstrip("=")
+    monkeypatch.setenv("SINTU_OWNER_TOTP_SECRET", first_secret)
+    monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "true")
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "true")
+    first = client.post("/api/auth/login", json={
+        "username":"owner", "password":"a-strong-test-password",
+        "otp_code":main._totp_code(first_secret)
+    })
+    assert first.status_code == 200
+    client.post("/api/auth/logout")
+
+    monkeypatch.setenv("SINTU_OWNER_TOTP_SECRET", second_secret)
+    rotated = client.post("/api/auth/login", json={
+        "username":"owner", "password":"a-strong-test-password",
+        "otp_code":main._totp_code(second_secret)
+    })
+    assert rotated.status_code == 200
