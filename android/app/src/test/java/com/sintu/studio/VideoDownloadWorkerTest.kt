@@ -15,6 +15,18 @@ class VideoDownloadWorkerTest {
     }
 
     @Test
+    fun notificationProgressTextHandlesKnownAndUnknownContentLength() {
+        assertEquals(
+            "Downloading to Movies/SINTU… 25% (1.0/4.0 MB)",
+            VideoDownloadWorker.progressDescription(1024L * 1024L, 4L * 1024L * 1024L)
+        )
+        assertEquals(
+            "Downloading to Movies/SINTU… 1.0 MB",
+            VideoDownloadWorker.progressDescription(1024L * 1024L, 0L)
+        )
+    }
+
+    @Test
     fun retriesTransientHttpStatusesOnly() {
         listOf(408, 429, 500, 502, 503, 599).forEach {
             assertTrue("Expected HTTP $it to be retryable", isRetryableVideoDownloadStatus(it))
