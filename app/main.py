@@ -5870,7 +5870,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                             run_id, stage_id, "paused", owner_username=owner,
                             issues=["Local media operation exited before its stage was verified."],
                         )
-                except (ValueError, PermissionError):
+                except Exception:
                     pass
             for image_id in created_images:
                 (IMAGE_DIR / f"{image_id}.jpg").unlink(missing_ok=True)
