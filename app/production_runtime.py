@@ -880,6 +880,9 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
     run = get_run(run_id, owner_username)
     if not run:
         return
+    # Resolve the persisted owner before stage writes so callers that omit the
+    # optional owner argument still retain correct owner-scoped ledger mutations.
+    owner_username = owner_username or run.get("owner_username", "local")
     selected = _selected_format(run["format_id"])
     if not selected:
         set_run(run_id, "failed", error="Video format no longer exists.")
