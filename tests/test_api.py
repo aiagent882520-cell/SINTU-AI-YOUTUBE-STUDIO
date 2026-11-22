@@ -4561,6 +4561,7 @@ def test_owner_login_requires_valid_mobile_totp_but_team_accounts_do_not(tmp_pat
     monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "true")
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "true")
     assert client.post("/api/auth/login", json={
         "username":"owner", "password":"a-strong-test-password"
     }).status_code == 401
@@ -4596,6 +4597,7 @@ def test_owner_login_fails_closed_until_mobile_totp_is_enrolled(tmp_path, monkey
     monkeypatch.delenv("SINTU_OWNER_TOTP_SECRET", raising=False)
     client = client_for_test(tmp_path, monkeypatch)
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "true")
     response = client.post("/api/auth/login", json={
         "username":"owner", "password":"a-strong-test-password"
     })
