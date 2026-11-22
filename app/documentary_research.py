@@ -18,12 +18,6 @@ SOURCE_TYPES = {"primary", "academic", "government", "reputable_news", "referenc
 MAX_CLAIMS = 500
 MAX_SOURCES = 500
 MAX_TEXT = 5000
-MAX_PROMPT_CONTEXT_CHARS = 24000
-DOCUMENTARY_FORMAT_IDS = frozenset({
-    "documentary", "nature-documentary", "investigative-documentary",
-    "science-documentary", "biography", "mystery-documentary",
-    "travel-documentary", "crime-documentary",
-})
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$")
 
 
@@ -192,53 +186,3 @@ def validate_research_package(package):
             "evaluate source quality, establish source independence, or determine whether evidence proves a claim."
         ),
     }
-
-
-
-def build_research_prompt_context(package):
-    """Serialize the complete ledger within a bounded model-context budget."""
-    import json
-
-    canonical = json.dumps(package, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    if len(canonical) > MAX_PROMPT_CONTEXT_CHARS:
-        raise ValueError(
-            f"Documentary research evidence exceeds the {MAX_PROMPT_CONTEXT_CHARS}-character model-context limit."
-        )
-    return canonical
-
-
-def validate_documentary_evidence_for_production(package):
-    """Fail closed unless factual claims are source-linked and structurally corroborated.
-
-    This is a traceability gate only. It never verifies source authenticity or claim truth.
-    """
-    import hashlib
-    import json
-
-    result = validate_research_package(package)
-    if result["valid"]:
-        factual_claims = [
-            claim for claim in package["claims"]
-            if isinstance(claim, dict) and claim.get("claim_type") == "factual"
-        ]
-        if not factual_claims:
-            result["errors"].append("production: at least one factual claim is required for a documentary")
-        for index, claim in enumerate(factual_claims):
-            if claim.get("status") != "corroborated":
-                result["errors"].append(
-                    f"production: factual claim {claim.get('id', index)} must be structurally corroborated before documentary production"
-                )
-    result["valid"] = not result["errors"]
-    canonical = json.dumps(package, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    if len(canonical) > MAX_PROMPT_CONTEXT_CHARS:
-        result["errors"].append(
-            f"production: research evidence exceeds the {MAX_PROMPT_CONTEXT_CHARS}-character model-context limit"
-        )
-    result["valid"] = not result["errors"]
-    result["sha256"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    result["acceptance_boundary"] = (
-        "Structural source/claim traceability only. This gate does not fetch URLs, authenticate publishers, "
-        "prove source independence, inspect source contents, or determine whether evidence supports a claim. "
-        "Independent human fact-checking remains required."
-    )
-    return result

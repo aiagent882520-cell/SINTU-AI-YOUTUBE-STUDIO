@@ -46,6 +46,31 @@
 
 ---
 
+# DOCUMENTARY AUTOMATION EXECUTION — 2026-11-21
+
+## Current code change (PR #278)
+- Base main at branch creation: `d21ff09a8f87c53cdcc0b1e463bae48c10bf7658`.
+- Feature branch: `feature/documentary-scene-animation-20261121`.
+- PR: https://github.com/aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO/pull/278
+- Latest feature implementation commit at this checkpoint: `d06b93c512bd8f34013806ff7926e157d1f43d2b`; latest test commit: `c9411ae2c645f98f010303f75f1c58cc5e07388d`.
+- Added `app/documentary_animation.py`: deterministic offline frame-by-frame 2D scene engine with five visual grammars (map-route schematic, event timeline, explanatory diagram, character action, moving environment).
+- Added `tests/test_documentary_animation.py`: classifier coverage, frame motion tests, real MP4/ffprobe export checks, invalid-profile rejection.
+- Integrated into `/api/production/runs/{run_id}/produce-media` for existing `2d-cartoon` and `story-animation` format IDs. Existing Hindi voice, music, subtitle, sound-effects and final FFmpeg assembly path remains connected.
+- Scene-level motion/resolution/duration evidence is returned in render metadata and copied into the provenance manifest settings.
+- Scene clips now include slow camera push/alternating track. Environmental water/fire/smoke effects are conditional on matching scene language; the report explicitly marks map geometry as schematic, not geospatial.
+- GitHub Actions runs on intermediate commits were cancelled when the branch advanced. The run for implementation commit `d06b93c512bd8f34013806ff7926e157d1f43d2b` was still in progress at last check; the run for latest test commit `c9411ae2c645f98f010303f75f1c58cc5e07388d` was pending. No PASS claim until a final exact-head run completes.
+
+## Documentary acceptance boundary
+- The new engine is **procedural vector animation**, not ComfyUI inference or AI-generated historical artwork.
+- Map visuals are schematic, not geographically accurate. Timelines and diagrams are unlabeled visual structures; factual labels/coordinates are not yet sourced from verified research.
+- Automated motion evidence checks rendered frame sequence samples and ffprobe output; it is not a complete perceptual frozen-frame, duplicate-scene, continuity, lip-sync, pronunciation, intelligibility, or human film-quality review.
+- The 2D production endpoint still depends on a working local Hindi TTS engine/model and local music generator. Existing eSpeak NG fallback can sound synthetic; natural documentary-presenter voice acceptance is not established.
+- No complete real-topic documentary has yet been produced and reviewed end-to-end through the integrated endpoint. This PR is an implementation increment, not final documentary-film acceptance.
+- Research sourcing, claim verification, historical asset provenance/licensing, scene-to-narration semantic matching, voice quality, final film playback, crash/cancel/restart rerender acceptance, and human editorial sign-off remain open.
+- Do not publish any generated MP4 without the existing persisted quality/provenance gate and separate human YouTube authorization.
+
+---
+
 # SINTU AI YOUTUBE STUDIO — execution state
 
 Last updated: 2026-11-21 07:45 UTC
