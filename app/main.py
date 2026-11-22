@@ -220,6 +220,33 @@ def _verify_password(password: str, encoded: str) -> bool:
         return False
 
 
+def _totp_code(secret: str, timestamp: float | None = None) -> str:
+    """Generate a 6-digit RFC 6238 TOTP code using the SHA-1 authenticator profile."""
+    normalized = str(secret or "").replace(" ", "").strip().upper()
+    if not normalized:
+        raise ValueError("Owner OTP secret is not configured.")
+    padding = "=" * ((8 - len(normalized) % 8) % 8)
+    key = base64.b32decode(normalized + padding, casefold=True)
+    counter = int((time.time() if timestamp is None else timestamp) // 30)
+    digest = hmac.new(key, counter.to_bytes(8, "big"), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    binary = int.from_bytes(digest[offset:offset + 4], "big") & 0x7FFFFFFF
+    return f"{binary % 1_000_000:06d}"
+
+
+def _verify_owner_otp(secret: str, code: str | None, timestamp: float | None = None) -> bool:
+    if not isinstance(code, str) or not re.fullmatch(r"\\d{6}", code):
+        return False
+    now = time.time() if timestamp is None else timestamp
+    try:
+        return any(
+            hmac.compare_digest(_totp_code(secret, now + (step * 30)), code)
+            for step in (-1, 0, 1)
+        )
+    except (ValueError, TypeError):
+        return False
+
+
 def _ensure_bootstrap_admin():
     username = os.getenv("SINTU_OWNER_USERNAME", os.getenv("SINTU_ADMIN_USERNAME", "admin")).strip()
     password = os.getenv("SINTU_ADMIN_PASSWORD", "")
@@ -644,6 +671,7 @@ def login_page():
 class AdminLoginInput(BaseModel):
     username: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=1, max_length=256)
+    otp_code: str | None = Field(default=None, pattern=r"^\\d{6}$")
 
 
 class AdminUserCreate(BaseModel):
@@ -676,9 +704,15 @@ def admin_login(payload: AdminLoginInput, request: Request):
     if not allowed:
         raise HTTPException(status_code=429, detail=f"Too many login attempts. {retry_after} seconds baad try karein.")
     with db() as conn:
-        user = conn.execute("SELECT id,username,password_hash,role,is_active FROM admin_users WHERE username=?", (payload.username,)).fetchone()
+        user = conn.execute("SELECT id,username,password_hash,role,is_active,is_owner FROM admin_users WHERE username=?", (payload.username,)).fetchone()
     if not user or not user["is_active"] or not _verify_password(payload.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Username ya password galat hai.")
+    if user["is_owner"] and os.getenv("SINTU_OWNER_OTP_REQUIRED", "true").strip().lower() == "true":
+        otp_secret = os.getenv("SINTU_OWNER_TOTP_SECRET", "").strip()
+        if not otp_secret:
+            raise HTTPException(status_code=503, detail="Owner mobile OTP is not enrolled. Run scripts/setup_owner_otp.py on the SINTU host.")
+        if not _verify_owner_otp(otp_secret, payload.otp_code):
+            raise HTTPException(status_code=401, detail="Owner mobile OTP galat ya expire ho gaya hai.")
     _LOGIN_LIMITER.reset(client_ip)
     actor = dict(user)
     request.state.user = actor
