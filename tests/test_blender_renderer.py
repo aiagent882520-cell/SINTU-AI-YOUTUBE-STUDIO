@@ -35,3 +35,20 @@ def test_blender_embedded_script_has_valid_python_syntax():
 def test_blender_scene_rejects_text_objects():
     with pytest.raises(ValueError, match="Unsupported 3D primitive"):
         blender_renderer.validate_scene("No text", [{"shape":"text","name":"visible words"}], 5, "1280x720", 24)
+
+
+@pytest.mark.parametrize("location", [[float("nan"), 0, 0], [True, 0, 0]])
+def test_blender_scene_rejects_non_finite_or_boolean_locations(location):
+    with pytest.raises(ValueError, match="finite numbers"):
+        blender_renderer.validate_scene("Bad location", [{"shape": "cube", "location": location}], 5, "1280x720", 24)
+
+
+@pytest.mark.parametrize("field,value,message", [
+    ("scale", [1, float("inf"), 1], "finite numbers"),
+    ("scale", [1, True, 1], "finite numbers"),
+    ("color", [0.2, float("nan"), 0.8, 1], "finite normalized values"),
+    ("color", [0.2, False, 0.8, 1], "finite normalized values"),
+])
+def test_blender_scene_rejects_non_finite_or_boolean_numeric_fields(field, value, message):
+    with pytest.raises(ValueError, match=message):
+        blender_renderer.validate_scene("Bad numeric", [{"shape": "cube", field: value}], 5, "1280x720", 24)
