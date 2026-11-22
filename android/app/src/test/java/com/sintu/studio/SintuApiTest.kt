@@ -226,9 +226,6 @@ class SintuApiTest {
         assertEquals(1360, response.height)
     }
 
-}
-
-
     @Test
     fun ownerMobileOtpIsIncludedInLoginRequest() {
         val json = Gson().toJson(LoginRequest("owner", "strong-password", "123456"))
@@ -253,3 +250,4 @@ class SintuApiTest {
         assertFalse(session.is_owner)
         assertEquals(listOf("ai_assistant", "video_editor"), session.features)
     }
+}
