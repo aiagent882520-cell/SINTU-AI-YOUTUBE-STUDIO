@@ -74,6 +74,7 @@ def test_factory_runs_dashboard_route_is_feature_gated():
     route = next(
         route for route in main.app.routes
         if getattr(route, "path", None) == "/api/production-factory/runs"
+        and "GET" in getattr(route, "methods", set())
     )
     assert "GET" in route.methods
     assert access_control.feature_for_path("/api/production-factory/runs") == "production"
