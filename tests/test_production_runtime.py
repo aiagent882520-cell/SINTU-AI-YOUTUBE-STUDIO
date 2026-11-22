@@ -885,7 +885,7 @@ def test_runtime_dispatches_existing_roles_in_stage_order_and_persists_checkpoin
 
     monkeypatch.setattr(runtime, "generate_text", fake_generate)
     run = runtime.create_run("youtube-shorts", "भारत के जल स्रोत", "owner")
-    runtime.execute_run(run["id"], "owner")
+    runtime.execute_run(run["id"])
     result = runtime.get_run(run["id"], "owner")
 
     builders = [step["role"] for step in result["steps"] if step["step_type"] == "builder"]
