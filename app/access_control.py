@@ -47,6 +47,7 @@ _ROUTE_FEATURES = (
     ("/api/workflows", "dashboard"),
     ("/api/calendar", "social_publish"),
     ("/api/agents", "agents"),
+    ("/api/earnings", "earnings"),
     ("/api/export", "ai_assistant"),
     ("/api/generate", "ai_assistant"),
     ("/api/tasks", "ai_assistant"),
