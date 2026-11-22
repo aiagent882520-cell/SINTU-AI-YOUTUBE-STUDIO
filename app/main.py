@@ -253,29 +253,36 @@ def _verify_owner_otp(secret: str, code: str | None, timestamp: float | None = N
     return _matching_owner_otp_counter(secret, code, timestamp) is not None
 
 
-def _consume_owner_otp_counter(owner_user_id: int, counter: int) -> bool:
-    """Atomically reject re-use of an already accepted TOTP time step."""
+def _consume_owner_otp_counter(owner_user_id: int, counter: int, secret: str) -> bool:
+    """Atomically reject TOTP replay; a rotated secret gets a fresh counter namespace."""
+    fingerprint = hashlib.sha256(secret.encode("utf-8")).hexdigest()
     with db() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS owner_otp_state (
                 owner_user_id INTEGER PRIMARY KEY,
                 last_counter INTEGER NOT NULL,
+                secret_fingerprint TEXT NOT NULL DEFAULT '',
                 updated_at TEXT NOT NULL
             )
         """)
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(owner_otp_state)")}
+        if "secret_fingerprint" not in columns:
+            conn.execute("ALTER TABLE owner_otp_state ADD COLUMN secret_fingerprint TEXT NOT NULL DEFAULT ''")
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
-            "SELECT last_counter FROM owner_otp_state WHERE owner_user_id=?",
+            "SELECT last_counter,secret_fingerprint FROM owner_otp_state WHERE owner_user_id=?",
             (owner_user_id,),
         ).fetchone()
-        if row and counter <= row["last_counter"]:
+        if row and row["secret_fingerprint"] == fingerprint and counter <= row["last_counter"]:
             return False
         conn.execute("""
-            INSERT INTO owner_otp_state(owner_user_id,last_counter,updated_at)
-            VALUES(?,?,?)
+            INSERT INTO owner_otp_state(owner_user_id,last_counter,secret_fingerprint,updated_at)
+            VALUES(?,?,?,?)
             ON CONFLICT(owner_user_id) DO UPDATE SET
-                last_counter=excluded.last_counter, updated_at=excluded.updated_at
-        """, (owner_user_id, counter, datetime.now(timezone.utc).isoformat()))
+                last_counter=excluded.last_counter,
+                secret_fingerprint=excluded.secret_fingerprint,
+                updated_at=excluded.updated_at
+        """, (owner_user_id, counter, fingerprint, datetime.now(timezone.utc).isoformat()))
     return True
 
 
@@ -745,7 +752,7 @@ def admin_login(payload: AdminLoginInput, request: Request):
         if not otp_secret:
             raise HTTPException(status_code=503, detail="Owner mobile OTP is not enrolled. Run scripts/setup_owner_otp.py on the SINTU host.")
         otp_counter = _matching_owner_otp_counter(otp_secret, payload.otp_code)
-        if otp_counter is None or not _consume_owner_otp_counter(user["id"], otp_counter):
+        if otp_counter is None or not _consume_owner_otp_counter(user["id"], otp_counter, otp_secret):
             raise HTTPException(status_code=401, detail="Owner mobile OTP galat, expire, ya pehle use ho chuka hai.")
     _LOGIN_LIMITER.reset(client_ip)
     actor = dict(user)
