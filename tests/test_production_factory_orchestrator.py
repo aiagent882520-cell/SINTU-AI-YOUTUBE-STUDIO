@@ -20,7 +20,8 @@ def test_pipeline_plan_is_complete_and_does_not_start_execution():
     assert plan["execution_started"] is False
     assert plan["execution_allowed"] is False
     assert plan["stage_execution_implemented"] is False
-    assert "planning-only" in plan["stage_execution_note"]
+    assert plan["stage_role_dispatch_integrated"] is True
+    assert "not full 21-stage execution" in plan["stage_execution_note"]
     assert plan["publishing_enabled"] is False
     assert plan["free_first"] is True
     assert next(stage for stage in plan["stages"] if stage["id"] == "owner_review")["approval"] == "owner_required"
