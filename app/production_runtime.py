@@ -718,6 +718,12 @@ def transition_owner_media_stage(
                 if stage_id not in completed_ids:
                     completed_ids.append(stage_id)
                 deferred_ids = [item for item in dispatch.get("deferred_stage_ids", []) if item != stage_id]
+                dispatch["skipped_stage_ids"] = [
+                    item for item in dispatch.get("skipped_stage_ids", []) if item != stage_id
+                ]
+                dispatch["awaiting_owner_stage_ids"] = [
+                    item for item in dispatch.get("awaiting_owner_stage_ids", []) if item != stage_id
+                ]
                 dispatch["completed_stage_ids"] = completed_ids
                 dispatch["deferred_stage_ids"] = deferred_ids
                 conn.execute(
