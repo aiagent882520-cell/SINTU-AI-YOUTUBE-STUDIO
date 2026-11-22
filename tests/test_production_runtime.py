@@ -69,6 +69,14 @@ def test_pipeline_stage_transitions_require_evidence_lease_and_owner_approval(tm
     with runtime._connect() as conn:
         conn.execute("UPDATE production_pipeline_stages SET status='completed' WHERE run_id=? AND sequence<16",
                      (run["id"],))
+    with pytest.raises(PermissionError, match="not worker-executable"):
+        runtime.transition_pipeline_stage(
+            run["id"], "owner_review", "running", owner_username="owner-a",
+        )
+    with pytest.raises(PermissionError, match="cannot be skipped"):
+        runtime.transition_pipeline_stage(
+            run["id"], "owner_review", "skipped", owner_username="owner-a",
+        )
     runtime.transition_pipeline_stage(
         run["id"], "owner_review", "awaiting_owner", owner_username="owner-a",
     )
