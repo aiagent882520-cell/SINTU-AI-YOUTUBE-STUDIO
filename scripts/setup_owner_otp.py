@@ -77,7 +77,7 @@ def main() -> int:
     print("Scan/paste this provisioning URI into a mobile authenticator app:")
     print(uri)
     print("Manual setup key:", secret)
-    print("Keep this URI/key private. The Owner must enter the current 6-digit code at login.")
+    print("Keep this URI/key private. The Owner must enter the current 6-digit code at login.")\n    print("Restart SINTU after enrollment so the running API loads the new secret: bash scripts/termux_apply_update.sh")
     return 0
 
 
