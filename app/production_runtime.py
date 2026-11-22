@@ -454,11 +454,11 @@ def transition_pipeline_stage(
             raise ProductionRunCancelled("Pipeline stage cannot change after cancellation.")
         if stage["approval"] == "owner_required" and status == "completed" and not owner_approved:
             raise PermissionError("Owner approval is required to complete this pipeline stage.")
-        if status == "completed" and stage["approval"] != "owner_required":
+        if stage["approval"] != "owner_required":
             now = _now()
             if (not worker_token or run["worker_token"] != worker_token
                     or not run["lease_expires_at"] or run["lease_expires_at"] < now):
-                raise ProductionRunCancelled("A live fenced worker lease is required to complete this stage.")
+                raise ProductionRunCancelled("A live fenced worker lease is required to change this stage.")
         transitions = {
             "pending": {"running", "blocked", "awaiting_owner"},
             "running": {"completed", "blocked", "paused", "awaiting_owner"},
