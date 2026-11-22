@@ -50,7 +50,7 @@ data class ImageGenerationResponse(
     val notice: String = ""
 )
 
-data class LoginRequest(val username: String, val password: String)
+data class LoginRequest(val username: String, val password: String, val otp_code: String? = null)
 data class LoginResponse(val authenticated: Boolean = false, val username: String = "", val role: String = "")
 data class SessionResponse(val authenticated: Boolean = false, val username: String? = null, val role: String? = null)
 data class ConversationCreateRequest(val title: String = "", val workflow: String = "content")
