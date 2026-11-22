@@ -692,7 +692,7 @@ def transition_owner_media_stage(
         )
         if status == "completed" and run["result_json"]:
             result_payload = json.loads(run["result_json"])
-            dispatch = result_payload.get("pipeline_dispatch")
+            dispatch = result_payload.get("pipeline_dispatch") if isinstance(result_payload, dict) else None
             if isinstance(dispatch, dict):
                 completed_ids = list(dispatch.get("completed_stage_ids") or [])
                 if stage_id not in completed_ids:
