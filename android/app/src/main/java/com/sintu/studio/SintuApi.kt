@@ -370,34 +370,27 @@ class SintuApi(context: Context, baseUrl: String) {
             require(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 "Gallery download requires Android 10 or newer."
             }
-            val response = service.videoFile(videoId)
-            if (!response.isSuccessful) {
-                val detail = response.errorBody()?.string()?.take(1000)
-                throw VideoDownloadHttpException(response.code(), detail?.takeIf { it.isNotBlank() }
-                    ?: "SINTU video download failed with HTTP ${response.code()}.")
+            val appContext = context.applicationContext
+            val temporary = File(appContext.cacheDir, "sintu-video-$videoId.download")
+            if (temporary.exists() && !temporary.delete()) {
+                throw java.io.IOException("Could not clear an interrupted MP4 download.")
             }
-            val body = response.body()
-                ?: throw IllegalStateException("SINTU server returned an empty MP4.")
-            val maxBytes = 500L * 1024L * 1024L
             try {
-                if (body.contentLength() > maxBytes) {
-                    throw IllegalStateException("MP4 exceeds the 500 MB phone-download limit.")
+                val response = service.videoFile(videoId)
+                if (!response.isSuccessful) {
+                    val detail = response.errorBody()?.string()?.take(1000)
+                    throw VideoDownloadHttpException(response.code(), detail?.takeIf { it.isNotBlank() }
+                        ?: "SINTU video download failed with HTTP ${response.code()}.")
                 }
-                val values = ContentValues().apply {
-                    put(MediaStore.MediaColumns.DISPLAY_NAME, "SINTU_${videoId}.mp4")
-                    put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
-                    put(MediaStore.MediaColumns.RELATIVE_PATH,
-                        Environment.DIRECTORY_MOVIES + "/SINTU")
-                    put(MediaStore.MediaColumns.IS_PENDING, 1)
-                }
-                val resolver = context.applicationContext.contentResolver
-                val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
-                    ?: throw IllegalStateException("Android could not create a Movies/SINTU file.")
+                val body = response.body()
+                    ?: throw IllegalStateException("SINTU server returned an empty MP4.")
+                val maxBytes = 500L * 1024L * 1024L
                 try {
-                    val output = resolver.openOutputStream(uri, "w")
-                        ?: throw IllegalStateException("Android could not open the MP4 destination.")
-                    body.byteStream().use { input ->
-                        output.use { destination ->
+                    if (body.contentLength() > maxBytes) {
+                        throw IllegalStateException("MP4 exceeds the 500 MB phone-download limit.")
+                    }
+                    java.io.FileOutputStream(temporary).use { destination ->
+                        body.byteStream().use { input ->
                             val buffer = ByteArray(64 * 1024)
                             var total = 0L
                             while (true) {
@@ -409,20 +402,69 @@ class SintuApi(context: Context, baseUrl: String) {
                                 }
                                 destination.write(buffer, 0, count)
                             }
-                            destination.flush()
+                        }
+                        destination.flush()
+                        destination.fd.sync()
+                    }
+                    if (!temporary.isFile || temporary.length() <= 0L) {
+                        throw IllegalStateException("SINTU server returned an empty MP4.")
+                    }
+
+                    val values = ContentValues().apply {
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, "SINTU_${videoId}.mp4")
+                        put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
+                        put(MediaStore.MediaColumns.RELATIVE_PATH,
+                            Environment.DIRECTORY_MOVIES + "/SINTU")
+                        put(MediaStore.MediaColumns.IS_PENDING, 1)
+                    }
+                    val resolver = appContext.contentResolver
+                    val collection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                    // Remove only an interrupted pending row for this exact SINTU video ID.
+                    resolver.query(
+                        collection,
+                        arrayOf(MediaStore.MediaColumns._ID),
+                        "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.IS_PENDING}=1",
+                        arrayOf("SINTU_${videoId}.mp4"),
+                        null
+                    )?.use { cursor ->
+                        val idColumn = cursor.getColumnIndex(MediaStore.MediaColumns._ID)
+                        while (idColumn >= 0 && cursor.moveToNext()) {
+                            val staleId = cursor.getLong(idColumn)
+                            resolver.delete(android.content.ContentUris.withAppendedId(collection, staleId), null, null)
                         }
                     }
-                    val ready = ContentValues().apply {
-                        put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    val uri = resolver.insert(collection, values)
+                        ?: throw IllegalStateException("Android could not create a Movies/SINTU file.")
+                    try {
+                        val output = resolver.openOutputStream(uri, "w")
+                            ?: throw IllegalStateException("Android could not open the MP4 destination.")
+                        java.io.FileInputStream(temporary).use { input ->
+                            output.use { destination ->
+                                val buffer = ByteArray(64 * 1024)
+                                while (true) {
+                                    val count = input.read(buffer)
+                                    if (count < 0) break
+                                    destination.write(buffer, 0, count)
+                                }
+                                destination.flush()
+                            }
+                        }
+                        val ready = ContentValues().apply {
+                            put(MediaStore.MediaColumns.IS_PENDING, 0)
+                        }
+                        if (resolver.update(uri, ready, null, null) <= 0) {
+                            throw IllegalStateException("Android could not publish the completed MP4 to Movies/SINTU.")
+                        }
+                        uri
+                    } catch (error: Exception) {
+                        resolver.delete(uri, null, null)
+                        throw error
                     }
-                    resolver.update(uri, ready, null, null)
-                    uri
-                } catch (error: Exception) {
-                    resolver.delete(uri, null, null)
-                    throw error
+                } finally {
+                    body.close()
                 }
             } finally {
-                body.close()
+                temporary.delete()
             }
         }
 
