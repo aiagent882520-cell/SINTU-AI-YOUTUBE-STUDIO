@@ -76,7 +76,9 @@
         const detail=document.createElement("p");detail.className="factory-meta";detail.textContent=run.format_id+" · "+run.run_id+" · Attempts: "+run.attempt_count+" · Steps: "+run.step_count;card.append(detail);
         const open=document.createElement("button");open.type="button";open.className="secondary";open.textContent="View run details";
         open.addEventListener("click",()=>viewRun(run.run_id));card.append(open);
-        if(run.status==="completed"){
+        if(run.status==="completed" && run.has_render && run.video_url){
+          const rendered=document.createElement("a");rendered.href=run.video_url;rendered.target="_blank";rendered.rel="noopener";rendered.textContent="Open verified MP4";card.append(rendered);
+        }else if(run.status==="completed"){
           const render=document.createElement("button");render.type="button";render.className="primary";render.textContent="Generate final MP4";
           render.addEventListener("click",()=>produceMedia(run.run_id));card.append(render);
         }
