@@ -26,6 +26,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +83,7 @@ private fun SintuRoot() {
         }
     } else {
         var password by remember { mutableStateOf("") }
+        var otpCode by remember { mutableStateOf("") }
         var user by remember { mutableStateOf(username) }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.Center) {
             Text("SINTU AI STUDIO", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
@@ -91,6 +94,15 @@ private fun SintuRoot() {
             OutlinedTextField(user, { user = it }, Modifier.fillMaxWidth(), label = { Text("Username") }, singleLine = true)
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                otpCode,
+                { otpCode = it.filter(Char::isDigit).take(6) },
+                Modifier.fillMaxWidth(),
+                label = { Text("Owner mobile OTP (6 digits; team users leave blank)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            )
             Spacer(Modifier.height(12.dp))
             Button(
                 onClick = {
@@ -99,7 +111,7 @@ private fun SintuRoot() {
                         try {
                             val normalized = SintuApi.normalizeBaseUrl(baseUrl)
                             val client = SintuApi(context, normalized)
-                            val result = client.login(user.trim(), password)
+                            val result = client.login(user.trim(), password, otpCode.takeIf { it.isNotBlank() })
                             prefs.edit().putString("api_base_url", normalized).apply()
                             baseUrl = normalized
                             api = client
