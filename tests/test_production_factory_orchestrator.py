@@ -106,6 +106,8 @@ def test_existing_specialist_roles_route_to_pipeline_stages_without_false_comple
     assert stages["quality"]["roles"] == ["HR Agent"]
     assert stages["render"]["status"] == "not_applicable"
     assert routed["unmapped_roles"] == ["Final Render Agent", "Unmapped Experimental Agent"]
+    assert routed["deferred_roles"] == ["Final Render Agent"]
+    assert "not run as" in routed["deferred_role_policy"]
 
 def test_all_sixty_format_roles_are_routed_or_explicitly_unmapped_without_fake_side_effect_stages():
     from app.production_factory_orchestrator import route_specialist_roles
