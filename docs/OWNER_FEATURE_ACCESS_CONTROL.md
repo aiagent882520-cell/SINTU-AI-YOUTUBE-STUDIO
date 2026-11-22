@@ -45,6 +45,6 @@ cd ~/SINTU-AI-YOUTUBE-STUDIO
 .venv/bin/python scripts/setup_owner_otp.py
 ```
 
-Open the printed provisioning URI in a mobile authenticator app (or enter the manual setup key). The secret is written atomically to `.env` with file mode 600. Keep the provisioning URI/key private. To intentionally replace a lost or compromised authenticator, run `scripts/setup_owner_otp.py --rotate`; the previous authenticator stops working immediately.
+Open the printed provisioning URI in a mobile authenticator app (or enter the manual setup key). The secret is written atomically to `.env` with file mode 600. Then restart SINTU so the running API loads the new secret (`bash scripts/termux_apply_update.sh`). Keep the provisioning URI/key private. To intentionally replace a lost or compromised authenticator, run `scripts/setup_owner_otp.py --rotate`; the previous authenticator stops working immediately.
 
 Owner login accepts a six-digit code with a ±30-second clock window. If the secret is missing, Owner login fails closed with an enrollment instruction. Email-delivered OTP is not implemented in this increment; mobile authenticator TOTP is the selected free, local-first second factor.
