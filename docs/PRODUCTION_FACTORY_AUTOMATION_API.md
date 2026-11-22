@@ -31,8 +31,13 @@ editing, localization, branding, quality, Owner review, render, package, publish
 analytics/earnings and learning. Planning
 does not enqueue work or perform external actions. The 21-stage map is currently
 planning-only; actual runs still use the existing durable specialist/checker worker,
-not a persisted stage-by-stage executor. Provider matches are candidates, not
-installation or health attestations.
+not yet a stage-by-stage executor. Each new run now persists an ordered 21-row
+stage ledger in the runtime SQLite database, including department, approval policy,
+status, evidence, issues and timestamps. The ledger has fenced worker completion,
+evidence-required completion and explicit Owner gates for Owner review/publishing.
+It is currently an auditable planning/checkpoint foundation: the existing specialist/
+checker worker does not yet advance these 21 stage rows automatically. Provider
+matches are candidates, not installation or health attestations.
 
 ## Monitor recent runs
 
