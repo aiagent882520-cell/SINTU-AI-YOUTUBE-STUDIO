@@ -156,5 +156,18 @@ class VideoDownloadWorker(appContext: Context, params: WorkerParameters) :
 internal fun downloadProgressPercent(downloadedBytes: Long, totalBytes: Long): Int? {
     if (totalBytes <= 0L) return null
     val bounded = downloadedBytes.coerceIn(0L, totalBytes)
-    return ((bounded * 100L) / totalBytes).toInt()
+    if (bounded == totalBytes) return 100
+
+    // Find floor(bounded * 100 / totalBytes) without overflowing Long.
+    var low = 0
+    var high = 99
+    val quotient = totalBytes / 100L
+    val remainder = totalBytes % 100L
+    while (low < high) {
+        val candidate = (low + high + 1) / 2
+        val threshold = quotient * candidate +
+            ((remainder * candidate + 99L) / 100L)
+        if (bounded >= threshold) low = candidate else high = candidate - 1
+    }
+    return low
 }
