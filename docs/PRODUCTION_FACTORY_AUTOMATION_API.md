@@ -10,7 +10,10 @@ specialist/builder/checker runtime.
 Returns a secret-free snapshot of the selected Master Brain, local model availability,
 optional remote-provider configuration flags, and image/voice/music/video engine
 readiness on the current server. It does not make paid API calls or claim that a
-configured credential has been tested against the vendor.
+configured credential has been tested against the vendor. The response also reports whether
+the in-process background queue supervisor is running, its poll interval, and batch size.
+The supervisor starts with the FastAPI application, recovers interrupted runs at startup,
+and only auto-picks queued runs; paused/review-required runs are not silently resumed.
 
 ## Plan a workflow
 
