@@ -38,6 +38,7 @@ _ROUTE_FEATURES = (
     ("/api/studio/runs", "production"),
     ("/api/offline-media", "media_library"),
     ("/api/blender-renders", "video_editor"),
+    ("/api/production-factory", "production"),
     ("/api/production-catalog", "production"),
     ("/api/production", "production"),
     ("/api/projects", "projects"),
