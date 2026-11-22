@@ -40,7 +40,13 @@ class VideoDownloadWorker(appContext: Context, params: WorkerParameters) :
         try {
             setForeground(createForegroundInfo())
             setProgress(workDataOf(KEY_PROGRESS to "Downloading MP4 to Movies/SINTU…"))
-            val uri = SintuApi(applicationContext, baseUrl).downloadVideoToGallery(applicationContext, videoId)
+            val uri = SintuApi(applicationContext, baseUrl).downloadVideoToGallery(
+                applicationContext,
+                videoId
+            ) { downloadedBytes, totalBytes ->
+                setProgress(workDataOf(KEY_PROGRESS to progressDescription(downloadedBytes, totalBytes)))
+                setForeground(createForegroundInfo(downloadedBytes, totalBytes))
+            }
             Result.success(workDataOf(KEY_SAVED_URI to uri.toString(), KEY_VIDEO_ID to videoId))
         } catch (error: VideoDownloadHttpException) {
             if (isRetryableVideoDownloadStatus(error.statusCode) && runAttemptCount < MAX_RETRIES) {
@@ -58,7 +64,7 @@ class VideoDownloadWorker(appContext: Context, params: WorkerParameters) :
         }
     }
 
-    private fun createForegroundInfo(): ForegroundInfo {
+    private fun createForegroundInfo(downloadedBytes: Long? = null, totalBytes: Long? = null): ForegroundInfo {
         val context = applicationContext
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -82,16 +88,21 @@ class VideoDownloadWorker(appContext: Context, params: WorkerParameters) :
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
         }
-        val notification = NotificationCompat.Builder(context, DOWNLOAD_CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, DOWNLOAD_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("SINTU MP4 download")
-            .setContentText("Downloading to Movies/SINTU. You can leave the app open or closed.")
+            .setContentText(progressDescription(downloadedBytes ?: 0L, totalBytes ?: 0L))
             .setContentIntent(contentIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
+        if (downloadedBytes != null && totalBytes != null && totalBytes > 0L) {
+            builder.setProgress(100, downloadProgressPercent(downloadedBytes, totalBytes) ?: 0, false)
+        } else {
+            builder.setProgress(0, 0, true)
+        }
+        val notification = builder.build()
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ForegroundInfo(
                 NOTIFICATION_ID,
@@ -113,6 +124,18 @@ class VideoDownloadWorker(appContext: Context, params: WorkerParameters) :
         const val KEY_PROGRESS = "progress"
         private const val MAX_RETRIES = 5
 
+        internal fun progressDescription(downloadedBytes: Long, totalBytes: Long): String {
+            val downloadedMb = downloadedBytes.coerceAtLeast(0L) / (1024.0 * 1024.0)
+            return if (totalBytes > 0L) {
+                val totalMb = totalBytes / (1024.0 * 1024.0)
+                "Downloading to Movies/SINTU… ${downloadProgressPercent(downloadedBytes, totalBytes)}% " +
+                    "(${String.format(java.util.Locale.US, "%.1f", downloadedMb)}/" +
+                    "${String.format(java.util.Locale.US, "%.1f", totalMb)} MB)"
+            } else {
+                "Downloading to Movies/SINTU… ${String.format(java.util.Locale.US, "%.1f", downloadedMb)} MB"
+            }
+        }
+
         fun enqueue(context: Context, videoId: String): java.util.UUID {
             require(videoId.matches(Regex("[a-f0-9]{32}"))) { "Invalid SINTU video ID." }
             val request = OneTimeWorkRequestBuilder<VideoDownloadWorker>()
@@ -127,4 +150,11 @@ class VideoDownloadWorker(appContext: Context, params: WorkerParameters) :
             return request.id
         }
     }
+}
+
+
+internal fun downloadProgressPercent(downloadedBytes: Long, totalBytes: Long): Int? {
+    if (totalBytes <= 0L) return null
+    val bounded = downloadedBytes.coerceIn(0L, totalBytes)
+    return ((bounded * 100L) / totalBytes).toInt()
 }
