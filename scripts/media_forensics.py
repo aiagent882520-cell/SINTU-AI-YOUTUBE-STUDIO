@@ -136,7 +136,7 @@ def visual_dhash(image: Image.Image) -> str:
         image.convert("L"), (64, 64), method=resampling, color=0, centering=(0.5, 0.5)
     )
     tiny = normalized.resize((9, 8), resampling)
-    pixels = list(tiny.getdata())
+    pixels = list(tiny.tobytes())
     value = 0
     for y in range(8):
         for x in range(8):
@@ -1018,11 +1018,11 @@ def compact_forensic_summary(report: dict) -> dict:
                  (sample.get("pixel_verification") or {}).get("black_pixel_percentage"),
                  (sample.get("pixel_verification") or {}).get("near_black"),
                  (sample.get("pixel_verification") or {}).get("visual_dhash"),
-                 str((sample.get("pixel_verification") or {}).get("visual_pixel_sha256") or "")[:16],
+                 str((sample.get("pixel_verification") or {}).get("visual_pixel_sha256") or "")[:12],
                  [
                      [candidate.get("path"), candidate.get("dhash_distance"),
                       candidate.get("exact_normalized_pixel_match")]
-                     for candidate in (sample.get("pixel_verification") or {}).get("source_image_candidates", [])[:3]
+                     for candidate in (sample.get("pixel_verification") or {}).get("source_image_candidates", [])[:2]
                  ]]
                 for sample in item.get("decoded_frame_samples", [])
             ],
@@ -1067,7 +1067,7 @@ def compact_forensic_summary(report: dict) -> dict:
         "targets": targets,
         "assets": [
             [str(asset.get("path", ""))[-64:], asset.get("mean_luma"),
-             asset.get("near_black"), asset.get("modified_utc"), asset.get("visual_dhash")]
+             asset.get("near_black"), asset.get("modified_utc")]
             for asset in report.get("candidate_source_assets", [])[:3]
         ],
         "logs": [
