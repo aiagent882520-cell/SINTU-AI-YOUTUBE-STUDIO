@@ -890,4 +890,7 @@ def test_runtime_dispatches_existing_roles_in_stage_order_and_persists_checkpoin
     assert stages["owner_review"]["status"] == "awaiting_owner"
     assert result["pipeline_stage_role_dispatch_integrated"] is True
     assert result["pipeline_stage_execution_implemented"] is False
+    assert result["result"]["pipeline_dispatch"]["mode"] == "existing_specialist_checker_roles"
+    assert result["result"]["pipeline_dispatch"]["full_21_stage_execution"] is False
+    assert "render" in result["result"]["pipeline_dispatch"]["deferred_stage_ids"]
 
