@@ -21,13 +21,13 @@
     <div class="actions"><span id="health" class="status" role="status">Connecting…</span><a class="secondary" href="/earnings">Earning System</a><button id="logout" class="secondary" type="button">Logout</button></div>
   </header>
   <main>
-    <section class="hero">
+    <section class="hero" data-feature="dashboard">
       <p class="eyebrow">SINTU AI YOUTUBE STUDIO · VIDEO PRODUCTION</p>
       <h2>Idea se <em>production plan</em> tak.</h2>
       <p>Ek hi workspace mein video scripts, research, thumbnails, courses aur social content.</p>
       <p class="install-hint">Mobile par browser menu se “Add to Home screen” karke app ki tarah install karein.</p>
     </section>
-    <section class="stats">
+    <section class="stats" data-feature="dashboard">
       <article><strong id="agentCount">0</strong><span>Specialists + Checkers</span></article>
       <article><strong id="workflowCount">8</strong><span>AI workflows</span></article>
       <article><strong id="taskCount">0</strong><span>Saved tasks</span></article>
@@ -72,7 +72,7 @@
       <div class="actions"><button id="chatSendMessage" type="button">Send message</button></div>
       <p id="chatNotice" class="muted" role="status" aria-live="polite">Local AI model unavailable ho to SINTU blocked status dikhayega; paid fallback automatic nahi hai.</p>
     </section>
-    <section class="panel">
+    <section class="panel" data-feature="video_editor">
       <div class="panel-head"><div><h2>MP4 Storyboard Renderer</h2><p>AI clips, still-image scenes aur local 2D character animation ko voiceover, music, SFX, subtitles aur camera movement ke saath final MP4 mein banayein.</p></div></div>
       <label for="renderFormat">Video format</label>
       <select id="renderFormat"><option value="youtube-shorts">YouTube Shorts</option></select>
@@ -135,7 +135,7 @@
       <p id="renderNotice" class="muted" role="status" aria-live="polite">Renderer availability checking…</p>
       <div id="renderResult" hidden><video id="renderVideo" controls playsinline style="width:100%;max-height:520px;background:#000;border-radius:12px"></video><p><a id="renderDownload" download="sintu-storyboard.mp4">Download MP4</a></p></div>
     </section>
-        <section class="panel">
+        <section class="panel" data-feature="video_editor">
       <div class="panel-head"><div><h2>AI Video & Animation Studio</h2><p>Free local ComfyUI video workflow, ya revenue ke baad optional paid connector.</p></div></div>
       <p id="aiVideoStatus" class="muted" role="status">AI video provider status checking…</p>
       <label for="aiVideoPrompt">Video scene prompt</label>
@@ -154,7 +154,7 @@
       <p id="aiVideoNotice" class="muted" role="status" aria-live="polite">Paid generation disabled until configured by server admin. Short clip generation may take several minutes.</p>
       <div id="aiVideoResult" hidden><video id="aiVideoPreview" controls playsinline style="width:100%;max-height:520px;background:#000;border-radius:12px"></video><p><a id="aiVideoDownload" download="sintu-ai-video.mp4">Download AI video MP4</a></p><p id="aiVideoAssetId" class="muted"></p></div>
     </section>
-    <section class="panel">
+    <section class="panel" data-feature="video_editor">
       <div class="panel-head"><div><h2>Hindi Voiceover & Separate SRT File</h2><p>कम से कम 95% हिंदी narration audio बनाएं। SRT अलग file होती है; video में subtitle नहीं जुड़ता।</p></div></div>
       <label for="voiceText">Hindi voiceover script (95% Hindi; max 4,000 characters)</label>
       <textarea id="voiceText" rows="5" maxlength="4000" placeholder="यहाँ अपना कम से कम 95% हिंदी narration लिखें…"></textarea>
@@ -173,7 +173,7 @@
       <div class="actions"><button id="subtitleButton" type="button">Download Separate SRT File</button></div>
       <p id="subtitleNotice" class="muted" role="status" aria-live="polite"></p>
     </section>
-<section class="panel">
+<section class="panel" data-feature="video_editor">
       <div class="panel-head"><div><h2>AI Image & Thumbnail Studio</h2><p>Scene artwork, cinematic visuals aur YouTube thumbnail concepts ko image mein banayein.</p></div></div>
       <label for="imagePrompt">Image prompt / visual description</label>
       <textarea id="imagePrompt" rows="4" maxlength="3000" placeholder="Example: Ancient Indian stepwell at night, mysterious blue moonlight, cinematic documentary photography, no text…"></textarea>
@@ -186,7 +186,7 @@
       <p id="imageNotice" class="muted" role="status" aria-live="polite">Image service status checking…</p>
       <div id="imageResult" hidden><img id="generatedImage" alt="Generated SINTU AI artwork" style="display:block;width:100%;height:auto;border-radius:12px"><p><a id="imageDownload" download="sintu-ai-image.jpg">Download image</a></p><p id="imageAssetId" class="muted"></p></div>
     </section>
-    <section class="panel">
+    <section class="panel" data-feature="agents">
       <div class="panel-head"><div><h2>Creator Departments</h2><p>Har department ke liye dedicated workflow.</p></div></div>
       <div class="departments">
         <button class="dept" data-workflow="research"><b>Research & Trends</b><span>Topic discovery, fact-check planning, competitor and keyword research</span></button>
@@ -199,7 +199,7 @@
         <button class="dept" data-workflow="content"><b>Content Planner</b><span>Audience, content angle, calendar ideas and outlines</span></button>
       </div>
     </section>
-    <section class="panel">
+    <section class="panel" data-feature="agents">
       <div class="panel-head"><div><h2>61-Agent Team</h2><p>Registry view — agents are planned; individual autonomous agents are not yet implemented.</p></div></div>
       <div id="agents" class="agents">Loading agent registry…</div>
     </section>
@@ -245,7 +245,7 @@
       <div id="principalAiCouncilCards" class="integration-cards" aria-live="polite"></div>
       <p id="principalAiCouncilNotice" class="foot">Major decisions fail closed if any required Principal AI vote is missing. Local fallback is advisory only and never counts as a Principal vote.</p>
     </section>
-    <section class="panel" id="publishingConnectionsPanel" hidden data-feature="integrations" data-feature="integrations">
+    <section class="panel" id="publishingConnectionsPanel" hidden data-feature="integrations">
       <div class="panel-head"><div><h2>Social Publishing Control Center</h2><p>Sabhi social platform connections aur publishing readiness ek jagah.</p></div><button id="publishingConnectionsRefresh" class="secondary" type="button">Refresh all</button></div>
       <div id="publishingConnectionsCards" class="integration-cards" aria-live="polite"></div>
       <p id="publishingConnectionsNotice" class="muted" role="status" aria-live="polite">Checking connections…</p>
@@ -345,7 +345,7 @@
       <p id="calendarNotice" class="muted" role="status" aria-live="polite">Every item needs approval. No automatic publishing is enabled.</p>
       <div id="calendarItems" class="calendar-list">Loading calendar…</div>
     </section>
-    <section class="panel">
+    <section class="panel" data-feature="ai_assistant">
       <div class="panel-head"><div><h2>Task History</h2><p>Recent prompts and generated outputs.</p></div><button id="refresh" class="secondary" type="button">Refresh</button></div>
       <div class="task-filters">
         <input id="taskSearch" type="search" maxlength="200" placeholder="Search prompts or task ID…" aria-label="Search task history">
@@ -359,7 +359,7 @@
       <div id="taskFilterSummary" class="muted" aria-live="polite"></div>
       <div id="tasks">No tasks yet.</div>
     </section>
-    <section class="panel roadmap">
+    <section class="panel roadmap" data-feature="integrations">
       <h2>Integration Status</h2>
       <div class="status-grid">
         <div><b>AI text generation</b><span>Free local Ollama first; paid APIs stay locked until revenue and owner approval</span></div>
@@ -430,7 +430,7 @@
 </section>
 
 
-<section class="panel" id="youtubeAnalyticsPanel">
+<section class="panel" id="youtubeAnalyticsPanel" data-feature="youtube">
  <h2>YouTube Channel Analytics</h2>
  <p>Connected channel ke views, watch time, average view duration, subscribers, likes aur comments dekhein. OAuth credentials baad mein add kiye ja sakte hain.</p>
  <div class="actions"><label for="youtubeAnalyticsDays">Date range</label><select id="youtubeAnalyticsDays"><option value="7">Last 7 days</option><option value="28" selected>Last 28 days</option><option value="90">Last 90 days</option></select><button id="loadYoutubeAnalytics" type="button">Load channel analytics</button></div>
