@@ -399,29 +399,7 @@ fi
 if [ -n "$SMOKE_VIDEO_PATH" ]; then
   say "Verified sample video: $SMOKE_VIDEO_PATH"
 fi
-if ! grep -Eq '^SINTU_OWNER_TOTP_SECRET=.{16,}
-====================================================
- SINTU AI YOUTUBE STUDIO - READY
-====================================================
-App:       http://127.0.0.1:8000
-Project:   $APP_DIR
-Logs:      $LOG_FILE
-PID file:  $PID_FILE
-
-Useful commands:
-  cd "$APP_DIR"
-  bash scripts/termux_one_command.sh   # rerun safe setup/update
-  tail -f "$LOG_FILE"                  # live server log
-  tail -f "$LOG_DIR/llama-server.log"    # local AI model log
-  kill \$(cat "$PID_FILE")               # stop SINTU
-  kill \$(cat "$LOG_DIR/llama-server.pid")  # stop local AI
-
-Security:
-  .env is private (mode 600); do not share it.
-  Server binds to localhost only; it is not exposed to the internet.
-====================================================
-EOF
- .env; then
+if ! grep -Eq '^SINTU_OWNER_TOTP_SECRET=.{16,}$' .env; then
   say "Owner mobile OTP is not enrolled. Before Owner login, run: .venv/bin/python scripts/setup_owner_otp.py"
 fi
 
