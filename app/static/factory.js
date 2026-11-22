@@ -75,8 +75,33 @@
         const title=document.createElement("b");title.textContent=run.topic+" · "+run.status;card.append(title);
         const detail=document.createElement("p");detail.className="factory-meta";detail.textContent=run.format_id+" · "+run.run_id+" · Attempts: "+run.attempt_count+" · Steps: "+run.step_count;card.append(detail);
         const open=document.createElement("button");open.type="button";open.className="secondary";open.textContent="View run details";
-        open.addEventListener("click",()=>viewRun(run.run_id));card.append(open);root.append(card);}
+        open.addEventListener("click",()=>viewRun(run.run_id));card.append(open);
+        if(run.status==="completed"){
+          const render=document.createElement("button");render.type="button";render.className="primary";render.textContent="Generate final MP4";
+          render.addEventListener("click",()=>produceMedia(run.run_id));card.append(render);
+        }
+        root.append(card);}
     }catch(error){root.textContent=error.message;root.className="factory-error";}
+  }
+  async function produceMedia(id) {
+    if(!window.confirm("Approved production package se local images, Hindi voice, original background music aur verified MP4 generate karein? Ismein sirf configured free local engines use honge; YouTube par publish nahi hoga.")) return;
+    notice("Local media generation shuru… ComfyUI, Hindi Piper voice aur FFmpeg available hone chahiye.");
+    const buttons=[...$("factoryRuns").querySelectorAll("button")];
+    const button=buttons.find(item=>item.textContent==="Generate final MP4" && item.parentElement?.textContent.includes(id));
+    if(button){button.disabled=true;button.textContent="Generating…";}
+    try{
+      const result=await api("/api/production/runs/"+encodeURIComponent(id)+"/produce-media",{
+        method:"POST",
+        body:JSON.stringify({burn_subtitles:false,sound_effects_enabled:true,quality:"high",fps:30})
+      });
+      notice(result.detail||"Verified MP4 ready. Publishing remains disabled.");
+      await loadRuns();
+      if(result.render?.filename){
+        const link=document.createElement("a");link.href="/api/videos/"+encodeURIComponent(result.render.filename);
+        link.textContent="Open rendered video: "+result.render.filename;link.target="_blank";link.rel="noopener";
+        $("factoryNotice").append(document.createTextNode(" "),link);
+      }
+    }catch(error){notice(error.message,true);if(button){button.disabled=false;button.textContent="Generate final MP4";}}
   }
   async function viewRun(id) {
     try{const run=await api("/api/production/runs/"+encodeURIComponent(id));const details=(run.steps||[]).map(x=>x.role+": "+x.status).join("\n");
