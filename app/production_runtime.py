@@ -22,6 +22,7 @@ from .management_hierarchy import SENIOR_MANAGER_NAMES, management_hierarchy
 from .ai_brain import generate_text, ProviderNotConfigured, ProviderRequestError
 from .documentary_research import DOCUMENTARY_FORMAT_IDS, validate_documentary_evidence_for_production, build_research_prompt_context
 from .research_evidence_store import get_research_evidence
+from .production_factory_orchestrator import route_specialist_roles
 
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(Path(__file__).resolve().parent.parent))).expanduser().resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -1039,6 +1040,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
     try:
         team = format_team(run["format_id"])
         pairs = [item for item in team if item.get("role_type") == "specialist"]
+        role_stage_map = route_specialist_roles([item["name"] for item in team if item.get("role_type") == "specialist"])
         owner_pair = next((item for item in pairs if item["name"] == "Owner Agent"), None)
         pairs = [item for item in pairs if item["name"] != "Owner Agent"]
         from .production_factory_orchestrator import route_specialist_roles
@@ -1354,6 +1356,8 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
         pipeline_stage_rows = pipeline_stage_snapshot.get("pipeline_stages", [])
         result = {
             "format": selected,
+            "role_stage_map": role_stage_map,
+            "pipeline_stage_execution_implemented": False,
             "deliverables": deliverables,
             "research_evidence": ({
                 "sha256": research_record["sha256"],
