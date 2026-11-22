@@ -249,6 +249,8 @@ async function refresh() {
     if (providers.local.configured) available.push("Free local Ollama");
     if (providers.paid_upgrades_allowed && providers.openai.configured) available.push("OpenAI (optional)");
     if (providers.paid_upgrades_allowed && providers.gemini.configured) available.push("Gemini (optional)");
+    if (providers.paid_upgrades_allowed && providers.deepseek.configured) available.push("DeepSeek (optional)");
+    if (providers.paid_upgrades_allowed && providers.claude.configured) available.push("Claude (optional)");
     $("providerStatus").textContent = available.length
       ? "Available: " + available.join(" + ") + " · selected: " + providers.selected
       : "Free local AI setup needed: install/start Ollama and pull the configured model. Paid providers locked until revenue + approval.";
@@ -1241,7 +1243,7 @@ checkAIVideoService();
 
 
 function integrationStatusLabel(status) {
-  return ({ready:"Ready",needs_server_key:"Server API key required",needs_ffmpeg:"FFmpeg required",enabled:"Enabled (paid)",disabled:"Disabled",not_connected:"Not connected"})[status] || status;
+  return ({ready:"Ready",needs_server_key:"Server API key required",paid_upgrade_locked:"Paid upgrade locked",needs_ffmpeg:"FFmpeg required",enabled:"Enabled (paid)",disabled:"Disabled",not_connected:"Not connected"})[status] || status;
 }
 async function loadProviderAdminPanel() {
   const panel = $("providerAdminPanel");
@@ -1254,8 +1256,9 @@ async function loadProviderAdminPanel() {
       request("/api/admin/provider-settings"), request("/api/admin/integrations")
     ]);
     $("selectedProvider").value = settings.selected_provider;
+    const providerLabels = {openai:"OpenAI",gemini:"Google Gemini / AI Studio",deepseek:"DeepSeek",claude:"Anthropic Claude",local:"Free local model"};
     $("providerCards").innerHTML = Object.entries(settings.providers).map(([key,value]) => `
-      <div class="integration-card"><strong>${key==="openai"?"OpenAI":key==="gemini"?"Google Gemini / AI Studio":"DeepSeek"}</strong><span>${value.configured?"API key configured":"API key missing"}</span><small>Model: ${adminEscape(value.model)}</small></div>`).join("");
+      <div class="integration-card"><strong>${providerLabels[key] || adminEscape(key)}</strong><span>${value.configured?"API key configured":"API key missing"}</span><small>Model: ${adminEscape(value.model)}</small></div>`).join("");
     const rows = [
       ["Text AI", integrations.text_ai.status, integrations.text_ai.selected],
       ["MP4 rendering", integrations.video_rendering.status, "FFmpeg server dependency"],
@@ -1263,7 +1266,8 @@ async function loadProviderAdminPanel() {
       ["YouTube publishing", integrations.youtube_publishing.status, integrations.youtube_publishing.note],
       ["Social publishing", integrations.social_publishing.status, integrations.social_publishing.note],
       ["Channel analytics", integrations.analytics.status, integrations.analytics.note],
-      ["DeepSeek", integrations.other_text_providers.status, integrations.other_text_providers.deepseek?.configured ? "API key configured · paid usage locked until revenue + owner approval" : "API key required · paid usage locked until revenue + owner approval"], ["Google Flow", "external_handoff", "Format-aware prompt handoff; generation happens in your Google Flow account"], ["Google AI Studio Build", "external_handoff", "Build apps, websites, Android apps, software and agents from prompts"]
+      ["DeepSeek", integrations.text_ai.paid_upgrades_allowed ? (integrations.other_text_providers.deepseek?.configured ? "ready" : "needs_server_key") : "paid_upgrade_locked", integrations.other_text_providers.deepseek?.configured ? "API key configured · paid usage locked until revenue + owner approval" : "API key required · paid usage locked until revenue + owner approval"],
+      ["Anthropic Claude", integrations.text_ai.paid_upgrades_allowed ? (integrations.other_text_providers.claude?.configured ? "ready" : "needs_server_key") : "paid_upgrade_locked", integrations.other_text_providers.claude?.configured ? "API key configured · paid usage locked until revenue + owner approval" : "API key required · paid usage locked until revenue + owner approval"], ["Google Flow", "external_handoff", "Format-aware prompt handoff; generation happens in your Google Flow account"], ["Google AI Studio Build", "external_handoff", "Build apps, websites, Android apps, software and agents from prompts"]
     ];
     $("integrationCards").innerHTML = rows.map(([name,status,detail]) => `
       <div class="integration-card"><strong>${adminEscape(name)}</strong><span>${adminEscape(integrationStatusLabel(status))}</span><small>${adminEscape(detail)}</small></div>`).join("");
