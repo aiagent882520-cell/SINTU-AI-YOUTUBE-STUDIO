@@ -558,7 +558,7 @@ def transition_pipeline_stage(
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         run = conn.execute(
-            "SELECT owner_username,status,worker_token,cancel_requested,lease_expires_at FROM production_runs WHERE id=?",
+            "SELECT owner_username,status,worker_token,cancel_requested,lease_expires_at,result_json FROM production_runs WHERE id=?",
             (run_id,),
         ).fetchone()
         stage = conn.execute(
@@ -614,6 +614,26 @@ def transition_pipeline_stage(
         )
         _event(conn, run_id, owner_username, stage["status"], status, "pipeline_stage_transition",
                f"stage={stage_id}; owner_approved={bool(owner_approved)}; evidence_present={bool(evidence)}")
+        if status in {"completed", "skipped", "awaiting_owner"} and run["result_json"]:
+            result_payload = json.loads(run["result_json"])
+            dispatch = result_payload.get("pipeline_dispatch") if isinstance(result_payload, dict) else None
+            if isinstance(dispatch, dict):
+                groups = {
+                    "completed": "completed_stage_ids",
+                    "skipped": "skipped_stage_ids",
+                    "awaiting_owner": "awaiting_owner_stage_ids",
+                }
+                for key in groups.values():
+                    dispatch[key] = [item for item in dispatch.get(key, []) if item != stage_id]
+                dispatch[groups[status]].append(stage_id)
+                if status == "completed":
+                    dispatch["deferred_stage_ids"] = [
+                        item for item in dispatch.get("deferred_stage_ids", []) if item != stage_id
+                    ]
+                conn.execute(
+                    "UPDATE production_runs SET result_json=?,updated_at=? WHERE id=? AND owner_username=?",
+                    (json.dumps(result_payload, ensure_ascii=False), now, run_id, owner_username),
+                )
     return get_run(run_id, owner_username)
 
 
