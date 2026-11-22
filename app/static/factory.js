@@ -76,6 +76,12 @@
         const detail=document.createElement("p");detail.className="factory-meta";detail.textContent=run.format_id+" · "+run.run_id+" · Attempts: "+run.attempt_count+" · Steps: "+run.step_count;card.append(detail);
         const open=document.createElement("button");open.type="button";open.className="secondary";open.textContent="View run details";
         open.addEventListener("click",()=>viewRun(run.run_id));card.append(open);
+        if(run.status==="completed" && run.has_render && run.video_url){
+          const rendered=document.createElement("a");rendered.href=run.video_url;rendered.target="_blank";rendered.rel="noopener";rendered.textContent="Open verified MP4";card.append(rendered);
+        }else if(run.status==="completed"){
+          const render=document.createElement("button");render.type="button";render.className="primary";render.textContent="Generate final MP4";
+          render.addEventListener("click",()=>produceMedia(run.run_id));card.append(render);
+        }
         if(!["completed","failed","cancelled"].includes(run.status)){
           const cancel=document.createElement("button");cancel.type="button";cancel.className="secondary";cancel.textContent="Cancel run";
           cancel.addEventListener("click",()=>cancelRun(run.run_id));card.append(cancel);
@@ -91,6 +97,26 @@
       notice(result.detail||("Run status: "+result.status));
       await loadRuns();
     }catch(error){notice(error.message,true);}
+  }
+  async function produceMedia(id) {
+    if(!window.confirm("Approved production package se local images, Hindi voice, original background music aur verified MP4 generate karein? Ismein sirf configured free local engines use honge; YouTube par publish nahi hoga.")) return;
+    notice("Local media generation shuru… ComfyUI, Hindi Piper voice aur FFmpeg available hone chahiye.");
+    const buttons=[...$("factoryRuns").querySelectorAll("button")];
+    const button=buttons.find(item=>item.textContent==="Generate final MP4" && item.parentElement?.textContent.includes(id));
+    if(button){button.disabled=true;button.textContent="Generating…";}
+    try{
+      const result=await api("/api/production/runs/"+encodeURIComponent(id)+"/produce-media",{
+        method:"POST",
+        body:JSON.stringify({burn_subtitles:false,sound_effects_enabled:true,quality:"high",fps:30})
+      });
+      notice(result.detail||"Verified MP4 ready. Publishing remains disabled.");
+      await loadRuns();
+      if(result.render?.url || result.render?.video_id){
+        const link=document.createElement("a");link.href=result.render.url||("/api/videos/"+encodeURIComponent(result.render.video_id));
+        link.textContent="Open rendered video";link.target="_blank";link.rel="noopener";
+        $("factoryNotice").append(document.createTextNode(" "),link);
+      }
+    }catch(error){notice(error.message,true);if(button){button.disabled=false;button.textContent="Generate final MP4";}}
   }
   async function viewRun(id) {
     try{
