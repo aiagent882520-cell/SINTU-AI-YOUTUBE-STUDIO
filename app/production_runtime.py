@@ -90,6 +90,15 @@ def init_runtime_db() -> None:
             FOREIGN KEY(run_id) REFERENCES production_runs(id)
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_production_steps_run ON production_steps(run_id, sequence)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS production_pipeline_stages (
+            run_id TEXT NOT NULL, sequence INTEGER NOT NULL, stage_id TEXT NOT NULL,
+            department TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+            approval TEXT NOT NULL, evidence TEXT, issues_json TEXT NOT NULL DEFAULT '[]',
+            started_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL,
+            PRIMARY KEY(run_id, stage_id), UNIQUE(run_id, sequence),
+            FOREIGN KEY(run_id) REFERENCES production_runs(id)
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pipeline_stages_run ON production_pipeline_stages(run_id, sequence)")
 
 
 def _selected_format(format_id: str) -> dict[str, Any] | None:
@@ -122,6 +131,17 @@ def create_run(format_id: str, topic: str, owner_username: str = "local") -> dic
             (id,format_id,topic,status,owner_username,created_at,updated_at) VALUES(?,?,?,?,?,?,?)""",
             (run_id, format_id, topic, "queued", owner_username, now, now))
         _event(conn, run_id, owner_username, None, "queued", "run_created", "Production run created.")
+        # Persist the stage contract separately from the legacy specialist/checker worker.
+        from .production_factory_orchestrator import _STAGE_DEFINITIONS
+        for sequence, (stage_id, _name, department, _capabilities, approval) in enumerate(_STAGE_DEFINITIONS, 1):
+            conn.execute(
+                """INSERT INTO production_pipeline_stages
+                   (run_id,sequence,stage_id,department,status,approval,updated_at)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (run_id, sequence, stage_id, department, "pending", approval, now),
+            )
+        _event(conn, run_id, owner_username, None, "queued", "pipeline_ledger_created",
+               "Persisted 21-stage planning ledger; stage execution is not yet wired.")
     return get_run(run_id, owner_username)
 
 
@@ -374,8 +394,19 @@ def get_run(run_id: str, owner_username: str | None = None) -> dict[str, Any] | 
         if not row:
             return None
         steps = conn.execute("SELECT sequence,role,step_type,status,output_text,evidence_json,issues_json,attempts FROM production_steps WHERE run_id=? ORDER BY sequence", (run_id,)).fetchall()
+        pipeline_stages = conn.execute(
+            """SELECT sequence,stage_id,department,status,approval,evidence,issues_json,
+                      started_at,completed_at,updated_at
+               FROM production_pipeline_stages WHERE run_id=? ORDER BY sequence""", (run_id,)
+        ).fetchall()
     result = dict(row)
     result["result"] = json.loads(result.pop("result_json") or "null")
+    result["pipeline_stages"] = []
+    for item in pipeline_stages:
+        stage = dict(item)
+        stage["issues"] = json.loads(stage.pop("issues_json") or "[]")
+        result["pipeline_stages"].append(stage)
+    result["pipeline_stage_execution_implemented"] = False
     result["steps"] = []
     for item in steps:
         step = dict(item)
@@ -383,6 +414,75 @@ def get_run(run_id: str, owner_username: str | None = None) -> dict[str, Any] | 
         step["issues"] = json.loads(step.pop("issues_json") or "[]")
         result["steps"].append(step)
     return result
+
+
+def transition_pipeline_stage(
+    run_id: str,
+    stage_id: str,
+    status: str,
+    *,
+    owner_username: str,
+    worker_token: str | None = None,
+    evidence: str | None = None,
+    issues: list[str] | None = None,
+    owner_approved: bool = False,
+) -> dict[str, Any] | None:
+    """Persist an auditable stage transition; this is not yet wired to stage execution."""
+    allowed_statuses = {"pending", "running", "completed", "blocked", "paused", "awaiting_owner"}
+    if status not in allowed_statuses:
+        raise ValueError("Unsupported pipeline stage status.")
+    if not owner_username or len(owner_username) > 120:
+        raise ValueError("Pipeline stage owner is invalid.")
+    if status == "completed" and not (isinstance(evidence, str) and evidence.strip()):
+        raise ValueError("A completed pipeline stage requires evidence.")
+    if issues is not None and (not isinstance(issues, list) or any(not isinstance(x, str) for x in issues)):
+        raise ValueError("Stage issues must be a list of strings.")
+    init_runtime_db()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        run = conn.execute(
+            "SELECT owner_username,status,worker_token,cancel_requested,lease_expires_at FROM production_runs WHERE id=?",
+            (run_id,),
+        ).fetchone()
+        stage = conn.execute(
+            "SELECT sequence,status,approval FROM production_pipeline_stages WHERE run_id=? AND stage_id=?",
+            (run_id, stage_id),
+        ).fetchone()
+        if not run or run["owner_username"] != owner_username or not stage:
+            return None
+        if run["status"] in {"cancelled", "cancelling"} or run["cancel_requested"]:
+            raise ProductionRunCancelled("Pipeline stage cannot change after cancellation.")
+        if stage["approval"] == "owner_required" and status == "completed" and not owner_approved:
+            raise PermissionError("Owner approval is required to complete this pipeline stage.")
+        if status == "completed" and stage["approval"] != "owner_required":
+            now = _now()
+            if (not worker_token or run["worker_token"] != worker_token
+                    or not run["lease_expires_at"] or run["lease_expires_at"] < now):
+                raise ProductionRunCancelled("A live fenced worker lease is required to complete this stage.")
+        transitions = {
+            "pending": {"running", "blocked", "awaiting_owner"},
+            "running": {"completed", "blocked", "paused", "awaiting_owner"},
+            "paused": {"running", "blocked", "awaiting_owner"},
+            "blocked": {"pending", "running"},
+            "awaiting_owner": {"completed", "paused"},
+            "completed": set(),
+        }
+        if status not in transitions.get(stage["status"], set()):
+            raise ValueError(f"Invalid pipeline stage transition: {stage['status']} -> {status}.")
+        now = _now()
+        started_at = now if status == "running" and stage["status"] != "running" else None
+        completed_at = now if status == "completed" else None
+        conn.execute(
+            """UPDATE production_pipeline_stages SET status=?,evidence=COALESCE(?,evidence),
+               issues_json=?,started_at=COALESCE(?,started_at),
+               completed_at=COALESCE(?,completed_at),updated_at=?
+               WHERE run_id=? AND stage_id=?""",
+            (status, evidence, json.dumps(issues or [], ensure_ascii=False),
+             started_at, completed_at, now, run_id, stage_id),
+        )
+        _event(conn, run_id, owner_username, stage["status"], status, "pipeline_stage_transition",
+               f"stage={stage_id}; owner_approved={bool(owner_approved)}; evidence_present={bool(evidence)}")
+    return get_run(run_id, owner_username)
 
 
 def _set_run(run_id: str, status: str, current_role: str | None = None,
