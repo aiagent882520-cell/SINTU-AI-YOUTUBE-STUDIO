@@ -5926,6 +5926,11 @@ def production_factory_runs(request: Request, limit: int = 20):
             if isinstance(rendered_video_id, str) and re.fullmatch(r"[a-f0-9]{32}", rendered_video_id)
             else None
         )
+        stage_rows = run.get("pipeline_stages") or []
+        stage_status_counts = {}
+        for stage in stage_rows:
+            stage_status = str(stage.get("status") or "unknown")
+            stage_status_counts[stage_status] = stage_status_counts.get(stage_status, 0) + 1
         summaries.append({
             "run_id": run.get("id"),
             "status": status,
@@ -5940,6 +5945,9 @@ def production_factory_runs(request: Request, limit: int = 20):
             "cancel_requested": bool(run.get("cancel_requested")),
             "has_result": isinstance(run.get("result"), dict),
             "step_count": len(run.get("steps") or []),
+            "pipeline_stage_count": len(stage_rows),
+            "pipeline_stage_status": stage_status_counts,
+            "pipeline_stage_execution_implemented": False,
         })
     return {
         "runs": summaries,
