@@ -61,6 +61,7 @@
       const brain=document.createElement("p");brain.textContent="Master AI: "+data.master_brain.selected+" · Local model: "+(data.master_brain.local.model_available?"available":"not available")+" · Service: "+(data.master_brain.local.service_running?"running":"stopped");root.append(brain);
       for(const [name,item] of Object.entries(data.engines)){const row=document.createElement("p");row.textContent=name+": "+(item.available?"available":"not available")+" · "+(item.engine||"No local engine");root.append(row);}
       const worker=document.createElement("p");worker.textContent="Background worker: "+(data.background_worker?.running?"running":"not running")+" · Queue pickup: "+(data.background_worker?.auto_pickup_status||"unknown")+" · Paused jobs need Owner review";root.append(worker);
+      const worker=document.createElement("p");worker.textContent="Background worker: "+(data.worker.running?"RUNNING":"STOPPED")+" · Poll: "+data.worker.poll_interval_seconds+"s · Batch: "+data.worker.batch_size;root.append(worker);
       const policy=document.createElement("p");policy.textContent="Paid auto-activation: OFF · Publishing: OFF";root.append(policy);
       const note=document.createElement("p");note.className="factory-meta";note.textContent=data.notice;root.append(note);
     }catch(error){root.textContent=error.message;root.className="factory-error";}
