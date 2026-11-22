@@ -78,3 +78,6 @@ containing strict JSON such as:
 
 The worker rejects arbitrary shell commands and unapproved actions. It claims
 the issue, runs the task, posts the bounded result, and closes the issue.
+
+
+Owner login requires a mobile authenticator OTP. Enroll once with `.venv/bin/python scripts/setup_owner_otp.py`, then restart SINTU using `bash scripts/termux_apply_update.sh`. See [Owner feature access and OTP setup](OWNER_FEATURE_ACCESS_CONTROL.md).
