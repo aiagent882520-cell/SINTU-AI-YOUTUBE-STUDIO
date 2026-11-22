@@ -5392,6 +5392,9 @@ class ProductionFactoryPlanInput(BaseModel):
 @app.post("/api/production-factory/plan")
 def production_factory_plan(payload: ProductionFactoryPlanInput):
     """Build a free-first end-to-end plan without starting workers or external actions."""
+    valid_formats = {item["id"] for item in production_catalog()["formats"]}
+    if payload.format_id not in valid_formats:
+        raise HTTPException(status_code=400, detail="Unknown production format.")
     try:
         return build_pipeline_plan(payload.topic, payload.format_id)
     except ValueError as exc:
