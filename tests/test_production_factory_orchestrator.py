@@ -9,13 +9,20 @@ def test_pipeline_plan_is_complete_and_does_not_start_execution():
     plan = build_pipeline_plan("Hindi science explainer", "educational")
     stage_ids = [stage["id"] for stage in plan["stages"]]
     assert stage_ids == [
-        "intake", "research", "strategy", "writing", "visuals", "audio",
-        "assembly", "quality", "owner_review", "publishing", "analytics",
+        "intake", "planning", "research", "fact_check", "strategy", "script",
+        "storyboard", "character_bible", "visual_development", "generation",
+        "audio", "editing", "localization", "branding", "quality",
+        "owner_review", "render", "package", "publishing",
+        "analytics_earnings", "learning",
     ]
+    assert plan["pipeline_stage_count"] == 21
+    assert plan["pipeline_version"] == "2.0"
     assert plan["execution_started"] is False
     assert plan["execution_allowed"] is False
     assert plan["publishing_enabled"] is False
     assert plan["free_first"] is True
+    assert next(stage for stage in plan["stages"] if stage["id"] == "owner_review")["approval"] == "owner_required"
+    assert next(stage for stage in plan["stages"] if stage["id"] == "publishing")["auto_execute"] is False
     assert plan["paid_auto_activation"] is False
 
 
