@@ -923,6 +923,17 @@ def principal_knowledge_link(payload: PrincipalKnowledgeEdgeInput, request: Requ
     return {"edge": edge}
 
 
+@app.get("/api/admin/principal-ai/knowledge/audit")
+def principal_knowledge_audit(request: Request, limit: int = Query(default=100, ge=1, le=500)):
+    owner = _require_principal_ai_owner(request)
+    with db() as conn:
+        principal_knowledge_graph.ensure_schema(conn)
+        return {
+            "events": principal_knowledge_graph.list_audit_events(conn, owner, limit),
+            "integrity": principal_knowledge_graph.verify_audit_chain(conn, owner),
+        }
+
+
 @app.get("/api/admin/principal-ai/knowledge/edges")
 def principal_knowledge_edges(request: Request, node_id: str | None = None):
     owner = _require_principal_ai_owner(request)
