@@ -940,6 +940,15 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                 if active_pipeline_stage and active_pipeline_stage != "quality":
                     complete_pipeline_stage(active_pipeline_stage, "All assigned specialist deliverables passed their independent checkers.")
                 active_pipeline_stage = next_stage
+                if (active_pipeline_stage and research_record
+                        and not next(stage for stage in role_routing["stages"] if stage["stage_id"] == "research")["roles"]
+                        and stage_order.get(active_pipeline_stage, 99) > stage_order.get("research", 3)
+                        and stage_status("research") == "pending"):
+                    start_pipeline_stage("research")
+                    complete_pipeline_stage(
+                        "research",
+                        "Persisted documentary research ledger structurally validated; source contents still require human fact-check.",
+                    )
                 if active_pipeline_stage:
                     start_pipeline_stage(active_pipeline_stage)
             if role in approved_roles:
