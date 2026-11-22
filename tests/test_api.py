@@ -11,6 +11,8 @@ from app import main, video_renderer
 
 def client_for_test(tmp_path, monkeypatch):
     monkeypatch.setenv("SINTU_AUTH_REQUIRED", "false")
+    # Existing auth-flow tests focus on password/session policy; OTP has dedicated tests below.
+    monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "false")
     # Ordinary endpoint contract tests opt in explicitly; dedicated policy tests
     # remove these flags to verify the production-safe default is deny.
     monkeypatch.setenv("SINTU_PRODUCTION_ENABLED", "true")
@@ -4544,3 +4546,58 @@ def test_unknown_feature_routes_fail_closed_for_non_owner(tmp_path, monkeypatch)
     client.post("/api/auth/login", json={"username":"restricted_admin","password":"restricted-admin-password"})
     assert client.get("/api/unknown-new-feature").status_code == 403
     assert client.get("/api/admin/users").status_code == 403
+
+
+def test_owner_login_requires_valid_mobile_totp_but_team_accounts_do_not(tmp_path, monkeypatch):
+    import base64
+
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    secret = base64.b32encode(b"01234567890123456789").decode("ascii").rstrip("=")
+    monkeypatch.setenv("SINTU_OWNER_TOTP_SECRET", secret)
+    monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "true")
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    assert client.post("/api/auth/login", json={
+        "username":"owner", "password":"a-strong-test-password"
+    }).status_code == 401
+    assert client.post("/api/auth/login", json={
+        "username":"owner", "password":"a-strong-test-password", "otp_code":"000000"
+    }).status_code == 401
+    code = main._totp_code(secret)
+    login = client.post("/api/auth/login", json={
+        "username":"owner", "password":"a-strong-test-password", "otp_code":code
+    })
+    assert login.status_code == 200
+    assert client.get("/api/auth/session").json()["is_owner"] is True
+
+    created = client.post("/api/admin/users", json={
+        "username":"team_admin", "password":"team-admin-password", "role":"admin"
+    })
+    assert created.status_code == 200
+    client.post("/api/auth/logout")
+    team_login = client.post("/api/auth/login", json={
+        "username":"team_admin", "password":"team-admin-password"
+    })
+    assert team_login.status_code == 200
+    assert team_login.json()["role"] == "admin"
+
+
+def test_owner_login_fails_closed_until_mobile_totp_is_enrolled(tmp_path, monkeypatch):
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SINTU_ADMIN_USERNAME", "owner")
+    monkeypatch.setenv("SINTU_ADMIN_PASSWORD", "a-strong-test-password")
+    monkeypatch.setenv("SINTU_SESSION_SECRET", "test-session-secret-that-is-at-least-32-bytes")
+    monkeypatch.setenv("SINTU_COOKIE_SECURE", "false")
+    monkeypatch.setenv("SINTU_OWNER_OTP_REQUIRED", "true")
+    monkeypatch.delenv("SINTU_OWNER_TOTP_SECRET", raising=False)
+    client = client_for_test(tmp_path, monkeypatch)
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "true")
+    response = client.post("/api/auth/login", json={
+        "username":"owner", "password":"a-strong-test-password"
+    })
+    assert response.status_code == 503
+    assert "setup_owner_otp.py" in response.json()["detail"]
