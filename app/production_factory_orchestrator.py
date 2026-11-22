@@ -166,7 +166,7 @@ def build_pipeline_plan(
         "execution_allowed": False,
         "stage_execution_implemented": False,
         "stage_role_dispatch_integrated": True,
-        "stage_execution_note": "Existing specialist/checker roles advance matching applicable stage checkpoints. Dedicated executors for media rendering, packaging, publishing, analytics and learning are not yet integrated; this is not full 21-stage execution.",
+        "stage_execution_note": "Existing specialist/checker roles advance matching applicable stage checkpoints. The authenticated Owner media action advances verified render and package stages; publishing, analytics and learning executors remain unintegrated, so this is not full 21-stage execution.",
         "free_first": True,
         "paid_auto_activation": False,
         "publishing_enabled": False,
