@@ -319,3 +319,33 @@ def test_comfyui_image_generation_submits_replaced_workflow_and_downloads_output
     assert inputs["height"] == 1360
     assert inputs["negative"] == "text, watermark, low quality, distorted, malformed, extra limbs"
     assert any("/history/image-job-1" in url for url in calls)
+
+
+
+def test_comfyui_image_generation_stops_on_history_execution_error(tmp_path, monkeypatch):
+    workflow = tmp_path / "image.json"
+    data = api_workflow()
+    data["2"]["inputs"].pop("frames")
+    data["2"]["inputs"].pop("fps")
+    workflow.write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setenv("COMFYUI_IMAGE_WORKFLOW_PATH", str(workflow))
+    monkeypatch.setattr(comfyui_client, "image_workflow_status", lambda: {
+        "available": True, "base_url": "http://127.0.0.1:8188"
+    })
+    monkeypatch.setattr(comfyui_client.time, "sleep", lambda *_: None)
+
+    def fake_request(url, data=None, timeout=30):
+        if url.endswith("/prompt"):
+            return b'{"prompt_id":"image-job-error"}'
+        if "/history/" in url:
+            return json.dumps({"image-job-error": {"status": {"messages": [
+                ["execution_error", {"exception_message": "Missing image checkpoint"}]
+            ]}, "outputs": {}}}).encode()
+        raise AssertionError("Failed execution must not request an output file")
+
+    monkeypatch.setattr(comfyui_client, "_request", fake_request)
+    try:
+        comfyui_client.generate_image_bytes("A cinematic forest", 768, 1360, timeout_seconds=5)
+        assert False, "Expected workflow execution failure"
+    except comfyui_client.ComfyUIUnavailable as exc:
+        assert "Missing image checkpoint" in str(exc)
