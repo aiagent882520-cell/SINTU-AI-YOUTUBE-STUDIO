@@ -11,6 +11,7 @@ This is the native Android application project, separate from the browser PWA an
 - Create a YouTube Shorts production project, request a script/scene production package, and browse saved projects.
 - Native Image Studio calls the authenticated server image API, previews returned JPEGs, and saves images to Pictures/SINTU. It labels ComfyUI output as local AI inference and procedural fallback as non-generative artwork.
 - Explicitly reports that script/scene generation is not the same as final MP4 rendering.
+- Runs a gated production workflow, validates output resolution against the backend renderer profiles, downloads rendered MP4 files to Movies/SINTU, and can hand the saved file to an installed Android video player.
 
 ## Build
 
@@ -24,7 +25,7 @@ The debug APK is installable for device testing. The release APK produced by thi
 
 ## Current limitations
 
-This first native client tranche is not yet a complete parity release. Background upload/download recovery, native video preview/download, media library management, full timeline editing, offline project queueing, notifications, accessibility/device-size test matrix and signed release package remain outstanding. Real chat/generation also depends on the configured SINTU backend and available AI engines.
+This native client tranche is not yet a complete parity release. Media uploads run through persistent WorkManager jobs with SHA-256-verified resumable chunks and server-confirmed offsets. MP4 download currently runs in the foreground; download recovery/background transfer is not implemented. Playback is handed to an installed Android player after saving to Movies/SINTU; an in-app video player, media library management, full timeline editing, offline project queueing, notifications, accessibility/device-size test matrix and signed release package remain outstanding. Real chat/generation also depends on the configured SINTU backend and available AI engines.
 
 ## CI build evidence
 
