@@ -293,6 +293,13 @@ def _finish_cancel(run_id: str, owner_username: str | None, token: str | None = 
             (_now(), run_id),
         ).rowcount
         if changed:
+            paused_stages = conn.execute(
+                """UPDATE production_pipeline_stages SET status='paused',updated_at=?
+                   WHERE run_id=? AND status='running'""", (_now(), run_id)
+            ).rowcount
+            if paused_stages:
+                _event(conn, run_id, row["owner_username"], "running", "paused",
+                       "pipeline_checkpoint_cancelled", f"paused_stage_count={paused_stages}")
             _event(conn, run_id, row["owner_username"], row["status"], "cancelled",
                    "cancellation_completed", "Worker stopped at a safe checkpoint; partial outputs were preserved.")
     return changed == 1
@@ -501,7 +508,7 @@ def transition_pipeline_stage(
     issues: list[str] | None = None,
     owner_approved: bool = False,
 ) -> dict[str, Any] | None:
-    """Persist an auditable stage transition; this is not yet wired to stage execution."""
+    """Persist an auditable stage transition with ordering, lease and approval checks."""
     allowed_statuses = {"pending", "running", "completed", "blocked", "paused", "awaiting_owner", "skipped"}
     if status not in allowed_statuses:
         raise ValueError("Unsupported pipeline stage status.")
@@ -547,7 +554,7 @@ def transition_pipeline_stage(
             "pending": {"running", "blocked", "awaiting_owner", "skipped"},
             "running": {"completed", "blocked", "paused", "awaiting_owner"},
             "paused": {"running", "blocked", "awaiting_owner"},
-            "blocked": {"pending", "running"},
+            "blocked": {"pending", "running", "awaiting_owner"},
             "awaiting_owner": {"completed", "paused"},
             "completed": set(),
             "skipped": set(),
@@ -1111,7 +1118,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                         set_run(run_id, "paused", current_role="Owner Agent",
                                  error="Owner Agent did not provide an explicit READY verdict; human review is required.")
                         return
-                    if stage_status("owner_review") == "pending":
+                    if stage_status("owner_review") in {"pending", "blocked"}:
                         transition_pipeline_stage(
                             run_id, "owner_review", "awaiting_owner",
                             owner_username=owner_username or "local", worker_token=worker_token,
@@ -1129,7 +1136,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                          error="Owner Agent report failed its independent checker; human review required.")
                 return
         else:
-            if stage_status("owner_review") == "pending":
+            if stage_status("owner_review") in {"pending", "blocked"}:
                 transition_pipeline_stage(
                     run_id, "owner_review", "awaiting_owner",
                     owner_username=owner_username or "local", worker_token=worker_token,
