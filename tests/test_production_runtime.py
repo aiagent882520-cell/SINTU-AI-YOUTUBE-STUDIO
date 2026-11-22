@@ -316,7 +316,7 @@ def test_runtime_revises_once_then_continues_after_checker_pass(tmp_path, monkey
     stages = {stage["stage_id"]: stage for stage in result["pipeline_stages"]}
     assert stages["script"]["status"] == "completed"
     assert stages["intake"]["status"] == "skipped"
-    assert stages["quality"]["status"] == "skipped"
+    assert stages["quality"]["status"] == "completed"
     assert stages["owner_review"]["status"] == "awaiting_owner"
     assert result["pipeline_stage_execution_implemented"] is False
     assert [step["step_type"] for step in result["steps"][:4]] == ["builder", "checker", "builder", "checker"]
@@ -883,7 +883,7 @@ def test_runtime_dispatches_existing_roles_in_stage_order_and_persists_checkpoin
     assert stages["fact_check"]["status"] == "completed"
     assert stages["script"]["status"] == "completed"
     assert stages["intake"]["status"] == "skipped"
-    assert stages["quality"]["status"] == "skipped"
+    assert stages["quality"]["status"] == "completed"
     assert stages["owner_review"]["status"] == "awaiting_owner"
     assert result["pipeline_stage_role_dispatch_integrated"] is True
     assert result["pipeline_stage_execution_implemented"] is False
