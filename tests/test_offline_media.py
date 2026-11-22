@@ -71,6 +71,23 @@ def test_offline_media_api_imports_deduplicates_lists_and_downloads(tmp_path, mo
     assert downloaded.content == payload
 
 
+def test_offline_media_import_works_without_os_link(tmp_path, monkeypatch):
+    import os
+    import app.offline_media as offline_media
+
+    monkeypatch.delattr(os, "link", raising=False)
+    source = tmp_path / "incoming.part"
+    source.write_bytes(b"termux-compatible-copy")
+
+    record = offline_media.import_media_file(
+        data_dir=tmp_path, source_path=source, filename="clip.mp4"
+    )
+
+    stored = tmp_path / "offline_media" / "files" / record["stored_name"]
+    assert stored.read_bytes() == b"termux-compatible-copy"
+    assert not source.exists()
+
+
 def test_offline_media_api_rejects_empty_and_unsupported_files(tmp_path, monkeypatch):
     client = _client(tmp_path, monkeypatch)
     assert client.post("/api/offline-media/import?filename=empty.mp4", content=b"").status_code == 400
