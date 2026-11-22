@@ -241,8 +241,8 @@ class SintuApi(context: Context, baseUrl: String) {
             .create(SintuService::class.java)
     }
 
-    suspend fun login(username: String, password: String): LoginResponse =
-        service.login(LoginRequest(username, password)).bodyOrThrow()
+    suspend fun login(username: String, password: String, otpCode: String? = null): LoginResponse =
+        service.login(LoginRequest(username, password, otpCode)).bodyOrThrow()
 
     suspend fun logout() {
         try { service.logout() } finally { sessionStore.clear() }
