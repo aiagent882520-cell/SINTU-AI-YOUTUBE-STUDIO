@@ -61,3 +61,17 @@ approves the action.
 - Never treat a catalogue entry as proof of credentials, installation, licensing,
   capacity or live availability.
 - Do not delete or overwrite original media as part of recovery or automation.
+
+
+## Durable queued-run recovery
+
+At application startup, SINTU first recovers expired worker leases, then starts an in-process
+supervisor that polls the persistent production-run database for `queued` jobs. It uses
+the runtime's atomic fenced worker claim, so it can safely race with the request-scoped
+FastAPI background task or another server process without executing the same run twice.
+
+Only `queued` jobs are automatically picked up. A `paused` job is intentionally excluded:
+it can mean an independent checker failed, documentary evidence is missing or corrupt,
+or a human-review gate was reached. Such a run must be explicitly resumed by an Owner
+after reviewing its checkpoint. Shutdown stops queue polling without forcibly interrupting
+an active model call; an interrupted lease is recovered on a later startup.
