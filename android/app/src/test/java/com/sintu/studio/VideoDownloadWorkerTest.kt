@@ -12,6 +12,20 @@ class VideoDownloadWorkerTest {
         assertEquals(100, downloadProgressPercent(150, 100))
         assertEquals(0, downloadProgressPercent(-10, 100))
         assertEquals(null, downloadProgressPercent(50, 0))
+        assertEquals(null, downloadProgressPercent(50, -1))
+    }
+
+    @Test
+    fun progressPercentageDoesNotOverflowForLargeLongValues() {
+        assertEquals(50, downloadProgressPercent(Long.MAX_VALUE / 2, Long.MAX_VALUE))
+        assertEquals(99, downloadProgressPercent(Long.MAX_VALUE - 1, Long.MAX_VALUE))
+        assertEquals(100, downloadProgressPercent(Long.MAX_VALUE, Long.MAX_VALUE))
+    }
+
+    @Test
+    fun progressPercentageHandlesZeroAndNegativeDownloads() {
+        assertEquals(0, downloadProgressPercent(0, Long.MAX_VALUE))
+        assertEquals(0, downloadProgressPercent(-1, Long.MAX_VALUE))
     }
 
     @Test
