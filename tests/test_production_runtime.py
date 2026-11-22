@@ -942,6 +942,10 @@ def test_owner_media_executor_advances_render_and_package_after_owner_review(tmp
             "full_21_stage_execution": False,
         }},
     )
+    with pytest.raises(PermissionError, match="Human Owner Review"):
+        runtime.transition_owner_media_stage(
+            run["id"], "render", "running", owner_username="owner",
+        )
     with runtime._connect() as conn:
         conn.execute(
             "UPDATE production_pipeline_stages SET status='completed' WHERE run_id=? AND sequence<=16",
