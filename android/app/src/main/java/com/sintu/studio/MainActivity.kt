@@ -458,11 +458,11 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
     LaunchedEffect(currentVideoDownload?.id, currentVideoDownload?.state) {
         when (currentVideoDownload?.state) {
             WorkInfo.State.SUCCEEDED -> {
-                downloadedUri = currentVideoDownload.outputData.getString(VideoDownloadWorker.KEY_SAVED_URI).orEmpty()
+                downloadedUri = currentVideoDownload?.outputData?.getString(VideoDownloadWorker.KEY_SAVED_URI).orEmpty()
                 if (downloadedUri.isNotBlank()) notice = "MP4 Movies/SINTU mein save ho gaya. App band hone ke baad bhi download complete hua."
             }
             WorkInfo.State.FAILED -> {
-                notice = currentVideoDownload.outputData.getString(VideoDownloadWorker.KEY_ERROR)
+                notice = currentVideoDownload?.outputData?.getString(VideoDownloadWorker.KEY_ERROR)
                     ?: "Background MP4 download failed."
             }
             WorkInfo.State.RUNNING -> notice = "MP4 background mein download ho raha hai…"
