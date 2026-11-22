@@ -58,6 +58,7 @@ def test_cpu_launcher_starts_existing_checkout_with_explicit_cpu_flag(tmp_path):
     [
         ("torch=2.6.0\\ncuda=False\\nmps=False", True),
         ("torch=2.6.0\\ncuda=True\\nmps=False", False),
+        ("torch=2.6.0\\ncuda=False\\nmps=True", False),
     ],
 )
 def test_auto_mode_selects_cpu_only_when_cuda_is_unavailable(tmp_path, torch_info, expected_cpu):
