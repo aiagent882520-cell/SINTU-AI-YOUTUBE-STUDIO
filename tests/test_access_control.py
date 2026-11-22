@@ -37,6 +37,7 @@ def test_feature_route_registry_maps_known_paths_and_fails_closed():
     assert access_control.feature_for_path("/api/admin/provider-settings") == "ai_settings"
     assert access_control.feature_for_path("/api/production/runs") == "production"
     assert access_control.feature_for_path("/api/offline-media") == "media_library"
+    assert access_control.feature_for_path("/api/earnings/records") == "earnings"
     assert access_control.feature_for_path("/api/not-yet-classified") is None
     assert access_control.feature_for_path("/api/admin/users") is None
 
