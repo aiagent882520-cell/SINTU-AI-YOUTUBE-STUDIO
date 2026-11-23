@@ -248,7 +248,7 @@ def test_platform_metadata_extracts_only_source_backed_fields():
     result = extract_platform_metadata({
         "Title Generator": '{"title": "भारत के 5 अद्भुत तथ्य"}',
         "Description Writer": "Description: इस वीडियो में पाँच रोचक तथ्यों को समझें।",
-        "YouTube SEO Tags Expert": "Tags: विज्ञान, भारत, रोचक तथ्य\\nHashtags: #विज्ञान, #भारत",
+        "YouTube SEO Tags Expert": "Tags: विज्ञान, भारत, रोचक तथ्य\nHashtags: #विज्ञान, #भारत",
     })
     assert result["platform"] == "youtube"
     assert result["status"] == "partial"
