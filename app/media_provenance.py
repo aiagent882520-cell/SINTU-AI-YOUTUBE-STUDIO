@@ -178,7 +178,7 @@ def create_delivery_package(
     cursor = 0
     cue_index = 1
     for line in captions:
-        clean = line.replace("\\r", " ").strip()
+        clean = line.replace("\\r", " ").replace("\\n", " ").replace("-->", "→").strip()
         if clean:
             cues.append(
                 f"{cue_index}\\n{srt_timestamp(cursor)} --> "
