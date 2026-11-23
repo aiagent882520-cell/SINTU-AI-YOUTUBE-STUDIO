@@ -134,8 +134,11 @@ before the package stage is marked complete. The archive includes the verified M
 all input assets recorded in the render provenance manifest, timed Hindi SRT captions
 (even when captions are not burned into the MP4), production metadata, specialist
 deliverables, the renderer quality report, the render provenance manifest and
-source-linked research evidence when present. A package index records each included
-file's size and SHA-256; the archive is reopened and CRC-checked before it is accepted.
+source-linked research evidence when present. The current render action does not generate
+a thumbnail image or translated subtitle tracks; the README and package index list those
+omissions alongside the unavailable editable timeline project and per-asset rights
+certificates. A package index records each included file's size and SHA-256; the archive
+is reopened and CRC-checked before it is accepted.
 The ZIP itself also has a persisted SHA-256 and byte size.
 
 `GET /api/production/runs/{run_id}/package` downloads the archive only for the
