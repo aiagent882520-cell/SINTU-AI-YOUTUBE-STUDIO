@@ -38,9 +38,14 @@ def registered_worktrees() -> set[Path]:
 
 
 def prepare_worktree() -> str:
-    if WORKTREE.is_symlink():
-        raise RuntimeError("Dedicated main worktree path is a symlink; refusing to use it.")
+    for candidate in (WORKTREE.parent.parent, WORKTREE.parent, WORKTREE):
+        if candidate.is_symlink():
+            raise RuntimeError("Dedicated main worktree path contains a symlink; refusing to use it.")
     WORKTREE.parent.mkdir(parents=True, exist_ok=True)
+    home = Path.home().resolve()
+    target = WORKTREE.resolve()
+    if not target.is_relative_to(home):
+        raise RuntimeError("Dedicated main worktree path resolves outside the Termux home directory.")
     git("fetch", "origin", "main:refs/remotes/origin/main")
     registered = registered_worktrees()
     target = WORKTREE.resolve()
