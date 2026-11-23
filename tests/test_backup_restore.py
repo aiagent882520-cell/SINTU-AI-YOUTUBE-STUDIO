@@ -230,3 +230,13 @@ def test_restore_rolls_back_all_databases_when_third_install_fails(tmp_path, mon
     assert not list(data.glob(".sintu-restore-*.sqlite"))
     assert not list(data.glob(".sintu-restore-media-*.tmp"))
     assert not list((data / "backups").glob("pre-restore-*.sqlite"))
+
+
+
+def test_backup_allowlist_includes_verified_production_packages_and_manifests():
+    from app.backup_restore import _safe_member_name
+
+    assert _safe_member_name("media/production_packages/" + "a" * 32 + "-delivery.zip")
+    assert _safe_member_name("media/production_manifests/" + "a" * 32 + "-final.json")
+    assert not _safe_member_name("media/production_packages/../private.zip")
+    assert not _safe_member_name("media/production_manifests/link")
