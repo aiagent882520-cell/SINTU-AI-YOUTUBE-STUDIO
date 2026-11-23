@@ -225,7 +225,7 @@ def test_runtime_executes_worker_and_checker_as_separate_calls(tmp_path, monkeyp
     runtime.execute_run(run["id"])
     result = runtime.get_run(run["id"])
 
-    assert result["status"] == "completed"
+    assert result["status"] == "completed", result.get("error")
     assert result["pipeline_stage_evidence_enforced"] is True
     script_stage = next(stage for stage in result["pipeline_stages"] if stage["stage_id"] == "script")
     assert script_stage["status"] == "completed"
@@ -269,7 +269,7 @@ def test_runtime_stops_after_first_checker_failure(tmp_path, monkeypatch):
     runtime.execute_run(run["id"])
     result = runtime.get_run(run["id"])
 
-    assert result["status"] == "paused"
+    assert result["status"] == "paused", result.get("error")
     assert result["current_role"].endswith("Checker")
     assert len(calls) == 6
     assert [step["step_type"] for step in result["steps"]] == ["builder", "checker"] * 3
@@ -332,7 +332,7 @@ def test_runtime_revises_once_then_continues_after_checker_pass(tmp_path, monkey
     runtime.execute_run(run["id"])
     result = runtime.get_run(run["id"])
 
-    assert result["status"] == "completed"
+    assert result["status"] == "completed", result.get("error")
     assert result["result"]["deliverables"]["Script Writer"].startswith("Revised")
     stages = {stage["stage_id"]: stage for stage in result["pipeline_stages"]}
     assert stages["script"]["status"] == "completed"
@@ -449,7 +449,7 @@ def test_owner_agent_not_ready_pauses_even_when_its_checker_passes(tmp_path, mon
     runtime.execute_run(run["id"])
     result = runtime.get_run(run["id"])
 
-    assert result["status"] == "paused"
+    assert result["status"] == "paused", result.get("error")
     assert result["current_role"] == "Owner Agent"
     assert "release blockers" in result["error"]
     stages = {stage["stage_id"]: stage for stage in result["pipeline_stages"]}
@@ -508,7 +508,7 @@ def test_resumed_run_skips_already_approved_specialist_checkpoints(tmp_path, mon
     runtime.execute_run(run["id"])
     result = runtime.get_run(run["id"])
 
-    assert result["status"] == "completed"
+    assert result["status"] == "completed", result.get("error")
     assert result["result"]["deliverables"]["Script Writer"] == "Previously approved Hindi narration"
     assert result["result"]["deliverables"]["Voice Artist"] == "Voice direction for the approved narration"
     assert not any("Role: Script Writer" in prompt for prompt in calls)
@@ -595,7 +595,7 @@ def test_documentary_runtime_passes_persisted_research_ledger_to_workers_and_rev
     runtime.execute_run(run["id"], "owner")
     result = runtime.get_run(run["id"], "owner")
 
-    assert result["status"] == "completed"
+    assert result["status"] == "completed", result.get("error")
     assert result["result"]["research_evidence"]["sha256"] == validation["sha256"]
     assert result["result"]["research_evidence"]["human_fact_check_required"] is True
     stages = {stage["stage_id"]: stage for stage in result["pipeline_stages"]}
@@ -622,7 +622,7 @@ def test_documentary_runtime_pauses_when_research_evidence_is_missing(tmp_path, 
     run = runtime.create_run("documentary", "भारत का इतिहास", "owner")
     runtime.execute_run(run["id"], "owner")
     result = runtime.get_run(run["id"], "owner")
-    assert result["status"] == "paused"
+    assert result["status"] == "paused", result.get("error")
     assert result["current_role"] == "Documentary Research Evidence"
     assert calls == []
 
@@ -662,7 +662,7 @@ def test_cancellation_during_model_call_wins_and_preserves_partial_outputs(tmp_p
     runtime.execute_run(run["id"], "alice")
     result = runtime.get_run(run["id"], "alice")
 
-    assert result["status"] == "cancelled"
+    assert result["status"] == "cancelled", result.get("error")
     assert len(calls) == 1
     assert result["steps"] == []
     assert result["result"] is None
@@ -722,7 +722,7 @@ def test_restart_recovery_finishes_pending_cancellation_without_deleting_steps(t
 
     assert runtime.recover_interrupted_runs() == 1
     result = runtime.get_run(run["id"], "alice")
-    assert result["status"] == "cancelled"
+    assert result["status"] == "cancelled", result.get("error")
     assert result["steps"][0]["output_text"] == "preserved checkpoint"
     assert runtime.list_run_events(run["id"], "alice")[-1]["event_type"] == "restart_recovery"
 
@@ -736,7 +736,7 @@ def test_completed_run_is_not_cancelled_or_modified(tmp_path, monkeypatch):
     runtime._set_run(run["id"], "completed", result=original)
 
     result = runtime.request_cancel(run["id"], "alice")
-    assert result["status"] == "completed"
+    assert result["status"] == "completed", result.get("error")
     assert result["result"] == original
     assert runtime.list_run_events(run["id"], "alice")[-1]["to_status"] == "completed"
 
@@ -760,7 +760,7 @@ def test_model_call_timeout_pauses_without_claiming_success(tmp_path, monkeypatc
     runtime.execute_run(run["id"], "alice")
 
     result = runtime.get_run(run["id"], "alice")
-    assert result["status"] == "paused"
+    assert result["status"] == "paused", result.get("error")
     assert "exceeded" in result["error"]
     assert result["steps"] == []
 
@@ -859,7 +859,7 @@ def test_transient_provider_errors_retry_with_audited_backoff(tmp_path, monkeypa
     runtime.execute_run(run["id"], "alice")
 
     result = runtime.get_run(run["id"], "alice")
-    assert result["status"] == "completed"
+    assert result["status"] == "completed", result.get("error")
     assert len(calls) == 4
     retry_events = [event for event in runtime.list_run_events(run["id"], "alice")
                     if event["event_type"] == "model_call_retry"]
