@@ -127,7 +127,7 @@ video ID and safe local video URL, allowing the dashboard to reopen the MP4 afte
 refresh without regenerating it. A missing local engine returns an explicit
 unavailable response; the dashboard does not fall back to paid providers.
 
-### Build and download the complete local delivery ZIP
+### Build and download the verified local delivery ZIP
 
 A successful local render now builds `production_packages/{run_id}-delivery.zip`
 before the package stage is marked complete. The archive includes the verified MP4,
