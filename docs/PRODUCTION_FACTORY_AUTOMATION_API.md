@@ -145,7 +145,9 @@ The ZIP itself also has a persisted SHA-256 and byte size.
 `GET /api/production/runs/{run_id}/package` downloads the archive only for the
 authenticated Owner who owns that run. The route validates the expected run-specific
 path, file size and SHA-256 before returning it. Package creation is local-only and
-does not publish, upload, share or modify source assets.
+does not publish, upload, share or modify source assets. Studio backups now include
+production thumbnails, provenance manifests and delivery ZIPs under the existing
+2 GiB backup safety limit; restore remains additive and does not overwrite existing media.
 
 The current renderer does not export an editable timeline/project file or per-asset
 third-party rights certificates. The ZIP README and package manifest explicitly list
