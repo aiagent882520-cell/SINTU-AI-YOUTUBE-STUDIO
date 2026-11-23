@@ -11,21 +11,118 @@ from typing import Any
 from .provider_registry import list_providers
 from .policy import paid_upgrades_allowed as _paid_upgrades_allowed
 
-PIPELINE_VERSION = "1.0"  # Stable contract version for persisted/client-visible plans.
+PIPELINE_VERSION = "2.0"  # 21-stage planning contract; planning never starts execution.
 
+# The production lifecycle is intentionally decomposed into small, auditable gates.
+# Character identity and visual development are separate so continuity can be checked
+# before expensive generation. Owner review precedes final rendering and publication.
 _STAGE_DEFINITIONS = (
     ("intake", "Brief and format validation", "planning", (), "automatic"),
+    ("planning", "Scope, deliverables, constraints and acceptance criteria", "planning", ("planning", "text"), "automatic"),
     ("research", "Topic and source research", "research", ("web_research", "research"), "automatic"),
-    ("strategy", "Audience, angle and content strategy", "strategy", ("planning", "text"), "automatic"),
-    ("writing", "Script, storyboard and metadata", "writing", ("script", "text"), "automatic"),
-    ("visuals", "Thumbnail, images and visual assets", "visuals", ("image",), "automatic"),
-    ("audio", "Hindi voice, music and sound design", "audio", ("text_to_speech", "audio"), "automatic"),
-    ("assembly", "Video edit, captions and render", "assembly", ("video", "transcode"), "automatic"),
-    ("quality", "Independent visual, audio and policy checks", "quality", ("quality_check", "analysis"), "automatic"),
-    ("owner_review", "Owner review of final deliverables", "approval", (), "owner_required"),
-    ("publishing", "YouTube and social publishing", "publishing", (), "owner_required"),
-    ("analytics", "Performance and earnings analysis", "analytics", ("business_analytics",), "automatic"),
+    ("fact_check", "Evidence review and claim verification", "compliance", ("research", "analysis"), "automatic"),
+    ("strategy", "Audience, angle, channel and content strategy", "strategy", ("planning", "text"), "automatic"),
+    ("script", "Narration, dialogue and production copy", "writing", ("script", "text"), "automatic"),
+    ("storyboard", "Shot list, scene order and timing", "preproduction", ("script", "planning"), "automatic"),
+    ("character_bible", "Character identity, voice and continuity rules", "preproduction", ("planning", "image"), "automatic"),
+    ("visual_development", "Art direction, locations, props and visual references", "visuals", ("image", "3d", "painting"), "automatic"),
+    ("generation", "Scene images, clips, animation and graphics", "generation", ("image", "video_generation", "animation"), "automatic"),
+    ("audio", "Hindi voice, music, ambience and sound effects", "audio", ("text_to_speech", "audio", "licensed_music", "sound_effects"), "automatic"),
+    ("editing", "Timeline assembly, transitions and audio mix", "editing", ("video_editing", "video", "transcode"), "automatic"),
+    ("localization", "Subtitles, captions, translation and language variants", "localization", ("speech_to_text", "text_to_speech", "text"), "automatic"),
+    ("branding", "Watermark, title cards, thumbnail and channel identity", "branding", ("thumbnail", "social_graphics"), "automatic"),
+    ("quality", "Independent visual, audio, factual and policy checks", "quality", ("quality_check", "analysis", "browser_testing"), "automatic"),
+    ("owner_review", "Owner review and approval of final creative package", "approval", (), "owner_required"),
+    ("render", "Final export at a verified resolution and codec", "rendering", ("video", "transcode"), "automatic"),
+    ("package", "Manifest, metadata, captions and delivery bundle", "delivery", ("transcode", "documents"), "automatic"),
+    ("publishing", "YouTube and social publishing after per-action approval", "publishing", (), "owner_required"),
+    ("analytics_earnings", "Performance, genuine earnings and cost analysis", "analytics", ("business_analytics", "analysis"), "automatic"),
+    ("learning", "Evidence-backed retrospectives and workflow improvement", "learning", ("analysis", "planning"), "automatic"),
 )
+
+# Existing specialist roles are routed into the closest real production stage.
+# Unmapped roles remain explicitly visible to the legacy worker; they are never silently
+# represented as completed pipeline work.
+_ROLE_STAGE_RULES = (
+    ("intake", ("master ai", "master ai director", "brief analyst")),
+    ("planning", ("task manager", "workflow agent", "content planner", "production planner",
+                  "project manager", "cost & resource manager")),
+    ("research", ("web research", "topic researcher", "research analyst", "story researcher",
+                  "trend detector", "competitor analyst", "keyword research", "topic predictor", "r&d agent")),
+    ("fact_check", ("fact checker", "fact-check", "fact check")),
+    ("strategy", ("audience analyst", "channel strategist", "seo strategist", "content strategist",
+                  "growth strategist", "distribution manager", "community manager")),
+    ("script", ("script writer", "storytelling", "story writer", "topic writer", "screenplay writer",
+                "language specialist", "narration director", "dialogue writer", "prompt writer",
+                "course designer", "lesson creator", "educational expert", "quiz & assessment")),
+    ("storyboard", ("filmmaking director", "film director", "creative director", "documentary producer",
+                    "music video director", "storyboard", "shot planner", "scene order agent",
+                    "cinematographer", "camera movement planner")),
+    ("character_bible", ("character designer", "character artist", "character consistency")),
+    ("visual_development", ("concept artist", "layout agent", "visual designer", "graphic designer",
+                            "art director", "background designer", "infographic designer",
+                            "product designer", "product demo agent", "logo designer")),
+    ("generation", ("ai video generator", "video generation agent", "image generator",
+                    "image generation agent", "scene generation agent", "background generation agent",
+                    "visual effects artist", "visual effects agent", "modeling agent", "3d modeler",
+                    "texturing agent", "rigging setup agent", "rigging agent", "lighting agent",
+                    "animation director", "2d animator", "3d animator", "character animator",
+                    "stop motion", "motion graphics artist", "ai avatar agent", "lip sync agent", "vfx agent")),
+    ("audio", ("voice generator", "voice generation agent", "voice artist", "voice actor", "voice director",
+               "narrator", "recording agent", "consent-based voice cloning", "music composer",
+               "background music agent", "hindi narration agent", "sound effects agent", "sound designer", "audio editor", "audio mixer")),
+    ("editing", ("video editor", "visual editor", "cinematic editor", "colorist", "color correction agent",
+                 "editing specialist", "motion graphics editor", "compositing agent", "green screen compositor",
+                 "vfx compositor", "2d vfx agent", "transition designer")),
+    ("localization", ("subtitle creator", "subtitle agent", "localization", "translator", "caption specialist")),
+    ("branding", ("thumbnail designer", "thumbnail optimizer", "title generator", "title writer",
+                  "description writer", "hashtag", "tag expert", "tags researcher", "youtube seo",
+                  "ctr optimizer", "branding agent")),
+    ("quality", ("quality enhancer", "testing & qa", "quality reviewer", "compliance reviewer",
+                 "script quality", "video quality", "audio quality", "visual consistency",
+                 "copyright checker", "subtitle quality", "final approval", "cyber security",
+                 "security & privacy", "hr agent", "manager agent", "gm agent", "ho agent")),
+)
+
+
+def route_specialist_roles(role_names: list[str]) -> dict[str, Any]:
+    """Route existing format-team roles to stages without inventing missing work."""
+    routed: dict[str, list[str]] = {stage_id: [] for stage_id, *_ in _STAGE_DEFINITIONS}
+    unmapped: list[str] = []
+    for raw_name in role_names:
+        name = str(raw_name or "").strip()
+        normalized = name.casefold()
+        match = next(
+            (stage_id for stage_id, terms in _ROLE_STAGE_RULES
+             if any(term in normalized for term in terms)),
+            None,
+        )
+        if match:
+            routed[match].append(name)
+        else:
+            unmapped.append(name)
+    deferred_tokens = ("final render", "rendering specialist", "final output", "upload agent",
+                       "scheduling agent", "analytics agent", "asset manager", "memory agent",
+                       "automation agent")
+    deferred_stage_ids = {"render", "package", "publishing", "analytics_earnings", "learning"}
+    deferred = [
+        role for role in role_names
+        if any(token in str(role).casefold() for token in deferred_tokens)
+        or any(role in routed[stage_id] for stage_id in deferred_stage_ids)
+    ]
+    return {
+        "stages": [
+            {"stage_id": stage_id, "roles": roles, "status": "assigned" if roles else "not_applicable"}
+            for stage_id, roles in routed.items()
+        ],
+        "unmapped_roles": unmapped,
+        "deferred_roles": deferred,
+        "deferred_role_policy": (
+            "Deferred roles may receive text-only specialist/checker invocations for plans or checklists, "
+            "but those invocations never execute render, package, publishing, analytics or learning side effects."
+        ),
+    }
+
 
 # Only capabilities supplied by a provider that is already part of this repository's
 # runtime may be selected automatically. Optional engines and catalogue-only vendors
@@ -35,10 +132,6 @@ _RUNTIME_STATUSES = frozenset({
     "adapter_available_credentials_optional",
     "integrated_test_dependency",
 })
-
-
-def _provider_index(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    return {str(row.get("id")): row for row in rows if isinstance(row, dict) and row.get("id")}
 
 
 def _candidate_providers(capability: str, rows: list[dict[str, Any]]) -> list[dict[str, str]]:
@@ -63,7 +156,7 @@ def build_pipeline_plan(
     *,
     providers: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Build a transparent, non-executing production plan."""
+    """Build a transparent, non-executing 21-stage production plan."""
     clean_topic = (topic or "").strip()
     clean_format = (format_id or "").strip()
     if not clean_topic or len(clean_topic) > 5000:
@@ -103,10 +196,14 @@ def build_pipeline_plan(
 
     return {
         "pipeline_version": PIPELINE_VERSION,
+        "pipeline_stage_count": len(stages),
         "topic": clean_topic,
         "format_id": clean_format,
         "execution_started": False,
         "execution_allowed": False,
+        "stage_execution_implemented": False,
+        "stage_role_dispatch_integrated": True,
+        "stage_execution_note": "Existing specialist/checker roles advance matching applicable stage checkpoints. The authenticated Owner media action advances verified render and package stages; publishing, analytics and learning executors remain unintegrated, so this is not full 21-stage execution.",
         "free_first": True,
         "paid_auto_activation": False,
         "publishing_enabled": False,
@@ -114,7 +211,8 @@ def build_pipeline_plan(
         "stages": stages,
         "notice": (
             "This is a plan, not a live health check or execution. Provider catalogue entries "
-            "do not prove installation, credentials, licensing, capacity or availability."
+            "do not prove installation, credentials, licensing, capacity or availability. "
+            "Each stage must pass its own runtime checks before execution."
         ),
     }
 

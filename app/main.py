@@ -51,15 +51,15 @@ from .provider_registry import list_providers, provider_summary
 from .production_factory_orchestrator import build_pipeline_plan
 from . import principal_ai_council, principal_knowledge_graph
 from . import access_control
-from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, verify_publishable_mp4, RendererUnavailable, RenderFailed, OUTPUT_DIR
+from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, verify_publishable_mp4, create_video_frame_thumbnail, RendererUnavailable, RenderFailed, OUTPUT_DIR
 from .format_rendering import all_format_render_profiles, format_render_profile
 from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable, VoiceGenerationFailed, AUDIO_DIR
 from .image_generator import generate_image, image_status, ImageUnavailable, ImageGenerationFailed, IMAGE_DIR
 from .music_generator import generate_music, music_status, MusicUnavailable, MusicGenerationFailed
 from .video_generator import generate_video, video_status, VideoUnavailable, VideoGenerationFailed, AI_VIDEO_DIR
-from .media_provenance import write_render_manifest
+from .media_provenance import write_render_manifest, create_delivery_package
 from .publishing_quality_gate import PublishingQualityError, require_publishable_provenance
-from .production_runtime import create_run as create_production_run, get_run as get_production_run, list_runs as list_production_runs, execute_run as execute_production_run, attach_render_result, recover_interrupted_runs, request_cancel as cancel_production_run, list_run_events as list_production_run_events
+from .production_runtime import create_run as create_production_run, get_run as get_production_run, list_runs as list_production_runs, execute_run as execute_production_run, attach_render_result, recover_interrupted_runs, request_cancel as cancel_production_run, list_run_events as list_production_run_events, transition_pipeline_stage, transition_owner_media_stage
 from .production_factory_worker import supervisor as production_factory_supervisor
 from .earning_system import router as earning_router, sync_youtube_estimate
 from .security import RequestRateLimiter, client_address_allowed, same_origin_request
@@ -1179,7 +1179,8 @@ def admin_audit(limit: int = 50):
 
 BACKUP_DIR = DATA_DIR / "backups"
 _BACKUP_MEDIA_DIRS = ("generated_images", "generated_ai_videos", "generated_audio",
-                      "generated_music", "generated_videos")
+                      "generated_music", "generated_videos", "production_thumbnails",
+                      "production_manifests", "production_packages")
 _BACKUP_MAX_BYTES = 2 * 1024 * 1024 * 1024
 _BACKUP_MAX_FILES = 10000
 _BACKUP_ID_PATTERN = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8}$")
@@ -5639,6 +5640,36 @@ def _scene_prompts_from_deliverables(deliverables: dict) -> list[str]:
     return []
 
 
+def _approve_owner_review_for_media(run_id: str, owner: str, run: dict) -> None:
+    """Record the authenticated Owner's explicit approval before a local render action."""
+    owner_review = next(
+        (stage for stage in run.get("pipeline_stages", []) if stage.get("stage_id") == "owner_review"),
+        None,
+    )
+    if not owner_review or owner_review.get("status") in {"blocked", "paused", "running", "skipped"}:
+        raise HTTPException(status_code=409, detail="Owner Review is blocked or unavailable; resolve its blockers before media generation.")
+    if owner_review.get("status") == "pending":
+        try:
+            transition_pipeline_stage(
+                run_id, "owner_review", "awaiting_owner", owner_username=owner,
+                issues=["Authenticated Owner initiated a local media action."],
+            )
+        except (ValueError, PermissionError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+        owner_review["status"] = "awaiting_owner"
+    if owner_review.get("status") == "awaiting_owner":
+        try:
+            transition_pipeline_stage(
+                run_id, "owner_review", "completed", owner_username=owner,
+                evidence="Authenticated Owner explicitly initiated local media generation.",
+                owner_approved=True,
+            )
+        except (ValueError, PermissionError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+    elif owner_review.get("status") != "completed":
+        raise HTTPException(status_code=409, detail="Owner Review must be explicitly approved before media generation.")
+
+
 @app.post("/api/production/runs/{run_id}/produce-media")
 def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, request: Request):
     """Generate local scene images, Hindi voice, original music and a verified MP4 for an approved run."""
@@ -5650,6 +5681,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=404, detail="Production run not found.")
     if run.get("status") != "completed" or not isinstance(run.get("result"), dict):
         raise HTTPException(status_code=409, detail="Production package must pass all builder/checker/reviewer gates first.")
+    # The AI Owner Agent recommendation cannot approve the human Owner gate.
     research_record = None
     if run.get("format_id") in DOCUMENTARY_FORMAT_IDS:
         try:
@@ -5667,11 +5699,11 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=400, detail="Production format no longer exists.") from None
     if not profile["generic_export_available"]:
         raise HTTPException(status_code=501, detail=profile["limitations"][0])
+    try:
+        _approve_owner_review_for_media(run_id, owner, run)
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
     use_procedural_2d = run["format_id"] in {"2d-cartoon", "story-animation"}
-    if not use_procedural_2d and not image_status().get("local_available"):
-        raise HTTPException(status_code=503, detail="Local ComfyUI image workflow is not ready. Configure a validated free local workflow; paid providers are not enabled by this route.")
-    if not voice_status().get("local_available"):
-        raise HTTPException(status_code=503, detail="Local Piper TTS executable and Hindi voice model are required. Paid voice providers are not enabled by this route.")
     deliverables = run["result"].get("deliverables") or {}
     scene_prompts = [item.strip() for item in payload.scene_prompts]
     if not scene_prompts:
@@ -5696,7 +5728,19 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=400, detail="Unsupported output resolution profile.")
     if payload.fps not in {24, 30, 60} or payload.quality not in {"standard", "high", "maximum"}:
         raise HTTPException(status_code=400, detail="Unsupported FPS or render quality.")
+    if not use_procedural_2d and not image_status().get("local_available"):
+        raise HTTPException(status_code=503, detail="Local ComfyUI image workflow is not ready. Configure a validated free local workflow; paid providers are not enabled by this route.")
+    if not voice_status().get("local_available"):
+        raise HTTPException(status_code=503, detail="Local Piper TTS executable and Hindi voice model are required. Paid voice providers are not enabled by this route.")
+    try:
+        transition_owner_media_stage(
+            run_id, "render", "running", owner_username=owner,
+        )
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
     created_images, audio_id, music_id = [], None, None
+    render_output_path = render_manifest_file = delivery_package_file = thumbnail_path = None
+    package_verified = False
     try:
         if not use_procedural_2d:
             for prompt in scene_prompts:
@@ -5718,12 +5762,12 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
             raise RenderFailed("A generated media asset is missing; final render was stopped.")
         if payload.subtitles and len(payload.subtitles) != len(scene_prompts):
             raise HTTPException(status_code=400, detail="Custom subtitle lines ki sankhya scene prompts ke barabar honi chahiye.")
-        subtitle_lines = (
+        caption_lines = (
             [line.strip() for line in payload.subtitles]
-            if payload.burn_subtitles and payload.subtitles
+            if payload.subtitles
             else _subtitle_lines_from_narration(narration, len(scene_prompts))
-            if payload.burn_subtitles else []
         )
+        subtitle_lines = caption_lines if payload.burn_subtitles else []
         animation_report = None
         if use_procedural_2d:
             from .documentary_animation import render_documentary_animation_clips
@@ -5753,17 +5797,20 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 sound_effects_volume=payload.sound_effects_volume,
                 fps=payload.fps, quality=payload.quality,
             )
+        render_output_path = OUTPUT_DIR / rendered["filename"]
+        quality_report = rendered.get("quality_report") if isinstance(rendered, dict) else None
+        if not isinstance(quality_report, dict) or quality_report.get("verified") is not True:
+            raise RenderFailed("Renderer did not return a verified quality report; provenance PASS withheld.")
+        thumbnail_result = create_video_frame_thumbnail(render_output_path, run_id)
+        thumbnail_path = thumbnail_result["path"]
         try:
-            quality_report = rendered.get("quality_report") if isinstance(rendered, dict) else None
-            if not isinstance(quality_report, dict) or quality_report.get("verified") is not True:
-                raise RenderFailed("Renderer did not return a verified quality report; provenance PASS withheld.")
             manifest = write_render_manifest(
                 data_dir=DATA_DIR,
                 run_id=run_id,
                 format_id=run["format_id"],
                 topic=run.get("topic", ""),
-                output_path=OUTPUT_DIR / rendered["filename"],
-                asset_paths=[*image_paths, audio_path, music_matches[0]],
+                output_path=render_output_path,
+                asset_paths=[*image_paths, audio_path, music_matches[0], thumbnail_path],
                 settings={
                     "resolution": resolution,
                     "fps": payload.fps,
@@ -5781,44 +5828,175 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                     "voice": str(voice_result.get("provider") or "local"),
                     "music": str(music_result.get("provider") or "local"),
                     "renderer": "FFmpeg",
+                    "thumbnail": "FFmpeg verified MP4 representative frame",
                 },
                 quality_report=quality_report,
             )
         except Exception as exc:
             (OUTPUT_DIR / rendered["filename"]).unlink(missing_ok=True)
             raise RenderFailed("Could not persist the render provenance manifest; the MP4 result is withheld.") from exc
+        render_manifest_file = DATA_DIR / manifest["manifest_path"]
+        delivery_package = create_delivery_package(
+            data_dir=DATA_DIR,
+            run_id=run_id,
+            render_manifest_path=manifest["manifest_path"],
+            captions=caption_lines,
+            seconds_per_caption=payload.seconds_per_scene,
+            metadata={
+                "run_id": run_id,
+                "format_id": run["format_id"],
+                "topic": run.get("topic", ""),
+                "language": "hi",
+                "resolution": resolution,
+                "fps": payload.fps,
+                "quality": payload.quality,
+                "seconds_per_scene": payload.seconds_per_scene,
+                "scene_count": len(scene_prompts),
+                "captions_burned_in": bool(subtitle_lines),
+                "image_engine": str((image_result.get("provider") if not use_procedural_2d else "SINTU Scene-aware 2D Animation") or "local"),
+                "voice_engine": str(voice_result.get("provider") or "local"),
+                "music_engine": str(music_result.get("provider") or "local"),
+                "renderer": "FFmpeg",
+                "thumbnail": {
+                    "path": thumbnail_result["relative_path"],
+                    "width": thumbnail_result["width"],
+                    "height": thumbnail_result["height"],
+                    "source": thumbnail_result["source"],
+                },
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+            deliverables={
+                **deliverables,
+                "_local_media_generation": {
+                    "scene_prompts": scene_prompts,
+                    "hindi_narration": narration,
+                    "caption_lines": caption_lines,
+                    "seconds_per_scene": payload.seconds_per_scene,
+                },
+            },
+            research_evidence=research_record.get("package") if research_record else None,
+        )
+        delivery_package_file = DATA_DIR / delivery_package["path"]
+        package_verified = True
+        package_summary = {
+            key: delivery_package[key] for key in (
+                "verified", "path", "filename", "size_bytes", "sha256",
+                "file_count", "captions_included", "thumbnail_included",
+                "translations_included", "editable_project_included",
+                "rights_certificates_included", "translation_languages", "platform_metadata_status",
+                "platform_metadata_missing_fields",
+            )
+        }
         rendered["provenance_manifest"] = manifest["manifest_path"]
+        rendered["thumbnail"] = {
+            "path": thumbnail_result["relative_path"],
+            "width": thumbnail_result["width"],
+            "height": thumbnail_result["height"],
+            "source": thumbnail_result["source"],
+        }
+        rendered["delivery_package"] = package_summary
+        transition_owner_media_stage(
+            run_id, "render", "completed", owner_username=owner,
+            evidence=f"Verified MP4 {rendered.get('video_id', '')}; provenance manifest {manifest['manifest_path']}; quality report PASS.",
+        )
+        transition_owner_media_stage(
+            run_id, "package", "running", owner_username=owner,
+        )
+        transition_owner_media_stage(
+            run_id, "package", "completed", owner_username=owner,
+            evidence=f"Verified delivery ZIP {delivery_package['filename']}; SHA-256 {delivery_package['sha256']}; {delivery_package['file_count']} files.",
+        )
         updated = attach_render_result(run_id, rendered, owner)
         return {
             "run_id": run_id, "status": updated["status"],
             "generated_images": created_images, "voiceover": voice_result,
-            "background_music": music_result, "subtitles": subtitle_lines,
+            "background_music": music_result, "subtitles": caption_lines,
+            "captions_burned_in": bool(subtitle_lines),
+            "delivery_package": package_summary,
+            "delivery_package_url": f"/api/production/runs/{run_id}/package",
             "render": rendered, "video_rendered": True, "published": False,
             "research_evidence": ({
                 "sha256": research_record["sha256"],
                 "status": "STRUCTURAL_TRACEABILITY_VALIDATED_NOT_FACT_VERIFIED",
                 "human_fact_check_required": True,
             } if research_record else None),
-            "detail": "Local media generated and final MP4 verified. YouTube publishing still requires separate human approval.",
+            "detail": "Local MP4 and SHA-256-verified production delivery ZIP generated. YouTube publishing still requires separate human approval.",
         }
     except (ImageUnavailable, VoiceUnavailable, MusicUnavailable, RendererUnavailable, RuntimeError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
     except (ImageGenerationFailed, VoiceGenerationFailed, MusicGenerationFailed, RenderFailed) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from None
+    except OSError:
+        raise HTTPException(status_code=503, detail="Local production delivery storage is unavailable; render/package checkpoint was paused.") from None
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
     finally:
         # Failed attempts must not leave a collection of orphaned partial assets.
         import sys
         if sys.exc_info()[0] is not None:
-            for image_id in created_images:
-                (IMAGE_DIR / f"{image_id}.jpg").unlink(missing_ok=True)
-            if audio_id:
-                for suffix in (".wav", ".mp3"):
-                    (AUDIO_DIR / f"{audio_id}{suffix}").unlink(missing_ok=True)
-            if music_id:
-                for path in MUSIC_DIR.glob(music_id + ".*"):
-                    path.unlink(missing_ok=True)
+            for stage_id in ("package", "render"):
+                try:
+                    current_run = get_production_run(run_id, owner)
+                    current_stage = next(
+                        (stage for stage in (current_run or {}).get("pipeline_stages", [])
+                         if stage.get("stage_id") == stage_id),
+                        None,
+                    )
+                    if current_stage and current_stage.get("status") == "running":
+                        transition_owner_media_stage(
+                            run_id, stage_id, "paused", owner_username=owner,
+                            issues=["Local media operation exited before its stage was verified."],
+                        )
+                except Exception:
+                    pass
+            if not package_verified:
+                for artifact in (render_output_path, render_manifest_file, delivery_package_file, thumbnail_path):
+                    try:
+                        if (artifact is not None and not artifact.is_symlink() and artifact.is_file()
+                                and artifact.resolve().is_relative_to(DATA_DIR.resolve())):
+                            artifact.unlink()
+                    except OSError:
+                        pass
+                for image_id in created_images:
+                    (IMAGE_DIR / f"{image_id}.jpg").unlink(missing_ok=True)
+                if audio_id:
+                    for suffix in (".wav", ".mp3"):
+                        (AUDIO_DIR / f"{audio_id}{suffix}").unlink(missing_ok=True)
+                if music_id:
+                    for path in MUSIC_DIR.glob(music_id + ".*"):
+                        if not path.is_symlink():
+                            path.unlink(missing_ok=True)
+
+
+@app.get("/api/production/runs/{run_id}/package")
+def download_production_delivery_package(run_id: str, request: Request):
+    """Download only the authenticated Owner's verified local production ZIP."""
+    if not re.fullmatch(r"[a-f0-9]{32}", run_id):
+        raise HTTPException(status_code=400, detail="Invalid production run ID.")
+    owner = _production_project_owner(request)
+    run = get_production_run(run_id, owner)
+    if not run or not isinstance(run.get("result"), dict):
+        raise HTTPException(status_code=404, detail="Production run not found.")
+    render = run["result"].get("render")
+    package = render.get("delivery_package") if isinstance(render, dict) else None
+    expected_relative = f"production_packages/{run_id}-delivery.zip"
+    if not isinstance(package, dict) or package.get("verified") is not True or package.get("path") != expected_relative:
+        raise HTTPException(status_code=404, detail="Verified production delivery package not found.")
+    candidate = DATA_DIR / expected_relative
+    if candidate.is_symlink() or not candidate.is_file():
+        raise HTTPException(status_code=404, detail="Production delivery package is unavailable.")
+    resolved = candidate.resolve()
+    if not resolved.is_relative_to(DATA_DIR.resolve()):
+        raise HTTPException(status_code=404, detail="Production delivery package path is invalid.")
+    try:
+        if resolved.stat().st_size != package.get("size_bytes") or _sha256_file(resolved) != package.get("sha256"):
+            raise HTTPException(status_code=409, detail="Production delivery package integrity check failed.")
+    except OSError:
+        raise HTTPException(status_code=404, detail="Production delivery package is unavailable.") from None
+    return FileResponse(
+        resolved, media_type="application/zip",
+        filename=f"SINTU-{run_id}-delivery.zip",
+    )
 
 
 @app.post("/api/production/runs/{run_id}/render")
@@ -5831,11 +6009,29 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput, 
         raise HTTPException(status_code=404, detail="Production run not found.")
     if run["status"] != "completed":
         raise HTTPException(status_code=409, detail="Production run must pass all builder/checker and final reviewer gates before rendering.")
+    render_stage = next(
+        (stage for stage in run.get("pipeline_stages", []) if stage.get("stage_id") == "render"),
+        None,
+    )
+    if not render_stage or render_stage.get("status") in {"completed", "running", "blocked", "skipped"}:
+        raise HTTPException(status_code=409, detail="Render stage is unavailable or already completed.")
     if run["format_id"] != payload.format_id:
         raise HTTPException(status_code=400, detail="Render format must match the approved production run format.")
     if not payload.image_ids and not payload.video_ids and not payload.timeline and not payload.timeline_items:
         raise HTTPException(status_code=400, detail="Final production render requires supplied scene images, AI video clips or a mixed media timeline; scene descriptions alone are not visuals.")
-    rendered = render_video(payload)
+    try:
+        _approve_owner_review_for_media(run_id, owner, run)
+        transition_owner_media_stage(run_id, "render", "running", owner_username=owner)
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    try:
+        rendered = render_video(payload)
+    except Exception as exc:
+        transition_owner_media_stage(
+            run_id, "render", "paused", owner_username=owner,
+            issues=[f"Renderer exited before producing a verified artifact: {type(exc).__name__}"],
+        )
+        raise
     render_data = rendered.get("render", rendered) if isinstance(rendered, dict) else rendered
     asset_paths = []
     for image_id in payload.image_ids:
@@ -5894,12 +6090,30 @@ def render_approved_production_run(run_id: str, payload: ProductionRenderInput, 
         filename = render_data.get("filename") if isinstance(render_data, dict) else None
         if isinstance(filename, str) and filename and Path(filename).name == filename:
             (OUTPUT_DIR / filename).unlink(missing_ok=True)
+        transition_owner_media_stage(
+            run_id, "render", "paused", owner_username=owner,
+            issues=["Render provenance could not be persisted."],
+        )
         raise HTTPException(status_code=502, detail="Render provenance could not be saved; MP4 result is withheld.") from exc
     render_data["provenance_manifest"] = manifest["manifest_path"]
     try:
         updated = attach_render_result(run_id, rendered, owner)
     except ValueError as exc:
+        transition_owner_media_stage(
+            run_id, "render", "paused", owner_username=owner,
+            issues=["Verified render could not be attached to its production run."],
+        )
         raise HTTPException(status_code=409, detail=str(exc)) from None
+    transition_owner_media_stage(
+        run_id, "render", "completed", owner_username=owner,
+        evidence=f"Verified render attached with provenance manifest {manifest['manifest_path']}.",
+    )
+    transition_owner_media_stage(run_id, "package", "running", owner_username=owner)
+    transition_owner_media_stage(
+        run_id, "package", "completed", owner_username=owner,
+        evidence=f"Owner-scoped render package attached with provenance manifest {manifest['manifest_path']}.",
+    )
+    updated = get_production_run(run_id, owner)
     return {"run_id": run_id, "status": updated["status"], "render": rendered,
             "published": False, "detail": "Final MP4 rendered, provenance recorded and attached. YouTube publishing still requires separate approval."}
 
@@ -5926,6 +6140,11 @@ def production_factory_runs(request: Request, limit: int = 20):
             if isinstance(rendered_video_id, str) and re.fullmatch(r"[a-f0-9]{32}", rendered_video_id)
             else None
         )
+        stage_rows = run.get("pipeline_stages") or []
+        stage_status_counts = {}
+        for stage in stage_rows:
+            stage_status = str(stage.get("status") or "unknown")
+            stage_status_counts[stage_status] = stage_status_counts.get(stage_status, 0) + 1
         summaries.append({
             "run_id": run.get("id"),
             "status": status,
@@ -5940,6 +6159,10 @@ def production_factory_runs(request: Request, limit: int = 20):
             "cancel_requested": bool(run.get("cancel_requested")),
             "has_result": isinstance(run.get("result"), dict),
             "step_count": len(run.get("steps") or []),
+            "pipeline_stage_count": len(stage_rows),
+            "pipeline_stage_status": stage_status_counts,
+            "pipeline_stage_execution_implemented": False,
+            "pipeline_stage_role_dispatch_integrated": bool(run.get("pipeline_stage_role_dispatch_integrated", True)),
         })
     return {
         "runs": summaries,

@@ -5,6 +5,7 @@ records every result, stops on failed quality gates, and never publishes automat
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -22,6 +23,7 @@ from .management_hierarchy import SENIOR_MANAGER_NAMES, management_hierarchy
 from .ai_brain import generate_text, ProviderNotConfigured, ProviderRequestError
 from .documentary_research import DOCUMENTARY_FORMAT_IDS, validate_documentary_evidence_for_production, build_research_prompt_context
 from .research_evidence_store import get_research_evidence
+from .production_factory_orchestrator import route_specialist_roles
 
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(Path(__file__).resolve().parent.parent))).expanduser().resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -53,6 +55,7 @@ def _connect():
 
 def init_runtime_db() -> None:
     with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
         conn.execute("""CREATE TABLE IF NOT EXISTS production_runs (
             id TEXT PRIMARY KEY, format_id TEXT NOT NULL, topic TEXT NOT NULL,
             status TEXT NOT NULL, current_role TEXT, result_json TEXT,
@@ -90,6 +93,51 @@ def init_runtime_db() -> None:
             FOREIGN KEY(run_id) REFERENCES production_runs(id)
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_production_steps_run ON production_steps(run_id, sequence)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS production_pipeline_stages (
+            run_id TEXT NOT NULL, sequence INTEGER NOT NULL, stage_id TEXT NOT NULL,
+            department TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+            approval TEXT NOT NULL, evidence TEXT, issues_json TEXT NOT NULL DEFAULT '[]',
+            started_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL,
+            PRIMARY KEY(run_id, stage_id), UNIQUE(run_id, sequence),
+            FOREIGN KEY(run_id) REFERENCES production_runs(id)
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pipeline_stages_run ON production_pipeline_stages(run_id, sequence)")
+        # Backfill pre-ledger runs without inventing historical stage completion.
+        from .production_factory_orchestrator import _STAGE_DEFINITIONS
+        legacy_runs = conn.execute(
+            """SELECT id,owner_username,status,updated_at FROM production_runs
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM production_pipeline_stages s
+                   WHERE s.run_id=production_runs.id
+               )"""
+        ).fetchall()
+        for legacy in legacy_runs:
+            for sequence, (stage_id, _name, department, _capabilities, approval) in enumerate(_STAGE_DEFINITIONS, 1):
+                if legacy["status"] == "completed" and sequence < 16:
+                    stage_status = "skipped"
+                    issues = ["Legacy run predates stage-level tracking; no per-stage evidence is available."]
+                elif legacy["status"] == "completed" and sequence == 16:
+                    stage_status = "awaiting_owner"
+                    issues = ["Legacy run requires explicit Owner approval before local media generation."]
+                else:
+                    stage_status = "pending"
+                    issues = []
+                conn.execute(
+                    """INSERT INTO production_pipeline_stages
+                       (run_id,sequence,stage_id,department,status,approval,issues_json,updated_at)
+                       VALUES(?,?,?,?,?,?,?,?)""",
+                    (legacy["id"], sequence, stage_id, department, stage_status,
+                     approval, json.dumps(issues, ensure_ascii=False), legacy["updated_at"]),
+                )
+            conn.execute(
+                """INSERT INTO production_run_events
+                   (run_id,owner_username,from_status,to_status,event_type,details,created_at)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (legacy["id"], legacy["owner_username"], legacy["status"], legacy["status"],
+                 "pipeline_ledger_backfilled",
+                 "Legacy run received a 21-stage ledger; historical stage completion was not inferred.",
+                 legacy["updated_at"]),
+            )
 
 
 def _selected_format(format_id: str) -> dict[str, Any] | None:
@@ -122,6 +170,17 @@ def create_run(format_id: str, topic: str, owner_username: str = "local") -> dic
             (id,format_id,topic,status,owner_username,created_at,updated_at) VALUES(?,?,?,?,?,?,?)""",
             (run_id, format_id, topic, "queued", owner_username, now, now))
         _event(conn, run_id, owner_username, None, "queued", "run_created", "Production run created.")
+        # Persist the stage contract separately from the legacy specialist/checker worker.
+        from .production_factory_orchestrator import _STAGE_DEFINITIONS
+        for sequence, (stage_id, _name, department, _capabilities, approval) in enumerate(_STAGE_DEFINITIONS, 1):
+            conn.execute(
+                """INSERT INTO production_pipeline_stages
+                   (run_id,sequence,stage_id,department,status,approval,updated_at)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (run_id, sequence, stage_id, department, "pending", approval, now),
+            )
+        _event(conn, run_id, owner_username, None, "queued", "pipeline_ledger_created",
+               "Persisted 21-stage ledger; existing specialist/checker roles advance mapped stages, while media and post-production stages remain pending.")
     return get_run(run_id, owner_username)
 
 
@@ -273,6 +332,13 @@ def _finish_cancel(run_id: str, owner_username: str | None, token: str | None = 
             (_now(), run_id),
         ).rowcount
         if changed:
+            paused_stages = conn.execute(
+                """UPDATE production_pipeline_stages SET status='paused',updated_at=?
+                   WHERE run_id=? AND status='running'""", (_now(), run_id)
+            ).rowcount
+            if paused_stages:
+                _event(conn, run_id, row["owner_username"], "running", "paused",
+                       "pipeline_checkpoint_cancelled", f"paused_stage_count={paused_stages}")
             _event(conn, run_id, row["owner_username"], row["status"], "cancelled",
                    "cancellation_completed", "Worker stopped at a safe checkpoint; partial outputs were preserved.")
     return changed == 1
@@ -357,6 +423,16 @@ def recover_stale_runs() -> int:
             if changed:
                 _event(conn, row["id"], row["owner_username"], row["status"], target,
                        "stale_worker_recovered", error)
+                if target == "paused":
+                    stage_rows = conn.execute(
+                        """UPDATE production_pipeline_stages SET status='paused',updated_at=?
+                           WHERE run_id=? AND status='running'""",
+                        (now, row["id"]),
+                    ).rowcount
+                    if stage_rows:
+                        _event(conn, row["id"], row["owner_username"], "running", "paused",
+                               "pipeline_checkpoint_recovered",
+                               f"paused_stage_count={stage_rows}; incomplete work must be revalidated")
                 recovered += 1
     return recovered
 
@@ -374,8 +450,23 @@ def get_run(run_id: str, owner_username: str | None = None) -> dict[str, Any] | 
         if not row:
             return None
         steps = conn.execute("SELECT sequence,role,step_type,status,output_text,evidence_json,issues_json,attempts FROM production_steps WHERE run_id=? ORDER BY sequence", (run_id,)).fetchall()
+        pipeline_stages = conn.execute(
+            """SELECT sequence,stage_id,department,status,approval,evidence,issues_json,
+                      started_at,completed_at,updated_at
+               FROM production_pipeline_stages WHERE run_id=? ORDER BY sequence""", (run_id,)
+        ).fetchall()
     result = dict(row)
     result["result"] = json.loads(result.pop("result_json") or "null")
+    result["pipeline_stages"] = []
+    for item in pipeline_stages:
+        stage = dict(item)
+        stage["issues"] = json.loads(stage.pop("issues_json") or "[]")
+        result["pipeline_stages"].append(stage)
+    result["pipeline_stage_execution_implemented"] = False
+    result["pipeline_stage_evidence_enforced"] = True
+    result["pipeline_stage_role_dispatch_integrated"] = bool(
+        isinstance(result.get("result"), dict) and result["result"].get("pipeline_dispatch")
+    )
     result["steps"] = []
     for item in steps:
         step = dict(item)
@@ -383,6 +474,289 @@ def get_run(run_id: str, owner_username: str | None = None) -> dict[str, Any] | 
         step["issues"] = json.loads(step.pop("issues_json") or "[]")
         result["steps"].append(step)
     return result
+
+
+def claim_next_pipeline_stage(
+    run_id: str,
+    *,
+    owner_username: str,
+    worker_token: str,
+) -> dict[str, Any] | None:
+    """Atomically claim the next ordered stage or surface its explicit Owner gate."""
+    if not owner_username or not worker_token:
+        raise ValueError("Owner and worker lease are required.")
+    init_runtime_db()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        run = conn.execute(
+            """SELECT owner_username,status,worker_token,cancel_requested,lease_expires_at
+               FROM production_runs WHERE id=?""", (run_id,)
+        ).fetchone()
+        now = _now()
+        if (not run or run["owner_username"] != owner_username
+                or run["status"] not in {"running", "reviewing"}
+                or run["worker_token"] != worker_token or run["cancel_requested"]
+                or not run["lease_expires_at"] or run["lease_expires_at"] < now):
+            raise ProductionRunCancelled("A live fenced run lease is required to claim a pipeline stage.")
+        stage = conn.execute(
+            """SELECT sequence,stage_id,department,status,approval
+               FROM production_pipeline_stages WHERE run_id=? AND status NOT IN ('completed','skipped')
+               ORDER BY sequence LIMIT 1""", (run_id,)
+        ).fetchone()
+        if not stage:
+            return None
+        if stage["status"] in {"blocked", "awaiting_owner", "running"}:
+            return dict(stage)
+        previous = conn.execute(
+            """SELECT stage_id FROM production_pipeline_stages
+               WHERE run_id=? AND sequence<? AND status NOT IN ('completed','skipped')
+               ORDER BY sequence LIMIT 1""", (run_id, stage["sequence"])
+        ).fetchone()
+        if previous:
+            raise ValueError("Pipeline order violation; earlier stage is not complete.")
+        if stage["approval"] == "owner_required":
+            conn.execute(
+                """UPDATE production_pipeline_stages SET status='awaiting_owner',updated_at=?
+                   WHERE run_id=? AND stage_id=? AND status IN ('pending','paused')""",
+                (now, run_id, stage["stage_id"]),
+            )
+            _event(conn, run_id, owner_username, stage["status"], "awaiting_owner",
+                   "pipeline_owner_gate", f"stage={stage['stage_id']}; worker cannot self-approve")
+            stage = dict(stage)
+            stage["status"] = "awaiting_owner"
+            return stage
+        changed = conn.execute(
+            """UPDATE production_pipeline_stages SET status='running',
+               started_at=COALESCE(started_at,?),updated_at=?
+               WHERE run_id=? AND stage_id=? AND status IN ('pending','paused')""",
+            (now, now, run_id, stage["stage_id"]),
+        ).rowcount
+        if changed:
+            _event(conn, run_id, owner_username, stage["status"], "running",
+                   "pipeline_stage_claimed", f"stage={stage['stage_id']}; sequence={stage['sequence']}")
+            stage = dict(stage)
+            stage["status"] = "running"
+        return stage
+
+
+def transition_pipeline_stage(
+    run_id: str,
+    stage_id: str,
+    status: str,
+    *,
+    owner_username: str,
+    worker_token: str | None = None,
+    evidence: str | None = None,
+    issues: list[str] | None = None,
+    owner_approved: bool = False,
+) -> dict[str, Any] | None:
+    """Persist an auditable stage transition with ordering, lease and approval checks."""
+    allowed_statuses = {"pending", "running", "completed", "blocked", "paused", "awaiting_owner", "skipped"}
+    if status not in allowed_statuses:
+        raise ValueError("Unsupported pipeline stage status.")
+    if not owner_username or len(owner_username) > 120:
+        raise ValueError("Pipeline stage owner is invalid.")
+    if status == "completed" and not (isinstance(evidence, str) and evidence.strip()):
+        raise ValueError("A completed pipeline stage requires evidence.")
+    if issues is not None and (not isinstance(issues, list) or any(not isinstance(x, str) for x in issues)):
+        raise ValueError("Stage issues must be a list of strings.")
+    init_runtime_db()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        run = conn.execute(
+            "SELECT owner_username,status,worker_token,cancel_requested,lease_expires_at,result_json FROM production_runs WHERE id=?",
+            (run_id,),
+        ).fetchone()
+        stage = conn.execute(
+            "SELECT sequence,status,approval FROM production_pipeline_stages WHERE run_id=? AND stage_id=?",
+            (run_id, stage_id),
+        ).fetchone()
+        if not run or run["owner_username"] != owner_username or not stage:
+            return None
+        if run["status"] in {"cancelled", "cancelling"} or run["cancel_requested"]:
+            raise ProductionRunCancelled("Pipeline stage cannot change after cancellation.")
+        if stage["approval"] == "owner_required" and status == "skipped":
+            raise PermissionError("Owner-gated stages cannot be skipped.")
+        if stage["approval"] == "owner_required" and status == "running":
+            raise PermissionError("Owner-gated stages are not worker-executable.")
+        if stage["approval"] == "owner_required" and status == "completed":
+            if not owner_approved or stage["status"] != "awaiting_owner":
+                raise PermissionError("An explicitly awaiting Owner gate is required before Owner approval.")
+        if status in {"running", "awaiting_owner", "completed"}:
+            earlier = conn.execute(
+                """SELECT stage_id,status FROM production_pipeline_stages
+                   WHERE run_id=? AND sequence<? ORDER BY sequence""",
+                (run_id, stage["sequence"]),
+            ).fetchall()
+            incomplete = [item["stage_id"] for item in earlier if item["status"] not in {"completed", "skipped"}]
+            if incomplete:
+                raise ValueError("Earlier pipeline stages are incomplete: " + ", ".join(incomplete[:5]))
+        if stage["approval"] != "owner_required":
+            now = _now()
+            if (not worker_token or run["worker_token"] != worker_token
+                    or not run["lease_expires_at"] or run["lease_expires_at"] < now):
+                raise ProductionRunCancelled("A live fenced worker lease is required to change this stage.")
+        transitions = {
+            "pending": {"running", "blocked", "awaiting_owner", "skipped"},
+            "running": {"completed", "blocked", "paused", "awaiting_owner"},
+            "paused": {"running", "blocked", "awaiting_owner"},
+            "blocked": {"pending", "running", "awaiting_owner"},
+            "awaiting_owner": {"completed", "paused"},
+            "completed": set(),
+            "skipped": set(),
+        }
+        if status not in transitions.get(stage["status"], set()):
+            raise ValueError(f"Invalid pipeline stage transition: {stage['status']} -> {status}.")
+        now = _now()
+        started_at = now if status == "running" and stage["status"] != "running" else None
+        completed_at = now if status == "completed" else None
+        conn.execute(
+            """UPDATE production_pipeline_stages SET status=?,evidence=COALESCE(?,evidence),
+               issues_json=?,started_at=COALESCE(?,started_at),
+               completed_at=COALESCE(?,completed_at),updated_at=?
+               WHERE run_id=? AND stage_id=?""",
+            (status, evidence, json.dumps(issues or [], ensure_ascii=False),
+             started_at, completed_at, now, run_id, stage_id),
+        )
+        _event(conn, run_id, owner_username, stage["status"], status, "pipeline_stage_transition",
+               f"stage={stage_id}; owner_approved={bool(owner_approved)}; evidence_present={bool(evidence)}")
+        if status in {"completed", "skipped", "awaiting_owner"} and run["result_json"]:
+            result_payload = json.loads(run["result_json"])
+            dispatch = result_payload.get("pipeline_dispatch") if isinstance(result_payload, dict) else None
+            if isinstance(dispatch, dict):
+                groups = {
+                    "completed": "completed_stage_ids",
+                    "skipped": "skipped_stage_ids",
+                    "awaiting_owner": "awaiting_owner_stage_ids",
+                }
+                for key in groups.values():
+                    dispatch[key] = [item for item in dispatch.get(key, []) if item != stage_id]
+                dispatch[groups[status]].append(stage_id)
+                if status == "completed":
+                    dispatch["deferred_stage_ids"] = [
+                        item for item in dispatch.get("deferred_stage_ids", []) if item != stage_id
+                    ]
+                conn.execute(
+                    "UPDATE production_runs SET result_json=?,updated_at=? WHERE id=? AND owner_username=?",
+                    (json.dumps(result_payload, ensure_ascii=False), now, run_id, owner_username),
+                )
+    return get_run(run_id, owner_username)
+
+
+def transition_owner_media_stage(
+    run_id: str,
+    stage_id: str,
+    status: str,
+    *,
+    owner_username: str,
+    evidence: str | None = None,
+    issues: list[str] | None = None,
+) -> dict[str, Any] | None:
+    """Advance the synchronous local render/package stages from an authenticated Owner action."""
+    if stage_id not in {"render", "package"}:
+        raise ValueError("Owner media action may only advance render or package stages.")
+    if status not in {"running", "completed", "paused"}:
+        raise ValueError("Unsupported Owner media stage status.")
+    if not owner_username or len(owner_username) > 120:
+        raise ValueError("Owner username is invalid.")
+    if status == "completed" and not (isinstance(evidence, str) and evidence.strip()):
+        raise ValueError("Completed media stages require verified evidence.")
+    if issues is not None and (not isinstance(issues, list) or any(not isinstance(item, str) for item in issues)):
+        raise ValueError("Stage issues must be a list of strings.")
+    init_runtime_db()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        run = conn.execute(
+            "SELECT owner_username,status,cancel_requested,result_json FROM production_runs WHERE id=?",
+            (run_id,),
+        ).fetchone()
+        stage = conn.execute(
+            "SELECT sequence,status FROM production_pipeline_stages WHERE run_id=? AND stage_id=?",
+            (run_id, stage_id),
+        ).fetchone()
+        owner_review = conn.execute(
+            "SELECT status FROM production_pipeline_stages WHERE run_id=? AND stage_id='owner_review'",
+            (run_id,),
+        ).fetchone()
+        if not run or run["owner_username"] != owner_username or not stage or not owner_review:
+            return None
+        if run["status"] != "completed" or run["cancel_requested"]:
+            raise PermissionError("Local media stages require a completed, uncancelled production package.")
+        if owner_review["status"] != "completed":
+            raise PermissionError("Human Owner Review must be completed before local media stages.")
+        if status == "running":
+            earlier = conn.execute(
+                """SELECT stage_id,status FROM production_pipeline_stages
+                   WHERE run_id=? AND sequence<? ORDER BY sequence""",
+                (run_id, stage["sequence"]),
+            ).fetchall()
+            incomplete = [item["stage_id"] for item in earlier if item["status"] not in {"completed", "skipped"}]
+            if incomplete:
+                raise ValueError("Earlier pipeline stages are incomplete: " + ", ".join(incomplete[:5]))
+        transitions = {
+            "pending": {"running"},
+            "paused": {"running"},
+            "running": {"completed", "paused"},
+            "completed": set(),
+        }
+        if status not in transitions.get(stage["status"], set()):
+            raise ValueError(f"Invalid Owner media stage transition: {stage['status']} -> {status}.")
+        now = _now()
+        conn.execute(
+            """UPDATE production_pipeline_stages SET status=?,evidence=COALESCE(?,evidence),
+               issues_json=?,started_at=COALESCE(?,started_at),
+               completed_at=COALESCE(?,completed_at),updated_at=?
+               WHERE run_id=? AND stage_id=?""",
+            (status, evidence, json.dumps(issues or [], ensure_ascii=False),
+             now if status == "running" else None, now if status == "completed" else None,
+             now, run_id, stage_id),
+        )
+        _event(
+            conn, run_id, owner_username, stage["status"], status,
+            "owner_media_stage_transition",
+            f"stage={stage_id}; executor=authenticated_owner_local_media_action; evidence_present={bool(evidence)}",
+        )
+        if status == "completed" and run["result_json"]:
+            result_payload = json.loads(run["result_json"])
+            dispatch = result_payload.get("pipeline_dispatch") if isinstance(result_payload, dict) else None
+            if isinstance(dispatch, dict):
+                completed_ids = list(dispatch.get("completed_stage_ids") or [])
+                if stage_id not in completed_ids:
+                    completed_ids.append(stage_id)
+                deferred_ids = [item for item in dispatch.get("deferred_stage_ids", []) if item != stage_id]
+                dispatch["skipped_stage_ids"] = [
+                    item for item in dispatch.get("skipped_stage_ids", []) if item != stage_id
+                ]
+                dispatch["awaiting_owner_stage_ids"] = [
+                    item for item in dispatch.get("awaiting_owner_stage_ids", []) if item != stage_id
+                ]
+                dispatch["completed_stage_ids"] = completed_ids
+                dispatch["deferred_stage_ids"] = deferred_ids
+                conn.execute(
+                    "UPDATE production_runs SET result_json=?,updated_at=? WHERE id=? AND owner_username=?",
+                    (json.dumps(result_payload, ensure_ascii=False), now, run_id, owner_username),
+                )
+    return get_run(run_id, owner_username)
+
+
+def _pause_active_pipeline_stage(
+    run_id: str,
+    owner_username: str | None,
+    worker_token: str | None,
+    stage_id: str | None,
+    reason: str,
+) -> None:
+    """Persist a resumable checkpoint when a stage executor exits unexpectedly."""
+    if not stage_id or not worker_token:
+        return
+    run = get_run(run_id, owner_username)
+    stage = next((item for item in (run or {}).get("pipeline_stages", [])
+                  if item["stage_id"] == stage_id), None)
+    if stage and stage["status"] == "running":
+        transition_pipeline_stage(
+            run_id, stage_id, "paused", owner_username=owner_username or "local",
+            worker_token=worker_token, issues=[reason[:500]],
+        )
 
 
 def _set_run(run_id: str, status: str, current_role: str | None = None,
@@ -517,6 +891,13 @@ def recover_interrupted_runs() -> int:
                 (target, error, now, row["id"]),
             ).rowcount
             if changed:
+                paused_stages = conn.execute(
+                    """UPDATE production_pipeline_stages SET status='paused',updated_at=?
+                       WHERE run_id=? AND status='running'""", (now, row["id"])
+                ).rowcount
+                if paused_stages:
+                    _event(conn, row["id"], row["owner_username"], "running", "paused",
+                           "pipeline_checkpoint_recovered", f"paused_stage_count={paused_stages}")
                 _event(conn, row["id"], row["owner_username"], row["status"], target,
                        "restart_recovery", error)
                 recovered += 1
@@ -621,6 +1002,9 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
     run = get_run(run_id, owner_username)
     if not run:
         return
+    # Resolve the persisted owner before stage writes so callers that omit the
+    # optional owner argument still retain correct owner-scoped ledger mutations.
+    owner_username = owner_username or run.get("owner_username", "local")
     selected = _selected_format(run["format_id"])
     if not selected:
         set_run(run_id, "failed", error="Video format no longer exists.")
@@ -659,8 +1043,123 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
     try:
         team = format_team(run["format_id"])
         pairs = [item for item in team if item.get("role_type") == "specialist"]
+        role_stage_map = route_specialist_roles([item["name"] for item in team if item.get("role_type") == "specialist"])
         owner_pair = next((item for item in pairs if item["name"] == "Owner Agent"), None)
         pairs = [item for item in pairs if item["name"] != "Owner Agent"]
+        role_routing = route_specialist_roles([item["name"] for item in pairs])
+        role_to_stage = {role: stage["stage_id"] for stage in role_routing["stages"] for role in stage["roles"]}
+        stage_order = {stage["stage_id"]: stage["sequence"] for stage in run.get("pipeline_stages", [])}
+        original_role_order = {item["name"]: index for index, item in enumerate(pairs)}
+        pairs.sort(key=lambda item: (stage_order.get(role_to_stage.get(item["name"], ""), 999), original_role_order[item["name"]]))
+        _audit_worker_event(
+            run_id, owner_username, worker_token, "pipeline_role_routing",
+            "mapped=" + json.dumps(role_routing["stages"], ensure_ascii=False)[:3000]
+            + "; unmapped=" + json.dumps(role_routing["unmapped_roles"], ensure_ascii=False)[:1000],
+        )
+        for stage in role_routing["stages"]:
+            stage_id = stage["stage_id"]
+            if (stage_order.get(stage_id, 99) > 15 or stage["roles"]
+                    or (stage_id == "quality" and REVIEWERS)
+                    or (stage_id == "research" and research_record)):
+                continue
+            current = next((row for row in run.get("pipeline_stages", []) if row["stage_id"] == stage_id), None)
+            if current and current["status"] in {"pending", "paused"}:
+                transition_pipeline_stage(
+                    run_id, stage_id, "skipped", owner_username=owner_username or "local",
+                    worker_token=worker_token, issues=["No matching specialist is assigned by this format preset."],
+                )
+        active_pipeline_stage = None
+        def stage_status(stage_id):
+            current_run = get_run(run_id, owner_username)
+            return next((row["status"] for row in (current_run or {}).get("pipeline_stages", []) if row["stage_id"] == stage_id), None)
+        def start_pipeline_stage(stage_id):
+            current_status = stage_status(stage_id)
+            if current_status in {"pending", "paused"}:
+                transition_pipeline_stage(
+                    run_id, stage_id, "running", owner_username=owner_username or "local",
+                    worker_token=worker_token,
+                )
+        def complete_pipeline_stage(stage_id, evidence=None):
+            if stage_status(stage_id) != "running":
+                return
+            current_run = get_run(run_id, owner_username) or {}
+            current_steps = current_run.get("steps", [])
+            if stage_id == "quality":
+                reviewer_evidence = []
+                for reviewer, report in review_results.items():
+                    if report.get("decision") != "PASS" or not report.get("raw_output"):
+                        raise ValueError("Quality stage cannot complete without every passing reviewer report.")
+                    reviewer_evidence.append({
+                        "reviewer": reviewer,
+                        "decision": "PASS",
+                        "output_sha256": hashlib.sha256(report["raw_output"].encode("utf-8")).hexdigest(),
+                        "evidence": report.get("evidence", []),
+                    })
+                evidence_payload = {
+                    "kind": "independent_quality_review",
+                    "reviewers": reviewer_evidence,
+                    "specialist_checker_pass_count": sum(
+                        1 for item in current_steps
+                        if item.get("step_type") == "checker" and item.get("status") == "pass"
+                    ),
+                }
+            elif stage_id == "research" and research_record and not next(
+                (item.get("roles", []) for item in role_routing["stages"] if item["stage_id"] == "research"), []
+            ):
+                evidence_payload = {
+                    "kind": "persisted_research_evidence",
+                    "sha256": research_record["sha256"],
+                    "source_count": research_record["validation"]["source_count"],
+                    "claim_count": research_record["validation"]["claim_count"],
+                    "status": "STRUCTURAL_TRACEABILITY_VALIDATED_NOT_FACT_VERIFIED",
+                    "human_fact_check_required": True,
+                }
+            else:
+                stage_roles = next(
+                    (item.get("roles", []) for item in role_routing["stages"] if item["stage_id"] == stage_id),
+                    [],
+                )
+                role_evidence = []
+                for assigned_role in stage_roles:
+                    builder = next(
+                        (item for item in reversed(current_steps)
+                         if item.get("role") == assigned_role
+                         and item.get("step_type") == "builder"
+                         and item.get("status") == "completed"
+                         and isinstance(item.get("output_text"), str)
+                         and item["output_text"].strip()),
+                        None,
+                    )
+                    checker = next(
+                        (item for item in current_steps
+                         if item.get("role") == assigned_role + " Checker"
+                         and item.get("step_type") == "checker"
+                         and item.get("status") == "pass"
+                         and (builder is not None)
+                         and item.get("sequence", 0) > builder.get("sequence", 0)),
+                        None,
+                    )
+                    if not builder or not checker:
+                        raise ValueError(
+                            f"Stage {stage_id} cannot complete: {assigned_role} lacks a passing builder/checker handoff."
+                        )
+                    role_evidence.append({
+                        "role": assigned_role,
+                        "builder_sequence": builder.get("sequence"),
+                        "checker_sequence": checker.get("sequence"),
+                        "output_sha256": hashlib.sha256(builder["output_text"].encode("utf-8")).hexdigest(),
+                        "checker_evidence": checker.get("evidence", []),
+                    })
+                evidence_payload = {
+                    "kind": "approved_specialist_stage",
+                    "stage_id": stage_id,
+                    "roles": role_evidence,
+                }
+            transition_pipeline_stage(
+                run_id, stage_id, "completed", owner_username=owner_username or "local",
+                worker_token=worker_token,
+                evidence=json.dumps(evidence_payload, ensure_ascii=False, sort_keys=True),
+            )
         existing_steps = run.get("steps", [])
         deliverables: dict[str, str] = {}
         management_reports: dict[str, str] = {}
@@ -676,6 +1175,22 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                     deliverables[pair["name"]] = saved_output
         for pair in pairs:
             role = pair["name"]
+            next_stage = role_to_stage.get(role)
+            if next_stage != active_pipeline_stage:
+                if active_pipeline_stage and active_pipeline_stage != "quality":
+                    complete_pipeline_stage(active_pipeline_stage, "All assigned specialist deliverables passed their independent checkers.")
+                active_pipeline_stage = next_stage
+                if (active_pipeline_stage and research_record
+                        and not next(stage for stage in role_routing["stages"] if stage["stage_id"] == "research")["roles"]
+                        and stage_order.get(active_pipeline_stage, 99) > stage_order.get("research", 3)
+                        and stage_status("research") == "pending"):
+                    start_pipeline_stage("research")
+                    complete_pipeline_stage(
+                        "research",
+                        "Persisted documentary research ledger structurally validated; source contents still require human fact-check.",
+                    )
+                if active_pipeline_stage:
+                    start_pipeline_stage(active_pipeline_stage)
             if role in approved_roles:
                 continue
             checker = role + " Checker"
@@ -752,10 +1267,29 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                         deliverables[role] = worker["output"]
                     break
             if verdict["decision"] != "PASS":
+                if active_pipeline_stage and stage_status(active_pipeline_stage) == "running":
+                    transition_pipeline_stage(
+                        run_id, active_pipeline_stage, "paused",
+                        owner_username=owner_username or "local", worker_token=worker_token,
+                        issues=verdict["issues"],
+                    )
                 set_run(run_id, "paused", current_role=checker,
                          error="Independent checker failed after the bounded revision attempt. Run paused for human review.")
                 return
 
+        if active_pipeline_stage and active_pipeline_stage != "quality":
+            complete_pipeline_stage(
+                active_pipeline_stage,
+                "All assigned specialist deliverables passed their independent checkers.",
+            )
+        if research_record and stage_status("research") == "pending":
+            start_pipeline_stage("research")
+            complete_pipeline_stage(
+                "research",
+                "Persisted documentary research ledger structurally validated; source contents still require human fact-check.",
+            )
+        if REVIEWERS:
+            start_pipeline_stage("quality")
         review_results = {}
         for reviewer in REVIEWERS:
             saved_report = _approved_reviewer_report(existing_steps, reviewer)
@@ -785,9 +1319,15 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             save_step(run_id, sequence, reviewer, "reviewer", verdict["decision"].lower(),
                        review_prompt, review["output"], verdict["evidence"], verdict["issues"])
             if verdict["decision"] != "PASS":
+                if stage_status("quality") == "running":
+                    transition_pipeline_stage(
+                        run_id, "quality", "paused", owner_username=owner_username or "local",
+                        worker_token=worker_token, issues=verdict["issues"],
+                    )
                 set_run(run_id, "paused", current_role=reviewer,
                          error=f"Final reviewer failed: {reviewer}. Production run paused for correction.")
                 return
+        complete_pipeline_stage("quality", "All configured specialist checkers and final reviewers returned PASS.")
         # Owner Agent runs after all five independent final reviewers so it can
         # evaluate their actual reports. Its checker is separate, and it cannot
         # replace the authenticated human owner's publishing approval.
@@ -845,21 +1385,56 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                     )
                     management_reports["Owner Agent"] = owner_output
                     if re.search(r"\bNOT\s+READY\b", owner_output, re.IGNORECASE):
+                        if stage_status("owner_review") == "pending":
+                            transition_pipeline_stage(
+                                run_id, "owner_review", "blocked",
+                                owner_username=owner_username or "local", worker_token=worker_token,
+                                issues=["Owner Agent identified release blockers; human review required."],
+                            )
                         set_run(run_id, "paused", current_role="Owner Agent",
                                  error="Owner Agent identified release blockers; human review is required before continuing.")
                         return
                     if not re.search(r"\bREADY\b", owner_output, re.IGNORECASE):
+                        if stage_status("owner_review") == "pending":
+                            transition_pipeline_stage(
+                                run_id, "owner_review", "blocked",
+                                owner_username=owner_username or "local", worker_token=worker_token,
+                                issues=["Owner Agent did not provide an explicit READY verdict."],
+                            )
                         set_run(run_id, "paused", current_role="Owner Agent",
                                  error="Owner Agent did not provide an explicit READY verdict; human review is required.")
                         return
+                    if stage_status("owner_review") in {"pending", "blocked"}:
+                        transition_pipeline_stage(
+                            run_id, "owner_review", "awaiting_owner",
+                            owner_username=owner_username or "local", worker_token=worker_token,
+                            issues=["AI Owner Agent recommendation is not human Owner approval."],
+                        )
                     break
             if not owner_verdict or owner_verdict["decision"] != "PASS":
+                if stage_status("owner_review") == "pending":
+                    transition_pipeline_stage(
+                        run_id, "owner_review", "blocked",
+                        owner_username=owner_username or "local", worker_token=worker_token,
+                        issues=["Owner Agent failed its independent checker."],
+                    )
                 set_run(run_id, "paused", current_role="Owner Agent Checker",
                          error="Owner Agent report failed its independent checker; human review required.")
                 return
+        else:
+            if stage_status("owner_review") in {"pending", "blocked"}:
+                transition_pipeline_stage(
+                    run_id, "owner_review", "awaiting_owner",
+                    owner_username=owner_username or "local", worker_token=worker_token,
+                    issues=["Human Owner review is required; no Owner Agent was assigned."],
+                )
 
+        pipeline_stage_snapshot = get_run(run_id, owner_username) or {}
+        pipeline_stage_rows = pipeline_stage_snapshot.get("pipeline_stages", [])
         result = {
             "format": selected,
+            "role_stage_map": role_stage_map,
+            "pipeline_stage_execution_implemented": False,
             "deliverables": deliverables,
             "research_evidence": ({
                 "sha256": research_record["sha256"],
@@ -871,6 +1446,32 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             "reviewer_reports": review_results,
             "management_reports": management_reports,
             "management_hierarchy": management_hierarchy(),
+            "pipeline_dispatch": {
+                "mode": "existing_specialist_checker_roles",
+                "completed_stage_ids": [
+                    stage["stage_id"] for stage in pipeline_stage_rows if stage["status"] == "completed"
+                ],
+                "skipped_stage_ids": [
+                    stage["stage_id"] for stage in pipeline_stage_rows if stage["status"] == "skipped"
+                ],
+                "awaiting_owner_stage_ids": [
+                    stage["stage_id"] for stage in pipeline_stage_rows if stage["status"] == "awaiting_owner"
+                ],
+                "applicable_stage_ids": [
+                    stage["stage_id"] for stage in role_routing["stages"]
+                    if stage["roles"] or (stage["stage_id"] == "quality" and REVIEWERS)
+                    or (stage["stage_id"] == "research" and research_record)
+                ],
+                "not_applicable_stage_ids": [
+                    stage["stage_id"] for stage in role_routing["stages"]
+                    if not stage["roles"] and not (stage["stage_id"] == "quality" and REVIEWERS)
+                    and not (stage["stage_id"] == "research" and research_record)
+                ],
+                "unmapped_worker_roles": role_routing["unmapped_roles"],
+                "deferred_worker_roles": role_routing.get("deferred_roles", []),
+                "deferred_stage_ids": ["render", "package", "publishing", "analytics_earnings", "learning"],
+                "full_21_stage_execution": False,
+            },
             "publishing_approval_required": True,
             "video_rendered": False,
             "published": False,
@@ -882,17 +1483,24 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
     except ProductionRunCancelled:
         _finish_cancel(run_id, owner_username, worker_token)
     except ProductionRunTimeout as exc:
+        _pause_active_pipeline_stage(run_id, owner_username, worker_token,
+                                     locals().get("active_pipeline_stage"), str(exc))
         set_run(run_id, "paused", error=str(exc))
     except (ProviderNotConfigured, ProviderRequestError) as exc:
         if _cancellation_requested(run_id, owner_username, worker_token):
             _finish_cancel(run_id, owner_username, worker_token)
         else:
+            _pause_active_pipeline_stage(run_id, owner_username, worker_token,
+                                         locals().get("active_pipeline_stage"), str(exc))
             set_run(run_id, "blocked", error=str(exc))
     except Exception as exc:
         if _cancellation_requested(run_id, owner_username, worker_token):
             _finish_cancel(run_id, owner_username, worker_token)
         else:
-            set_run(run_id, "failed", error=f"Production runtime error: {type(exc).__name__}")
+            _pause_active_pipeline_stage(run_id, owner_username, worker_token,
+                                         locals().get("active_pipeline_stage"),
+                                         f"Runtime error: {type(exc).__name__}")
+            set_run(run_id, "failed", error=f"Production runtime error: {type(exc).__name__}: {str(exc)[:240]}")
 
 
 def attach_render_result(run_id: str, render_result: dict[str, Any],

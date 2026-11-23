@@ -25,10 +25,26 @@ Request JSON:
 }
 ```
 
-The response contains an ordered 11-stage plan: intake, research, strategy, writing,
-visuals, audio, assembly, quality, Owner review, publishing and analytics. Planning
-does not enqueue work or perform external actions. Provider matches are candidates,
-not installation or health attestations.
+The response contains an ordered 21-stage plan: intake, planning, research, fact-check,
+strategy, script, storyboard, character bible, visual development, generation, audio,
+editing, localization, branding, quality, Owner review, render, package, publishing,
+analytics/earnings and learning. Planning does not enqueue work or perform external actions. During
+actual runs, existing specialist/checker roles are mapped to applicable stage
+checkpoints through quality; actual render and delivery-package work is performed only
+through the authenticated Owner-triggered local media endpoint, while publishing,
+analytics and learning remain separate follow-up executors. Each new run now persists an ordered 21-row
+stage ledger in the runtime SQLite database, including department, approval policy,
+status, evidence, issues and timestamps. `GET /api/production/runs/{run_id}` returns the full Owner-scoped ledger; the Factory run-details panel displays all 21 rows, while the recent-runs summary exposes only stage counts by status. The ledger has fenced worker completion,
+evidence-required completion and explicit Owner gates for Owner review/publishing.
+Stage claims are ordered and fenced by the active run lease; expired worker recovery
+returns in-flight stage rows to paused so a new lease can resume them. Owner gates are
+surfaced as `awaiting_owner` and cannot be self-approved by the worker. The existing specialist/checker worker now routes matched specialist roles into
+applicable stages (intake through quality), orders those role groups by stage, and
+advances a stage only after its assigned workers pass independent checkers. A completed specialist stage now stores machine-readable evidence with each approved builder sequence, its later passing checker sequence, checker evidence and the deliverable SHA-256. The Quality stage stores each of the five passing reviewer reports with output hashes and evidence. Documentary Research can store its persisted evidence-package hash and structural validation counts when no research specialist is assigned. The Owner-scoped run response exposes `pipeline_stage_evidence_enforced: true`; this strengthens auditability but does not mean every one of the 21 stages has a dedicated executor. Stages
+with no matching role in the selected format are explicitly marked `skipped` rather
+than falsely completed. The Owner Agent can only place Owner Review into
+`awaiting_owner`; its recommendation is not human approval. The authenticated Owner's confirmed local media-generation action advances render and package only after verified MP4/provenance and a verified delivery ZIP have been built. The result's `pipeline_dispatch.completed_stage_ids` and `deferred_stage_ids` are updated as those stages complete. Publishing, analytics and learning remain pending for separate executors. Text-only roles such as Final Render Agent, Upload Agent and Analytics Agent are not treated as proof that those real operations occurred; they remain visible as unmapped worker roles. Existing pre-ledger completed runs are backfilled with earlier stages marked `skipped` (no historical stage evidence is inferred) and Owner Review set to `awaiting_owner`. Therefore this is partial stage dispatch, not full 21-stage execution. The worker also attaches a deterministic `role_stage_map` to the final package, showing which format-team specialists match each stage and which roles remain unmapped. This map is diagnostic metadata; it does not itself execute a stage or certify a stage as complete. Provider
+matches are candidates, not installation or health attestations.
 
 ## Monitor recent runs
 
@@ -47,9 +63,10 @@ production worker. The worker retains its run state, lease fencing, retry limits
 cancellation checkpoints and builder/checker/reviewer quality gates.
 
 A completed script/package is not the same as a rendered video or a published video.
-Media rendering remains behind its existing quality and production gates. External
-publishing remains separately disabled unless the Owner explicitly enables it and
-approves the action.
+The authenticated Owner's explicit local media-generation request completes the
+`owner_review` stage with an evidence record; an AI Owner Agent READY recommendation
+cannot do this. The media endpoint rejects blocked Owner Review checkpoints. External
+publishing remains separately disabled and requires its own explicit Owner approval.
 
 ## Provider and approval policy
 
@@ -62,6 +79,21 @@ approves the action.
   capacity or live availability.
 - Do not delete or overwrite original media as part of recovery or automation.
 
+
+## Deferred specialist roles and side-effect boundaries
+
+The role router reports `deferred_worker_roles` separately from general unmapped roles.
+Roles such as Final Render Agent, Final Output Agent, Upload Agent, Scheduling Agent,
+Analytics Agent, Asset Manager, Memory Agent and Automation Agent may still receive
+ordinary text-only specialist/checker invocations when present in a format preset.
+Those invocations can produce plans, checklists or recommendations only; they do not
+execute rendering, packaging, uploads, scheduling, analytics retrieval or learning
+operations. Their names in a preset are not proof that those operations occurred.
+
+The run result keeps these roles visible alongside deferred stage IDs. Dedicated
+side-effect executors must be integrated and independently tested before their stages
+can be reported as complete. Upload and scheduling remain Owner-approved external
+side effects; a text response from an Upload Agent never performs a publish.
 
 ## Durable queued-run recovery
 
@@ -95,7 +127,32 @@ video ID and safe local video URL, allowing the dashboard to reopen the MP4 afte
 refresh without regenerating it. A missing local engine returns an explicit
 unavailable response; the dashboard does not fall back to paid providers.
 
-This action creates a local MP4 only. It does not upload or publish to YouTube.
+### Build and download the verified local delivery ZIP
+
+A successful local render now builds `production_packages/{run_id}-delivery.zip`
+before the package stage is marked complete. The archive includes the verified MP4,
+all input assets recorded in the render provenance manifest, timed Hindi SRT captions
+(even when captions are not burned into the MP4), a 1280x720 representative-frame thumbnail
+extracted from the verified MP4, production metadata, specialist deliverables, the
+renderer quality report, the render provenance manifest and source-linked research
+evidence when present. Complete translated subtitle tracks are included only when a localization/translator specialist supplies a valid JSON language-to-caption array matching every Hindi scene cue. Incomplete or malformed tracks are omitted and reported in the package index, alongside the unavailable editable timeline project and per-asset rights certificates. The included thumbnail
+is a representative frame, not a separately art-directed or text-designed cover. A separate `metadata/platform-publishing.json` file normalizes only title, description, tags, hashtags and category values found in saved specialist deliverables. It records the source role for each extracted field and lists missing fields; it never fabricates SEO copy or treats a missing value as complete. The package index records each payload member's size and SHA-256; every archived member is
+re-hashed and the ZIP is CRC-checked before it is accepted. The index documents that it
+cannot hash itself; the ZIP itself has a persisted SHA-256 and byte size.
+
+`GET /api/production/runs/{run_id}/package` downloads the archive only for the
+authenticated Owner who owns that run. The route validates the expected run-specific
+path, file size and SHA-256 before returning it. Package creation is local-only and
+does not publish, upload, share or modify source assets. Studio backups now include
+production thumbnails, provenance manifests and delivery ZIPs under the existing
+2 GiB backup safety limit; restore remains additive and does not overwrite existing media.
+
+The current renderer does not export an editable timeline/project file or per-asset
+third-party rights certificates. The ZIP README and package manifest explicitly list
+those omissions; users must verify rights before external distribution. These items
+are not represented as completed deliverables.
+
+This action creates local media and a verified delivery ZIP only. It does not upload or publish to YouTube.
 Publishing remains a separate Owner-approved operation. Documentary runs still
 require intact source-linked research evidence, and structural traceability is not
 a substitute for human fact-checking.

@@ -26,7 +26,7 @@
   }
   function renderPlan(plan) {
     const root=$("factoryPlanOutput"); root.replaceChildren();
-    const heading=document.createElement("h3"); heading.textContent="11-stage factory plan"; root.append(heading);
+    const heading=document.createElement("h3"); heading.textContent=(plan.pipeline_stage_count||plan.stages?.length||0)+"-stage factory plan"; root.append(heading);
     for(const stage of plan.stages||[]){
       const card=document.createElement("article"); card.className="factory-stage";
       const title=document.createElement("b"); title.textContent=stage.sequence+". "+stage.name; card.append(title);
@@ -121,12 +121,17 @@
         method:"POST",
         body:JSON.stringify({burn_subtitles:false,sound_effects_enabled:true,quality:"high",fps:30})
       });
-      notice(result.detail||"Verified MP4 ready. Publishing remains disabled.");
+      notice(result.detail||"Verified MP4 and production ZIP ready. Publishing remains disabled.");
       await loadRuns();
       if(result.render?.url || result.render?.video_id){
         const link=document.createElement("a");link.href=result.render.url||("/api/videos/"+encodeURIComponent(result.render.video_id));
         link.textContent="Open rendered video";link.target="_blank";link.rel="noopener";
         $("factoryNotice").append(document.createTextNode(" "),link);
+      }
+      if(result.delivery_package_url && result.delivery_package?.verified === true){
+        const packageLink=document.createElement("a");packageLink.href=result.delivery_package_url;
+        packageLink.textContent="Download verified production ZIP";packageLink.rel="noopener";
+        $("factoryNotice").append(document.createTextNode(" · "),packageLink);
       }
     }catch(error){notice(error.message,true);if(button){button.disabled=false;button.textContent="Generate final MP4";}}
   }
@@ -143,6 +148,70 @@
       panel=document.createElement("section");panel.className="factory-run-details factory-stage";
       const heading=document.createElement("h3");heading.textContent="Run execution details · "+run.status;panel.append(heading);
       const current=document.createElement("p");current.className="factory-meta";current.textContent="Current role: "+(run.current_role||"—")+" · Attempts: "+(run.attempt_count||0);panel.append(current);
+      const pipelineTitle=document.createElement("b");pipelineTitle.textContent="21-stage pipeline ledger";panel.append(pipelineTitle);
+      const pipelineNote=document.createElement("p");pipelineNote.className="factory-meta";
+      pipelineNote.textContent="Mapped specialist/checker roles advance applicable stages through quality. The authenticated Owner's confirmed Generate final MP4 action records Owner Review approval and advances verified render/package stages; publishing, analytics and learning still need separate executors.";
+      panel.append(pipelineNote);
+      const renderedResult=run.result?.render||{};
+      const packageInfo=renderedResult.delivery_package;
+      if(packageInfo?.verified===true){
+        const packageTitle=document.createElement("b");packageTitle.textContent="Verified production delivery";panel.append(packageTitle);
+        const packageNote=document.createElement("p");packageNote.className="factory-meta";
+        packageNote.textContent=packageInfo.filename+" · "+packageInfo.file_count+" files · "+packageInfo.size_bytes+" bytes · SHA-256 "+packageInfo.sha256;
+        panel.append(packageNote);
+        const packageLink=document.createElement("a");packageLink.href="/api/production/runs/"+encodeURIComponent(id)+"/package";
+        packageLink.textContent="Download Owner-only production ZIP";packageLink.rel="noopener";panel.append(packageLink);
+        const packageLimits=document.createElement("p");packageLimits.className="factory-meta";
+        packageLimits.textContent="Hindi captions: "+(packageInfo.captions_included?"included":"not available")+
+          " · Thumbnail: "+(packageInfo.thumbnail_included?"included":"not generated")+
+          " · Translations: "+(packageInfo.translations_included?("included ("+(packageInfo.translation_languages||[]).join(", ")+")"):"not generated")+
+          " · Editable project: "+(packageInfo.editable_project_included?"included":"not exported")+
+          " · Rights certificates: "+(packageInfo.rights_certificates_included?"included":"not supplied");
+        panel.append(packageLimits);
+        const publishingMetadata=document.createElement("p");publishingMetadata.className="factory-meta";
+        const missingMetadata=Array.isArray(packageInfo.platform_metadata_missing_fields)?packageInfo.platform_metadata_missing_fields:[];
+        publishingMetadata.textContent="YouTube metadata: "+(packageInfo.platform_metadata_status||"not assessed")+(missingMetadata.length?" · Missing: "+missingMetadata.join(", "):"");
+        panel.append(publishingMetadata);
+      }
+      const dispatch=run.result?.pipeline_dispatch||{};
+      const deferredRoles=Array.isArray(dispatch.deferred_worker_roles)?dispatch.deferred_worker_roles:[];
+      const deferredTitle=document.createElement("b");deferredTitle.textContent="Deferred side-effect roles";panel.append(deferredTitle);
+      const deferredNote=document.createElement("p");deferredNote.className="factory-meta";
+      deferredNote.textContent=deferredRoles.length
+        ? deferredRoles.join(" · ")+" — role prompts may produce text-only plans/checklists; no actual render, package, upload, scheduling or analytics action is performed."
+        : "No deferred specialist roles recorded for this run.";
+      panel.append(deferredNote);
+      const deferredStages=Array.isArray(dispatch.deferred_stage_ids)?dispatch.deferred_stage_ids:[];
+      const deferredStageNote=document.createElement("p");deferredStageNote.className="factory-meta";
+      deferredStageNote.textContent="Deferred stages: "+(deferredStages.join(" · ")||"none reported");
+      panel.append(deferredStageNote);
+      const evidencePolicy=document.createElement("p");evidencePolicy.className="factory-meta";
+      evidencePolicy.textContent="Stage evidence enforcement: "+(run.pipeline_stage_evidence_enforced?"active":"not reported")+
+        " · Full 21-stage executors: "+(run.pipeline_stage_execution_implemented?"reported":"not yet implemented");
+      panel.append(evidencePolicy);
+      for(const stage of run.pipeline_stages||[]){
+        const row=document.createElement("p");row.className="factory-meta";
+        row.textContent=stage.sequence+" · "+stage.stage_id+" · "+stage.department+" · "+stage.status+
+          (stage.approval==="owner_required"?" · Owner approval required":"");
+        panel.append(row);
+        if(stage.evidence){
+          let evidenceSummary="Evidence recorded";
+          try{
+            const evidence=typeof stage.evidence==="string"?JSON.parse(stage.evidence):stage.evidence;
+            if(evidence&&evidence.kind==="approved_specialist_stage"){
+              evidenceSummary=evidence.roles.length+" approved specialist handoff(s) · "+evidence.roles.map(item=>item.role+" SHA-256 "+String(item.output_sha256||"").slice(0,12)).join(" · ");
+            }else if(evidence&&evidence.kind==="independent_quality_review"){
+              evidenceSummary=evidence.reviewers.length+" passing reviewer report(s) with output hashes";
+            }else if(evidence&&evidence.kind==="persisted_research_evidence"){
+              evidenceSummary=evidence.source_count+" sources · "+evidence.claim_count+" claims · structural traceability only";
+            }else{
+              evidenceSummary="Evidence recorded (format not recognized by this UI)";
+            }
+          }catch(_error){evidenceSummary="Evidence recorded (details unavailable)";}
+          const evidenceRow=document.createElement("p");evidenceRow.className="factory-meta";
+          evidenceRow.textContent="   ↳ "+evidenceSummary;panel.append(evidenceRow);
+        }
+      }
       const stepsTitle=document.createElement("b");stepsTitle.textContent="Specialist and checker steps";panel.append(stepsTitle);
       for(const step of run.steps||[]){
         const row=document.createElement("p");row.className="factory-meta";

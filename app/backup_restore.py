@@ -13,7 +13,10 @@ from pathlib import Path, PurePosixPath
 BACKUP_FORMAT = "sintu-studio-backup-v1"
 MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
 MAX_FILES = 10_000
-MEDIA_DIRS = {"generated_images", "generated_ai_videos", "generated_audio", "generated_music", "generated_videos"}
+MEDIA_DIRS = {
+    "generated_images", "generated_ai_videos", "generated_audio", "generated_music",
+    "generated_videos", "production_thumbnails", "production_manifests", "production_packages",
+}
 DATABASE_MEMBERS = {
     "database/sintu_studio.db": ("sintu_studio.db", {"tasks", "admin_users", "security_audit", "app_settings", "content_calendar"}),
     "database/sintu_earnings.sqlite3": ("sintu_earnings.sqlite3", {"earning_records", "earning_targets"}),

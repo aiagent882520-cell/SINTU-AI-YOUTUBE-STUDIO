@@ -43,7 +43,7 @@ def test_full_catalog_run_executes_each_worker_checker_and_final_review(tmp_path
     runtime.execute_run(run["id"], "test-owner")
     result = runtime.get_run(run["id"], "test-owner")
 
-    assert result["status"] == "completed"
+    assert result["status"] == "completed", result.get("error")
     assert len([step for step in result["steps"] if step["step_type"] == "builder"]) == len(CATALOG_WORKER_ROLES)
     assert len([step for step in result["steps"] if step["step_type"] == "checker"]) == len(CATALOG_WORKER_ROLES)
     assert len([step for step in result["steps"] if step["step_type"] == "reviewer"]) == 5
@@ -75,7 +75,7 @@ def test_full_catalog_run_pauses_on_first_failed_independent_checker(tmp_path, m
     runtime.execute_run(run["id"])
     result = runtime.get_run(run["id"])
 
-    assert result["status"] == "paused"
+    assert result["status"] == "paused", result.get("error")
     assert result["current_role"] == AGENTS[0] + " Checker"
     assert len([step for step in result["steps"] if step["step_type"] == "builder"]) == 3
     assert len([step for step in result["steps"] if step["step_type"] == "checker"]) == 3

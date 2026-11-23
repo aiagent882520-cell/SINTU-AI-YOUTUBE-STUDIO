@@ -9,13 +9,23 @@ def test_pipeline_plan_is_complete_and_does_not_start_execution():
     plan = build_pipeline_plan("Hindi science explainer", "educational")
     stage_ids = [stage["id"] for stage in plan["stages"]]
     assert stage_ids == [
-        "intake", "research", "strategy", "writing", "visuals", "audio",
-        "assembly", "quality", "owner_review", "publishing", "analytics",
+        "intake", "planning", "research", "fact_check", "strategy", "script",
+        "storyboard", "character_bible", "visual_development", "generation",
+        "audio", "editing", "localization", "branding", "quality",
+        "owner_review", "render", "package", "publishing",
+        "analytics_earnings", "learning",
     ]
+    assert plan["pipeline_stage_count"] == 21
+    assert plan["pipeline_version"] == "2.0"
     assert plan["execution_started"] is False
     assert plan["execution_allowed"] is False
+    assert plan["stage_execution_implemented"] is False
+    assert plan["stage_role_dispatch_integrated"] is True
+    assert "not full 21-stage execution" in plan["stage_execution_note"]
     assert plan["publishing_enabled"] is False
     assert plan["free_first"] is True
+    assert next(stage for stage in plan["stages"] if stage["id"] == "owner_review")["approval"] == "owner_required"
+    assert next(stage for stage in plan["stages"] if stage["id"] == "publishing")["auto_execute"] is False
     assert plan["paid_auto_activation"] is False
 
 
@@ -40,8 +50,8 @@ def test_custom_provider_candidates_are_capability_matched():
          "pricing": "paid_optional", "capabilities": ["video"]},
     ]
     plan = build_pipeline_plan("topic", "format", providers=providers)
-    writing = next(stage for stage in plan["stages"] if stage["id"] == "writing")
-    assembly = next(stage for stage in plan["stages"] if stage["id"] == "assembly")
+    writing = next(stage for stage in plan["stages"] if stage["id"] == "script")
+    assembly = next(stage for stage in plan["stages"] if stage["id"] == "render")
     assert any(item["id"] == "local_writer" for item in writing["provider_candidates"])
     assert any(item["id"] == "paid_video" for item in assembly["provider_candidates"])
     assert next(item for item in assembly["provider_candidates"] if item["id"] == "paid_video")["selection"] == "verify_before_use"
@@ -71,3 +81,49 @@ def test_input_limits_are_enforced():
         build_pipeline_plan("", "shorts")
     with pytest.raises(ValueError):
         build_pipeline_plan("topic", "")
+
+def test_existing_specialist_roles_route_to_pipeline_stages_without_false_completion():
+    from app.production_factory_orchestrator import route_specialist_roles
+
+    routed = route_specialist_roles([
+        "Master AI", "Web Research", "Fact Checker", "Script Writer",
+        "Filmmaking Director", "AI Video Generator", "Voice Generator",
+        "Video Editor", "Subtitle Creator", "Thumbnail Designer", "HR Agent",
+        "Video Generation Agent", "Hindi Narration Agent", "Tags Researcher",
+        "Final Render Agent", "Unmapped Experimental Agent",
+    ])
+    stages = {row["stage_id"]: row for row in routed["stages"]}
+    assert stages["intake"]["roles"] == ["Master AI"]
+    assert stages["research"]["roles"] == ["Web Research"]
+    assert stages["fact_check"]["roles"] == ["Fact Checker"]
+    assert stages["script"]["roles"] == ["Script Writer"]
+    assert stages["storyboard"]["roles"] == ["Filmmaking Director"]
+    assert stages["generation"]["roles"] == ["AI Video Generator", "Video Generation Agent"]
+    assert stages["audio"]["roles"] == ["Voice Generator", "Hindi Narration Agent"]
+    assert stages["editing"]["roles"] == ["Video Editor"]
+    assert stages["localization"]["roles"] == ["Subtitle Creator"]
+    assert stages["branding"]["roles"] == ["Thumbnail Designer", "Tags Researcher"]
+    assert stages["quality"]["roles"] == ["HR Agent"]
+    assert stages["render"]["status"] == "not_applicable"
+    assert routed["unmapped_roles"] == ["Final Render Agent", "Unmapped Experimental Agent"]
+    assert routed["deferred_roles"] == ["Final Render Agent"]
+    assert "text-only specialist/checker invocations" in routed["deferred_role_policy"]
+    assert "never execute render" in routed["deferred_role_policy"]
+
+def test_all_sixty_format_roles_are_routed_or_explicitly_unmapped_without_fake_side_effect_stages():
+    from app.production_factory_orchestrator import route_specialist_roles
+    from app.studio_scope import video_formats
+
+    for format_item in video_formats():
+        routed = route_specialist_roles(format_item["roles"])
+        stages = {row["stage_id"]: row for row in routed["stages"]}
+        assigned = [role for row in routed["stages"] for role in row["roles"]]
+        assert sorted(assigned + routed["unmapped_roles"]) == sorted(format_item["roles"])
+        assert set(routed["deferred_roles"]).issubset(set(routed["unmapped_roles"]))
+        assert all(role in format_item["roles"] for role in routed["deferred_roles"])
+        assert stages["render"]["roles"] == []
+        assert stages["package"]["roles"] == []
+        assert stages["publishing"]["roles"] == []
+        assert stages["analytics_earnings"]["roles"] == []
+        assert stages["learning"]["roles"] == []
+

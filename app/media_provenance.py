@@ -1,4 +1,4 @@
-"""Private, content-addressed provenance manifests for successful production renders."""
+"""Private render provenance and verified Owner-local production delivery archives."""
 from __future__ import annotations
 
 import hashlib
@@ -6,6 +6,7 @@ import json
 import os
 import re
 import tempfile
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,10 @@ from typing import Any
 
 def _relative_file(path: Path, root: Path) -> tuple[Path, str]:
     resolved_root = root.expanduser().resolve()
-    resolved = path.expanduser().resolve(strict=True)
+    candidate = path.expanduser()
+    if candidate.is_symlink():
+        raise ValueError("Production provenance paths cannot be symlinks.")
+    resolved = candidate.resolve(strict=True)
     if not resolved.is_file() or not resolved.is_relative_to(resolved_root):
         raise ValueError("Production provenance paths must be existing files inside DATA_DIR.")
     return resolved, resolved.relative_to(resolved_root).as_posix()
@@ -98,3 +102,333 @@ def write_render_manifest(
         raise
     manifest["manifest_path"] = destination.relative_to(root).as_posix()
     return manifest
+
+
+
+def extract_platform_metadata(deliverables: dict[str, Any] | None) -> dict[str, Any]:
+    """Extract explicit YouTube metadata from saved deliverables; never invent missing fields."""
+    import re
+    aliases = {
+        "title": ("title", "video_title", "seo_title", "youtube_title"),
+        "description": ("description", "video_description", "seo_description", "youtube_description"),
+        "tags": ("tags", "video_tags", "youtube_tags", "keywords"),
+        "hashtags": ("hashtags", "hash_tags"),
+        "category": ("category", "youtube_category"),
+    }
+    role_hints = {
+        "title": ("title", "seo", "youtube"),
+        "description": ("description", "seo", "youtube"),
+        "tags": ("tag", "seo", "keyword", "youtube"),
+        "hashtags": ("hashtag", "tag", "seo", "youtube"),
+        "category": ("category", "seo", "youtube"),
+    }
+    values: dict[str, Any] = {key: None for key in aliases}
+    sources: dict[str, str] = {}
+    def normalize(value: Any, field: str) -> Any:
+        if field in {"tags", "hashtags"}:
+            items = re.split(r"[,;\n]+", value) if isinstance(value, str) else value
+            if not isinstance(items, list):
+                return None
+            cleaned = list(dict.fromkeys(item.strip() for item in items if isinstance(item, str) and item.strip()))
+            return cleaned or None
+        return value.strip()[:5000] if isinstance(value, str) and value.strip() else None
+    for role, raw in (deliverables or {}).items():
+        if not isinstance(role, str) or not isinstance(raw, str):
+            continue
+        role_key = role.casefold()
+        parsed = None
+        candidate = raw.strip()
+        if candidate.startswith("```"):
+            candidate = re.sub(r"^```[a-zA-Z0-9_-]*\s*|\s*```$", "", candidate)
+        try:
+            decoded = json.loads(candidate)
+            parsed = decoded if isinstance(decoded, dict) else None
+        except (TypeError, ValueError):
+            pass
+        for field, keys in aliases.items():
+            if values[field] is not None:
+                continue
+            relevant = any(hint in role_key for hint in role_hints[field])
+            value = None
+            if parsed is not None:
+                for key in keys:
+                    if key in parsed:
+                        value = normalize(parsed[key], field)
+                        if value is not None:
+                            break
+            if value is None and relevant:
+                for line in raw.splitlines():
+                    label, separator, remainder = line.partition(":")
+                    if separator and label.strip().casefold().replace(" ", "_") in keys:
+                        value = normalize(remainder, field)
+                        if value is not None:
+                            break
+            if value is not None and relevant:
+                values[field] = value
+                sources[field] = role
+    missing = [field for field, value in values.items() if value is None]
+    return {"schema_version": 1, "platform": "youtube",
+            "status": "complete" if not missing else ("partial" if len(missing) < len(values) else "missing"),
+            **values, "missing_fields": missing, "source_roles": sources,
+            "generation_policy": "Extracted from saved specialist deliverables only; missing values are not invented."}
+
+def extract_translated_captions(deliverables: dict[str, Any] | None, source_count: int) -> dict[str, list[str]]:
+    """Accept complete translated caption arrays only from explicit localization deliverables."""
+    accepted: dict[str, list[str]] = {}
+    if source_count <= 0:
+        return accepted
+    for role, raw in (deliverables or {}).items():
+        if not isinstance(role, str) or not any(token in role.casefold() for token in ("translat", "localization", "localisation")):
+            continue
+        if not isinstance(raw, str):
+            continue
+        candidate = raw.strip()
+        if candidate.startswith("```"):
+            candidate = re.sub(r"^```[a-zA-Z0-9_-]*\s*|\s*```$", "", candidate)
+        try:
+            payload = json.loads(candidate)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        tracks = payload.get("translations", payload.get("captions_by_language", {}))
+        if not isinstance(tracks, dict):
+            continue
+        for language, lines in tracks.items():
+            if not isinstance(language, str) or not re.fullmatch(r"[a-z]{2,3}(?:-[A-Z]{2})?", language):
+                continue
+            if language.casefold() in {"hi", "hi-in"} or language in accepted:
+                continue
+            if not isinstance(lines, list) or len(lines) != source_count:
+                continue
+            if any(not isinstance(line, str) or not line.strip() or len(line) > 1000 for line in lines):
+                continue
+            accepted[language] = [line.strip() for line in lines]
+    return accepted
+
+def create_delivery_package(
+    *,
+    data_dir: Path,
+    run_id: str,
+    render_manifest_path: str,
+    captions: list[str],
+    seconds_per_caption: int,
+    metadata: dict[str, Any],
+    deliverables: dict[str, Any] | None = None,
+    research_evidence: dict[str, Any] | None = None,
+    max_total_bytes: int = 1024 * 1024 * 1024,
+) -> dict[str, Any]:
+    """Build and verify an Owner-local ZIP from a verified render manifest.
+
+    Original media is copied into the archive, never moved or modified. The ZIP contains
+    a timed SRT even when captions were not burned into the MP4. Missing editable-project
+    and rights records are explicitly documented rather than fabricated.
+    """
+    if not re.fullmatch(r"[a-f0-9]{32}", run_id):
+        raise ValueError("Invalid production run ID.")
+    if not isinstance(captions, list) or len(captions) > 25:
+        raise ValueError("Delivery captions must contain at most 25 scene lines.")
+    if not isinstance(seconds_per_caption, int) or not 1 <= seconds_per_caption <= 60:
+        raise ValueError("Invalid delivery caption timing.")
+    if any(not isinstance(line, str) or len(line) > 1000 for line in captions):
+        raise ValueError("Delivery caption lines must be text up to 1000 characters.")
+    root = data_dir.expanduser().resolve()
+    manifest_candidate = root / render_manifest_path
+    manifest_file, manifest_relative = _relative_file(manifest_candidate, root)
+    if manifest_file.stat().st_size > 2 * 1024 * 1024:
+        raise ValueError("Render provenance manifest exceeds the 2 MiB safety limit.")
+    if not isinstance(metadata, dict):
+        raise ValueError("Delivery metadata must be an object.")
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    if manifest.get("run_id") != run_id or manifest.get("quality_check", {}).get("verified") is not True:
+        raise ValueError("Delivery package requires this run's verified render provenance.")
+    records = [manifest.get("output")] + list(manifest.get("inputs") or [])
+    if len(records) > 128:
+        raise ValueError("Production delivery package exceeds the 128-source-file limit.")
+    if not isinstance(records[0], dict) or any(not isinstance(item, dict) for item in records):
+        raise ValueError("Render provenance file records are invalid.")
+    verified_files: list[tuple[Path, str, dict[str, Any]]] = []
+    total_bytes = 0
+    for index, record in enumerate(records):
+        relative = record.get("path")
+        if not isinstance(relative, str) or not relative or Path(relative).is_absolute() or ".." in Path(relative).parts:
+            raise ValueError("Render provenance contains an unsafe relative path.")
+        source = root / relative
+        if source.is_symlink():
+            raise ValueError("Render provenance cannot package symlinked media.")
+        resolved, safe_relative = _relative_file(source, root)
+        if resolved.stat().st_size != record.get("size_bytes"):
+            raise ValueError("Render provenance media size changed after verification.")
+        digest = hashlib.sha256()
+        with resolved.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != record.get("sha256"):
+            raise ValueError("Render provenance media hash changed after verification.")
+        if index == 0:
+            archive_folder = "video/"
+        elif resolved.suffix.lower() in {".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac"}:
+            archive_folder = "audio/"
+        elif safe_relative.startswith("production_thumbnails/"):
+            archive_folder = "thumbnails/"
+        elif resolved.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
+            archive_folder = "images/"
+        else:
+            archive_folder = "assets/"
+        archive_name = archive_folder + f"{index:02d}-" + resolved.name
+        total_bytes += resolved.stat().st_size
+        if total_bytes > max_total_bytes:
+            raise ValueError("Production delivery package exceeds the 1 GiB safety limit.")
+        verified_files.append((resolved, archive_name, {
+            "path": archive_name, "size_bytes": resolved.stat().st_size,
+            "sha256": digest.hexdigest(), "source_path": safe_relative,
+        }))
+
+    def srt_timestamp(seconds: int) -> str:
+        hours, remainder = divmod(seconds, 3600)
+        minutes, whole_seconds = divmod(remainder, 60)
+        return f"{hours:02d}:{minutes:02d}:{whole_seconds:02d},000"
+
+    cues = []
+    cursor = 0
+    cue_index = 1
+    for line in captions:
+        clean = line.replace("\r", " ").replace("\n", " ").replace("-->", "→").strip()
+        if clean:
+            cues.append(
+                f"{cue_index}\n{srt_timestamp(cursor)} --> "
+                f"{srt_timestamp(cursor + seconds_per_caption)}\n{clean}\n"
+            )
+            cue_index += 1
+        cursor += seconds_per_caption
+    srt_content = ("\n".join(cues) + "\n") if cues else ""
+    translated_captions = extract_translated_captions(deliverables, len(captions))
+    translated_srt: dict[str, bytes] = {}
+    for language, lines in translated_captions.items():
+        translated_cues = []
+        cursor = 0
+        for cue_index, line in enumerate(lines, 1):
+            clean = line.replace("\r", " ").replace("\n", " ").replace("-->", "→").strip()
+            translated_cues.append(f"{cue_index}\n{srt_timestamp(cursor)} --> {srt_timestamp(cursor + seconds_per_caption)}\n{clean}\n")
+            cursor += seconds_per_caption
+        translated_srt[f"captions/subtitles.{language}.srt"] = ("\n".join(translated_cues) + "\n").encode("utf-8")
+    platform_metadata = extract_platform_metadata(deliverables)
+    json_payloads: dict[str, Any] = {
+        "metadata/production.json": metadata,
+        "metadata/platform-publishing.json": platform_metadata,
+        "project/deliverables.json": deliverables if isinstance(deliverables, dict) else {},
+        "reports/quality-report.json": manifest.get("quality_check", {}).get("report") or {},
+    }
+    if isinstance(research_evidence, dict):
+        json_payloads["research/research-evidence.json"] = research_evidence
+    serialized: dict[str, bytes] = {}
+    for name, value in json_payloads.items():
+        blob = (json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        if len(blob) > 2 * 1024 * 1024:
+            raise ValueError(f"Delivery metadata file is too large: {name}")
+        serialized[name] = blob
+    if srt_content:
+        serialized["captions/subtitles.hi.srt"] = srt_content.encode("utf-8")
+    serialized.update(translated_srt)
+    readme = (
+        "SINTU AI YOUTUBE STUDIO — PRODUCTION DELIVERY PACKAGE\n"
+        f"Run: {run_id}\n"
+        "Includes verified rendered media, source assets recorded by provenance, timed captions "
+        "when available, production metadata, deliverables, and quality report.\n"
+        "A 1280x720 representative-frame thumbnail is included when present in the verified render provenance.\n"
+        "This is a video-frame thumbnail, not a separately art-directed or text-designed cover.\n"
+        "Translated subtitle tracks are included only when a localization specialist supplies a complete validated track; otherwise they are omitted and listed in the package index.\n"
+        f"Translated subtitle languages included: {', '.join(sorted(translated_captions)) or 'none'}.\n"
+        "The editable timeline/project file is not exported by the current renderer.\n"
+        "Per-asset third-party license/rights certificates were not supplied by the current "
+        "production run; verify rights before external distribution.\n"
+        "Publishing is not performed by package creation and still requires separate Owner approval.\n"
+    )
+    serialized["README.txt"] = readme.encode("utf-8")
+    serialized["provenance/render-manifest.json"] = manifest_file.read_bytes()
+    package_entries = [item[2] for item in verified_files]
+    package_entries.extend({
+        "path": name, "size_bytes": len(blob), "sha256": hashlib.sha256(blob).hexdigest()
+    } for name, blob in serialized.items())
+    thumbnail_included = any(
+        item[2]["source_path"].startswith("production_thumbnails/")
+        for item in verified_files
+    )
+    not_included = [
+        "editable timeline project",
+        "per-asset license/rights certificates",
+    ]
+    if not thumbnail_included:
+        not_included.append("thumbnail image (not supplied in render provenance)")
+    if not translated_srt:
+        not_included.append("translated subtitle tracks (Hindi captions only)")
+    package_index = {
+        "schema_version": 1, "run_id": run_id, "verified": True,
+        "entries": package_entries,
+        "self_hash_note": "This index cannot hash itself; verify the full ZIP with the SHA-256 in the Owner-scoped run result.",
+        "not_included": not_included,
+    }
+    serialized["PACKAGE-MANIFEST.json"] = (
+        json.dumps(package_index, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+
+    package_dir = root / "production_packages"
+    package_dir.mkdir(parents=True, exist_ok=True)
+    if package_dir.is_symlink() or not package_dir.resolve().is_relative_to(root):
+        raise ValueError("Production package directory must remain inside DATA_DIR.")
+    destination = package_dir / f"{run_id}-delivery.zip"
+    fd, temporary_name = tempfile.mkstemp(prefix=".delivery-", suffix=".tmp", dir=package_dir)
+    os.close(fd)
+    try:
+        with zipfile.ZipFile(temporary_name, "w", allowZip64=True) as archive:
+            for source, archive_name, _record in verified_files:
+                archive.write(source, archive_name, compress_type=zipfile.ZIP_STORED)
+            for archive_name, blob in serialized.items():
+                archive.writestr(archive_name, blob, compress_type=zipfile.ZIP_DEFLATED, compresslevel=6)
+        with zipfile.ZipFile(temporary_name, "r") as archive:
+            bad_member = archive.testzip()
+            if bad_member is not None:
+                raise ValueError("Delivery ZIP integrity check failed: " + bad_member)
+            names = archive.namelist()
+            if len(names) != len(set(names)) or "PACKAGE-MANIFEST.json" not in names:
+                raise ValueError("Delivery ZIP contains duplicate or missing manifest entries.")
+            for record in package_entries:
+                archived_hash = hashlib.sha256()
+                archived_size = 0
+                with archive.open(record["path"], "r") as member:
+                    for chunk in iter(lambda: member.read(1024 * 1024), b""):
+                        archived_size += len(chunk)
+                        archived_hash.update(chunk)
+                if archived_size != record["size_bytes"] or archived_hash.hexdigest() != record["sha256"]:
+                    raise ValueError("Delivery ZIP member does not match its package SHA-256 record: " + record["path"])
+        with open(temporary_name, "rb") as stream:
+            package_hash = hashlib.sha256()
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                package_hash.update(chunk)
+        package_size = os.path.getsize(temporary_name)
+        os.replace(temporary_name, destination)
+    except Exception:
+        try:
+            os.unlink(temporary_name)
+        except OSError:
+            pass
+        raise
+    return {
+        "schema_version": 1,
+        "verified": True,
+        "path": destination.relative_to(root).as_posix(),
+        "filename": destination.name,
+        "size_bytes": package_size,
+        "sha256": package_hash.hexdigest(),
+        "file_count": len(package_entries) + 1,
+        "entries": package_entries,
+        "render_manifest_path": manifest_relative,
+        "captions_included": bool(srt_content),
+        "thumbnail_included": thumbnail_included,
+        "translations_included": bool(translated_srt),
+        "translation_languages": sorted(translated_captions),
+        "editable_project_included": False,
+        "rights_certificates_included": False,
+        "platform_metadata_status": platform_metadata["status"],
+        "platform_metadata_missing_fields": platform_metadata["missing_fields"],
+    }

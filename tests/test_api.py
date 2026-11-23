@@ -3296,8 +3296,10 @@ def test_render_api_blocks_unimplemented_specialized_formats(tmp_path, monkeypat
 def test_production_run_render_requires_approved_matching_format(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     run_id = "a" * 32
-    state = {"status": "paused", "format_id": "youtube-shorts"}
+    state = {"status": "paused", "format_id": "youtube-shorts", "pipeline_stages": [{"stage_id": "render", "status": "pending"}]}
     monkeypatch.setattr(main, "get_production_run", lambda value, owner=None: state if value == run_id and owner == "local" else None)
+    monkeypatch.setattr(main, "_approve_owner_review_for_media", lambda *args: None)
+    monkeypatch.setattr(main, "transition_owner_media_stage", lambda *args, **kwargs: None)
     monkeypatch.setattr(main, "render_video", lambda payload: {
         "video_id": "b" * 32, "filename": "b" * 32 + ".mp4",
         "url": "/api/videos/" + "b" * 32, "format": "MP4 / H.264",
@@ -3471,6 +3473,7 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
     run_id = "a" * 32
     state = {"id": run_id, "status": "completed", "format_id": "youtube-shorts",
              "topic": "भारत की रहस्यमयी जगहें",
+             "pipeline_stages": [{"stage_id": "owner_review", "status": "completed"}, {"stage_id": "render", "status": "pending"}],
              "result": {"deliverables": {"Script Writer": "भारत की रहस्यमयी जगहों की कहानी"}}}
     monkeypatch.setattr(main, "get_production_run", lambda value, owner=None: state if value == run_id and owner == "local" else None)
     monkeypatch.setattr(main, "image_status", lambda: {"local_available": True})
@@ -3516,6 +3519,18 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
     monkeypatch.setattr(main, "IMAGE_DIR", image_dir)
     monkeypatch.setattr(main, "AUDIO_DIR", audio_dir)
     monkeypatch.setattr(main, "MUSIC_DIR", music_dir)
+    monkeypatch.setattr(main, "create_video_frame_thumbnail", lambda path, run_id: {
+        "path": tmp_path / "thumbnail.jpg", "relative_path": "production_thumbnails/test.jpg",
+        "width": 1280, "height": 720, "source": "test fixture",
+    })
+    monkeypatch.setattr(main, "create_delivery_package", lambda **kwargs: {
+        "verified": True, "path": "production_packages/test.zip", "filename": "test.zip",
+        "size_bytes": 1024, "sha256": "a" * 64, "file_count": 5,
+        "captions_included": True, "thumbnail_included": True, "translations_included": False,
+        "editable_project_included": False, "rights_certificates_included": False,
+        "translation_languages": [], "platform_metadata_status": "partial",
+        "platform_metadata_missing_fields": ["tags", "hashtags", "category"],
+    })
     monkeypatch.setattr(main, "write_render_manifest", lambda **kwargs: {"manifest_path": "production_manifests/test.json"})
 
     response = client.post(f"/api/production/runs/{run_id}/produce-media", json={
@@ -3546,6 +3561,7 @@ def test_production_media_pipeline_uses_approved_storyboard_when_scene_prompts_o
     state = {
         "id": run_id, "status": "completed", "format_id": "youtube-shorts",
         "topic": "भारत की रहस्यमयी जगहें",
+        "pipeline_stages": [{"stage_id": "owner_review", "status": "completed"}, {"stage_id": "render", "status": "pending"}],
         "result": {
             "deliverables": {
                 "Script Writer": "भारत की रहस्यमयी जगहों की कहानी",
@@ -3592,6 +3608,18 @@ def test_production_media_pipeline_uses_approved_storyboard_when_scene_prompts_o
         (image_dir / (str(i).zfill(32) + ".jpg")).write_bytes(b"image")
     (audio_dir / ("b" * 32 + ".wav")).write_bytes(b"audio")
     (music_dir / ("c" * 32 + ".wav")).write_bytes(b"music")
+    monkeypatch.setattr(main, "create_video_frame_thumbnail", lambda path, run_id: {
+        "path": tmp_path / "thumbnail.jpg", "relative_path": "production_thumbnails/test.jpg",
+        "width": 1280, "height": 720, "source": "test fixture",
+    })
+    monkeypatch.setattr(main, "create_delivery_package", lambda **kwargs: {
+        "verified": True, "path": "production_packages/test.zip", "filename": "test.zip",
+        "size_bytes": 1024, "sha256": "a" * 64, "file_count": 5,
+        "captions_included": True, "thumbnail_included": True, "translations_included": False,
+        "editable_project_included": False, "rights_certificates_included": False,
+        "translation_languages": [], "platform_metadata_status": "partial",
+        "platform_metadata_missing_fields": ["tags", "hashtags", "category"],
+    })
     monkeypatch.setattr(main, "write_render_manifest", lambda **kwargs: {"manifest_path": "production_manifests/test.json"})
 
     response = client.post(f"/api/production/runs/{run_id}/produce-media", json={})
@@ -3617,6 +3645,7 @@ def test_production_media_pipeline_fails_closed_when_local_media_engines_missing
     client = client_for_test(tmp_path, monkeypatch)
     run_id = "e" * 32
     state = {"id": run_id, "status": "completed", "format_id": "youtube-shorts",
+             "pipeline_stages": [{"stage_id": "owner_review", "status": "completed"}, {"stage_id": "render", "status": "pending"}],
              "result": {"deliverables": {"Script Writer": "हिंदी कहानी"}}}
     monkeypatch.setattr(main, "get_production_run", lambda value, owner=None: state if value == run_id else None)
     monkeypatch.setattr(main, "image_status", lambda: {"local_available": False})
