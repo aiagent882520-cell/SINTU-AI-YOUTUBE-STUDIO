@@ -168,6 +168,10 @@
           " · Editable project: "+(packageInfo.editable_project_included?"included":"not exported")+
           " · Rights certificates: "+(packageInfo.rights_certificates_included?"included":"not supplied");
         panel.append(packageLimits);
+        const publishingMetadata=document.createElement("p");publishingMetadata.className="factory-meta";
+        const missingMetadata=Array.isArray(packageInfo.platform_metadata_missing_fields)?packageInfo.platform_metadata_missing_fields:[];
+        publishingMetadata.textContent="YouTube metadata: "+(packageInfo.platform_metadata_status||"not assessed")+(missingMetadata.length?" · Missing: "+missingMetadata.join(", "):"");
+        panel.append(publishingMetadata);
       }
       const dispatch=run.result?.pipeline_dispatch||{};
       const deferredRoles=Array.isArray(dispatch.deferred_worker_roles)?dispatch.deferred_worker_roles:[];
