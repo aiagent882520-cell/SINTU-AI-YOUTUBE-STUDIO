@@ -185,11 +185,32 @@
       const deferredStageNote=document.createElement("p");deferredStageNote.className="factory-meta";
       deferredStageNote.textContent="Deferred stages: "+(deferredStages.join(" · ")||"none reported");
       panel.append(deferredStageNote);
+      const evidencePolicy=document.createElement("p");evidencePolicy.className="factory-meta";
+      evidencePolicy.textContent="Stage evidence enforcement: "+(run.pipeline_stage_evidence_enforced?"active":"not reported")+
+        " · Full 21-stage executors: "+(run.pipeline_stage_execution_implemented?"reported":"not yet implemented");
+      panel.append(evidencePolicy);
       for(const stage of run.pipeline_stages||[]){
         const row=document.createElement("p");row.className="factory-meta";
         row.textContent=stage.sequence+" · "+stage.stage_id+" · "+stage.department+" · "+stage.status+
           (stage.approval==="owner_required"?" · Owner approval required":"");
         panel.append(row);
+        if(stage.evidence){
+          let evidenceSummary="Evidence recorded";
+          try{
+            const evidence=typeof stage.evidence==="string"?JSON.parse(stage.evidence):stage.evidence;
+            if(evidence&&evidence.kind==="approved_specialist_stage"){
+              evidenceSummary=evidence.roles.length+" approved specialist handoff(s) · "+evidence.roles.map(item=>item.role+" SHA-256 "+String(item.output_sha256||"").slice(0,12)).join(" · ");
+            }else if(evidence&&evidence.kind==="independent_quality_review"){
+              evidenceSummary=evidence.reviewers.length+" passing reviewer report(s) with output hashes";
+            }else if(evidence&&evidence.kind==="persisted_research_evidence"){
+              evidenceSummary=evidence.source_count+" sources · "+evidence.claim_count+" claims · structural traceability only";
+            }else{
+              evidenceSummary="Evidence recorded (format not recognized by this UI)";
+            }
+          }catch(_error){evidenceSummary="Evidence recorded (details unavailable)";}
+          const evidenceRow=document.createElement("p");evidenceRow.className="factory-meta";
+          evidenceRow.textContent="   ↳ "+evidenceSummary;panel.append(evidenceRow);
+        }
       }
       const stepsTitle=document.createElement("b");stepsTitle.textContent="Specialist and checker steps";panel.append(stepsTitle);
       for(const step of run.steps||[]){
