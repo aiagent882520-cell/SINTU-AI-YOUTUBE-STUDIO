@@ -162,8 +162,10 @@
         const packageLink=document.createElement("a");packageLink.href="/api/production/runs/"+encodeURIComponent(id)+"/package";
         packageLink.textContent="Download Owner-only production ZIP";packageLink.rel="noopener";panel.append(packageLink);
         const packageLimits=document.createElement("p");packageLimits.className="factory-meta";
-        packageLimits.textContent="Hindi captions included: "+(packageInfo.captions_included?"yes":"no")+
-          " · Editable timeline project: "+(packageInfo.editable_project_included?"included":"not exported")+
+        packageLimits.textContent="Hindi captions: "+(packageInfo.captions_included?"included":"not available")+
+          " · Thumbnail: "+(packageInfo.thumbnail_included?"included":"not generated")+
+          " · Translations: "+(packageInfo.translations_included?"included":"not generated")+
+          " · Editable project: "+(packageInfo.editable_project_included?"included":"not exported")+
           " · Rights certificates: "+(packageInfo.rights_certificates_included?"included":"not supplied");
         panel.append(packageLimits);
       }
