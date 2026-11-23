@@ -105,6 +105,73 @@ def write_render_manifest(
 
 
 
+def extract_platform_metadata(deliverables: dict[str, Any] | None) -> dict[str, Any]:
+    """Extract explicit YouTube metadata from saved deliverables; never invent missing fields."""
+    import re
+    aliases = {
+        "title": ("title", "video_title", "seo_title", "youtube_title"),
+        "description": ("description", "video_description", "seo_description", "youtube_description"),
+        "tags": ("tags", "video_tags", "youtube_tags", "keywords"),
+        "hashtags": ("hashtags", "hash_tags"),
+        "category": ("category", "youtube_category"),
+    }
+    role_hints = {
+        "title": ("title", "seo", "youtube"),
+        "description": ("description", "seo", "youtube"),
+        "tags": ("tag", "seo", "keyword", "youtube"),
+        "hashtags": ("hashtag", "seo", "youtube"),
+        "category": ("category", "seo", "youtube"),
+    }
+    values: dict[str, Any] = {key: None for key in aliases}
+    sources: dict[str, str] = {}
+    def normalize(value: Any, field: str) -> Any:
+        if field in {"tags", "hashtags"}:
+            items = re.split(r"[,;\\n]+", value) if isinstance(value, str) else value
+            if not isinstance(items, list):
+                return None
+            cleaned = list(dict.fromkeys(item.strip() for item in items if isinstance(item, str) and item.strip()))
+            return cleaned or None
+        return value.strip()[:5000] if isinstance(value, str) and value.strip() else None
+    for role, raw in (deliverables or {}).items():
+        if not isinstance(role, str) or not isinstance(raw, str):
+            continue
+        role_key = role.casefold()
+        parsed = None
+        candidate = raw.strip()
+        if candidate.startswith("```"):
+            candidate = re.sub(r"^```[a-zA-Z0-9_-]*\\s*|\\s*```$", "", candidate)
+        try:
+            decoded = json.loads(candidate)
+            parsed = decoded if isinstance(decoded, dict) else None
+        except (TypeError, ValueError):
+            pass
+        for field, keys in aliases.items():
+            if values[field] is not None:
+                continue
+            relevant = any(hint in role_key for hint in role_hints[field])
+            value = None
+            if parsed is not None:
+                for key in keys:
+                    if key in parsed:
+                        value = normalize(parsed[key], field)
+                        if value is not None:
+                            break
+            if value is None and relevant:
+                for line in raw.splitlines():
+                    label, separator, remainder = line.partition(":")
+                    if separator and label.strip().casefold().replace(" ", "_") in keys:
+                        value = normalize(remainder, field)
+                        if value is not None:
+                            break
+            if value is not None and (relevant or parsed is not None):
+                values[field] = value
+                sources[field] = role
+    missing = [field for field, value in values.items() if value is None]
+    return {"schema_version": 1, "platform": "youtube",
+            "status": "complete" if not missing else ("partial" if len(missing) < len(values) else "missing"),
+            **values, "missing_fields": missing, "source_roles": sources,
+            "generation_policy": "Extracted from saved specialist deliverables only; missing values are not invented."}
+
 def create_delivery_package(
     *,
     data_dir: Path,
@@ -201,8 +268,10 @@ def create_delivery_package(
             cue_index += 1
         cursor += seconds_per_caption
     srt_content = ("\n".join(cues) + "\n") if cues else ""
+    platform_metadata = extract_platform_metadata(deliverables)
     json_payloads: dict[str, Any] = {
         "metadata/production.json": metadata,
+        "metadata/platform-publishing.json": platform_metadata,
         "project/deliverables.json": deliverables if isinstance(deliverables, dict) else {},
         "reports/quality-report.json": manifest.get("quality_check", {}).get("report") or {},
     }
