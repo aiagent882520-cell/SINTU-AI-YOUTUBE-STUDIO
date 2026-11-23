@@ -462,6 +462,7 @@ def get_run(run_id: str, owner_username: str | None = None) -> dict[str, Any] | 
         stage["issues"] = json.loads(stage.pop("issues_json") or "[]")
         result["pipeline_stages"].append(stage)
     result["pipeline_stage_execution_implemented"] = False
+    result["pipeline_stage_evidence_enforced"] = True
     result["pipeline_stage_role_dispatch_integrated"] = bool(
         isinstance(result.get("result"), dict) and result["result"].get("pipeline_dispatch")
     )
@@ -1102,6 +1103,15 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                         if item.get("step_type") == "checker" and item.get("status") == "pass"
                     ),
                 }
+            elif stage_id == "research" and research_record:
+                evidence_payload = {
+                    "kind": "persisted_research_evidence",
+                    "sha256": research_record["sha256"],
+                    "source_count": research_record["validation"]["source_count"],
+                    "claim_count": research_record["validation"]["claim_count"],
+                    "status": "STRUCTURAL_TRACEABILITY_VALIDATED_NOT_FACT_VERIFIED",
+                    "human_fact_check_required": True,
+                }
             else:
                 stage_roles = next(
                     (item.get("roles", []) for item in role_routing["stages"] if item["stage_id"] == stage_id),
@@ -1119,10 +1129,12 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                         None,
                     )
                     checker = next(
-                        (item for item in reversed(current_steps)
+                        (item for item in current_steps
                          if item.get("role") == assigned_role + " Checker"
                          and item.get("step_type") == "checker"
-                         and item.get("status") == "pass"),
+                         and item.get("status") == "pass"
+                         and (builder is not None)
+                         and item.get("sequence", 0) > builder.get("sequence", 0)),
                         None,
                     )
                     if not builder or not checker:
