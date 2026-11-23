@@ -336,7 +336,7 @@ def create_delivery_package(
         "A 1280x720 representative-frame thumbnail is included when present in the verified render provenance.\n"
         "This is a video-frame thumbnail, not a separately art-directed or text-designed cover.\n"
         "Translated subtitle tracks are included only when a localization specialist supplies a complete validated track; otherwise they are omitted and listed in the package index.\n"
-        f"Translated subtitle languages included: {", ".join(sorted(translated_captions)) or "none"}.\n"
+        f"Translated subtitle languages included: {', '.join(sorted(translated_captions)) or 'none'}.\n"
         "The editable timeline/project file is not exported by the current renderer.\n"
         "Per-asset third-party license/rights certificates were not supplied by the current "
         "production run; verify rights before external distribution.\n"
