@@ -424,6 +424,17 @@ def test_compact_forensic_summary_preserves_five_targets_under_relay_tail_cap():
                 "size_bytes": 100000, "sha256": "b" * 64,
             }],
             "asset_reference_time_utc": "2026-11-13T00:00:00+00:00",
+            "temporal_visual_fingerprint_audit": {
+                "sample_count": 5, "valid_sample_count": 5,
+                "distinct_normalized_frame_count": 1, "distinct_dhash_count": 1,
+                "near_black_sample_count": 5,
+                "assessment": "all_sampled_frames_identical",
+                "identical_sample_groups": [{
+                    "samples": ["first", "quarter", "middle", "three_quarter", "last"],
+                    "normalized_pixel_sha256_prefix": "a" * 12,
+                }],
+                "basis": "sampled evidence only",
+            },
         })
     report = {
         "status": "READ_ONLY_FORENSICS",
@@ -470,6 +481,8 @@ def test_compact_forensic_summary_preserves_five_targets_under_relay_tail_cap():
     assert len(footer["targets"]) == 5
     assert all(len(target["samples"]) == 5 for target in footer["targets"])
     assert all(target["backups"][0][2] == "b" * 64 for target in footer["targets"])
+    assert all(target["temporal_visual_audit"]["assessment"] == "all_sampled_frames_identical"
+               for target in footer["targets"])
     assert all(len(target["black_frames"]["pblack"]) == 12 for target in footer["targets"])
     import json as json_module
     assert len(json_module.dumps(footer, separators=(",", ":"))) < 7000
