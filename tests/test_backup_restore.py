@@ -238,5 +238,6 @@ def test_backup_allowlist_includes_verified_production_packages_and_manifests():
 
     assert _safe_member_name("media/production_packages/" + "a" * 32 + "-delivery.zip")
     assert _safe_member_name("media/production_manifests/" + "a" * 32 + "-final.json")
+    assert _safe_member_name("media/production_thumbnails/" + "a" * 32 + ".jpg")
     assert not _safe_member_name("media/production_packages/../private.zip")
     assert not _safe_member_name("media/production_manifests/../../secret")
