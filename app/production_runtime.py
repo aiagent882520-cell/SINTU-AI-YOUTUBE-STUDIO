@@ -55,6 +55,7 @@ def _connect():
 
 def init_runtime_db() -> None:
     with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
         conn.execute("""CREATE TABLE IF NOT EXISTS production_runs (
             id TEXT PRIMARY KEY, format_id TEXT NOT NULL, topic TEXT NOT NULL,
             status TEXT NOT NULL, current_role TEXT, result_json TEXT,
@@ -1500,7 +1501,7 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
             _pause_active_pipeline_stage(run_id, owner_username, worker_token,
                                          locals().get("active_pipeline_stage"),
                                          f"Runtime error: {type(exc).__name__}")
-            set_run(run_id, "failed", error=f"Production runtime error: {type(exc).__name__}")
+            set_run(run_id, "failed", error=f"Production runtime error: {type(exc).__name__}: {str(exc)[:240]}")
 
 
 def attach_render_result(run_id: str, render_result: dict[str, Any],
