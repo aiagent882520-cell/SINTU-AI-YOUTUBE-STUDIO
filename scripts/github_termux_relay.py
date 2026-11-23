@@ -302,8 +302,8 @@ def process_pending(github: GitHub, issues: list[dict]) -> bool:
     restart_issue = None
     for issue in issues:
         try:
-            body = json.loads(issue.get("body") or "{}")
-        except (TypeError, json.JSONDecodeError):
+            body = parse_issue_payload(issue.get("body"))
+        except (TypeError, ValueError):
             body = {}
         if isinstance(body, dict) and body.get("action") == "restart_services":
             if restart_issue is None:
