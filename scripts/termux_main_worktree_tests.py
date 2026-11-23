@@ -41,7 +41,7 @@ def prepare_worktree() -> str:
     if WORKTREE.is_symlink():
         raise RuntimeError("Dedicated main worktree path is a symlink; refusing to use it.")
     WORKTREE.parent.mkdir(parents=True, exist_ok=True)
-    git("fetch", "origin", "main")
+    git("fetch", "origin", "main:refs/remotes/origin/main")
     registered = registered_worktrees()
     target = WORKTREE.resolve()
     if WORKTREE.exists():
