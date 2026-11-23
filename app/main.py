@@ -5699,6 +5699,10 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=400, detail="Production format no longer exists.") from None
     if not profile["generic_export_available"]:
         raise HTTPException(status_code=501, detail=profile["limitations"][0])
+    try:
+        _approve_owner_review_for_media(run_id, owner, run)
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
     use_procedural_2d = run["format_id"] in {"2d-cartoon", "story-animation"}
     deliverables = run["result"].get("deliverables") or {}
     scene_prompts = [item.strip() for item in payload.scene_prompts]
@@ -5724,10 +5728,6 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=400, detail="Unsupported output resolution profile.")
     if payload.fps not in {24, 30, 60} or payload.quality not in {"standard", "high", "maximum"}:
         raise HTTPException(status_code=400, detail="Unsupported FPS or render quality.")
-    try:
-        _approve_owner_review_for_media(run_id, owner, run)
-    except (ValueError, PermissionError) as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from None
     if not use_procedural_2d and not image_status().get("local_available"):
         raise HTTPException(status_code=503, detail="Local ComfyUI image workflow is not ready. Configure a validated free local workflow; paid providers are not enabled by this route.")
     if not voice_status().get("local_available"):
