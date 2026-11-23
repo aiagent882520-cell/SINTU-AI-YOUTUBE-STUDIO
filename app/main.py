@@ -5884,6 +5884,12 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
             )
         }
         rendered["provenance_manifest"] = manifest["manifest_path"]
+        rendered["thumbnail"] = {
+            "path": thumbnail_result["relative_path"],
+            "width": thumbnail_result["width"],
+            "height": thumbnail_result["height"],
+            "source": thumbnail_result["source"],
+        }
         rendered["delivery_package"] = package_summary
         transition_owner_media_stage(
             run_id, "render", "completed", owner_username=owner,
