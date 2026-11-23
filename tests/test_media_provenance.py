@@ -280,3 +280,4 @@ def test_translated_captions_require_complete_localization_tracks():
     assert result == {"en": ["First scene", "Second scene"], "es": ["Primera escena", "Segunda escena"]}
     assert extract_translated_captions({"Translator": '{"translations": {"en": ["only one"]}}'}, 2) == {}
     assert extract_translated_captions({"Translator": '{"translations": {"hi": ["एक", "दो"], "../bad": ["x", "y"]}}'}, 2) == {}
+    assert extract_translated_captions({"Translator": '{"translations": {"en": ["no source"]}}'}, 0) == {}
