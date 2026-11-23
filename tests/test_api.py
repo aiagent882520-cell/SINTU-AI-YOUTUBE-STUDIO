@@ -3473,6 +3473,7 @@ def test_production_media_pipeline_uses_local_engines_and_attaches_verified_rend
     run_id = "a" * 32
     state = {"id": run_id, "status": "completed", "format_id": "youtube-shorts",
              "topic": "भारत की रहस्यमयी जगहें",
+             "pipeline_stages": [{"stage_id": "owner_review", "status": "completed"}, {"stage_id": "render", "status": "pending"}],
              "result": {"deliverables": {"Script Writer": "भारत की रहस्यमयी जगहों की कहानी"}}}
     monkeypatch.setattr(main, "get_production_run", lambda value, owner=None: state if value == run_id and owner == "local" else None)
     monkeypatch.setattr(main, "image_status", lambda: {"local_available": True})
@@ -3548,6 +3549,7 @@ def test_production_media_pipeline_uses_approved_storyboard_when_scene_prompts_o
     state = {
         "id": run_id, "status": "completed", "format_id": "youtube-shorts",
         "topic": "भारत की रहस्यमयी जगहें",
+        "pipeline_stages": [{"stage_id": "owner_review", "status": "completed"}, {"stage_id": "render", "status": "pending"}],
         "result": {
             "deliverables": {
                 "Script Writer": "भारत की रहस्यमयी जगहों की कहानी",
@@ -3619,6 +3621,7 @@ def test_production_media_pipeline_fails_closed_when_local_media_engines_missing
     client = client_for_test(tmp_path, monkeypatch)
     run_id = "e" * 32
     state = {"id": run_id, "status": "completed", "format_id": "youtube-shorts",
+             "pipeline_stages": [{"stage_id": "owner_review", "status": "completed"}, {"stage_id": "render", "status": "pending"}],
              "result": {"deliverables": {"Script Writer": "हिंदी कहानी"}}}
     monkeypatch.setattr(main, "get_production_run", lambda value, owner=None: state if value == run_id else None)
     monkeypatch.setattr(main, "image_status", lambda: {"local_available": False})
