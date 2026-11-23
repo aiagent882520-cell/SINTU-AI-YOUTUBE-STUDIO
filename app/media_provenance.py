@@ -172,6 +172,38 @@ def extract_platform_metadata(deliverables: dict[str, Any] | None) -> dict[str, 
             **values, "missing_fields": missing, "source_roles": sources,
             "generation_policy": "Extracted from saved specialist deliverables only; missing values are not invented."}
 
+def extract_translated_captions(deliverables: dict[str, Any] | None, source_count: int) -> dict[str, list[str]]:
+    """Accept complete translated caption arrays only from explicit localization deliverables."""
+    accepted: dict[str, list[str]] = {}
+    for role, raw in (deliverables or {}).items():
+        if not isinstance(role, str) or not any(token in role.casefold() for token in ("translat", "localization", "localisation")):
+            continue
+        if not isinstance(raw, str):
+            continue
+        candidate = raw.strip()
+        if candidate.startswith("```"):
+            candidate = re.sub(r"^```[a-zA-Z0-9_-]*\s*|\s*```$", "", candidate)
+        try:
+            payload = json.loads(candidate)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        tracks = payload.get("translations", payload.get("captions_by_language", {}))
+        if not isinstance(tracks, dict):
+            continue
+        for language, lines in tracks.items():
+            if not isinstance(language, str) or not re.fullmatch(r"[a-z]{2,3}(?:-[A-Z]{2})?", language):
+                continue
+            if language.casefold() in {"hi", "hi-in"} or language in accepted:
+                continue
+            if not isinstance(lines, list) or len(lines) != source_count:
+                continue
+            if any(not isinstance(line, str) or not line.strip() or len(line) > 1000 for line in lines):
+                continue
+            accepted[language] = [line.strip() for line in lines]
+    return accepted
+
 def create_delivery_package(
     *,
     data_dir: Path,
@@ -268,6 +300,16 @@ def create_delivery_package(
             cue_index += 1
         cursor += seconds_per_caption
     srt_content = ("\n".join(cues) + "\n") if cues else ""
+    translated_captions = extract_translated_captions(deliverables, len(captions))
+    translated_srt: dict[str, bytes] = {}
+    for language, lines in translated_captions.items():
+        translated_cues = []
+        cursor = 0
+        for cue_index, line in enumerate(lines, 1):
+            clean = line.replace("\r", " ").replace("\n", " ").replace("-->", "→").strip()
+            translated_cues.append(f"{cue_index}\n{srt_timestamp(cursor)} --> {srt_timestamp(cursor + seconds_per_caption)}\n{clean}\n")
+            cursor += seconds_per_caption
+        translated_srt[f"captions/subtitles.{language}.srt"] = ("\n".join(translated_cues) + "\n").encode("utf-8")
     platform_metadata = extract_platform_metadata(deliverables)
     json_payloads: dict[str, Any] = {
         "metadata/production.json": metadata,
@@ -285,6 +327,7 @@ def create_delivery_package(
         serialized[name] = blob
     if srt_content:
         serialized["captions/subtitles.hi.srt"] = srt_content.encode("utf-8")
+    serialized.update(translated_srt)
     readme = (
         "SINTU AI YOUTUBE STUDIO — PRODUCTION DELIVERY PACKAGE\n"
         f"Run: {run_id}\n"
@@ -309,12 +352,13 @@ def create_delivery_package(
         for item in verified_files
     )
     not_included = [
-        "translated subtitle tracks (Hindi captions only)",
         "editable timeline project",
         "per-asset license/rights certificates",
     ]
     if not thumbnail_included:
         not_included.append("thumbnail image (not supplied in render provenance)")
+    if not translated_srt:
+        not_included.append("translated subtitle tracks (Hindi captions only)")
     package_index = {
         "schema_version": 1, "run_id": run_id, "verified": True,
         "entries": package_entries,
@@ -378,7 +422,8 @@ def create_delivery_package(
         "render_manifest_path": manifest_relative,
         "captions_included": bool(srt_content),
         "thumbnail_included": thumbnail_included,
-        "translations_included": False,
+        "translations_included": bool(translated_srt),
+        "translation_languages": sorted(translated_captions),
         "editable_project_included": False,
         "rights_certificates_included": False,
         "platform_metadata_status": platform_metadata["status"],
