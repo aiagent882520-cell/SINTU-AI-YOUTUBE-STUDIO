@@ -42,7 +42,7 @@ applicable stages (intake through quality), orders those role groups by stage, a
 advances a stage only after its assigned workers pass independent checkers. Stages
 with no matching role in the selected format are explicitly marked `skipped` rather
 than falsely completed. The Owner Agent can only place Owner Review into
-`awaiting_owner`; its recommendation is not human approval. The authenticated Owner's confirmed local media-generation action advances the render and package stages only after verified MP4/provenance and package attachment. The result's `pipeline_dispatch.completed_stage_ids` and `deferred_stage_ids` are updated as those stages complete. Publishing, analytics and learning remain pending for separate executors. Text-only roles such as Final Render Agent, Upload Agent and Analytics Agent are not treated as proof that those real operations occurred; they remain visible as unmapped worker roles. Existing pre-ledger completed runs are backfilled with earlier stages marked `skipped` (no historical stage evidence is inferred) and Owner Review set to `awaiting_owner`. Therefore this is partial stage dispatch, not full 21-stage execution. The worker also attaches a deterministic `role_stage_map` to the final package, showing which format-team specialists match each stage and which roles remain unmapped. This map is diagnostic metadata; it does not itself execute a stage or certify a stage as complete. Provider
+`awaiting_owner`; its recommendation is not human approval. The authenticated Owner's confirmed local media-generation action advances render and package only after verified MP4/provenance and a verified delivery ZIP have been built. The result's `pipeline_dispatch.completed_stage_ids` and `deferred_stage_ids` are updated as those stages complete. Publishing, analytics and learning remain pending for separate executors. Text-only roles such as Final Render Agent, Upload Agent and Analytics Agent are not treated as proof that those real operations occurred; they remain visible as unmapped worker roles. Existing pre-ledger completed runs are backfilled with earlier stages marked `skipped` (no historical stage evidence is inferred) and Owner Review set to `awaiting_owner`. Therefore this is partial stage dispatch, not full 21-stage execution. The worker also attaches a deterministic `role_stage_map` to the final package, showing which format-team specialists match each stage and which roles remain unmapped. This map is diagnostic metadata; it does not itself execute a stage or certify a stage as complete. Provider
 matches are candidates, not installation or health attestations.
 
 ## Monitor recent runs
@@ -125,6 +125,27 @@ video URL. After a render is attached, the run summary exposes only a validated
 video ID and safe local video URL, allowing the dashboard to reopen the MP4 after
 refresh without regenerating it. A missing local engine returns an explicit
 unavailable response; the dashboard does not fall back to paid providers.
+
+### Build and download the complete local delivery ZIP
+
+A successful local render now builds `production_packages/{run_id}-delivery.zip`
+before the package stage is marked complete. The archive includes the verified MP4,
+all input assets recorded in the render provenance manifest, timed Hindi SRT captions
+(even when captions are not burned into the MP4), production metadata, specialist
+deliverables, the renderer quality report, the render provenance manifest and
+source-linked research evidence when present. A package index records each included
+file's size and SHA-256; the archive is reopened and CRC-checked before it is accepted.
+The ZIP itself also has a persisted SHA-256 and byte size.
+
+`GET /api/production/runs/{run_id}/package` downloads the archive only for the
+authenticated Owner who owns that run. The route validates the expected run-specific
+path, file size and SHA-256 before returning it. Package creation is local-only and
+does not publish, upload, share or modify source assets.
+
+The current renderer does not export an editable timeline/project file or per-asset
+third-party rights certificates. The ZIP README and package manifest explicitly list
+those omissions; users must verify rights before external distribution. These items
+are not represented as completed deliverables.
 
 This action creates a local MP4 only. It does not upload or publish to YouTube.
 Publishing remains a separate Owner-approved operation. Documentary runs still
