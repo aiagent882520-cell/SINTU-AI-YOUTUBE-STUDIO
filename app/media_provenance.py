@@ -164,7 +164,15 @@ def create_delivery_package(
                 digest.update(chunk)
         if digest.hexdigest() != record.get("sha256"):
             raise ValueError("Render provenance media hash changed after verification.")
-        archive_name = ("video/" if index == 0 else "assets/") + f"{index:02d}-" + resolved.name
+        if index == 0:
+            archive_folder = "video/"
+        elif resolved.suffix.lower() in {".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac"}:
+            archive_folder = "audio/"
+        elif resolved.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
+            archive_folder = "images/"
+        else:
+            archive_folder = "assets/"
+        archive_name = archive_folder + f"{index:02d}-" + resolved.name
         total_bytes += resolved.stat().st_size
         if total_bytes > max_total_bytes:
             raise ValueError("Production delivery package exceeds the 1 GiB safety limit.")
