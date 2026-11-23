@@ -389,3 +389,22 @@ def test_bridge_worker_stops_after_restart_even_if_acknowledgement_fails(monkeyp
     monkeypatch.setattr(worker, "execute", lambda job: (0, "restart scheduled"))
 
     assert worker.run_once() == "restart"
+
+def test_bridge_queues_main_worktree_tests(tmp_path, monkeypatch):
+    client, api_headers, worker_headers = bridge_client(tmp_path, monkeypatch)
+    created = client.post(
+        "/api/termux-bridge/jobs", headers=api_headers,
+        json={"action": "main_worktree_tests"},
+    )
+    assert created.status_code == 202
+    job = client.get("/api/termux-bridge/jobs/next", headers=worker_headers)
+    assert job.status_code == 200
+    assert job.json()["action"] == "main_worktree_tests"
+
+
+def test_worker_maps_main_worktree_tests_to_isolated_runner(monkeypatch):
+    from scripts import termux_bridge_worker as worker
+    monkeypatch.setattr(worker, "PYTHON", "/sintu/.venv/bin/python")
+    assert worker.command_for({"action": "main_worktree_tests", "payload": {}}) == [
+        "/sintu/.venv/bin/python", "scripts/termux_main_worktree_tests.py"
+    ]
