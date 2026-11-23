@@ -1103,7 +1103,9 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                         if item.get("step_type") == "checker" and item.get("status") == "pass"
                     ),
                 }
-            elif stage_id == "research" and research_record:
+            elif stage_id == "research" and research_record and not next(
+                (item.get("roles", []) for item in role_routing["stages"] if item["stage_id"] == "research"), []
+            ):
                 evidence_payload = {
                     "kind": "persisted_research_evidence",
                     "sha256": research_record["sha256"],
