@@ -1,4 +1,4 @@
-"""Private, content-addressed provenance manifests for successful production renders."""
+"""Private render provenance and verified Owner-local production delivery archives."""
 from __future__ import annotations
 
 import hashlib
@@ -134,6 +134,10 @@ def create_delivery_package(
     root = data_dir.expanduser().resolve()
     manifest_candidate = root / render_manifest_path
     manifest_file, manifest_relative = _relative_file(manifest_candidate, root)
+    if manifest_file.stat().st_size > 2 * 1024 * 1024:
+        raise ValueError("Render provenance manifest exceeds the 2 MiB safety limit.")
+    if not isinstance(metadata, dict):
+        raise ValueError("Delivery metadata must be an object.")
     manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
     if manifest.get("run_id") != run_id or manifest.get("quality_check", {}).get("verified") is not True:
         raise ValueError("Delivery package requires this run's verified render provenance.")
