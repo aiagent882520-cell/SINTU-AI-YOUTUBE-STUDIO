@@ -265,3 +265,15 @@ def test_platform_metadata_does_not_guess_missing_values_or_use_unrelated_text()
     assert result["status"] == "missing"
     assert all(result[field] is None for field in ("title", "description", "tags", "hashtags", "category"))
     assert len(result["missing_fields"]) == 5
+
+def test_translated_captions_require_complete_localization_tracks():
+    from app.media_provenance import extract_translated_captions
+
+    valid = {
+        "Localization Translator": '{"translations": {"en": ["First scene", "Second scene"], "es": ["Primera escena", "Segunda escena"]}}',
+        "Script Writer": '{"translations": {"fr": ["Un", "Deux"]}}',
+    }
+    result = extract_translated_captions(valid, 2)
+    assert result == {"en": ["First scene", "Second scene"], "es": ["Primera escena", "Segunda escena"]}
+    assert extract_translated_captions({"Translator": '{"translations": {"en": ["only one"]}}'}, 2) == {}
+    assert extract_translated_captions({"Translator": '{"translations": {"hi": ["एक", "दो"], "../bad": ["x", "y"]}}'}, 2) == {}
