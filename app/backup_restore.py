@@ -15,7 +15,7 @@ MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
 MAX_FILES = 10_000
 MEDIA_DIRS = {
     "generated_images", "generated_ai_videos", "generated_audio", "generated_music",
-    "generated_videos", "production_manifests", "production_packages",
+    "generated_videos", "production_thumbnails", "production_manifests", "production_packages",
 }
 DATABASE_MEMBERS = {
     "database/sintu_studio.db": ("sintu_studio.db", {"tasks", "admin_users", "security_audit", "app_settings", "content_calendar"}),
