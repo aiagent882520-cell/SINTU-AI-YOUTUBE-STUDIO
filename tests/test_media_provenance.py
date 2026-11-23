@@ -125,12 +125,15 @@ def test_delivery_package_contains_verified_media_captions_and_truthful_project_
     assert package["rights_certificates_included"] is False
     assert package["captions_included"] is True
     assert package["thumbnail_included"] is True
-    assert package["translations_included"] is True\n    assert package["translation_languages"] == ["en"]
+    assert package["translations_included"] is True
+    assert package["translation_languages"] == ["en"]
     assert hashlib.sha256(archive_path.read_bytes()).hexdigest() == package["sha256"]
     with zipfile.ZipFile(archive_path) as archive:
         assert archive.testzip() is None
         names = set(archive.namelist())
-        assert "captions/subtitles.hi.srt" in names\n        assert "captions/subtitles.en.srt" in names\n        assert "00:00:04,000 --> 00:00:08,000" in archive.read("captions/subtitles.en.srt").decode("utf-8")
+        assert "captions/subtitles.hi.srt" in names
+        assert "captions/subtitles.en.srt" in names
+        assert "00:00:04,000 --> 00:00:08,000" in archive.read("captions/subtitles.en.srt").decode("utf-8")
         assert "metadata/platform-publishing.json" in names
         platform_metadata = json.loads(archive.read("metadata/platform-publishing.json"))
         assert platform_metadata["title"] == "नमूना शीर्षक"
@@ -245,7 +248,8 @@ def test_platform_metadata_extracts_only_source_backed_fields():
     result = extract_platform_metadata({
         "Title Generator": '{"title": "भारत के 5 अद्भुत तथ्य"}',
         "Description Writer": "Description: इस वीडियो में पाँच रोचक तथ्यों को समझें।",
-        "YouTube SEO Tags Expert": "Tags: विज्ञान, भारत, रोचक तथ्य\nHashtags: #विज्ञान, #भारत",
+        "YouTube SEO Tags Expert": "Tags: विज्ञान, भारत, रोचक तथ्य
+Hashtags: #विज्ञान, #भारत",
     })
     assert result["platform"] == "youtube"
     assert result["status"] == "partial"
