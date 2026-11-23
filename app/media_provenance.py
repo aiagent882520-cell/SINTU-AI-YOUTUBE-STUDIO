@@ -119,14 +119,14 @@ def extract_platform_metadata(deliverables: dict[str, Any] | None) -> dict[str, 
         "title": ("title", "seo", "youtube"),
         "description": ("description", "seo", "youtube"),
         "tags": ("tag", "seo", "keyword", "youtube"),
-        "hashtags": ("hashtag", "seo", "youtube"),
+        "hashtags": ("hashtag", "tag", "seo", "youtube"),
         "category": ("category", "seo", "youtube"),
     }
     values: dict[str, Any] = {key: None for key in aliases}
     sources: dict[str, str] = {}
     def normalize(value: Any, field: str) -> Any:
         if field in {"tags", "hashtags"}:
-            items = re.split(r"[,;\\n]+", value) if isinstance(value, str) else value
+            items = re.split(r"[,;\n]+", value) if isinstance(value, str) else value
             if not isinstance(items, list):
                 return None
             cleaned = list(dict.fromkeys(item.strip() for item in items if isinstance(item, str) and item.strip()))
@@ -139,7 +139,7 @@ def extract_platform_metadata(deliverables: dict[str, Any] | None) -> dict[str, 
         parsed = None
         candidate = raw.strip()
         if candidate.startswith("```"):
-            candidate = re.sub(r"^```[a-zA-Z0-9_-]*\\s*|\\s*```$", "", candidate)
+            candidate = re.sub(r"^```[a-zA-Z0-9_-]*\s*|\s*```$", "", candidate)
         try:
             decoded = json.loads(candidate)
             parsed = decoded if isinstance(decoded, dict) else None
