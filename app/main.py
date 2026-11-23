@@ -1179,8 +1179,8 @@ def admin_audit(limit: int = 50):
 
 BACKUP_DIR = DATA_DIR / "backups"
 _BACKUP_MEDIA_DIRS = ("generated_images", "generated_ai_videos", "generated_audio",
-                      "generated_music", "generated_videos", "production_manifests",
-                      "production_packages")
+                      "generated_music", "generated_videos", "production_thumbnails",
+                      "production_manifests", "production_packages")
 _BACKUP_MAX_BYTES = 2 * 1024 * 1024 * 1024
 _BACKUP_MAX_FILES = 10000
 _BACKUP_ID_PATTERN = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8}$")
