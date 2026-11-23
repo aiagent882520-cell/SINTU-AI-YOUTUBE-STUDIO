@@ -234,15 +234,22 @@ def create_delivery_package(
     package_entries.extend({
         "path": name, "size_bytes": len(blob), "sha256": hashlib.sha256(blob).hexdigest()
     } for name, blob in serialized.items())
+    thumbnail_included = any(
+        item[2]["source_path"].startswith("production_thumbnails/")
+        for item in verified_files
+    )
+    not_included = [
+        "translated subtitle tracks (Hindi captions only)",
+        "editable timeline project",
+        "per-asset license/rights certificates",
+    ]
+    if not thumbnail_included:
+        not_included.append("thumbnail image (not supplied in render provenance)")
     package_index = {
         "schema_version": 1, "run_id": run_id, "verified": True,
         "entries": package_entries,
         "self_hash_note": "This index cannot hash itself; verify the full ZIP with the SHA-256 in the Owner-scoped run result.",
-        "not_included": [
-            "translated subtitle tracks (Hindi captions only)",
-            "editable timeline project",
-            "per-asset license/rights certificates",
-        ],
+        "not_included": not_included,
     }
     serialized["PACKAGE-MANIFEST.json"] = (
         json.dumps(package_index, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
@@ -300,10 +307,7 @@ def create_delivery_package(
         "entries": package_entries,
         "render_manifest_path": manifest_relative,
         "captions_included": bool(srt_content),
-        "thumbnail_included": any(
-            item[2]["source_path"].startswith("production_thumbnails/")
-            for item in verified_files
-        ),
+        "thumbnail_included": thumbnail_included,
         "translations_included": False,
         "editable_project_included": False,
         "rights_certificates_included": False,
