@@ -175,6 +175,8 @@ def extract_platform_metadata(deliverables: dict[str, Any] | None) -> dict[str, 
 def extract_translated_captions(deliverables: dict[str, Any] | None, source_count: int) -> dict[str, list[str]]:
     """Accept complete translated caption arrays only from explicit localization deliverables."""
     accepted: dict[str, list[str]] = {}
+    if source_count <= 0:
+        return accepted
     for role, raw in (deliverables or {}).items():
         if not isinstance(role, str) or not any(token in role.casefold() for token in ("translat", "localization", "localisation")):
             continue
