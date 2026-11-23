@@ -5795,12 +5795,12 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 fps=payload.fps, quality=payload.quality,
             )
         render_output_path = OUTPUT_DIR / rendered["filename"]
+        quality_report = rendered.get("quality_report") if isinstance(rendered, dict) else None
+        if not isinstance(quality_report, dict) or quality_report.get("verified") is not True:
+            raise RenderFailed("Renderer did not return a verified quality report; provenance PASS withheld.")
+        thumbnail_result = create_video_frame_thumbnail(render_output_path, run_id)
+        thumbnail_path = thumbnail_result["path"]
         try:
-            quality_report = rendered.get("quality_report") if isinstance(rendered, dict) else None
-            if not isinstance(quality_report, dict) or quality_report.get("verified") is not True:
-                raise RenderFailed("Renderer did not return a verified quality report; provenance PASS withheld.")
-            thumbnail_result = create_video_frame_thumbnail(render_output_path, run_id)
-            thumbnail_path = thumbnail_result["path"]
             manifest = write_render_manifest(
                 data_dir=DATA_DIR,
                 run_id=run_id,
