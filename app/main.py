@@ -51,7 +51,7 @@ from .provider_registry import list_providers, provider_summary
 from .production_factory_orchestrator import build_pipeline_plan
 from . import principal_ai_council, principal_knowledge_graph
 from . import access_control
-from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, verify_publishable_mp4, RendererUnavailable, RenderFailed, OUTPUT_DIR
+from .video_renderer import render_storyboard, render_ai_clips, render_mixed_timeline, verify_publishable_mp4, create_video_frame_thumbnail, RendererUnavailable, RenderFailed, OUTPUT_DIR
 from .format_rendering import all_format_render_profiles, format_render_profile
 from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable, VoiceGenerationFailed, AUDIO_DIR
 from .image_generator import generate_image, image_status, ImageUnavailable, ImageGenerationFailed, IMAGE_DIR
@@ -5795,6 +5795,8 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 fps=payload.fps, quality=payload.quality,
             )
         render_output_path = OUTPUT_DIR / rendered["filename"]
+        thumbnail_result = create_video_frame_thumbnail(render_output_path, run_id)
+        thumbnail_path = thumbnail_result["path"]
         try:
             quality_report = rendered.get("quality_report") if isinstance(rendered, dict) else None
             if not isinstance(quality_report, dict) or quality_report.get("verified") is not True:
@@ -5805,7 +5807,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 format_id=run["format_id"],
                 topic=run.get("topic", ""),
                 output_path=render_output_path,
-                asset_paths=[*image_paths, audio_path, music_matches[0]],
+                asset_paths=[*image_paths, audio_path, music_matches[0], thumbnail_path],
                 settings={
                     "resolution": resolution,
                     "fps": payload.fps,
@@ -5823,6 +5825,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                     "voice": str(voice_result.get("provider") or "local"),
                     "music": str(music_result.get("provider") or "local"),
                     "renderer": "FFmpeg",
+                    "thumbnail": "FFmpeg verified MP4 representative frame",
                 },
                 quality_report=quality_report,
             )
@@ -5851,6 +5854,12 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 "voice_engine": str(voice_result.get("provider") or "local"),
                 "music_engine": str(music_result.get("provider") or "local"),
                 "renderer": "FFmpeg",
+                "thumbnail": {
+                    "path": thumbnail_result["relative_path"],
+                    "width": thumbnail_result["width"],
+                    "height": thumbnail_result["height"],
+                    "source": thumbnail_result["source"],
+                },
                 "created_at": datetime.now(timezone.utc).isoformat(),
             },
             deliverables={
