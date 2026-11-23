@@ -233,3 +233,30 @@ def test_video_frame_thumbnail_rejects_invalid_run_id(tmp_path):
     video.write_bytes(b"video")
     with pytest.raises(ValueError, match="run ID"):
         renderer.create_video_frame_thumbnail(video, "../unsafe")
+
+def test_platform_metadata_extracts_only_source_backed_fields():
+    from app.media_provenance import extract_platform_metadata
+
+    result = extract_platform_metadata({
+        "Title Generator": '{"title": "भारत के 5 अद्भुत तथ्य"}',
+        "Description Writer": "Description: इस वीडियो में पाँच रोचक तथ्यों को समझें।",
+        "YouTube SEO Tags Expert": "Tags: विज्ञान, भारत, रोचक तथ्य\nHashtags: #विज्ञान, #भारत",
+    })
+    assert result["platform"] == "youtube"
+    assert result["status"] == "partial"
+    assert result["title"] == "भारत के 5 अद्भुत तथ्य"
+    assert result["description"].startswith("इस वीडियो में")
+    assert result["tags"] == ["विज्ञान", "भारत", "रोचक तथ्य"]
+    assert result["hashtags"] == ["#विज्ञान", "#भारत"]
+    assert result["category"] is None
+    assert result["missing_fields"] == ["category"]
+    assert result["source_roles"]["title"] == "Title Generator"
+
+
+def test_platform_metadata_does_not_guess_missing_values_or_use_unrelated_text():
+    from app.media_provenance import extract_platform_metadata
+
+    result = extract_platform_metadata({"Script Writer": "Title: This is narration, not publishing metadata."})
+    assert result["status"] == "missing"
+    assert all(result[field] is None for field in ("title", "description", "tags", "hashtags", "category"))
+    assert len(result["missing_fields"]) == 5
