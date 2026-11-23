@@ -1062,7 +1062,6 @@ def compact_forensic_summary(report: dict) -> dict:
                  (sample.get("pixel_verification") or {}).get("mean_luma"),
                  (sample.get("pixel_verification") or {}).get("black_pixel_percentage"),
                  (sample.get("pixel_verification") or {}).get("near_black"),
-                 (sample.get("pixel_verification") or {}).get("visual_dhash"),
                  str((sample.get("pixel_verification") or {}).get("visual_pixel_sha256") or "")[:12],
                  [
                      [candidate.get("path"), candidate.get("dhash_distance"),
@@ -1075,7 +1074,12 @@ def compact_forensic_summary(report: dict) -> dict:
                 [str(backup.get("path", ""))[-100:], backup.get("size_bytes"), backup.get("sha256")]
                 for backup in item.get("pre_repair_backups", [])
             ],
-            "temporal_visual_audit": item.get("temporal_visual_fingerprint_audit"),
+            "temporal_visual_audit": [
+                (item.get("temporal_visual_fingerprint_audit") or {}).get("assessment"),
+                (item.get("temporal_visual_fingerprint_audit") or {}).get("valid_sample_count"),
+                (item.get("temporal_visual_fingerprint_audit") or {}).get("distinct_normalized_frame_count"),
+                (item.get("temporal_visual_fingerprint_audit") or {}).get("near_black_sample_count"),
+            ],
             "reference_time": item.get("asset_reference_time_utc"),
             "provenance": [
                 {
