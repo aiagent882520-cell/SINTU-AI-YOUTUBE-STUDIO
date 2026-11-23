@@ -315,3 +315,78 @@ def test_general_renderer_cannot_bypass_blocked_owner_review(monkeypatch):
     assert exc.value.status_code == 409
     assert "Owner Review is blocked" in exc.value.detail
 
+
+
+
+def test_delivery_package_download_is_owner_scoped_and_hash_verified(tmp_path, monkeypatch):
+    import hashlib
+    from fastapi import HTTPException
+    import pytest
+
+    run_id = "c" * 32
+    package_path = tmp_path / "production_packages" / f"{run_id}-delivery.zip"
+    package_path.parent.mkdir(parents=True)
+    package_bytes = b"verified-owner-delivery-zip"
+    package_path.write_bytes(package_bytes)
+    package = {
+        "verified": True,
+        "path": f"production_packages/{run_id}-delivery.zip",
+        "size_bytes": len(package_bytes),
+        "sha256": hashlib.sha256(package_bytes).hexdigest(),
+    }
+    monkeypatch.setattr(main, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(main, "_production_project_owner", lambda request: "owner-1")
+    monkeypatch.setattr(main, "get_production_run", lambda requested_id, owner: {
+        "id": requested_id, "owner_username": owner,
+        "result": {"render": {"delivery_package": package}},
+    })
+    response = main.download_production_delivery_package(run_id, object())
+    assert response.path == str(package_path.resolve())
+    assert response.filename == f"SINTU-{run_id}-delivery.zip"
+
+    package_path.write_bytes(b"tampered-zip")
+    with pytest.raises(HTTPException) as exc:
+        main.download_production_delivery_package(run_id, object())
+    assert exc.value.status_code == 409
+
+
+def test_delivery_package_download_rejects_missing_owner_run(monkeypatch):
+    import pytest
+    from fastapi import HTTPException
+
+    run_id = "d" * 32
+    monkeypatch.setattr(main, "_production_project_owner", lambda request: "owner-1")
+    monkeypatch.setattr(main, "get_production_run", lambda requested_id, owner: None)
+    with pytest.raises(HTTPException) as exc:
+        main.download_production_delivery_package(run_id, object())
+    assert exc.value.status_code == 404
+
+
+def test_delivery_package_download_route_is_feature_gated():
+    run_id = "e" * 32
+    route = next(
+        route for route in main.app.routes
+        if getattr(route, "path", None) == "/api/production/runs/{run_id}/package"
+    )
+    assert "GET" in route.methods
+    assert access_control.feature_for_path(f"/api/production/runs/{run_id}/package") == "production"
+
+
+def test_factory_dashboard_exposes_verified_delivery_package_download():
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[1] / "app" / "static" / "factory.js"
+    source = script.read_text(encoding="utf-8")
+    assert "Download verified production ZIP" in source
+    assert "delivery_package_url" in source
+    assert "Download Owner-only production ZIP" in source
+
+
+def test_local_media_route_builds_package_before_completing_package_stage():
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "app" / "main.py").read_text(encoding="utf-8")
+    assert "create_delivery_package(" in source
+    assert "captions=caption_lines" in source
+    assert "delivery_package['sha256']" in source
+    assert '"/api/production/runs/{run_id}/package"' in source
