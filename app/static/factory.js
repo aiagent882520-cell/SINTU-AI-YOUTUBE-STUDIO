@@ -121,7 +121,7 @@
         method:"POST",
         body:JSON.stringify({burn_subtitles:false,sound_effects_enabled:true,quality:"high",fps:30})
       });
-      notice(result.detail||"Verified MP4 ready. Publishing remains disabled.");
+      notice(result.detail||"Verified MP4 and production ZIP ready. Publishing remains disabled.");
       await loadRuns();
       if(result.render?.url || result.render?.video_id){
         const link=document.createElement("a");link.href=result.render.url||("/api/videos/"+encodeURIComponent(result.render.video_id));
