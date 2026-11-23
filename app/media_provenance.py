@@ -178,15 +178,15 @@ def create_delivery_package(
     cursor = 0
     cue_index = 1
     for line in captions:
-        clean = line.replace("\\r", " ").replace("\\n", " ").replace("-->", "→").strip()
+        clean = line.replace("\r", " ").replace("\n", " ").replace("-->", "→").strip()
         if clean:
             cues.append(
-                f"{cue_index}\\n{srt_timestamp(cursor)} --> "
-                f"{srt_timestamp(cursor + seconds_per_caption)}\\n{clean}\\n"
+                f"{cue_index}\n{srt_timestamp(cursor)} --> "
+                f"{srt_timestamp(cursor + seconds_per_caption)}\n{clean}\n"
             )
             cue_index += 1
         cursor += seconds_per_caption
-    srt_content = ("\\n".join(cues) + "\\n") if cues else ""
+    srt_content = ("\n".join(cues) + "\n") if cues else ""
     json_payloads: dict[str, Any] = {
         "metadata/production.json": metadata,
         "project/deliverables.json": deliverables if isinstance(deliverables, dict) else {},
@@ -196,21 +196,21 @@ def create_delivery_package(
         json_payloads["research/research-evidence.json"] = research_evidence
     serialized: dict[str, bytes] = {}
     for name, value in json_payloads.items():
-        blob = (json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\\n").encode("utf-8")
+        blob = (json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
         if len(blob) > 2 * 1024 * 1024:
             raise ValueError(f"Delivery metadata file is too large: {name}")
         serialized[name] = blob
     if srt_content:
         serialized["captions/subtitles.hi.srt"] = srt_content.encode("utf-8")
     readme = (
-        "SINTU AI YOUTUBE STUDIO — PRODUCTION DELIVERY PACKAGE\\n"
-        f"Run: {run_id}\\n"
+        "SINTU AI YOUTUBE STUDIO — PRODUCTION DELIVERY PACKAGE\n"
+        f"Run: {run_id}\n"
         "Includes verified rendered media, source assets recorded by provenance, timed captions "
-        "when available, production metadata, deliverables, and quality report.\\n"
-        "The editable timeline/project file is not exported by the current renderer.\\n"
+        "when available, production metadata, deliverables, and quality report.\n"
+        "The editable timeline/project file is not exported by the current renderer.\n"
         "Per-asset third-party license/rights certificates were not supplied by the current "
-        "production run; verify rights before external distribution.\\n"
-        "Publishing is not performed by package creation and still requires separate Owner approval.\\n"
+        "production run; verify rights before external distribution.\n"
+        "Publishing is not performed by package creation and still requires separate Owner approval.\n"
     )
     serialized["README.txt"] = readme.encode("utf-8")
     serialized["provenance/render-manifest.json"] = manifest_file.read_bytes()
@@ -224,7 +224,7 @@ def create_delivery_package(
         "not_included": ["editable timeline project", "per-asset license/rights certificates"],
     }
     serialized["PACKAGE-MANIFEST.json"] = (
-        json.dumps(package_index, ensure_ascii=False, indent=2, sort_keys=True) + "\\n"
+        json.dumps(package_index, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     ).encode("utf-8")
 
     package_dir = root / "production_packages"
