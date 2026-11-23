@@ -83,3 +83,100 @@ def test_render_manifest_rejects_missing_render_output(tmp_path):
             output_path=tmp_path / "missing.mp4",
             asset_paths=[],
         )
+
+
+
+def test_delivery_package_contains_verified_media_captions_and_truthful_project_limits(tmp_path):
+    import hashlib
+    import zipfile
+
+    from app.media_provenance import create_delivery_package
+
+    run_id = "d" * 32
+    output = tmp_path / "generated_videos" / "final.mp4"
+    image = tmp_path / "generated_images" / "scene.jpg"
+    voice = tmp_path / "generated_audio" / "voice.wav"
+    music = tmp_path / "generated_music" / "score.wav"
+    for path, data in ((output, b"verified-mp4"), (image, b"scene-image"),
+                       (voice, b"hindi-voice"), (music, b"original-score")):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    provenance = write_render_manifest(
+        data_dir=tmp_path, run_id=run_id, format_id="youtube-shorts",
+        topic="Hindi science", output_path=output,
+        asset_paths=[image, voice, music],
+        quality_report={"verified": True, "black_frame_check": "PASS"},
+        settings={"resolution": "720x1280", "fps": 30},
+    )
+    package = create_delivery_package(
+        data_dir=tmp_path, run_id=run_id,
+        render_manifest_path=provenance["manifest_path"],
+        captions=["पहला दृश्य", "दूसरा दृश्य"], seconds_per_caption=4,
+        metadata={"topic": "Hindi science", "format_id": "youtube-shorts"},
+        deliverables={"Script Writer": "नमूना स्क्रिप्ट"},
+        research_evidence={"status": "STRUCTURAL_TRACEABILITY_VALIDATED_NOT_FACT_VERIFIED"},
+    )
+
+    archive_path = tmp_path / package["path"]
+    assert package["verified"] is True
+    assert package["editable_project_included"] is False
+    assert package["rights_certificates_included"] is False
+    assert package["captions_included"] is True
+    assert hashlib.sha256(archive_path.read_bytes()).hexdigest() == package["sha256"]
+    with zipfile.ZipFile(archive_path) as archive:
+        assert archive.testzip() is None
+        names = set(archive.namelist())
+        assert "captions/subtitles.hi.srt" in names
+        assert "project/deliverables.json" in names
+        assert "reports/quality-report.json" in names
+        assert "research/research-evidence.json" in names
+        assert "provenance/render-manifest.json" in names
+        assert any(name.startswith("video/") for name in names)
+        captions = archive.read("captions/subtitles.hi.srt").decode("utf-8")
+        assert "00:00:00,000 --> 00:00:04,000" in captions
+        assert "00:00:04,000 --> 00:00:08,000" in captions
+        readme = archive.read("README.txt").decode("utf-8")
+        assert "editable timeline/project file is not exported" in readme
+        assert "rights certificates were not supplied" in readme
+        index = json.loads(archive.read("PACKAGE-MANIFEST.json"))
+        assert index["verified"] is True
+        assert len(index["entries"]) == package["file_count"] - 1
+
+
+def test_delivery_package_rejects_media_changed_after_provenance(tmp_path):
+    from app.media_provenance import create_delivery_package
+
+    run_id = "e" * 32
+    output = tmp_path / "generated_videos" / "final.mp4"
+    output.parent.mkdir(parents=True)
+    output.write_bytes(b"verified-before")
+    provenance = write_render_manifest(
+        data_dir=tmp_path, run_id=run_id, format_id="youtube-shorts",
+        topic="topic", output_path=output, asset_paths=[],
+        quality_report={"verified": True},
+    )
+    output.write_bytes(b"tampered-after")
+    with pytest.raises(ValueError, match="size changed|hash changed"):
+        create_delivery_package(
+            data_dir=tmp_path, run_id=run_id,
+            render_manifest_path=provenance["manifest_path"],
+            captions=[], seconds_per_caption=4, metadata={},
+        )
+
+
+def test_delivery_package_rejects_manifest_for_another_run(tmp_path):
+    from app.media_provenance import create_delivery_package
+
+    output = tmp_path / "final.mp4"
+    output.write_bytes(b"verified")
+    provenance = write_render_manifest(
+        data_dir=tmp_path, run_id="f" * 32, format_id="youtube-shorts",
+        topic="topic", output_path=output, asset_paths=[],
+        quality_report={"verified": True},
+    )
+    with pytest.raises(ValueError, match="this run's verified"):
+        create_delivery_package(
+            data_dir=tmp_path, run_id="a" * 32,
+            render_manifest_path=provenance["manifest_path"],
+            captions=[], seconds_per_caption=4, metadata={},
+        )
