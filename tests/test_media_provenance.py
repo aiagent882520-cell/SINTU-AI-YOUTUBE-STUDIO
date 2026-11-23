@@ -134,6 +134,8 @@ def test_delivery_package_contains_verified_media_captions_and_truthful_project_
         assert "research/research-evidence.json" in names
         assert "provenance/render-manifest.json" in names
         assert any(name.startswith("video/") for name in names)
+        assert any(name.startswith("images/") for name in names)
+        assert sum(name.startswith("audio/") for name in names) == 2
         captions = archive.read("captions/subtitles.hi.srt").decode("utf-8")
         assert "00:00:00,000 --> 00:00:04,000" in captions
         assert "00:00:04,000 --> 00:00:08,000" in captions
