@@ -57,7 +57,7 @@ from .voice_generator import generate_voiceover, voice_status, VoiceUnavailable,
 from .image_generator import generate_image, image_status, ImageUnavailable, ImageGenerationFailed, IMAGE_DIR
 from .music_generator import generate_music, music_status, MusicUnavailable, MusicGenerationFailed
 from .video_generator import generate_video, video_status, VideoUnavailable, VideoGenerationFailed, AI_VIDEO_DIR
-from .media_provenance import write_render_manifest
+from .media_provenance import write_render_manifest, create_delivery_package
 from .publishing_quality_gate import PublishingQualityError, require_publishable_provenance
 from .production_runtime import create_run as create_production_run, get_run as get_production_run, list_runs as list_production_runs, execute_run as execute_production_run, attach_render_result, recover_interrupted_runs, request_cancel as cancel_production_run, list_run_events as list_production_run_events, transition_pipeline_stage, transition_owner_media_stage
 from .production_factory_worker import supervisor as production_factory_supervisor
@@ -5756,12 +5756,12 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
             raise RenderFailed("A generated media asset is missing; final render was stopped.")
         if payload.subtitles and len(payload.subtitles) != len(scene_prompts):
             raise HTTPException(status_code=400, detail="Custom subtitle lines ki sankhya scene prompts ke barabar honi chahiye.")
-        subtitle_lines = (
+        caption_lines = (
             [line.strip() for line in payload.subtitles]
-            if payload.burn_subtitles and payload.subtitles
+            if payload.subtitles
             else _subtitle_lines_from_narration(narration, len(scene_prompts))
-            if payload.burn_subtitles else []
         )
+        subtitle_lines = caption_lines if payload.burn_subtitles else []
         animation_report = None
         if use_procedural_2d:
             from .documentary_animation import render_documentary_animation_clips
@@ -5825,8 +5825,36 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         except Exception as exc:
             (OUTPUT_DIR / rendered["filename"]).unlink(missing_ok=True)
             raise RenderFailed("Could not persist the render provenance manifest; the MP4 result is withheld.") from exc
+        delivery_package = create_delivery_package(
+            data_dir=DATA_DIR,
+            run_id=run_id,
+            render_manifest_path=manifest["manifest_path"],
+            captions=caption_lines,
+            seconds_per_caption=payload.seconds_per_scene,
+            metadata={
+                "run_id": run_id,
+                "format_id": run["format_id"],
+                "topic": run.get("topic", ""),
+                "resolution": resolution,
+                "fps": payload.fps,
+                "quality": payload.quality,
+                "seconds_per_scene": payload.seconds_per_scene,
+                "scene_count": len(scene_prompts),
+                "captions_burned_in": bool(subtitle_lines),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+            deliverables=deliverables,
+            research_evidence=research_record.get("package") if research_record else None,
+        )
+        package_summary = {
+            key: delivery_package[key] for key in (
+                "verified", "path", "filename", "size_bytes", "sha256",
+                "file_count", "captions_included", "editable_project_included",
+                "rights_certificates_included",
+            )
+        }
         rendered["provenance_manifest"] = manifest["manifest_path"]
-        updated = attach_render_result(run_id, rendered, owner)
+        rendered["delivery_package"] = package_summary
         transition_owner_media_stage(
             run_id, "render", "completed", owner_username=owner,
             evidence=f"Verified MP4 {rendered.get('video_id', '')}; provenance manifest {manifest['manifest_path']}; quality report PASS.",
@@ -5836,13 +5864,16 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         )
         transition_owner_media_stage(
             run_id, "package", "completed", owner_username=owner,
-            evidence=f"Owner-scoped run result, verified MP4 and provenance manifest attached: {manifest['manifest_path']}.",
+            evidence=f"Verified delivery ZIP {delivery_package['filename']}; SHA-256 {delivery_package['sha256']}; {delivery_package['file_count']} files.",
         )
-        updated = get_production_run(run_id, owner)
+        updated = attach_render_result(run_id, rendered, owner)
         return {
             "run_id": run_id, "status": updated["status"],
             "generated_images": created_images, "voiceover": voice_result,
-            "background_music": music_result, "subtitles": subtitle_lines,
+            "background_music": music_result, "subtitles": caption_lines,
+            "captions_burned_in": bool(subtitle_lines),
+            "delivery_package": package_summary,
+            "delivery_package_url": f"/api/production/runs/{run_id}/package",
             "render": rendered, "video_rendered": True, "published": False,
             "research_evidence": ({
                 "sha256": research_record["sha256"],
@@ -5884,6 +5915,37 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
             if music_id:
                 for path in MUSIC_DIR.glob(music_id + ".*"):
                     path.unlink(missing_ok=True)
+
+
+@app.get("/api/production/runs/{run_id}/package")
+def download_production_delivery_package(run_id: str, request: Request):
+    """Download only the authenticated Owner's verified local production ZIP."""
+    if not re.fullmatch(r"[a-f0-9]{32}", run_id):
+        raise HTTPException(status_code=400, detail="Invalid production run ID.")
+    owner = _production_project_owner(request)
+    run = get_production_run(run_id, owner)
+    if not run or not isinstance(run.get("result"), dict):
+        raise HTTPException(status_code=404, detail="Production run not found.")
+    render = run["result"].get("render")
+    package = render.get("delivery_package") if isinstance(render, dict) else None
+    expected_relative = f"production_packages/{run_id}-delivery.zip"
+    if not isinstance(package, dict) or package.get("verified") is not True or package.get("path") != expected_relative:
+        raise HTTPException(status_code=404, detail="Verified production delivery package not found.")
+    candidate = DATA_DIR / expected_relative
+    if candidate.is_symlink() or not candidate.is_file():
+        raise HTTPException(status_code=404, detail="Production delivery package is unavailable.")
+    resolved = candidate.resolve()
+    if not resolved.is_relative_to(DATA_DIR.resolve()):
+        raise HTTPException(status_code=404, detail="Production delivery package path is invalid.")
+    try:
+        if resolved.stat().st_size != package.get("size_bytes") or _sha256_file(resolved) != package.get("sha256"):
+            raise HTTPException(status_code=409, detail="Production delivery package integrity check failed.")
+    except OSError:
+        raise HTTPException(status_code=404, detail="Production delivery package is unavailable.") from None
+    return FileResponse(
+        resolved, media_type="application/zip",
+        filename=f"SINTU-{run_id}-delivery.zip",
+    )
 
 
 @app.post("/api/production/runs/{run_id}/render")
