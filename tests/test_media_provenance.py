@@ -127,6 +127,8 @@ def test_delivery_package_contains_verified_media_captions_and_truthful_project_
     assert package["thumbnail_included"] is True
     assert package["translations_included"] is True
     assert package["translation_languages"] == ["en"]
+    assert package["platform_metadata_status"] == "partial"
+    assert package["platform_metadata_missing_fields"] == ["tags", "hashtags", "category"]
     assert hashlib.sha256(archive_path.read_bytes()).hexdigest() == package["sha256"]
     with zipfile.ZipFile(archive_path) as archive:
         assert archive.testzip() is None
