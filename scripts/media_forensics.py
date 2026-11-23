@@ -189,6 +189,51 @@ def rank_source_image_candidates(videos: list[dict], assets: list[dict]) -> None
             pixel["source_attribution_confirmed"] = False
 
 
+def summarize_temporal_frame_fingerprints(videos: list[dict]) -> None:
+    """Compare sampled decoded frames; identical samples are evidence, not proof of a frozen clip."""
+    for video in videos:
+        samples = video.get("decoded_frame_samples", [])
+        valid = []
+        groups: dict[str, list[str]] = {}
+        dhashes = set()
+        near_black_count = 0
+        for index, sample in enumerate(samples):
+            pixel = sample.get("pixel_verification") or {}
+            if pixel.get("status") != "PASS":
+                continue
+            fingerprint = pixel.get("visual_pixel_sha256")
+            if (not isinstance(fingerprint, str) or len(fingerprint) != 64
+                    or any(char not in "0123456789abcdefABCDEF" for char in fingerprint)):
+                continue
+            label = str(sample.get("sample") or f"sample_{index + 1}")[:40]
+            valid.append(label)
+            groups.setdefault(fingerprint.lower(), []).append(label)
+            dhash = pixel.get("visual_dhash")
+            if isinstance(dhash, str) and len(dhash) == 16:
+                dhashes.add(dhash.lower())
+            near_black_count += int(bool(pixel.get("near_black")))
+        distinct = len(groups)
+        if len(valid) >= 2 and len(valid) == len(samples) and distinct == 1:
+            assessment = "all_sampled_frames_identical"
+        elif len(valid) >= 2 and distinct > 1:
+            assessment = "sampled_visual_change_detected"
+        else:
+            assessment = "insufficient_valid_samples"
+        video["temporal_visual_fingerprint_audit"] = {
+            "sample_count": len(samples),
+            "valid_sample_count": len(valid),
+            "distinct_normalized_frame_count": distinct,
+            "distinct_dhash_count": len(dhashes),
+            "near_black_sample_count": near_black_count,
+            "assessment": assessment,
+            "identical_sample_groups": [
+                {"samples": labels, "normalized_pixel_sha256_prefix": fingerprint[:12]}
+                for fingerprint, labels in groups.items() if len(labels) > 1
+            ],
+            "basis": "exact SHA-256 of aspect-preserving 64x64 normalized decoded-frame pixels at sampled timestamps; sampled evidence only, not full-motion proof",
+        }
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -1030,6 +1075,7 @@ def compact_forensic_summary(report: dict) -> dict:
                 [str(backup.get("path", ""))[-100:], backup.get("size_bytes"), backup.get("sha256")]
                 for backup in item.get("pre_repair_backups", [])
             ],
+            "temporal_visual_audit": item.get("temporal_visual_fingerprint_audit"),
             "reference_time": item.get("asset_reference_time_utc"),
             "provenance": [
                 {
@@ -1112,6 +1158,7 @@ def main() -> int:
             reference_time = video.get("asset_reference_time_utc") or video["modified_utc"]
             for asset in nearby_assets(datetime.fromisoformat(reference_time).timestamp()):
                 assets[asset["path"]] = asset
+    summarize_temporal_frame_fingerprints(videos)
     rank_source_image_candidates(videos, list(assets.values()))
     needles = tuple(value for name in TARGETS for value in (name, Path(name).stem))
     asset_needles = source_asset_needles(list(assets.values()))
