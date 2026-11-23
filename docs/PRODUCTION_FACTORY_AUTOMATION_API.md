@@ -83,14 +83,16 @@ publishing remains separately disabled and requires its own explicit Owner appro
 
 The role router reports `deferred_worker_roles` separately from general unmapped roles.
 Roles such as Final Render Agent, Final Output Agent, Upload Agent, Scheduling Agent,
-Analytics Agent, Asset Manager, Memory Agent and Automation Agent are not executed
-inside the text-only specialist/checker loop. Their names in a format preset are not
-proof of a render, package, upload, analytics fetch or learning operation.
+Analytics Agent, Asset Manager, Memory Agent and Automation Agent may still receive
+ordinary text-only specialist/checker invocations when present in a format preset.
+Those invocations can produce plans, checklists or recommendations only; they do not
+execute rendering, packaging, uploads, scheduling, analytics retrieval or learning
+operations. Their names in a preset are not proof that those operations occurred.
 
-The run result keeps these roles visible alongside the deferred stage IDs. Dedicated
-executors must be integrated and independently tested before any of these stages can
-be reported as complete. In particular, upload and scheduling remain Owner-approved
-external side effects; a text response from an Upload Agent never performs a publish.
+The run result keeps these roles visible alongside deferred stage IDs. Dedicated
+side-effect executors must be integrated and independently tested before their stages
+can be reported as complete. Upload and scheduling remain Owner-approved external
+side effects; a text response from an Upload Agent never performs a publish.
 
 ## Durable queued-run recovery
 
