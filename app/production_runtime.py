@@ -102,6 +102,10 @@ def init_runtime_db() -> None:
             FOREIGN KEY(run_id) REFERENCES production_runs(id)
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_pipeline_stages_run ON production_pipeline_stages(run_id, sequence)")
+        # Serialize the empty-ledger check and its inserts. Without a write lock,
+        # concurrent initializers can both select the same legacy run and race on
+        # UNIQUE(run_id, sequence).
+        conn.execute("BEGIN IMMEDIATE")
         # Backfill pre-ledger runs without inventing historical stage completion.
         from .production_factory_orchestrator import _STAGE_DEFINITIONS
         legacy_runs = conn.execute(
