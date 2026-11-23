@@ -1265,3 +1265,74 @@ def test_contact_sheet_never_follows_a_dangling_or_live_output_symlink(tmp_path,
     assert protected.read_bytes() == b"do-not-overwrite"
     assert link.is_symlink()
     assert Path(result[0]["contact_sheet"]).name.endswith("-contact-sheet-1.jpg")
+
+
+
+def test_temporal_frame_fingerprint_audit_detects_identical_samples():
+    videos = [{
+        "decoded_frame_samples": [
+            {"sample": label, "pixel_verification": {
+                "status": "PASS", "visual_pixel_sha256": "a" * 64,
+                "visual_dhash": "1" * 16, "near_black": False,
+            }}
+            for label in ("first", "quarter", "middle", "three_quarter", "last")
+        ]
+    }]
+
+    media_forensics.summarize_temporal_frame_fingerprints(videos)
+
+    audit = videos[0]["temporal_visual_fingerprint_audit"]
+    assert audit["assessment"] == "all_sampled_frames_identical"
+    assert audit["valid_sample_count"] == 5
+    assert audit["distinct_normalized_frame_count"] == 1
+    assert audit["distinct_dhash_count"] == 1
+    assert audit["identical_sample_groups"][0]["samples"] == [
+        "first", "quarter", "middle", "three_quarter", "last"
+    ]
+
+
+def test_temporal_frame_fingerprint_audit_detects_sampled_visual_change():
+    videos = [{
+        "decoded_frame_samples": [
+            {"sample": "first", "pixel_verification": {
+                "status": "PASS", "visual_pixel_sha256": "a" * 64,
+                "visual_dhash": "1" * 16, "near_black": False,
+            }},
+            {"sample": "middle", "pixel_verification": {
+                "status": "PASS", "visual_pixel_sha256": "b" * 64,
+                "visual_dhash": "2" * 16, "near_black": False,
+            }},
+            {"sample": "last", "pixel_verification": {
+                "status": "PASS", "visual_pixel_sha256": "b" * 64,
+                "visual_dhash": "2" * 16, "near_black": False,
+            }},
+        ]
+    }]
+
+    media_forensics.summarize_temporal_frame_fingerprints(videos)
+
+    audit = videos[0]["temporal_visual_fingerprint_audit"]
+    assert audit["assessment"] == "sampled_visual_change_detected"
+    assert audit["distinct_normalized_frame_count"] == 2
+    assert audit["distinct_dhash_count"] == 2
+
+
+def test_temporal_frame_fingerprint_audit_fails_closed_on_missing_samples():
+    videos = [{
+        "decoded_frame_samples": [
+            {"sample": "first", "pixel_verification": {
+                "status": "PASS", "visual_pixel_sha256": "a" * 64,
+                "visual_dhash": "1" * 16, "near_black": True,
+            }},
+            {"sample": "middle", "pixel_verification": {
+                "status": "FAIL", "visual_pixel_sha256": "a" * 64,
+            }},
+        ]
+    }]
+
+    media_forensics.summarize_temporal_frame_fingerprints(videos)
+
+    audit = videos[0]["temporal_visual_fingerprint_audit"]
+    assert audit["assessment"] == "insufficient_valid_samples"
+    assert audit["valid_sample_count"] == 1
+    assert audit["near_black_sample_count"] == 1
