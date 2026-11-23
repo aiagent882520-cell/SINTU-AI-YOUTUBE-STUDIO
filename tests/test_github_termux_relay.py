@@ -324,3 +324,8 @@ def test_process_issue_rejects_failed_command_issue_shapes_without_execution(
     assert github.updates[-1] == (
         number, {"state": "closed", "labels": [relay.FAILED_LABEL]}
     )
+
+def test_relay_maps_main_worktree_tests_to_isolated_runner():
+    assert relay.command_for("main_worktree_tests", {}) == [
+        relay.PYTHON, "scripts/termux_main_worktree_tests.py"
+    ]
