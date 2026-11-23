@@ -6,6 +6,7 @@ import json
 import os
 import re
 import tempfile
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,10 @@ from typing import Any
 
 def _relative_file(path: Path, root: Path) -> tuple[Path, str]:
     resolved_root = root.expanduser().resolve()
-    resolved = path.expanduser().resolve(strict=True)
+    candidate = path.expanduser()
+    if candidate.is_symlink():
+        raise ValueError("Production provenance paths cannot be symlinks.")
+    resolved = candidate.resolve(strict=True)
     if not resolved.is_file() or not resolved.is_relative_to(resolved_root):
         raise ValueError("Production provenance paths must be existing files inside DATA_DIR.")
     return resolved, resolved.relative_to(resolved_root).as_posix()
@@ -134,6 +138,8 @@ def create_delivery_package(
     if manifest.get("run_id") != run_id or manifest.get("quality_check", {}).get("verified") is not True:
         raise ValueError("Delivery package requires this run's verified render provenance.")
     records = [manifest.get("output")] + list(manifest.get("inputs") or [])
+    if len(records) > 128:
+        raise ValueError("Production delivery package exceeds the 128-source-file limit.")
     if not isinstance(records[0], dict) or any(not isinstance(item, dict) for item in records):
         raise ValueError("Render provenance file records are invalid.")
     verified_files: list[tuple[Path, str, dict[str, Any]]] = []
