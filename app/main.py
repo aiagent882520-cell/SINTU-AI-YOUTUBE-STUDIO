@@ -5700,10 +5700,6 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
     if not profile["generic_export_available"]:
         raise HTTPException(status_code=501, detail=profile["limitations"][0])
     use_procedural_2d = run["format_id"] in {"2d-cartoon", "story-animation"}
-    if not use_procedural_2d and not image_status().get("local_available"):
-        raise HTTPException(status_code=503, detail="Local ComfyUI image workflow is not ready. Configure a validated free local workflow; paid providers are not enabled by this route.")
-    if not voice_status().get("local_available"):
-        raise HTTPException(status_code=503, detail="Local Piper TTS executable and Hindi voice model are required. Paid voice providers are not enabled by this route.")
     deliverables = run["result"].get("deliverables") or {}
     scene_prompts = [item.strip() for item in payload.scene_prompts]
     if not scene_prompts:
@@ -5730,6 +5726,13 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=400, detail="Unsupported FPS or render quality.")
     try:
         _approve_owner_review_for_media(run_id, owner, run)
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    if not use_procedural_2d and not image_status().get("local_available"):
+        raise HTTPException(status_code=503, detail="Local ComfyUI image workflow is not ready. Configure a validated free local workflow; paid providers are not enabled by this route.")
+    if not voice_status().get("local_available"):
+        raise HTTPException(status_code=503, detail="Local Piper TTS executable and Hindi voice model are required. Paid voice providers are not enabled by this route.")
+    try:
         transition_owner_media_stage(
             run_id, "render", "running", owner_username=owner,
         )
