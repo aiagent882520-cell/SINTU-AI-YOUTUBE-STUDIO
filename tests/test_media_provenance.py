@@ -193,3 +193,42 @@ def test_delivery_package_rejects_manifest_for_another_run(tmp_path):
             render_manifest_path=provenance["manifest_path"],
             captions=[], seconds_per_caption=4, metadata={},
         )
+
+
+
+def test_video_frame_thumbnail_is_extracted_and_validated_locally(tmp_path, monkeypatch):
+    from pathlib import Path
+    from types import SimpleNamespace
+    from PIL import Image
+    import app.video_renderer as renderer
+
+    run_id = "9" * 32
+    video = tmp_path / "generated_videos" / "render.mp4"
+    video.parent.mkdir(parents=True)
+    video.write_bytes(b"verified-mp4-fixture")
+    monkeypatch.setattr(renderer, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(renderer.shutil, "which", lambda name: "/usr/bin/ffmpeg")
+
+    def fake_ffmpeg(args, **kwargs):
+        destination = Path(args[-1])
+        Image.new("RGB", (1280, 720), (30, 60, 90)).save(destination, format="JPEG")
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(renderer.render_process, "run_render_process", fake_ffmpeg)
+    result = renderer.create_video_frame_thumbnail(video, run_id)
+
+    assert result["relative_path"] == f"production_thumbnails/{run_id}.jpg"
+    assert result["width"] == 1280 and result["height"] == 720
+    assert result["source"] == "verified MP4 representative frame (local FFmpeg)"
+    with Image.open(result["path"]) as image:
+        assert image.format == "JPEG"
+        assert image.size == (1280, 720)
+
+
+def test_video_frame_thumbnail_rejects_invalid_run_id(tmp_path):
+    import app.video_renderer as renderer
+
+    video = tmp_path / "render.mp4"
+    video.write_bytes(b"video")
+    with pytest.raises(ValueError, match="run ID"):
+        renderer.create_video_frame_thumbnail(video, "../unsafe")
