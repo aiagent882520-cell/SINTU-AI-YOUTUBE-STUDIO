@@ -5735,6 +5735,8 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
     except (ValueError, PermissionError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     created_images, audio_id, music_id = [], None, None
+    render_output_path = render_manifest_file = delivery_package_file = None
+    package_verified = False
     try:
         if not use_procedural_2d:
             for prompt in scene_prompts:
@@ -5791,6 +5793,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 sound_effects_volume=payload.sound_effects_volume,
                 fps=payload.fps, quality=payload.quality,
             )
+        render_output_path = OUTPUT_DIR / rendered["filename"]
         try:
             quality_report = rendered.get("quality_report") if isinstance(rendered, dict) else None
             if not isinstance(quality_report, dict) or quality_report.get("verified") is not True:
@@ -5800,7 +5803,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 run_id=run_id,
                 format_id=run["format_id"],
                 topic=run.get("topic", ""),
-                output_path=OUTPUT_DIR / rendered["filename"],
+                output_path=render_output_path,
                 asset_paths=[*image_paths, audio_path, music_matches[0]],
                 settings={
                     "resolution": resolution,
@@ -5825,6 +5828,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         except Exception as exc:
             (OUTPUT_DIR / rendered["filename"]).unlink(missing_ok=True)
             raise RenderFailed("Could not persist the render provenance manifest; the MP4 result is withheld.") from exc
+        render_manifest_file = DATA_DIR / manifest["manifest_path"]
         delivery_package = create_delivery_package(
             data_dir=DATA_DIR,
             run_id=run_id,
@@ -5846,6 +5850,8 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
             deliverables=deliverables,
             research_evidence=research_record.get("package") if research_record else None,
         )
+        delivery_package_file = DATA_DIR / delivery_package["path"]
+        package_verified = True
         package_summary = {
             key: delivery_package[key] for key in (
                 "verified", "path", "filename", "size_bytes", "sha256",
@@ -5907,14 +5913,23 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                         )
                 except Exception:
                     pass
-            for image_id in created_images:
-                (IMAGE_DIR / f"{image_id}.jpg").unlink(missing_ok=True)
-            if audio_id:
-                for suffix in (".wav", ".mp3"):
-                    (AUDIO_DIR / f"{audio_id}{suffix}").unlink(missing_ok=True)
-            if music_id:
-                for path in MUSIC_DIR.glob(music_id + ".*"):
-                    path.unlink(missing_ok=True)
+            if not package_verified:
+                for artifact in (render_output_path, render_manifest_file, delivery_package_file):
+                    try:
+                        if (artifact is not None and not artifact.is_symlink() and artifact.is_file()
+                                and artifact.resolve().is_relative_to(DATA_DIR.resolve())):
+                            artifact.unlink()
+                    except OSError:
+                        pass
+                for image_id in created_images:
+                    (IMAGE_DIR / f"{image_id}.jpg").unlink(missing_ok=True)
+                if audio_id:
+                    for suffix in (".wav", ".mp3"):
+                        (AUDIO_DIR / f"{audio_id}{suffix}").unlink(missing_ok=True)
+                if music_id:
+                    for path in MUSIC_DIR.glob(music_id + ".*"):
+                        if not path.is_symlink():
+                            path.unlink(missing_ok=True)
 
 
 @app.get("/api/production/runs/{run_id}/package")
