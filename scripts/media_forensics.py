@@ -1034,7 +1034,6 @@ def compact_forensic_summary(report: dict) -> dict:
         targets.append({
             "file": item.get("file"),
             "readable": item.get("readable"),
-            "permissions": item.get("permissions_octal"),
             "bytes": item.get("size_bytes"),
             "sha256": item.get("sha256"),
             "duration": metadata.get("duration_seconds"),
