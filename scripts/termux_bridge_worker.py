@@ -102,6 +102,8 @@ def command_for(job: dict) -> list[str]:
         if topic:
             command += ["--topic", topic.strip()]
         return command
+    if action == "main_worktree_tests":
+        return [PYTHON, "scripts/termux_main_worktree_tests.py"]
     if action == "run_tests":
         test_path = payload.get("test_path")
         if test_path:

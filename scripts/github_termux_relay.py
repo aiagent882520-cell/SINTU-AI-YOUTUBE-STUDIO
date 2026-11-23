@@ -41,7 +41,7 @@ AUTOMATION_ONLY = os.getenv("SINTU_AUTOMATION_ONLY", "true").strip().lower() in 
 PRODUCTION_ACTIONS = {"offline_video_e2e", "full_self_test", "full_studio_e2e"}
 AUTOMATION_PAUSED_ACTIONS = PRODUCTION_ACTIONS | {"media_repair"}
 ACTIONS = {
-    "git_status", "git_pull_ff_only", "run_tests", "compile_check", "automation_self_test",
+    "git_status", "git_pull_ff_only", "run_tests", "main_worktree_tests", "compile_check", "automation_self_test",
     "health_audit", "operational_readiness", "live_preflight", "engine_probe",
     "safe_optional_install",
     "restart_services", "media_repair", "media_forensics", "watchdog_recovery_test",
@@ -213,6 +213,8 @@ def command_for(action: str, payload: dict) -> list[str]:
         if topic:
             command += ["--topic", topic.strip()]
         return command
+    if action == "main_worktree_tests":
+        return [PYTHON, "scripts/termux_main_worktree_tests.py"]
     if action == "run_tests":
         test_path = payload.get("test_path")
         if test_path:
