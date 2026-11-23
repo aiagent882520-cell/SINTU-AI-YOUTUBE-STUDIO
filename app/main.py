@@ -5868,7 +5868,8 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         package_summary = {
             key: delivery_package[key] for key in (
                 "verified", "path", "filename", "size_bytes", "sha256",
-                "file_count", "captions_included", "editable_project_included",
+                "file_count", "captions_included", "thumbnail_included",
+                "translations_included", "editable_project_included",
                 "rights_certificates_included",
             )
         }
