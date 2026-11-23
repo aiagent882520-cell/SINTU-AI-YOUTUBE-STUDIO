@@ -104,8 +104,12 @@ def route_specialist_roles(role_names: list[str]) -> dict[str, Any]:
     deferred_tokens = ("final render", "rendering specialist", "final output", "upload agent",
                        "scheduling agent", "analytics agent", "asset manager", "memory agent",
                        "automation agent")
-    deferred = [role for role in unmapped
-                if any(token in role.casefold() for token in deferred_tokens)]
+    deferred_stage_ids = {"render", "package", "publishing", "analytics_earnings", "learning"}
+    deferred = [
+        role for role in role_names
+        if any(token in str(role).casefold() for token in deferred_tokens)
+        or any(role in routed[stage_id] for stage_id in deferred_stage_ids)
+    ]
     return {
         "stages": [
             {"stage_id": stage_id, "roles": roles, "status": "assigned" if roles else "not_applicable"}
