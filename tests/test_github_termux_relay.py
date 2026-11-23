@@ -175,7 +175,7 @@ def test_relay_defers_restart_until_other_queued_jobs_are_drained(monkeypatch):
 
     monkeypatch.setattr(relay, "process_issue", fake_process_issue)
     issues = [
-        {"number": 1, "body": '{"action":"restart_services"}'},
+        {"number": 1, "body": '{"action":"restart_services"}\nRestart only after all queued work is drained.'},
         {"number": 2, "body": '{"action":"run_tests"}'},
         {"number": 3, "body": '{"action":"media_forensics"}'},
     ]
