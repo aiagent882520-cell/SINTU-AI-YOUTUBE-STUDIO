@@ -115,7 +115,7 @@ def test_delivery_package_contains_verified_media_captions_and_truthful_project_
         render_manifest_path=provenance["manifest_path"],
         captions=["पहला दृश्य", "दूसरा दृश्य"], seconds_per_caption=4,
         metadata={"topic": "Hindi science", "format_id": "youtube-shorts"},
-        deliverables={"Script Writer": "नमूना स्क्रिप्ट", "Title Generator": '{"title": "नमूना शीर्षक"}', "Description Writer": "Description: नमूना विवरण"},
+        deliverables={"Script Writer": "नमूना स्क्रिप्ट", "Title Generator": '{"title": "नमूना शीर्षक"}', "Description Writer": "Description: नमूना विवरण", "Localization Translator": '{"translations": {"en": ["First scene", "Second scene"]}}'},
         research_evidence={"status": "STRUCTURAL_TRACEABILITY_VALIDATED_NOT_FACT_VERIFIED"},
     )
 
@@ -125,12 +125,12 @@ def test_delivery_package_contains_verified_media_captions_and_truthful_project_
     assert package["rights_certificates_included"] is False
     assert package["captions_included"] is True
     assert package["thumbnail_included"] is True
-    assert package["translations_included"] is False
+    assert package["translations_included"] is True\n    assert package["translation_languages"] == ["en"]
     assert hashlib.sha256(archive_path.read_bytes()).hexdigest() == package["sha256"]
     with zipfile.ZipFile(archive_path) as archive:
         assert archive.testzip() is None
         names = set(archive.namelist())
-        assert "captions/subtitles.hi.srt" in names
+        assert "captions/subtitles.hi.srt" in names\n        assert "captions/subtitles.en.srt" in names\n        assert "00:00:04,000 --> 00:00:08,000" in archive.read("captions/subtitles.en.srt").decode("utf-8")
         assert "metadata/platform-publishing.json" in names
         platform_metadata = json.loads(archive.read("metadata/platform-publishing.json"))
         assert platform_metadata["title"] == "नमूना शीर्षक"
@@ -153,7 +153,7 @@ def test_delivery_package_contains_verified_media_captions_and_truthful_project_
         assert "rights certificates were not supplied" in readme
         index = json.loads(archive.read("PACKAGE-MANIFEST.json"))
         assert index["verified"] is True
-        assert "translated subtitle tracks (Hindi captions only)" in index["not_included"]
+        assert "translated subtitle tracks (Hindi captions only)" not in index["not_included"]
         assert "cannot hash itself" in index["self_hash_note"]
         for record in index["entries"]:
             archived = archive.read(record["path"])
