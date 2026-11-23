@@ -164,7 +164,7 @@
         const packageLimits=document.createElement("p");packageLimits.className="factory-meta";
         packageLimits.textContent="Hindi captions: "+(packageInfo.captions_included?"included":"not available")+
           " · Thumbnail: "+(packageInfo.thumbnail_included?"included":"not generated")+
-          " · Translations: "+(packageInfo.translations_included?"included":"not generated")+
+          " · Translations: "+(packageInfo.translations_included?("included ("+(packageInfo.translation_languages||[]).join(", ")+")"):"not generated")+
           " · Editable project: "+(packageInfo.editable_project_included?"included":"not exported")+
           " · Rights certificates: "+(packageInfo.rights_certificates_included?"included":"not supplied");
         panel.append(packageLimits);
