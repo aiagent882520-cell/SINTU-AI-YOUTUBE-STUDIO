@@ -382,7 +382,7 @@ def test_factory_dashboard_exposes_verified_delivery_package_download():
     assert "delivery_package_url" in source
     assert "Download Owner-only production ZIP" in source
     assert 'Thumbnail: "+(packageInfo.thumbnail_included?"included":"not generated")' in source
-    assert 'Translations: "+(packageInfo.translations_included?"included":"not generated")' in source
+    assert 'Translations: "+(packageInfo.translations_included?("included ("+(packageInfo.translation_languages||[]).join(", ")+")"):"not generated")' in source
 
 
 def test_local_media_route_builds_package_before_completing_package_stage():
