@@ -5880,7 +5880,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 "verified", "path", "filename", "size_bytes", "sha256",
                 "file_count", "captions_included", "thumbnail_included",
                 "translations_included", "editable_project_included",
-                "rights_certificates_included", "platform_metadata_status",
+                "rights_certificates_included", "translation_languages", "platform_metadata_status",
                 "platform_metadata_missing_fields",
             )
         }
