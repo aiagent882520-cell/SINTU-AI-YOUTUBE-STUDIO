@@ -32,6 +32,7 @@ else
   install -m 600 "$helper_tmp" "$HELPER"
 fi
 
+mkdir -p "$HOME/.sintu"
 backup_dir="$(mktemp -d "$HOME/.sintu/relay-backup.XXXXXX")"
 cp -p "$RELAY" "$backup_dir/github_termux_relay.py"
 
