@@ -3296,8 +3296,10 @@ def test_render_api_blocks_unimplemented_specialized_formats(tmp_path, monkeypat
 def test_production_run_render_requires_approved_matching_format(tmp_path, monkeypatch):
     client = client_for_test(tmp_path, monkeypatch)
     run_id = "a" * 32
-    state = {"status": "paused", "format_id": "youtube-shorts"}
+    state = {"status": "paused", "format_id": "youtube-shorts", "pipeline_stages": [{"stage_id": "render", "status": "pending"}]}
     monkeypatch.setattr(main, "get_production_run", lambda value, owner=None: state if value == run_id and owner == "local" else None)
+    monkeypatch.setattr(main, "_approve_owner_review_for_media", lambda *args: None)
+    monkeypatch.setattr(main, "transition_owner_media_stage", lambda *args, **kwargs: None)
     monkeypatch.setattr(main, "render_video", lambda payload: {
         "video_id": "b" * 32, "filename": "b" * 32 + ".mp4",
         "url": "/api/videos/" + "b" * 32, "format": "MP4 / H.264",
