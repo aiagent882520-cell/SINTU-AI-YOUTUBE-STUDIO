@@ -381,4 +381,6 @@ def create_delivery_package(
         "translations_included": False,
         "editable_project_included": False,
         "rights_certificates_included": False,
+        "platform_metadata_status": platform_metadata["status"],
+        "platform_metadata_missing_fields": platform_metadata["missing_fields"],
     }
