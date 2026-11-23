@@ -231,7 +231,7 @@ def test_runtime_executes_worker_and_checker_as_separate_calls(tmp_path, monkeyp
     assert script_stage["status"] == "completed"
     script_evidence = json.loads(script_stage["evidence"])
     assert script_evidence["kind"] == "approved_specialist_stage"
-    assert script_evidence["roles"][0]["role"] == "Script Writer"
+    assert script_evidence["roles"][0]["role"] == "Prompt Writer"
     assert script_evidence["roles"][0]["output_sha256"]
     assert script_evidence["roles"][0]["checker_sequence"] > script_evidence["roles"][0]["builder_sequence"]
     quality_stage = next(stage for stage in result["pipeline_stages"] if stage["stage_id"] == "quality")
