@@ -128,6 +128,11 @@
         link.textContent="Open rendered video";link.target="_blank";link.rel="noopener";
         $("factoryNotice").append(document.createTextNode(" "),link);
       }
+      if(result.delivery_package_url && result.delivery_package?.verified === true){
+        const packageLink=document.createElement("a");packageLink.href=result.delivery_package_url;
+        packageLink.textContent="Download verified production ZIP";packageLink.rel="noopener";
+        $("factoryNotice").append(document.createTextNode(" · "),packageLink);
+      }
     }catch(error){notice(error.message,true);if(button){button.disabled=false;button.textContent="Generate final MP4";}}
   }
   async function viewRun(id) {
@@ -147,6 +152,21 @@
       const pipelineNote=document.createElement("p");pipelineNote.className="factory-meta";
       pipelineNote.textContent="Mapped specialist/checker roles advance applicable stages through quality. The authenticated Owner's confirmed Generate final MP4 action records Owner Review approval and advances verified render/package stages; publishing, analytics and learning still need separate executors.";
       panel.append(pipelineNote);
+      const renderedResult=run.result?.render||{};
+      const packageInfo=renderedResult.delivery_package;
+      if(packageInfo?.verified===true){
+        const packageTitle=document.createElement("b");packageTitle.textContent="Verified production delivery";panel.append(packageTitle);
+        const packageNote=document.createElement("p");packageNote.className="factory-meta";
+        packageNote.textContent=packageInfo.filename+" · "+packageInfo.file_count+" files · "+packageInfo.size_bytes+" bytes · SHA-256 "+packageInfo.sha256;
+        panel.append(packageNote);
+        const packageLink=document.createElement("a");packageLink.href="/api/production/runs/"+encodeURIComponent(id)+"/package";
+        packageLink.textContent="Download Owner-only production ZIP";packageLink.rel="noopener";panel.append(packageLink);
+        const packageLimits=document.createElement("p");packageLimits.className="factory-meta";
+        packageLimits.textContent="Hindi captions included: "+(packageInfo.captions_included?"yes":"no")+
+          " · Editable timeline project: "+(packageInfo.editable_project_included?"included":"not exported")+
+          " · Rights certificates: "+(packageInfo.rights_certificates_included?"included":"not supplied");
+        panel.append(packageLimits);
+      }
       const dispatch=run.result?.pipeline_dispatch||{};
       const deferredRoles=Array.isArray(dispatch.deferred_worker_roles)?dispatch.deferred_worker_roles:[];
       const deferredTitle=document.createElement("b");deferredTitle.textContent="Deferred side-effect roles";panel.append(deferredTitle);
