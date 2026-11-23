@@ -149,10 +149,10 @@
       panel.append(pipelineNote);
       const dispatch=run.result?.pipeline_dispatch||{};
       const deferredRoles=Array.isArray(dispatch.deferred_worker_roles)?dispatch.deferred_worker_roles:[];
-      const deferredTitle=document.createElement("b");deferredTitle.textContent="Deferred specialist executors";panel.append(deferredTitle);
+      const deferredTitle=document.createElement("b");deferredTitle.textContent="Deferred side-effect roles";panel.append(deferredTitle);
       const deferredNote=document.createElement("p");deferredNote.className="factory-meta";
       deferredNote.textContent=deferredRoles.length
-        ? deferredRoles.join(" · ")+" — visible but not executed by the text-only worker loop."
+        ? deferredRoles.join(" · ")+" — role prompts may produce text-only plans/checklists; no actual render, package, upload, scheduling or analytics action is performed."
         : "No deferred specialist roles recorded for this run.";
       panel.append(deferredNote);
       const deferredStages=Array.isArray(dispatch.deferred_stage_ids)?dispatch.deferred_stage_ids:[];
