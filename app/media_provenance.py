@@ -163,7 +163,7 @@ def extract_platform_metadata(deliverables: dict[str, Any] | None) -> dict[str, 
                         value = normalize(remainder, field)
                         if value is not None:
                             break
-            if value is not None and (relevant or parsed is not None):
+            if value is not None and relevant:
                 values[field] = value
                 sources[field] = role
     missing = [field for field, value in values.items() if value is None]
