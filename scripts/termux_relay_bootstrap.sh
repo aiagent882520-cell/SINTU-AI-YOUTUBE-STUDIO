@@ -88,6 +88,7 @@ finally:
     except FileNotFoundError:
         pass
 print("SINTU isolated-main relay action installed.")
-PYecho "Backup: $backup_dir/github_termux_relay.py"
+PY
+echo "Backup: $backup_dir/github_termux_relay.py"
 echo "Existing dirty project files were not changed."
 echo "Next: bash scripts/start_services.sh"
