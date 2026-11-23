@@ -5900,7 +5900,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 "status": "STRUCTURAL_TRACEABILITY_VALIDATED_NOT_FACT_VERIFIED",
                 "human_fact_check_required": True,
             } if research_record else None),
-            "detail": "Local media generated and final MP4 verified. YouTube publishing still requires separate human approval.",
+            "detail": "Local MP4 and SHA-256-verified production delivery ZIP generated. YouTube publishing still requires separate human approval.",
         }
     except (ImageUnavailable, VoiceUnavailable, MusicUnavailable, RendererUnavailable, RuntimeError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
