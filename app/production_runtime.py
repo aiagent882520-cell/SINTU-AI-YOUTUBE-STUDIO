@@ -5,6 +5,7 @@ records every result, stops on failed quality gates, and never publishes automat
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -1077,12 +1078,74 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
                     run_id, stage_id, "running", owner_username=owner_username or "local",
                     worker_token=worker_token,
                 )
-        def complete_pipeline_stage(stage_id, evidence):
-            if stage_status(stage_id) == "running":
-                transition_pipeline_stage(
-                    run_id, stage_id, "completed", owner_username=owner_username or "local",
-                    worker_token=worker_token, evidence=evidence,
+        def complete_pipeline_stage(stage_id, evidence=None):
+            if stage_status(stage_id) != "running":
+                return
+            current_run = get_run(run_id, owner_username) or {}
+            current_steps = current_run.get("steps", [])
+            if stage_id == "quality":
+                reviewer_evidence = []
+                for reviewer, report in review_results.items():
+                    if report.get("decision") != "PASS" or not report.get("raw_output"):
+                        raise ValueError("Quality stage cannot complete without every passing reviewer report.")
+                    reviewer_evidence.append({
+                        "reviewer": reviewer,
+                        "decision": "PASS",
+                        "output_sha256": hashlib.sha256(report["raw_output"].encode("utf-8")).hexdigest(),
+                        "evidence": report.get("evidence", []),
+                    })
+                evidence_payload = {
+                    "kind": "independent_quality_review",
+                    "reviewers": reviewer_evidence,
+                    "specialist_checker_pass_count": sum(
+                        1 for item in current_steps
+                        if item.get("step_type") == "checker" and item.get("status") == "pass"
+                    ),
+                }
+            else:
+                stage_roles = next(
+                    (item.get("roles", []) for item in role_routing["stages"] if item["stage_id"] == stage_id),
+                    [],
                 )
+                role_evidence = []
+                for assigned_role in stage_roles:
+                    builder = next(
+                        (item for item in reversed(current_steps)
+                         if item.get("role") == assigned_role
+                         and item.get("step_type") == "builder"
+                         and item.get("status") == "completed"
+                         and isinstance(item.get("output_text"), str)
+                         and item["output_text"].strip()),
+                        None,
+                    )
+                    checker = next(
+                        (item for item in reversed(current_steps)
+                         if item.get("role") == assigned_role + " Checker"
+                         and item.get("step_type") == "checker"
+                         and item.get("status") == "pass"),
+                        None,
+                    )
+                    if not builder or not checker:
+                        raise ValueError(
+                            f"Stage {stage_id} cannot complete: {assigned_role} lacks a passing builder/checker handoff."
+                        )
+                    role_evidence.append({
+                        "role": assigned_role,
+                        "builder_sequence": builder.get("sequence"),
+                        "checker_sequence": checker.get("sequence"),
+                        "output_sha256": hashlib.sha256(builder["output_text"].encode("utf-8")).hexdigest(),
+                        "checker_evidence": checker.get("evidence", []),
+                    })
+                evidence_payload = {
+                    "kind": "approved_specialist_stage",
+                    "stage_id": stage_id,
+                    "roles": role_evidence,
+                }
+            transition_pipeline_stage(
+                run_id, stage_id, "completed", owner_username=owner_username or "local",
+                worker_token=worker_token,
+                evidence=json.dumps(evidence_payload, ensure_ascii=False, sort_keys=True),
+            )
         existing_steps = run.get("steps", [])
         deliverables: dict[str, str] = {}
         management_reports: dict[str, str] = {}
