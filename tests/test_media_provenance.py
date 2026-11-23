@@ -264,7 +264,7 @@ def test_platform_metadata_extracts_only_source_backed_fields():
 def test_platform_metadata_does_not_guess_missing_values_or_use_unrelated_text():
     from app.media_provenance import extract_platform_metadata
 
-    result = extract_platform_metadata({"Script Writer": "Title: This is narration, not publishing metadata."})
+    result = extract_platform_metadata({"Script Writer": '{"title": "Narration heading, not publishing metadata"}'})
     assert result["status"] == "missing"
     assert all(result[field] is None for field in ("title", "description", "tags", "hashtags", "category"))
     assert len(result["missing_fields"]) == 5
