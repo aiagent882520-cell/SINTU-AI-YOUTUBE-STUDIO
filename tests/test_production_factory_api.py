@@ -341,7 +341,8 @@ def test_delivery_package_download_is_owner_scoped_and_hash_verified(tmp_path, m
         "result": {"render": {"delivery_package": package}},
     })
     response = main.download_production_delivery_package(run_id, object())
-    assert response.path == str(package_path.resolve())
+    from pathlib import Path
+    assert Path(response.path).resolve() == package_path.resolve()
     assert response.filename == f"SINTU-{run_id}-delivery.zip"
 
     package_path.write_bytes(b"tampered-zip")
