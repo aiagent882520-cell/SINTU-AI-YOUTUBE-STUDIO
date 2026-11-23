@@ -114,8 +114,8 @@ def route_specialist_roles(role_names: list[str]) -> dict[str, Any]:
         "unmapped_roles": unmapped,
         "deferred_roles": deferred,
         "deferred_role_policy": (
-            "Deferred roles are reported for future dedicated executors; they are not run as "
-            "render, package, publishing, analytics or learning work by the text-only specialist loop."
+            "Deferred roles may receive text-only specialist/checker invocations for plans or checklists, "
+            "but those invocations never execute render, package, publishing, analytics or learning side effects."
         ),
     }
 
