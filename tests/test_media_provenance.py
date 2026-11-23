@@ -144,6 +144,7 @@ def test_delivery_package_contains_verified_media_captions_and_truthful_project_
         assert "00:00:04,000 --> 00:00:08,000" in captions
         readme = archive.read("README.txt").decode("utf-8")
         assert "editable timeline/project file is not exported" in readme
+        assert "not a separately art-directed or text-designed cover" in readme
         assert "rights certificates were not supplied" in readme
         index = json.loads(archive.read("PACKAGE-MANIFEST.json"))
         assert index["verified"] is True
