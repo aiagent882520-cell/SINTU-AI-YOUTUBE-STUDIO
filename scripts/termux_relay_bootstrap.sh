@@ -46,7 +46,7 @@ import tempfile
 
 path = Path(sys.argv[1])
 source = path.read_text(encoding="utf-8")
-actions = re.search(r"(?ms)^ACTIONS\\s*=\\s*\\{.*?^\\}", source)
+actions = re.search(r"(?ms)^ACTIONS\s*=\s*\{.*?^\}", source)
 if not actions:
     raise SystemExit("Could not locate the relay allowlist; no changes made.")
 block = actions.group(0)
@@ -60,17 +60,17 @@ if "main_worktree_tests" not in block:
     source = source[:actions.start()] + block + source[actions.end():]
 
 if 'scripts/termux_main_worktree_tests.py' not in source:
-    command = re.search(r'(?m)^([ \\t]*)if action == ["\\']run_tests["\\']:\\s*$', source)
+    command = re.search(r"(?m)^([ \t]*)if action == ['\"]run_tests['\"]:\s*$", source)
     if not command:
         raise SystemExit("Could not locate the fixed run_tests command mapping; no changes made.")
     indent = command.group(1)
     insertion = (
-        indent + 'if action == "main_worktree_tests":\\n'
-        + indent + '    return [PYTHON, "scripts/termux_main_worktree_tests.py"]\\n'
+        indent + 'if action == "main_worktree_tests":\n'
+        + indent + '    return [PYTHON, "scripts/termux_main_worktree_tests.py"]\n'
     )
     source = source[:command.start()] + insertion + source[command.start():]
 
-actions = re.search(r"(?ms)^ACTIONS\\s*=\\s*\\{.*?^\\}", source)
+actions = re.search(r"(?ms)^ACTIONS\s*=\s*\{.*?^\}", source)
 if not actions or "main_worktree_tests" not in actions.group(0) or 'scripts/termux_main_worktree_tests.py' not in source:
     raise SystemExit("Relay patch verification failed; no changes made.")
 mode = stat.S_IMODE(path.stat().st_mode)
@@ -88,7 +88,6 @@ finally:
     except FileNotFoundError:
         pass
 print("SINTU isolated-main relay action installed.")
-PY
-echo "Backup: $backup_dir/github_termux_relay.py"
+PYecho "Backup: $backup_dir/github_termux_relay.py"
 echo "Existing dirty project files were not changed."
 echo "Next: bash scripts/start_services.sh"
