@@ -1214,3 +1214,66 @@ def render_mixed_timeline(items: list[dict], title: str, scenes: list[str],
         result["scene_durations"] = [item.get("duration") if item["kind"] == "image" else (round(float(item["trim_end"])-float(item.get("trim_start",0)),2) if item.get("trim_end") is not None else None) for item in items]
         result["note"] = "Still images and AI video clips are joined in order. Still-image duration is configurable; video clips can be trimmed by start/end seconds without modifying original source files. Source audio, optional voiceover/music, mandatory SINTU branding, timed subtitles and cut/fade transitions are supported."
         return result
+
+
+
+def create_video_frame_thumbnail(video_path: Path, run_id: str) -> dict:
+    """Extract a verified 1280x720 representative-frame thumbnail without altering the MP4."""
+    if not re.fullmatch(r"[a-f0-9]{32}", run_id):
+        raise ValueError("Invalid production run ID for thumbnail.")
+    source = Path(video_path).expanduser()
+    if source.is_symlink() or not source.is_file() or not source.resolve().is_relative_to(DATA_DIR):
+        raise RenderFailed("Thumbnail source must be an existing local render inside DATA_DIR.")
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RendererUnavailable("FFmpeg is required to create the production thumbnail.")
+    thumbnail_dir = DATA_DIR / "production_thumbnails"
+    thumbnail_dir.mkdir(parents=True, exist_ok=True)
+    if thumbnail_dir.is_symlink() or not thumbnail_dir.resolve().is_relative_to(DATA_DIR):
+        raise RenderFailed("Production thumbnail directory must remain inside DATA_DIR.")
+    destination = thumbnail_dir / f"{run_id}.jpg"
+    fd, temporary_name = tempfile.mkstemp(prefix=".thumbnail-", suffix=".jpg", dir=thumbnail_dir)
+    os.close(fd)
+    try:
+        try:
+            result = render_process.run_render_process(
+                [
+                    ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+                    "-ss", "0.5", "-i", str(source),
+                    "-frames:v", "1", "-vf",
+                    "scale=1280:720:force_original_aspect_ratio=decrease,"
+                    "pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0x101828",
+                    "-q:v", "2", "-f", "image2", temporary_name,
+                ],
+                capture_output=True, text=True, timeout=45, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            raise RenderFailed("FFmpeg thumbnail extraction failed or timed out.") from None
+        if result.returncode != 0:
+            raise RenderFailed("FFmpeg could not extract a representative thumbnail frame.")
+        temporary_path = Path(temporary_name)
+        if not temporary_path.is_file() or temporary_path.stat().st_size <= 0 or temporary_path.stat().st_size > MAX_SCENE_IMAGE_BYTES:
+            raise RenderFailed("Extracted thumbnail is empty or exceeds the image safety limit.")
+        try:
+            with Image.open(temporary_path) as image:
+                if image.format != "JPEG" or image.size != (1280, 720):
+                    raise RenderFailed("Extracted thumbnail has an unexpected format or dimensions.")
+                image.verify()
+        except (OSError, ValueError):
+            raise RenderFailed("Extracted thumbnail failed image integrity validation.") from None
+        os.replace(temporary_name, destination)
+    except Exception:
+        try:
+            os.unlink(temporary_name)
+        except OSError:
+            pass
+        raise
+    return {
+        "path": destination,
+        "relative_path": destination.relative_to(DATA_DIR).as_posix(),
+        "width": 1280,
+        "height": 720,
+        "format": "JPEG",
+        "size_bytes": destination.stat().st_size,
+        "source": "verified MP4 representative frame (local FFmpeg)",
+    }
