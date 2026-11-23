@@ -1046,7 +1046,6 @@ def execute_run(run_id: str, owner_username: str | None = None) -> None:
         role_stage_map = route_specialist_roles([item["name"] for item in team if item.get("role_type") == "specialist"])
         owner_pair = next((item for item in pairs if item["name"] == "Owner Agent"), None)
         pairs = [item for item in pairs if item["name"] != "Owner Agent"]
-        from .production_factory_orchestrator import route_specialist_roles
         role_routing = route_specialist_roles([item["name"] for item in pairs])
         role_to_stage = {role: stage["stage_id"] for stage in role_routing["stages"] for role in stage["roles"]}
         stage_order = {stage["stage_id"]: stage["sequence"] for stage in run.get("pipeline_stages", [])}
