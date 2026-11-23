@@ -1073,8 +1073,12 @@ def compact_forensic_summary(report: dict) -> dict:
                 [str(backup.get("path", ""))[-100:], backup.get("size_bytes"), backup.get("sha256")]
                 for backup in item.get("pre_repair_backups", [])
             ],
-            "temporal_visual_audit": [
-                (item.get("temporal_visual_fingerprint_audit") or {}).get("assessment"),
+            "temporal": [
+                {"all_sampled_frames_identical": "same",
+                 "sampled_visual_change_detected": "change",
+                 "insufficient_valid_samples": "incomplete"}.get(
+                    (item.get("temporal_visual_fingerprint_audit") or {}).get("assessment"), "unknown"
+                ),
                 (item.get("temporal_visual_fingerprint_audit") or {}).get("valid_sample_count"),
                 (item.get("temporal_visual_fingerprint_audit") or {}).get("distinct_normalized_frame_count"),
                 (item.get("temporal_visual_fingerprint_audit") or {}).get("near_black_sample_count"),
