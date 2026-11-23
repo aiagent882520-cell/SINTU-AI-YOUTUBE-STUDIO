@@ -5736,7 +5736,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
     except (ValueError, PermissionError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     created_images, audio_id, music_id = [], None, None
-    render_output_path = render_manifest_file = delivery_package_file = None
+    render_output_path = render_manifest_file = delivery_package_file = thumbnail_path = None
     package_verified = False
     try:
         if not use_procedural_2d:
@@ -5940,7 +5940,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 except Exception:
                     pass
             if not package_verified:
-                for artifact in (render_output_path, render_manifest_file, delivery_package_file):
+                for artifact in (render_output_path, render_manifest_file, delivery_package_file, thumbnail_path):
                     try:
                         if (artifact is not None and not artifact.is_symlink() and artifact.is_file()
                                 and artifact.resolve().is_relative_to(DATA_DIR.resolve())):
