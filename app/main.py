@@ -5906,6 +5906,8 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=503, detail=str(exc)) from None
     except (ImageGenerationFailed, VoiceGenerationFailed, MusicGenerationFailed, RenderFailed) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from None
+    except OSError:
+        raise HTTPException(status_code=503, detail="Local production delivery storage is unavailable; render/package checkpoint was paused.") from None
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
     finally:
