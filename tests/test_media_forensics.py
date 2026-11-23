@@ -481,7 +481,7 @@ def test_compact_forensic_summary_preserves_five_targets_under_relay_tail_cap():
     assert len(footer["targets"]) == 5
     assert all(len(target["samples"]) == 5 for target in footer["targets"])
     assert all(target["backups"][0][2] == "b" * 64 for target in footer["targets"])
-    assert all(target["temporal_visual_audit"][0] == "all_sampled_frames_identical"
+    assert all(target["temporal"][0] == "same"
                for target in footer["targets"])
     assert all(len(target["black_frames"]["pblack"]) == 12 for target in footer["targets"])
     import json as json_module
