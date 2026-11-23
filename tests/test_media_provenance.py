@@ -115,7 +115,7 @@ def test_delivery_package_contains_verified_media_captions_and_truthful_project_
         render_manifest_path=provenance["manifest_path"],
         captions=["पहला दृश्य", "दूसरा दृश्य"], seconds_per_caption=4,
         metadata={"topic": "Hindi science", "format_id": "youtube-shorts"},
-        deliverables={"Script Writer": "नमूना स्क्रिप्ट"},
+        deliverables={"Script Writer": "नमूना स्क्रिप्ट", "Title Generator": '{"title": "नमूना शीर्षक"}', "Description Writer": "Description: नमूना विवरण"},
         research_evidence={"status": "STRUCTURAL_TRACEABILITY_VALIDATED_NOT_FACT_VERIFIED"},
     )
 
@@ -131,6 +131,11 @@ def test_delivery_package_contains_verified_media_captions_and_truthful_project_
         assert archive.testzip() is None
         names = set(archive.namelist())
         assert "captions/subtitles.hi.srt" in names
+        assert "metadata/platform-publishing.json" in names
+        platform_metadata = json.loads(archive.read("metadata/platform-publishing.json"))
+        assert platform_metadata["title"] == "नमूना शीर्षक"
+        assert platform_metadata["description"] == "नमूना विवरण"
+        assert "tags" in platform_metadata["missing_fields"]
         assert "project/deliverables.json" in names
         assert "reports/quality-report.json" in names
         assert "research/research-evidence.json" in names
