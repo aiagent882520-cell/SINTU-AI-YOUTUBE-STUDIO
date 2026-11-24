@@ -19,13 +19,13 @@ if missing:
     raise SystemExit("Workflow placeholders missing: " + ", ".join(missing))
 env = Path(".env")
 lines = env.read_text(encoding="utf-8").splitlines() if env.exists() else []
-values = {"COMFYUI_BASE_URL": sys.argv[2], "COMFYUI_IMAGE_WORKFLOW_PATH": str(workflow)}
+values = {"COMFYUI_BASE_URL": sys.argv[2], "COMFYUI_IMAGE_WORKFLOW_PATH": str(workflow), "SINTU_IMAGE_GENERATION_MODE": "ai"}
 for key, value in values.items():
     lines = [line for line in lines if not line.startswith(key + "=")]
     lines.append(key + "=" + value)
 env.write_text("\n".join(lines) + "\n", encoding="utf-8")
 env.chmod(0o600)
-print("Configured local ComfyUI image workflow.")
+print("Configured local ComfyUI image workflow and AI-only mode (no procedural fallback).")
 print("Required checkpoint: sd_xl_base_1.0.safetensors")
 print("Start ComfyUI separately, install the checkpoint in ComfyUI/models/checkpoints, then restart SINTU.")
 PY
