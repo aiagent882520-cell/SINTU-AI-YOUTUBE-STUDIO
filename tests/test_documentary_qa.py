@@ -1,9 +1,10 @@
 """Pixel-level regression tests for Hindi documentary subtitle rendering."""
 import shutil
+import subprocess
 
 import pytest
 
-from app.documentary_qa import audit_subtitle_pixel_bounds
+from app.documentary_qa import audit_audio_quality, audit_subtitle_pixel_bounds
 from app.video_renderer import _ffmpeg_supports_subtitles
 
 
@@ -28,6 +29,31 @@ def test_hindi_subtitles_stay_inside_rendered_pixel_safe_area():
     assert all(cue["pixel_bounds"][2] - 1 <= cue["safe_x_bounds"][1] for cue in report["cues"])
     assert all(cue["pixel_bounds"][1] >= cue["safe_y_bounds"][0] for cue in report["cues"])
     assert all(cue["pixel_bounds"][3] - 1 <= cue["safe_y_bounds"][1] for cue in report["cues"])
+
+
+
+def test_audio_quality_audit_measures_integrated_loudness_and_true_peak(tmp_path):
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("FFmpeg is unavailable.")
+    output = tmp_path / "audio-quality.mp4"
+    rendered = subprocess.run(
+        [
+            ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", "color=c=navy:s=160x284:r=24:d=3",
+            "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=3",
+            "-filter:a", "volume=0.1",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-ar", "48000", "-ac", "2", "-shortest",
+            str(output),
+        ],
+        capture_output=True, text=True, timeout=45, check=False,
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    report = audit_audio_quality(output)
+    assert report["passed"] is True
+    assert -35.0 <= report["integrated_lufs"] <= -14.0
+    assert report["true_peak_dbfs"] <= -1.0
 
 
 def test_subtitle_pixel_audit_rejects_vertical_clipping():
