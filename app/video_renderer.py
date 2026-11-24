@@ -1072,7 +1072,9 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                     f"apad,atrim=duration={total_duration:.3f}[sfx]"
                 )
                 mix_labels.append("[sfx]")
-            filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,apad,atrim=duration={total_duration:.3f},loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary[aout]")
+            has_real_audio = any(item["has_audio"] for item in clip_info) or voice_index is not None or music_index is not None or sound_effect_index is not None
+            audio_post_filter = "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary" if has_real_audio else "anull"
+            filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,apad,atrim=duration={total_duration:.3f},{audio_post_filter}[aout]")
 
             command += ["-filter_complex", ";".join(filters), "-map", video_map, "-map", "[aout]",
                         "-c:v", "libx264", "-threads", str(_ffmpeg_thread_count()), "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p", "-color_range", "tv",
