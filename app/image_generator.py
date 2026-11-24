@@ -3,6 +3,7 @@ import base64
 import json
 import os
 import uuid
+from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from .policy import paid_upgrades_allowed
@@ -166,10 +167,26 @@ def generate_image(prompt: str, kind: str = "scene", aspect: str = "portrait") -
             raise ImageGenerationFailed(f"Image generation failed ({type(exc).__name__}). Check API quota and model access.") from None
 
     image_id, image, output = _save_generated_image(raw)
+    metadata = {
+        "image_id": image_id,
+        "provider": provider,
+        "prompt": prompt,
+        "kind": kind,
+        "aspect": aspect,
+        "width": image.width,
+        "height": image.height,
+        "format": "JPEG",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "notice": notice,
+    }
     if provider == "Wikimedia Commons (licensed real photograph)":
-        output.with_suffix(".source.json").write_text(json.dumps(provenance, ensure_ascii=False, indent=2), encoding="utf-8")
+        metadata["source"] = provenance
+    output.with_suffix(".source.json").write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return {"image_id": image_id, "url": f"/api/images/{image_id}", "kind": kind,
             "aspect": aspect, "width": image.width, "height": image.height,
             "format": "JPEG", "size_bytes": output.stat().st_size,
             "provider": provider, "local": provider != status.get("model"), "notice": notice,
+            "metadata": metadata,
             **({"source": provenance} if provider == "Wikimedia Commons (licensed real photograph)" else {})}
