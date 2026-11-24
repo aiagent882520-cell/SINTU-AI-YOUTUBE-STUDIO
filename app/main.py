@@ -5831,7 +5831,8 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 format_id=run["format_id"],
                 topic=run.get("topic", ""),
                 output_path=render_output_path,
-                asset_paths=[*image_paths, audio_path, music_matches[0], thumbnail_path],
+                asset_paths=[*image_paths, audio_path, music_matches[0], thumbnail_path,
+                             *([Path(documentary_qa_report["report_path"])] if documentary_qa_report else [])],
                 settings={
                     "resolution": resolution,
                     "fps": payload.fps,
