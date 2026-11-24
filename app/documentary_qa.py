@@ -136,11 +136,11 @@ def audit_audio_quality(video_path: Path) -> dict:
     if result.returncode:
         raise RuntimeError(f"Final audio loudness analysis failed: {(result.stderr or '')[-1200:]}")
     integrated = re.search(
-        r"Integrated loudness:\\s+I:\\s*(-?\\d+(?:\\.\\d+)?)\\s+LUFS",
+        r"Integrated loudness:[ ]+I:[ ]+(-?[0-9]+[.]?[0-9]*)[ ]+LUFS",
         result.stderr,
     )
     true_peak = re.search(
-        r"True peak:\\s+Peak:\\s*(-?\\d+(?:\\.\\d+)?)\\s+dBFS",
+        r"True peak:[ ]+Peak:[ ]+(-?[0-9]+[.]?[0-9]*)[ ]+dBFS",
         result.stderr,
     )
     if not integrated or not true_peak:
