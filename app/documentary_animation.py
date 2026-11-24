@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageOps
 
 ANIMATION_FPS = 12
 MAX_SCENES = 25
@@ -165,9 +165,15 @@ def _draw_character_scene(draw: ImageDraw.ImageDraw, w: int, h: int, p: float, i
         draw.line((xx,ground,xx-8,ground-45),fill=(112,139,93),width=4)
 
 
-def _render_frame(description: str, kind: str, index: int, p: float, size: tuple[int,int]) -> Image.Image:
+def _render_frame(description: str, kind: str, index: int, p: float, size: tuple[int,int],
+                  source_image: Image.Image | None = None) -> Image.Image:
     w,h=size
-    image=_background(size,index)
+    # Use the scene's generated/AI image as the full-frame documentary plate.
+    # The vector grammar remains a moving foreground layer, not a replacement
+    # for the actual scene artwork.
+    image = (ImageOps.fit(source_image.convert("RGB"), size, method=Image.Resampling.LANCZOS,
+                          centering=(0.5 + (p - 0.5) * 0.08, 0.5))
+             if source_image is not None else _background(size,index))
     draw=ImageDraw.Draw(image)
     if kind=="map":
         _draw_map(draw,w,h,p,index)
@@ -204,6 +210,8 @@ def render_documentary_animation_clips(
         raise ValueError("Documentary scene duration must be 2–12 seconds and total <=300 seconds.")
     if resolution not in PROFILES or fps not in {24,30,60}:
         raise ValueError("Unsupported documentary animation render profile.")
+    if scene_images is not None and (len(scene_images) != len(scenes) or any(not Path(p).is_file() for p in scene_images)):
+        raise ValueError("Every documentary scene must have one readable generated scene image.")
     w,h=map(int,resolution.split("x"))
     out=Path(output_dir); out.mkdir(parents=True,exist_ok=True)
     clips=[]; evidence=[]
@@ -214,9 +222,14 @@ def render_documentary_animation_clips(
             frame_dir=Path(temp)
             samples=[]
             count=seconds_per_scene*ANIMATION_FPS
+            source_image = None
+            if scene_images is not None:
+                with Image.open(scene_images[index]) as opened:
+                    opened.load()
+                    source_image = opened.convert("RGB")
             for frame_index in range(count):
                 p=frame_index/max(1,count-1)
-                frame=_render_frame(description,kind,index,p,(w,h))
+                frame=_render_frame(description,kind,index,p,(w,h),source_image=source_image)
                 if frame_index in {0,count//2,count-1}:
                     samples.append(frame.copy())
                 frame.save(frame_dir/f"frame_{frame_index:05d}.jpg",quality=88,optimize=True)
@@ -252,8 +265,10 @@ def render_documentary_animation_clips(
                          "frames":count,"pixel_format":pixel_format,"color_range":color_range,
                           "motion_samples_passed":motion_pixels,
                          "motion_verified":True,"camera_move":"slow_push_with_alternating_track","file":target.name})
-    report={"engine":"SINTU scene-aware procedural 2D documentary animation",
-            "provider":"local vector animation; no external model inference",
+    report={"engine":"SINTU scene-aware 2D documentary animation",
+            "provider":"local vector animation with generated scene-image backplates" if scene_images is not None else "local vector animation; no external model inference",
+            "scene_image_count":len(scene_images) if scene_images is not None else 0,
+            "scene_images_used_as_full_frame_backplates":scene_images is not None,
             "fps":fps,"animation_fps":ANIMATION_FPS,"resolution":resolution,
             "scene_count":len(clips),"map_geometry":"schematic_not_geospatial","scenes":evidence,
             "all_scenes_animated":all(x["motion_verified"] for x in evidence)}
