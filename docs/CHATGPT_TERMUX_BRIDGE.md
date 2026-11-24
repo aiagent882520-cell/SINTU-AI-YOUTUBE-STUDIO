@@ -113,7 +113,7 @@ installed/enabled.
 ### Queue a device job from ChatGPT
 
 Create a GitHub issue in this repository with label
-`sintu-command-queued`, a title beginning `SINTU-CMD:`, and a JSON-only body.
+`sintu-command-queued`, a title beginning `SINTU-CMD:`, and a body whose first line is a single-line JSON object.
 The issue must be authored by the configured owner account
 (`SINTU_GITHUB_ALLOWED_ACTOR`, default `aiagent882520-cell`).
 
@@ -125,8 +125,7 @@ Example:
 
 Allowed actions (exactly): `git_status`, `git_pull_ff_only`, `run_tests`, `main_worktree_tests`, `compile_check`, `automation_self_test`, `health_audit`, `operational_readiness`, `live_preflight`, `engine_probe`, `safe_optional_install`, `restart_services`, `media_repair`, `media_forensics`, `watchdog_recovery_test`, `offline_video_e2e`, `full_self_test`, `full_studio_e2e`.
 
-The issue body must be one JSON object with `action` required and no keys other
-than `action`, `topic`, and `test_path`. `test_path` is optional only for
+The first line of the issue body must be one single-line JSON object with `action` required and no keys other than `action`, `topic`, and `test_path`. Optional explanatory Markdown may follow on later lines; do not put prose before the JSON line. `test_path` is optional only for
 `run_tests` and must name an existing Python file directly inside `tests/`;
 without it, the full pytest suite runs. `main_worktree_tests` accepts no extra fields and runs against a dedicated clean worktree, preserving local changes in the user's primary checkout. `topic` is optional only for
 `offline_video_e2e`, `full_self_test`, and `full_studio_e2e`, and must contain
