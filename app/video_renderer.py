@@ -334,7 +334,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         result = render_process.run_render_process(
             [ffprobe, "-v", "error", "-count_frames",
              "-show_entries",
-             "format=format_name,duration:stream=codec_type,codec_name,width,height,pix_fmt,duration,nb_read_frames,avg_frame_rate,sample_rate,channels,duration_ts,time_base",
+             "format=format_name,duration:stream=codec_type,codec_name,width,height,pix_fmt,color_range,duration,nb_read_frames,avg_frame_rate,sample_rate,channels,duration_ts,time_base",
              "-of", "json", str(path)],
             capture_output=True, text=True, timeout=30, check=False,
         )
@@ -354,6 +354,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         width, height = int(video.get("width", 0)), int(video.get("height", 0))
         codec = str(video.get("codec_name", "")).lower()
         pixel_format = str(video.get("pix_fmt", "")).lower()
+        color_range = str(video.get("color_range", "")).lower()
         audio_stream = next((item for item in streams if item.get("codec_type") == "audio"), None)
         audio_codec = str(audio_stream.get("codec_name", "")).lower() if audio_stream else ""
         audio_sample_rate = int(audio_stream.get("sample_rate", 0)) if audio_stream else 0
@@ -369,10 +370,10 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         raise RenderFailed("Final output MP4 container nahi hai.")
     if codec != "h264" or (width, height) != (expected_width, expected_height):
         raise RenderFailed("Final video codec ya resolution expected profile se match nahi karta.")
-    if pixel_format != "yuv420p":
+    if pixel_format != "yuv420p" or color_range not in {"tv", "mpeg"}:
         raise RenderFailed(
-            "Final MP4 Android-compatible yuv420p pixel format mein encode nahi hua "
-            f"(ffprobe pix_fmt={pixel_format or 'missing'})."
+            "Final MP4 Android-compatible limited-range yuv420p mein encode nahi hua "
+            f"(ffprobe pix_fmt={pixel_format or 'missing'}, color_range={color_range or 'missing'})."
         )
     if has_audio and (audio_codec != "aac" or audio_sample_rate != 48000 or audio_channels != 2):
         raise RenderFailed("Final MP4 audio Android-compatible AAC, 48 kHz stereo profile mein nahi hai.")
@@ -453,7 +454,8 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
     verified = {"verified": True, "duration_seconds": duration, "video_duration_seconds": video_duration,
                 "frame_count": frame_count, "fps": actual_fps,
                 "audio_duration_seconds": audio_duration if has_audio else None,
-                "resolution": f"{width}x{height}", "video_codec": codec, "audio": has_audio,
+                "resolution": f"{width}x{height}", "video_codec": codec, "pixel_format": pixel_format,
+                 "color_range": color_range, "audio": has_audio,
                 "black_intervals": black_intervals,
                 "longest_black_segment_seconds": round(longest_black_seconds, 3),
                 "visible_frame_count": visible, "sampled_frame_count": len(sampled)}
@@ -868,6 +870,8 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         "fps": fps,
         "quality": quality,
         "video_codec": "H.264 / libx264",
+        "pixel_format": (verified or {}).get("pixel_format"),
+        "color_range": (verified or {}).get("color_range"),
         "audio": "+".join([label for label, enabled in (("voiceover", audio_path), ("music", music_path), ("sound-effects", sfx_path)) if enabled]) or "none",
         "music": bool(music_path),
         "music_volume": music_volume if music_path else None,
@@ -1019,7 +1023,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                 video_labels.append(f"[{vlabel}]")
                 audio_labels.append(f"[{alabel}]")
                 vfilters = (
-                    f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+                    f"scale={width}:{height}:force_original_aspect_ratio=increase:in_range=auto:out_range=tv,"
                     f"crop={width}:{height},fps={fps},setsar=1,format=yuv420p,setpts=PTS-STARTPTS"
                 )
                 if len(clip_info) > 1:
@@ -1044,7 +1048,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             # The RGBA watermark overlay/libass path can negotiate a non-yuv420
             # pixel format even when every source clip is yuv420p. Normalize the
             # final composed stream after all overlays/subtitles for Android MP4.
-            filters.append(f"{video_map}format=yuv420p[vfinal]")
+            filters.append(f"{video_map}scale=iw:ih:in_range=auto:out_range=tv,format=yuv420p[vfinal]")
             video_map = "[vfinal]"
             filters.append("".join(audio_labels) + f"concat=n={len(video_paths)}:v=0:a=1[clipaudio]")
 
@@ -1070,7 +1074,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,apad,atrim=duration={total_duration:.3f}[aout]")
 
             command += ["-filter_complex", ";".join(filters), "-map", video_map, "-map", "[aout]",
-                        "-c:v", "libx264", "-threads", str(_ffmpeg_thread_count()), "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
+                        "-c:v", "libx264", "-threads", str(_ffmpeg_thread_count()), "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p", "-color_range", "tv",
                         "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", "-t", f"{total_duration:.3f}",
                         "-movflags", "+faststart", str(temporary_output_path)]
             completed = render_process.run_render_process(command, capture_output=True, text=True, timeout=RENDER_TIMEOUT_SECONDS, check=False)
