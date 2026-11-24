@@ -33,7 +33,30 @@ fi
 echo "$EXPECTED_SHA256  $MODEL" | sha256sum --check
 "$PIPER_BIN" --help >/dev/null
 
-echo "Hindi Piper voice ready."
-echo "PIPER_EXECUTABLE=$PIPER_BIN"
-echo "PIPER_MODEL_PATH=$MODEL"
-echo "Add the two values above to your local .env to use neural Hindi narration."
+# Persist only the two voice settings; preserve every unrelated .env entry.
+python - "$ROOT/.env" "$PIPER_BIN" "$MODEL" <<'PY'
+from pathlib import Path
+import os
+import sys
+
+env_path = Path(sys.argv[1])
+values = {
+    "PIPER_EXECUTABLE": sys.argv[2],
+    "PIPER_MODEL_PATH": sys.argv[3],
+}
+lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
+for key, value in values.items():
+    prefix = key + "="
+    lines = [line for line in lines if not line.startswith(prefix)]
+    lines.append(prefix + value)
+env_path.parent.mkdir(parents=True, exist_ok=True)
+env_path.write_text("\\n".join(lines).rstrip() + "\\n", encoding="utf-8")
+try:
+    os.chmod(env_path, 0o600)
+except OSError:
+    pass
+PY
+
+echo "Hindi Piper voice ready and configured in .env."
+echo "Model: $MODEL"
+echo "Restart SINTU to activate neural Hindi narration."
