@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from PIL import Image, ImageChops
+from PIL import Image
 
 from .video_renderer import (
     OUTPUT_DIR,
@@ -45,8 +45,10 @@ def audit_subtitle_pixel_bounds(
         for index, (subtitle, duration) in enumerate(zip(subtitles, durations), start=1):
             if not isinstance(subtitle, str) or not subtitle.strip():
                 raise ValueError(f"Subtitle {index} is empty.")
+            cue_work = work / f"cue-{index:02d}"
+            cue_work.mkdir()
             subtitle_file, subtitle_filter = _create_subtitle_track(
-                work / f"cue-{index:02d}", [subtitle], [float(duration)],
+                cue_work, [subtitle], [float(duration)],
                 width, height, ffmpeg,
             )
             if subtitle_file is None or not subtitle_filter:
