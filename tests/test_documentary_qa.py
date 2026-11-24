@@ -51,7 +51,7 @@ def test_audio_quality_audit_measures_integrated_loudness_and_true_peak(tmp_path
     assert rendered.returncode == 0, rendered.stderr
     report = audit_audio_quality(output)
     assert report["passed"] is True
-    assert -35.0 <= report["integrated_lufs"] <= -14.0
+    assert -18.0 <= report["integrated_lufs"] <= -14.0
     assert report["true_peak_dbfs"] <= -1.0
 
 
