@@ -248,6 +248,8 @@ def test_offline_storyboard_e2e_creates_verified_local_video(monkeypatch, tmp_pa
     animation_report = {
         "engine": "SINTU scene-aware procedural 2D documentary animation",
         "scene_count": 15,
+        "scene_image_count": 15,
+        "scene_images_used_as_full_frame_backplates": True,
         "all_scenes_animated": True,
         "scenes": [
             {"visual_type": visual_types[index % len(visual_types)], "motion_verified": True}
