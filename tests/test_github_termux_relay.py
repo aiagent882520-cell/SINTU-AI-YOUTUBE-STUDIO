@@ -1,4 +1,5 @@
 import importlib.util
+import re
 from pathlib import Path
 
 import pytest
@@ -329,3 +330,18 @@ def test_relay_maps_main_worktree_tests_to_isolated_runner():
     assert relay.command_for("main_worktree_tests", {}) == [
         relay.PYTHON, "scripts/termux_main_worktree_tests.py"
     ]
+
+def test_documented_issue_action_allowlist_matches_runtime_and_openapi():
+    from app.termux_bridge import ALLOWED_ACTIONS
+
+    bridge_doc = (ROOT / "docs" / "CHATGPT_TERMUX_BRIDGE.md").read_text(encoding="utf-8")
+    section = bridge_doc.split("Allowed actions (exactly):", 1)[1].split("\n\n", 1)[0]
+    documented = set(re.findall(r"`([^`]+)`", section))
+    assert documented == ALLOWED_ACTIONS
+    assert f"{len(ALLOWED_ACTIONS)} fixed actions" in bridge_doc
+
+    openapi = (ROOT / "docs" / "CHATGPT_TERMUX_BRIDGE_OPENAPI.yaml").read_text(encoding="utf-8")
+    match = re.search(r"enum:\s*\[(.*?)\]", openapi, re.DOTALL)
+    assert match is not None
+    documented_openapi = {item.strip() for item in match.group(1).split(",")}
+    assert documented_openapi == ALLOWED_ACTIONS
