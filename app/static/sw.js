@@ -1,4 +1,4 @@
-const CACHE_NAME = "sintu-studio-shell-v15";
+const CACHE_NAME = "sintu-studio-shell-v16";
 const APP_SHELL = [
   "/login",
   "/static/manifest.json",
@@ -8,7 +8,9 @@ const APP_SHELL = [
   "/static/offline_media.js",
   "/static/production_studio.css",
   "/static/offline.html",
-  "/static/icon.svg"
+  "/static/icon.svg",
+  "/static/brand-logo.svg",
+  "/static/login.js"
 ];
 
 self.addEventListener("install", event => {
