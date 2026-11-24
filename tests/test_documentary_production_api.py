@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import math
+import shutil
 import struct
+import subprocess
 import wave
 from pathlib import Path
 
@@ -30,6 +32,14 @@ def test_documentary_factory_api_renders_real_animated_mp4_with_audio_and_subtit
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Exercise POST /produce-media through FastAPI, not just renderer helpers."""
+    if not shutil.which("ffmpeg") or not shutil.which("ffprobe") or not shutil.which("fc-match"):
+        pytest.skip("The API render acceptance test requires FFmpeg, FFprobe and fontconfig.")
+    font = subprocess.run(
+        ["fc-match", "-f", "%{family}", "Noto Sans Devanagari"],
+        capture_output=True, text=True, timeout=10, check=False,
+    )
+    if font.returncode or "Noto Sans Devanagari" not in font.stdout:
+        pytest.skip("Run this integration test in the CI offline-video job with Noto Sans Devanagari installed.")
     run_id = "a" * 32
     data_dir = tmp_path / "data"
     output_dir = data_dir / "generated_videos"
