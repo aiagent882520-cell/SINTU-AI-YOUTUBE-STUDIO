@@ -64,7 +64,7 @@ def test_documentary_animation_exports_real_scene_mp4s_and_motion_report(tmp_pat
         assert evidence["camera_move"] == "slow_push_with_alternating_track"
         probe = subprocess.run(
             [shutil.which("ffprobe"), "-v", "error", "-show_entries",
-             "stream=codec_type,width,height", "-show_entries", "format=duration",
+             "stream=codec_type,width,height,pix_fmt,color_range", "-show_entries", "format=duration",
              "-of", "json", str(clip)],
             capture_output=True, text=True, timeout=30, check=False,
         )
@@ -72,6 +72,10 @@ def test_documentary_animation_exports_real_scene_mp4s_and_motion_report(tmp_pat
         metadata = json.loads(probe.stdout)
         video = next(x for x in metadata["streams"] if x["codec_type"] == "video")
         assert (video["width"], video["height"]) == (360, 640)
+        assert video["pix_fmt"] == "yuv420p"
+        assert video["color_range"] in {"tv", "mpeg"}
+        assert evidence["pixel_format"] == "yuv420p"
+        assert evidence["color_range"] in {"tv", "mpeg"}
         assert float(metadata["format"]["duration"]) == pytest.approx(2.0, abs=0.2)
     saved = json.loads((tmp_path / "documentary-animation-report.json").read_text())
     assert saved["all_scenes_animated"] is True
