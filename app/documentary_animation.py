@@ -225,14 +225,15 @@ def render_documentary_animation_clips(
             if motion_pixels<2:
                 raise RuntimeError(f"Scene {index+1} ({kind}) failed frame-motion acceptance.")
             cmd=[ffmpeg,"-y","-hide_banner","-loglevel","error","-framerate",str(ANIMATION_FPS),
-                 "-i",str(frame_dir/"frame_%05d.jpg"),"-vf",f"fps={fps},format=yuv420p",
-                 "-c:v","libx264","-preset","veryfast","-crf","20","-t",str(seconds_per_scene),
+                 "-i",str(frame_dir/"frame_%05d.jpg"),"-vf",f"fps={fps},scale=iw:ih:in_range=auto:out_range=tv,format=yuv420p",
+                 "-c:v","libx264","-pix_fmt","yuv420p","-color_range","tv",
+                 "-preset","veryfast","-crf","20","-t",str(seconds_per_scene),
                  "-an","-movflags","+faststart",str(target)]
             result=subprocess.run(cmd,capture_output=True,text=True,timeout=300,check=False)
             if result.returncode or not target.is_file() or target.stat().st_size<1000:
                 target.unlink(missing_ok=True)
                 raise RuntimeError((result.stderr or f"Scene {index+1} encoding failed.")[-1200:])
-        probe=subprocess.run([ffprobe,"-v","error","-show_entries","format=duration:stream=codec_type,width,height",
+        probe=subprocess.run([ffprobe,"-v","error","-show_entries","format=duration:stream=codec_type,width,height,pix_fmt,color_range",
                               "-of","json",str(target)],capture_output=True,text=True,timeout=30,check=False)
         if probe.returncode:
             target.unlink(missing_ok=True)
@@ -240,12 +241,16 @@ def render_documentary_animation_clips(
         meta=json.loads(probe.stdout)
         stream=next((s for s in meta.get("streams",[]) if s.get("codec_type")=="video"),{})
         duration=float(meta.get("format",{}).get("duration",0))
-        if (stream.get("width"),stream.get("height"))!=(w,h) or abs(duration-seconds_per_scene)>.25:
+        pixel_format=str(stream.get("pix_fmt","")).lower()
+        color_range=str(stream.get("color_range","")).lower()
+        if ((stream.get("width"),stream.get("height"))!=(w,h) or abs(duration-seconds_per_scene)>.25
+                or pixel_format!="yuv420p" or color_range not in {"tv","mpeg"}):
             target.unlink(missing_ok=True)
-            raise RuntimeError(f"Scene {index+1} failed resolution/duration acceptance.")
+            raise RuntimeError(f"Scene {index+1} failed resolution/duration/pixel-format acceptance.")
         clips.append(target)
         evidence.append({"scene":index+1,"visual_type":kind,"duration_seconds":duration,
-                         "frames":count,"motion_samples_passed":motion_pixels,
+                         "frames":count,"pixel_format":pixel_format,"color_range":color_range,
+                          "motion_samples_passed":motion_pixels,
                          "motion_verified":True,"camera_move":"slow_push_with_alternating_track","file":target.name})
     report={"engine":"SINTU scene-aware procedural 2D documentary animation",
             "provider":"local vector animation; no external model inference",
