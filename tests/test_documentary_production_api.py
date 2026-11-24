@@ -151,6 +151,11 @@ def test_documentary_factory_api_renders_real_animated_mp4_with_audio_and_subtit
     assert "voiceover" in result["render"]["audio"]
     assert "music" in result["render"]["audio"]
     assert result["render"]["quality_report"]["verified"] is True
+    documentary_qa = result["render"]["documentary_qa"]
+    assert documentary_qa["passed"] is True
+    assert documentary_qa["subtitle_pixel_audit"]["cue_count"] == 5
+    assert all(cue["passed"] for cue in documentary_qa["subtitle_pixel_audit"]["cues"])
+    assert Path(documentary_qa["report_path"]).is_file()
     rendered_file = output_dir / result["render"]["filename"]
     assert rendered_file.is_file() and rendered_file.stat().st_size > 10_000
     assert result["delivery_package"]["verified"] is True
