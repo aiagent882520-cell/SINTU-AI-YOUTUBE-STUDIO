@@ -49,7 +49,9 @@ def test_dirty_checkout_relay_bootstrap_restarts_only_the_verified_relay():
     assert 'relay_pid_file="$HOME/.sintu/github-relay.pid"' in bootstrap
     assert "gh auth status" in bootstrap
     assert "labels=sintu-command-running" in bootstrap
-    assert bootstrap.index("running_count=") < bootstrap.index('kill -TERM "$relay_pid"')
+    assert "active_count=" in bootstrap
+    assert "2400" in bootstrap
+    assert bootstrap.index("active_count=") < bootstrap.index('kill -TERM "$relay_pid"')
     assert '"/proc/$relay_pid/cmdline"' in bootstrap
     assert 'ps -o args= -p "$relay_pid"' in bootstrap
     assert '"scripts/github_termux_relay.py"' in bootstrap
