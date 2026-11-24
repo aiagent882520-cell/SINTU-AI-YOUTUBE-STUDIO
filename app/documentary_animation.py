@@ -199,6 +199,7 @@ def _render_frame(description: str, kind: str, index: int, p: float, size: tuple
 def render_documentary_animation_clips(
     scenes: list[str], seconds_per_scene: int, output_dir: Path,
     resolution: str = "720x1280", fps: int = 24,
+    scene_images: list[Path] | None = None,
 ) -> tuple[list[Path], dict]:
     """Render scene-specific, frame-animated documentary clips and measurable motion evidence."""
     ffmpeg,ffprobe=shutil.which("ffmpeg"),shutil.which("ffprobe")
