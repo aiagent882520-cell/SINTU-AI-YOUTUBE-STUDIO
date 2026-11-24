@@ -5741,6 +5741,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=409, detail=str(exc)) from None
     created_images, audio_id, music_id = [], None, None
     render_output_path = render_manifest_file = delivery_package_file = thumbnail_path = None
+    documentary_qa_file = None
     package_verified = False
     try:
         if not use_procedural_2d:
@@ -5820,6 +5821,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 raise RenderFailed(f"Independent documentary MP4/subtitle QA failed: {exc}") from exc
             if documentary_qa_report.get("passed") is not True:
                 raise RenderFailed("Independent documentary MP4/subtitle pixel QA did not pass.")
+            documentary_qa_file = Path(documentary_qa_report["report_path"])
             rendered["documentary_qa"] = documentary_qa_report
             quality_report["documentary_qa"] = documentary_qa_report
         thumbnail_result = create_video_frame_thumbnail(render_output_path, run_id)
@@ -5972,7 +5974,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 except Exception:
                     pass
             if not package_verified:
-                for artifact in (render_output_path, render_manifest_file, delivery_package_file, thumbnail_path):
+                for artifact in (render_output_path, render_manifest_file, delivery_package_file, thumbnail_path, documentary_qa_file):
                     try:
                         if (artifact is not None and not artifact.is_symlink() and artifact.is_file()
                                 and artifact.resolve().is_relative_to(DATA_DIR.resolve())):
