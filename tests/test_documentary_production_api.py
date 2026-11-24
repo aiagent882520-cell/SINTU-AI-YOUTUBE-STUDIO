@@ -160,6 +160,8 @@ def test_documentary_factory_api_renders_real_animated_mp4_with_audio_and_subtit
     assert result["render"]["subtitles_burned_in"] is True
     assert result["render"]["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
     assert result["render"]["sound_effects"] is True
+    assert result["render"]["sound_effect_cue_count"] >= 1
+    assert "sound-effects" in result["render"]["audio"]
     assert "voiceover" in result["render"]["audio"]
     assert "music" in result["render"]["audio"]
     assert result["render"]["quality_report"]["verified"] is True
