@@ -6,6 +6,7 @@ import os
 import re
 import urllib.parse
 import urllib.request
+import html
 
 API = "https://commons.wikimedia.org/w/api.php"
 MAX_DOWNLOAD_BYTES = 15 * 1024 * 1024
@@ -29,7 +30,20 @@ def _request(url: str, *, timeout: int = 20, limit: int = MAX_DOWNLOAD_BYTES) ->
 
 
 def _plain(value: str) -> str:
-    return re.sub(r"<[^>]+>", " ", value or "").replace("&nbsp;", " ").strip()
+    return html.unescape(re.sub(r"<[^>]+>", " ", value or "")).strip()
+
+
+def _is_reusable_license(name: str) -> bool:
+    """Allow commercial reuse and adaptations; reject NC/ND licences."""
+    normalized = re.sub(r"\\s+", " ", (name or "").strip()).lower()
+    if re.search(r"\\b(nc|non[- ]commercial|nd|no[- ]derivatives)\\b", normalized):
+        return False
+    return bool(
+        re.fullmatch(r"cc0(?: 1\\.0)?", normalized)
+        or re.fullmatch(r"cc by(?:-sa)?(?: 2\\.0| 2\\.5| 3\\.0| 4\\.0)?", normalized)
+        or re.fullmatch(r"public domain", normalized)
+        or re.fullmatch(r"pd[- ][a-z0-9 .-]+", normalized)
+    )
 
 
 def fetch_documentary_image(query: str) -> tuple[bytes, dict]:
@@ -54,7 +68,7 @@ def fetch_documentary_image(query: str) -> tuple[bytes, dict]:
         info = (page.get("imageinfo") or [{}])[0]
         meta = info.get("extmetadata") or {}
         licence = _plain((meta.get("LicenseShortName") or {}).get("value", ""))
-        if not licence or not re.search(r"(CC BY|CC0|Public domain|PD-|GPL|Free Art License)", licence, re.I):
+        if not _is_reusable_license(licence):
             continue
         image_url = info.get("thumburl") or info.get("url") or ""
         parsed = urllib.parse.urlparse(image_url)
