@@ -825,7 +825,8 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                 audio_filters.append(
                     "".join(mix_labels) +
                     f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,"
-                    f"apad,atrim=duration={duration}[aout]"
+                    f"apad,atrim=duration={duration},"
+                    "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary[aout]"
                 )
                 command += ["-filter_complex", ";".join(audio_filters),
                             "-map", "0:v:0", "-map", "[aout]", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
@@ -1071,7 +1072,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                     f"apad,atrim=duration={total_duration:.3f}[sfx]"
                 )
                 mix_labels.append("[sfx]")
-            filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,apad,atrim=duration={total_duration:.3f}[aout]")
+            filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,apad,atrim=duration={total_duration:.3f},loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary[aout]")
 
             command += ["-filter_complex", ";".join(filters), "-map", video_map, "-map", "[aout]",
                         "-c:v", "libx264", "-threads", str(_ffmpeg_thread_count()), "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p", "-color_range", "tv",
