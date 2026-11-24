@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from app.documentary_qa import audit_audio_quality, audit_subtitle_pixel_bounds
+from app.documentary_qa import audit_audio_quality, audit_subtitle_pixel_bounds, audit_visual_scene_content
 from app.video_renderer import _ffmpeg_supports_subtitles
 
 
@@ -69,3 +69,36 @@ def test_subtitle_pixel_audit_rejects_vertical_clipping():
 def test_subtitle_pixel_audit_rejects_empty_cue():
     with pytest.raises(ValueError, match="empty"):
         audit_subtitle_pixel_bounds([""], [4.0], 720, 1280)
+
+
+def test_visual_scene_audit_accepts_full_frame_color_scene_art(tmp_path):
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("FFmpeg is unavailable.")
+    output = tmp_path / "color-scene.mp4"
+    rendered = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
+         "-i", "color=c=navy:s=160x284:r=24:d=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(output)],
+        capture_output=True, text=True, timeout=45, check=False,
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    report = audit_visual_scene_content(output)
+    assert report["passed"] is True
+    assert report["scene_frames_passed"] == report["sampled_frames"]
+
+
+def test_visual_scene_audit_rejects_black_text_card(tmp_path):
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("FFmpeg is unavailable.")
+    output = tmp_path / "black-text-card.mp4"
+    rendered = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
+         "-i", "color=c=black:s=160x284:r=24:d=3", "-vf",
+         "drawbox=x=40:y=120:w=80:h=20:color=white:t=fill", "-c:v", "libx264",
+         "-pix_fmt", "yuv420p", str(output)],
+        capture_output=True, text=True, timeout=45, check=False,
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    with pytest.raises(AssertionError, match="black frames.*text-only visuals"):
+        audit_visual_scene_content(output)
