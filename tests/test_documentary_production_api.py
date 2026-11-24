@@ -115,6 +115,8 @@ def test_documentary_factory_api_renders_real_animated_mp4_with_audio_and_subtit
     })
     monkeypatch.setattr(main, "attach_render_result", lambda *_args: {"status": "completed"})
 
+    # Use the app's explicit local-owner mode while keeping both HTTP middlewares active.
+    monkeypatch.setenv("SINTU_AUTH_REQUIRED", "false")
     # Keep the normal application middleware and the actual registered API route.
     monkeypatch.setattr(main, "client_address_allowed", lambda *_args: True)
     monkeypatch.setattr(main, "production_actions_allowed", lambda: True)
