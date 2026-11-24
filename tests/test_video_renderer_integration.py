@@ -1,6 +1,7 @@
 import shutil
 from pathlib import Path
 import subprocess
+import json
 
 import pytest
 from PIL import Image, ImageDraw
@@ -314,7 +315,7 @@ def test_ai_clip_renderer_normalizes_full_range_jpeg_input_to_android_yuv420p(tm
         capture_output=True, text=True, timeout=30, check=False,
     )
     assert probe.returncode == 0, probe.stderr
-    stream = __import__("json").loads(probe.stdout)["streams"][0]
+    stream = json.loads(probe.stdout)["streams"][0]
     assert stream["pix_fmt"] == "yuv420p"
     assert stream["color_range"] in {"tv", "mpeg"}
     assert result["pixel_format"] == "yuv420p"
