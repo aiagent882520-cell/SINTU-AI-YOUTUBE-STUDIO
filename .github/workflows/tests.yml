@@ -119,6 +119,9 @@ jobs:
             -e 's|https://us-east-2.ec2.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
             -e 's|http://security.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
             -e 's|https://security.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' {} +
+          # eSpeak NG and Noto Sans Devanagari are in Ubuntu Universe on hosted runners.
+          sudo find /etc/apt -type f -name '*.sources' -exec sed -i -E \
+            '/^Components:/ { /(^|[[:space:]])universe([[:space:]]|$)/! s/$/ universe/; }' {} +
           font_family="$(fc-match -f '%{family}' 'Noto Sans Devanagari' 2>/dev/null | cut -d, -f1 || true)"
           if ! command -v espeak-ng >/dev/null 2>&1 || [[ "$font_family" != "Noto Sans Devanagari" ]]; then
             # Refresh indexes after mirror rewrite so package archives resolve
