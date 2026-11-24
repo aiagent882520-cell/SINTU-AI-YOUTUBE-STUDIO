@@ -35,12 +35,12 @@ def _plain(value: str) -> str:
 
 def _is_reusable_license(name: str) -> bool:
     """Allow commercial reuse and adaptations; reject NC/ND licences."""
-    normalized = re.sub(r"\\s+", " ", (name or "").strip()).lower()
-    if re.search(r"\\b(nc|non[- ]commercial|nd|no[- ]derivatives)\\b", normalized):
+    normalized = re.sub(r"\s+", " ", (name or "").strip()).lower()
+    if re.search(r"\b(nc|non[- ]commercial|nd|no[- ]derivatives)\b", normalized):
         return False
     return bool(
-        re.fullmatch(r"cc0(?: 1\\.0)?", normalized)
-        or re.fullmatch(r"cc by(?:-sa)?(?: 2\\.0| 2\\.5| 3\\.0| 4\\.0)?", normalized)
+        re.fullmatch(r"cc0(?: 1\.0)?", normalized)
+        or re.fullmatch(r"cc by(?:-sa)?(?: 2\.0| 2\.5| 3\.0| 4\.0)?", normalized)
         or re.fullmatch(r"public domain", normalized)
         or re.fullmatch(r"pd[- ][a-z0-9 .-]+", normalized)
     )
