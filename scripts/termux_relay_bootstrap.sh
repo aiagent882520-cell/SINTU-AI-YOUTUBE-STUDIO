@@ -146,6 +146,19 @@ fi
 
 started_at="$(date +%s)"
 bash scripts/start_services.sh
+new_relay_pid="$(cat "$HOME/.sintu/github-relay.pid" 2>/dev/null || true)"
+if [[ ! "$new_relay_pid" =~ ^[0-9]+$ ]] || ! kill -0 "$new_relay_pid" 2>/dev/null; then
+  echo "GitHub relay process did not remain alive after startup; inspect $HOME/.sintu/github-relay.log." >&2
+  exit 5
+fi
+new_relay_cmdline="$(tr '\0' ' ' < "/proc/$new_relay_pid/cmdline" 2>/dev/null || true)"
+if [[ -z "$new_relay_cmdline" ]]; then
+  new_relay_cmdline="$(ps -o args= -p "$new_relay_pid" 2>/dev/null || true)"
+fi
+if [[ "$new_relay_cmdline" != *"scripts/github_termux_relay.py"* ]]; then
+  echo "Started PID does not match the GitHub relay; refusing to claim relay recovery." >&2
+  exit 5
+fi
 HEARTBEAT="$HOME/.sintu/github-relay.heartbeat"
 for _ in $(seq 1 20); do
   if .venv/bin/python -c 'import os,sys; p=sys.argv[1]; t=int(sys.argv[2]); raise SystemExit(0 if os.path.isfile(p) and int(os.path.getmtime(p)) >= t else 1)' "$HEARTBEAT" "$started_at" 2>/dev/null; then
