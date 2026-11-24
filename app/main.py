@@ -5703,7 +5703,12 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         _approve_owner_review_for_media(run_id, owner, run)
     except (ValueError, PermissionError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
-    use_procedural_2d = run["format_id"] in {"2d-cartoon", "story-animation"}
+    # Documentary formats keep their persisted research-evidence gate above, then use
+    # deterministic local 2D animation rather than requiring ComfyUI image generation.
+    use_procedural_2d = (
+        run["format_id"] in {"2d-cartoon", "story-animation"}
+        or run["format_id"] in DOCUMENTARY_FORMAT_IDS
+    )
     deliverables = run["result"].get("deliverables") or {}
     scene_prompts = [item.strip() for item in payload.scene_prompts]
     if not scene_prompts:
