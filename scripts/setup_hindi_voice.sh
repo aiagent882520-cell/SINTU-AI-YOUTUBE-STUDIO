@@ -50,7 +50,7 @@ for key, value in values.items():
     lines = [line for line in lines if not line.startswith(prefix)]
     lines.append(prefix + value)
 env_path.parent.mkdir(parents=True, exist_ok=True)
-env_path.write_text("\\n".join(lines).rstrip() + "\\n", encoding="utf-8")
+env_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 try:
     os.chmod(env_path, 0o600)
 except OSError:
