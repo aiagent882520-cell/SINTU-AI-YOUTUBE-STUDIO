@@ -318,6 +318,8 @@ def _offline_storyboard_e2e(topic: str) -> dict:
             fps=24,
             quality="high",
             scene_descriptions=scenes,
+            sound_effects_enabled=True,
+            sound_effects_volume=0.18,
         )
     final_path = OUTPUT_DIR / rendered["filename"]
     if not final_path.is_file() or final_path.stat().st_size <= 1000:
@@ -328,6 +330,10 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         raise RuntimeError("60-second Hindi acceptance MP4 must contain burned-in subtitles.")
     if "voiceover" not in rendered.get("audio", "") or "music" not in rendered.get("audio", ""):
         raise RuntimeError("Offline documentary MP4 must contain Hindi narration and background music.")
+    if (rendered.get("sound_effects") is not True
+            or int(rendered.get("sound_effect_cue_count", 0)) < 1
+            or "sound-effects" not in rendered.get("audio", "")):
+        raise RuntimeError("Offline documentary MP4 must contain generated, mixed, verified scene sound effects.")
     if abs(float(rendered.get("duration_seconds", 0)) - target_duration) > 0.1:
         raise RuntimeError("Offline storyboard MP4 duration does not match the 60-second acceptance target.")
 
@@ -364,6 +370,8 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "resolution": rendered["resolution"],
         "watermark": rendered["brand_watermark"],
         "audio": rendered["audio"],
+        "sound_effects": rendered["sound_effects"],
+        "sound_effect_cue_count": rendered["sound_effect_cue_count"],
         "subtitles_burned_in": rendered["subtitles_burned_in"],
         "verified_by_renderer": True,
     }
