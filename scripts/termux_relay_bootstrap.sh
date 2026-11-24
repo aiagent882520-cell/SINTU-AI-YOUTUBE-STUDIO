@@ -91,4 +91,41 @@ print("SINTU isolated-main relay action installed.")
 PY
 echo "Backup: $backup_dir/github_termux_relay.py"
 echo "Existing dirty project files were not changed."
-echo "Next: bash scripts/start_services.sh"
+
+# start_services.sh deliberately leaves a correctly identified running relay
+# alone. Stop only the verified relay here so it reloads the patched allowlist;
+# never signal an unrelated/reused PID and never escalate to SIGKILL.
+relay_pid_file="$HOME/.sintu/github-relay.pid"
+if [ -s "$relay_pid_file" ]; then
+  relay_pid="$(cat "$relay_pid_file" 2>/dev/null || true)"
+  if [[ "$relay_pid" =~ ^[0-9]+$ ]] && kill -0 "$relay_pid" 2>/dev/null; then
+    relay_cmdline="$(tr '\0' ' ' < "/proc/$relay_pid/cmdline" 2>/dev/null || true)"
+    if [[ -z "$relay_cmdline" ]]; then
+      relay_cmdline="$(ps -o args= -p "$relay_pid" 2>/dev/null || true)"
+    fi
+    if [[ -z "$relay_cmdline" ]]; then
+      echo "Cannot verify GitHub relay process identity; refusing to signal PID $relay_pid." >&2
+      exit 4
+    fi
+    if [[ "$relay_cmdline" != *"scripts/github_termux_relay.py"* ]]; then
+      echo "GitHub relay PID identity mismatch; refusing to signal PID $relay_pid." >&2
+      exit 4
+    fi
+    kill -TERM "$relay_pid" 2>/dev/null || true
+    for _ in $(seq 1 20); do
+      kill -0 "$relay_pid" 2>/dev/null || break
+      sleep 0.25
+    done
+    if kill -0 "$relay_pid" 2>/dev/null; then
+      echo "GitHub relay did not stop after TERM; refusing to SIGKILL it." >&2
+      exit 4
+    fi
+  elif [[ ! "$relay_pid" =~ ^[0-9]+$ ]]; then
+    echo "Invalid GitHub relay PID file; refusing to start a duplicate." >&2
+    exit 4
+  fi
+  rm -f "$relay_pid_file"
+fi
+
+bash scripts/start_services.sh
+echo "SINTU relay bootstrap completed; the relay was restarted only after process identity verification."
