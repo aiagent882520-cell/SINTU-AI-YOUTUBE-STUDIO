@@ -370,7 +370,10 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
     if codec != "h264" or (width, height) != (expected_width, expected_height):
         raise RenderFailed("Final video codec ya resolution expected profile se match nahi karta.")
     if pixel_format != "yuv420p":
-        raise RenderFailed("Final MP4 Android-compatible yuv420p pixel format mein encode nahi hua.")
+        raise RenderFailed(
+            "Final MP4 Android-compatible yuv420p pixel format mein encode nahi hua "
+            f"(ffprobe pix_fmt={pixel_format or 'missing'})."
+        )
     if has_audio and (audio_codec != "aac" or audio_sample_rate != 48000 or audio_channels != 2):
         raise RenderFailed("Final MP4 audio Android-compatible AAC, 48 kHz stereo profile mein nahi hai.")
     if not math.isfinite(duration) or duration <= 0 or abs(duration - expected_duration) > max(1.0, expected_duration * 0.03):
