@@ -157,6 +157,49 @@ def audit_audio_quality(video_path: Path) -> dict:
         "maximum_true_peak_dbfs": -1.0,
     }
 
+def audit_visual_scene_content(video_path: Path, *, minimum_color_ratio: float = 0.06) -> dict:
+    """Reject black/text-only frames by measuring actual colored scene-pixel coverage."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("Visual scene audit requires FFmpeg.")
+    if not 0.01 <= minimum_color_ratio <= 0.5:
+        raise ValueError("Minimum visual color ratio is outside the safe range.")
+    result = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-i", str(video_path),
+         "-vf", "fps=1,scale=64:64", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
+        capture_output=True, text=False, timeout=90, check=False,
+    )
+    frame_bytes = 64 * 64 * 3
+    if result.returncode or not result.stdout or len(result.stdout) % frame_bytes:
+        raise RuntimeError("Visual scene audit could not decode complete frame samples.")
+    samples = []
+    for offset in range(0, len(result.stdout), frame_bytes):
+        frame = result.stdout[offset:offset + frame_bytes]
+        colored = 0
+        luminance = 0
+        for pixel in range(0, frame_bytes, 3):
+            red, green, blue = frame[pixel], frame[pixel + 1], frame[pixel + 2]
+            luminance += (red + green + blue) / 3
+            if max(red, green, blue) >= 40 and max(red, green, blue) - min(red, green, blue) >= 18:
+                colored += 1
+        color_ratio = colored / (64 * 64)
+        mean_luminance = luminance / (64 * 64)
+        samples.append({"color_pixel_ratio": round(color_ratio, 4),
+                        "mean_luminance": round(mean_luminance, 2),
+                        "passed": color_ratio >= minimum_color_ratio and mean_luminance >= 12})
+    passed_count = sum(1 for item in samples if item["passed"])
+    required = max(1, int(len(samples) * 0.85 + 0.999))
+    passed = passed_count >= required
+    if not passed:
+        raise AssertionError(
+            f"Documentary visual audit failed: {passed_count}/{len(samples)} frames contain substantial colored scene imagery; "
+            "black frames, monochrome subtitle cards, and text-only visuals are not accepted."
+        )
+    return {"passed": True, "method": "1 fps decoded RGB sampling; colored-pixel occupancy and mean luminance",
+            "sampled_frames": len(samples), "scene_frames_passed": passed_count,
+            "minimum_color_pixel_ratio": minimum_color_ratio, "samples": samples}
+
+
 def audit_documentary_mp4(
     video_path: Path,
     subtitles: list[str],
@@ -173,11 +216,13 @@ def audit_documentary_mp4(
         subtitles, durations, width, height,
     )
     audio_quality = audit_audio_quality(video_path)
+    visual_scenes = audit_visual_scene_content(video_path)
     report = {
-        "passed": bool(media["verified"] and subtitle_pixels["passed"] and audio_quality["passed"]),
+        "passed": bool(media["verified"] and subtitle_pixels["passed"] and audio_quality["passed"] and visual_scenes["passed"]),
         "video": media,
         "subtitle_pixel_audit": subtitle_pixels,
         "audio_quality": audio_quality,
+        "visual_scene_audit": visual_scenes,
     }
     report_path = video_path.with_name(f"{video_path.stem}-qa.json")
     report_path.write_text(
