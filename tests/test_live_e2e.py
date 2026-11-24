@@ -263,7 +263,8 @@ def test_offline_storyboard_e2e_creates_verified_local_video(monkeypatch, tmp_pa
         render_calls.append((clips, kwargs)) or {
             "filename": "final.mp4", "video_id": "final-id", "duration_seconds": 60,
             "resolution": "720x1280", "brand_watermark": "SINTU AI YOUTUBE STUDIO",
-            "subtitles_burned_in": True, "audio": "voiceover+music",
+            "subtitles_burned_in": True, "audio": "voiceover+music+sound-effects",
+            "sound_effects": True, "sound_effect_cue_count": 29,
         }
     ))
     monkeypatch.setattr(live_e2e, "audit_documentary_mp4", lambda *args, **kwargs: {
@@ -298,6 +299,11 @@ def test_offline_storyboard_e2e_creates_verified_local_video(monkeypatch, tmp_pa
     assert len(render_calls[0][1]["subtitles"]) == 15
     assert render_calls[0][1]["audio_path"] == audio_dir / "voice.wav"
     assert render_calls[0][1]["music_path"] == music_dir / "music.wav"
+    assert render_calls[0][1]["sound_effects_enabled"] is True
+    assert render_calls[0][1]["sound_effects_volume"] == 0.18
+    assert result["sound_effects"] is True
+    assert result["sound_effect_cue_count"] == 29
+    assert "sound-effects" in result["audio"]
     assert render_calls[0][1]["resolution"] == "720x1280"
     assert result["animation_visual_types"] == ["character", "diagram", "environment", "map", "timeline"]
     assert result["final_qa_report"]["passed"] is True
