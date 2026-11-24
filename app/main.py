@@ -5802,6 +5802,26 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         quality_report = rendered.get("quality_report") if isinstance(rendered, dict) else None
         if not isinstance(quality_report, dict) or quality_report.get("verified") is not True:
             raise RenderFailed("Renderer did not return a verified quality report; provenance PASS withheld.")
+        documentary_qa_report = None
+        if use_procedural_2d and subtitle_lines:
+            # Independently re-open the final MP4 and inspect actual burned Hindi
+            # glyph pixels; renderer metadata or character counts are not enough.
+            from .documentary_qa import audit_documentary_mp4
+            width, height = (int(value) for value in resolution.split("x"))
+            try:
+                documentary_qa_report = audit_documentary_mp4(
+                    render_output_path,
+                    subtitle_lines,
+                    [payload.seconds_per_scene] * len(scene_prompts),
+                    width,
+                    height,
+                )
+            except (AssertionError, RuntimeError, ValueError) as exc:
+                raise RenderFailed(f"Independent documentary MP4/subtitle QA failed: {exc}") from exc
+            if documentary_qa_report.get("passed") is not True:
+                raise RenderFailed("Independent documentary MP4/subtitle pixel QA did not pass.")
+            rendered["documentary_qa"] = documentary_qa_report
+            quality_report["documentary_qa"] = documentary_qa_report
         thumbnail_result = create_video_frame_thumbnail(render_output_path, run_id)
         thumbnail_path = thumbnail_result["path"]
         try:
