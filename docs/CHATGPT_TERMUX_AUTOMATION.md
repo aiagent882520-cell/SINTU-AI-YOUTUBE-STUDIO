@@ -17,6 +17,10 @@ The GitHub issue contract is JSON-only: required `action`; optional `topic` only
 
 Issue title must begin with `SINTU-CMD:`, for example `SINTU-CMD: full_studio_e2e`.
 
+## Safe latest-main regression check
+
+The read-only issue action `main_worktree_tests` uses the exact body `{"action":"main_worktree_tests"}`. It fetches `origin/main`, then runs the full pytest suite in the dedicated `~/.sintu/worktrees/main` Git worktree using the existing local virtual environment. It refuses symlinked paths, an existing unregistered directory, local changes inside the dedicated worktree, and any HEAD that does not match the fetched `origin/main`. It does not reset, clean, stash, or overwrite the user's primary checkout. This action accepts no `topic` or `test_path` fields.
+
 ## What full_studio_e2e does
 
 It calls the existing `scripts/live_e2e.py --full-studio-e2e` path. That workflow:
