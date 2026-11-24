@@ -119,7 +119,7 @@
     try{
       const result=await api("/api/production/runs/"+encodeURIComponent(id)+"/produce-media",{
         method:"POST",
-        body:JSON.stringify({burn_subtitles:false,sound_effects_enabled:true,quality:"high",fps:30})
+        body:JSON.stringify({burn_subtitles:true,sound_effects_enabled:true,quality:"high",fps:30})
       });
       notice(result.detail||"Verified MP4 and production ZIP ready. Publishing remains disabled.");
       await loadRuns();
