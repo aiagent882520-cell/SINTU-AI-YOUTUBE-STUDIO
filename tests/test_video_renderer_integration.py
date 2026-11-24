@@ -285,6 +285,42 @@ def test_storyboard_renderer_burns_hindi_subtitles_into_final_mp4(tmp_path, monk
     assert "video" in probe.stdout
 
 
+def test_ai_clip_renderer_normalizes_full_range_jpeg_input_to_android_yuv420p(tmp_path, monkeypatch):
+    ffmpeg, ffprobe = _ffmpeg_tools()
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
+    frame_dir = tmp_path / "full-range-frames"
+    frame_dir.mkdir()
+    for index in range(12):
+        Image.new("RGB", (160, 284), (30 + index * 8, 55 + index * 5, 85 + index * 3)).save(
+            frame_dir / f"frame_{index:05d}.jpg", quality=88,
+        )
+    source = tmp_path / "full-range-source.mp4"
+    encoded = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-framerate", "12",
+         "-i", str(frame_dir / "frame_%05d.jpg"), "-vf", "fps=24,format=yuv420p",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-t", "1", str(source)],
+        capture_output=True, check=False, timeout=60,
+    )
+    assert encoded.returncode == 0, encoded.stderr.decode("utf-8", "replace")
+
+    result = video_renderer.render_ai_clips(
+        [source], subtitles=["हिंदी documentary का pixel-range test।"],
+        resolution="720x1280", fps=24, quality="standard", transition="cut",
+    )
+    output = tmp_path / result["filename"]
+    probe = subprocess.run(
+        [ffprobe, "-v", "error", "-show_entries", "stream=pix_fmt,color_range",
+         "-of", "json", str(output)],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert probe.returncode == 0, probe.stderr
+    stream = __import__("json").loads(probe.stdout)["streams"][0]
+    assert stream["pix_fmt"] == "yuv420p"
+    assert stream["color_range"] in {"tv", "mpeg"}
+    assert result["pixel_format"] == "yuv420p"
+    assert result["color_range"] in {"tv", "mpeg"}
+
+
 def test_ai_clip_renderer_burns_timed_subtitles_into_final_mp4(tmp_path, monkeypatch):
     ffmpeg, _ = _ffmpeg_tools()
     if not video_renderer._ffmpeg_supports_subtitles(ffmpeg):
