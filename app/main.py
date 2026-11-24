@@ -5816,7 +5816,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                     width,
                     height,
                 )
-            except (AssertionError, RuntimeError, ValueError) as exc:
+            except Exception as exc:
                 raise RenderFailed(f"Independent documentary MP4/subtitle QA failed: {exc}") from exc
             if documentary_qa_report.get("passed") is not True:
                 raise RenderFailed("Independent documentary MP4/subtitle pixel QA did not pass.")
