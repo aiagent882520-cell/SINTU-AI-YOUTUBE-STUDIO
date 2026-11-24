@@ -43,6 +43,7 @@ def test_audio_quality_audit_measures_integrated_loudness_and_true_peak(tmp_path
             "-f", "lavfi", "-i", "color=c=navy:s=160x284:r=24:d=3",
             "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=3",
             "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
             "-c:a", "aac", "-ar", "48000", "-ac", "2", "-shortest",
             str(output),
         ],
