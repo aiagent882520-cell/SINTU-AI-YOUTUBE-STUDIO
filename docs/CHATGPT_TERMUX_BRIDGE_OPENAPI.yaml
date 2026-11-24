@@ -18,7 +18,7 @@ components:
       properties:
         action:
           type: string
-          enum: [git_status, git_pull_ff_only, run_tests, compile_check, automation_self_test, health_audit, operational_readiness, live_preflight, engine_probe, safe_optional_install, restart_services, media_repair, media_forensics, watchdog_recovery_test, offline_video_e2e, full_self_test, full_studio_e2e]
+          enum: [git_status, git_pull_ff_only, run_tests, main_worktree_tests, compile_check, automation_self_test, health_audit, operational_readiness, live_preflight, engine_probe, safe_optional_install, restart_services, media_repair, media_forensics, watchdog_recovery_test, offline_video_e2e, full_self_test, full_studio_e2e]
         test_path:
           type: string
           maxLength: 160
