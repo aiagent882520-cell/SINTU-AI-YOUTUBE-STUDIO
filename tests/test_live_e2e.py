@@ -244,14 +244,31 @@ def test_offline_storyboard_e2e_creates_verified_local_video(monkeypatch, tmp_pa
     monkeypatch.setattr(live_e2e, "generate_voiceover", lambda text: {
         "filename": "voice.wav", "voice": "eSpeak NG Hindi", "format": "WAV"
     })
+    visual_types = ["map", "timeline", "diagram", "character", "environment"]
+    animation_report = {
+        "engine": "SINTU scene-aware procedural 2D documentary animation",
+        "scene_count": 15,
+        "all_scenes_animated": True,
+        "scenes": [
+            {"visual_type": visual_types[index % len(visual_types)], "motion_verified": True}
+            for index in range(15)
+        ],
+    }
+    animation_calls = []
+    monkeypatch.setattr(live_e2e, "render_documentary_animation_clips", lambda *args, **kwargs: (
+        animation_calls.append((args, kwargs)) or ([Path(f"clip-{i}.mp4") for i in range(15)], animation_report)
+    ))
     render_calls = []
-    monkeypatch.setattr(live_e2e, "render_storyboard", lambda **kwargs: (
-        render_calls.append(kwargs) or {
+    monkeypatch.setattr(live_e2e, "render_ai_clips", lambda clips, **kwargs: (
+        render_calls.append((clips, kwargs)) or {
             "filename": "final.mp4", "video_id": "final-id", "duration_seconds": 60,
             "resolution": "720x1280", "brand_watermark": "SINTU AI YOUTUBE STUDIO",
             "subtitles_burned_in": True, "audio": "voiceover+music",
         }
     ))
+    monkeypatch.setattr(live_e2e, "audit_documentary_mp4", lambda *args, **kwargs: {
+        "passed": True, "subtitle_pixel_audit": {"passed": True, "cue_count": 15},
+    })
 
     result = live_e2e._offline_storyboard_e2e("भारत के किले")
     assert len(calls) == 15
@@ -270,15 +287,20 @@ def test_offline_storyboard_e2e_creates_verified_local_video(monkeypatch, tmp_pa
     assert by_fort["Junagarh Fort"]["url"].endswith("/forts.html")
     assert "1459" in by_fort["Mehrangarh Fort"]["claim"]
     assert "seven gates" not in by_fort["Mehrangarh Fort"]["claim"]
-    assert "folklore" in render_calls[0]["scenes"][1].lower()
+    assert "folklore" in render_calls[0][1]["scene_descriptions"][1].lower()
     assert result["duration_seconds"] == 60
     assert result["subtitle_count"] == 15
     assert result["target_duration_seconds"] == 60
     assert result["subtitles_burned_in"] is True
     assert music_calls[0]["duration"] == 60
-    assert render_calls[0]["seconds_per_scene"] == 4
-    assert len(render_calls[0]["scenes"]) == 15
-    assert len(render_calls[0]["subtitles"]) == 15
+    assert animation_calls[0][0][1] == 4
+    assert len(render_calls[0][0]) == 15
+    assert len(render_calls[0][1]["subtitles"]) == 15
+    assert render_calls[0][1]["audio_path"] == audio_dir / "voice.wav"
+    assert render_calls[0][1]["music_path"] == music_dir / "music.wav"
+    assert render_calls[0][1]["resolution"] == "720x1280"
+    assert result["animation_visual_types"] == ["character", "diagram", "environment", "map", "timeline"]
+    assert result["final_qa_report"]["passed"] is True
     assert result["voice_engine"] == "eSpeak NG Hindi"
     assert result["verified_by_renderer"] is True
     assert result["final_render_bytes"] == 2000
