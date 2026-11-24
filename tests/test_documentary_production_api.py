@@ -169,3 +169,5 @@ def test_documentary_factory_api_renders_real_animated_mp4_with_audio_and_subtit
     rendered_file = output_dir / result["render"]["filename"]
     assert rendered_file.is_file() and rendered_file.stat().st_size > 10_000
     assert result["delivery_package"]["verified"] is True
+    assert result["research_evidence"]["human_fact_check_required"] is True
+    assert result["render"]["quality_report"]["documentary_qa"]["passed"] is True
