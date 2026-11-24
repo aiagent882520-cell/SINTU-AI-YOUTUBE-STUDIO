@@ -147,13 +147,13 @@ def audit_audio_quality(video_path: Path) -> dict:
         raise RuntimeError("FFmpeg did not return complete integrated-loudness and true-peak measurements.")
     integrated_lufs = float(integrated.group(1))
     true_peak_dbfs = float(true_peak.group(1))
-    passed = -35.0 <= integrated_lufs <= -14.0 and true_peak_dbfs <= -1.0
+    passed = -18.0 <= integrated_lufs <= -14.0 and true_peak_dbfs <= -1.0
     return {
         "passed": passed,
         "method": "FFmpeg EBU R128 integrated loudness and true-peak analysis",
         "integrated_lufs": integrated_lufs,
         "true_peak_dbfs": true_peak_dbfs,
-        "accepted_integrated_lufs": [-35.0, -14.0],
+        "accepted_integrated_lufs": [-18.0, -14.0],
         "maximum_true_peak_dbfs": -1.0,
     }
 
