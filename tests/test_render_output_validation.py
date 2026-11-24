@@ -69,6 +69,14 @@ def test_final_mp4_verification_rejects_incomplete_video_stream(tmp_path, monkey
         _verify_rendered_output(output, 720, 1280, 8, require_audio=True)
 
 
+def test_final_mp4_verification_reports_actual_unsupported_pixel_format(tmp_path, monkeypatch):
+    _setup_probe(monkeypatch, _metadata(pix_fmt="yuv444p"))
+    output = tmp_path / "wrong-pixel-format.mp4"
+    output.write_bytes(b"mp4")
+    with pytest.raises(RenderFailed, match=r"pix_fmt=yuv444p"):
+        _verify_rendered_output(output, 720, 1280, 8, require_audio=True)
+
+
 def test_final_mp4_verification_rejects_missing_expected_audio(tmp_path, monkeypatch):
     _setup_probe(monkeypatch, _metadata(audio=False))
     output = tmp_path / "final.mp4"
