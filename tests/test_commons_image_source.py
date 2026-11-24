@@ -109,3 +109,18 @@ def test_documentary_scene_uses_commons_photo_and_writes_provenance(tmp_path, mo
     saved = tmp_path / (result["image_id"] + ".source.json")
     assert saved.is_file()
     assert json.loads(saved.read_text(encoding="utf-8"))["artist"] == "Photographer"
+
+
+@pytest.mark.parametrize("licence", [
+    "CC BY 4.0", "CC BY-SA 4.0", "CC0 1.0", "Public domain", "PD-US",
+])
+def test_commons_accepts_commercially_reusable_adaptable_licences(licence):
+    assert commons._is_reusable_license(licence)
+
+
+@pytest.mark.parametrize("licence", [
+    "CC BY-NC 4.0", "CC BY-NC-SA 4.0", "CC BY-ND 4.0",
+    "CC BY-NC-ND 4.0", "All rights reserved", "GPL",
+])
+def test_commons_rejects_noncommercial_no_derivatives_and_unknown_licences(licence):
+    assert not commons._is_reusable_license(licence)
