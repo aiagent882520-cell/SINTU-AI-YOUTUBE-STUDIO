@@ -8,6 +8,7 @@ from .policy import paid_upgrades_allowed
 from PIL import Image, UnidentifiedImageError
 from .comfyui_client import image_workflow_status, generate_image_bytes, ComfyUIUnavailable
 from .procedural_art import generate_procedural_scene_bytes
+from .commons_image_source import fetch_documentary_image, CommonsImageUnavailable
 
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(Path(__file__).resolve().parent.parent))).expanduser().resolve()
 IMAGE_DIR = DATA_DIR / "generated_images"
@@ -62,7 +63,8 @@ def image_status():
     token_configured = bool(os.getenv("MEDIA_GENERATION_TOKEN"))
     comfy = image_workflow_status()
     local_available = True  # The offline procedural renderer is always available.
-    engine = "ComfyUI" if comfy["available"] else "SINTU Procedural Art (offline fallback)"
+    commons_enabled = os.getenv("SINTU_DOCUMENTARY_IMAGE_SOURCE", "procedural").strip().lower() == "wikimedia"
+    engine = ("ComfyUI" if comfy["available"] else "Wikimedia Commons (licensed real photographs)" if commons_enabled else "SINTU Procedural Art (offline fallback)")
     return {
         "available": local_available or (enabled and configured and token_configured),
         "local_available": local_available,
@@ -104,6 +106,15 @@ def generate_image(prompt: str, kind: str = "scene", aspect: str = "portrait") -
             notice = "Locally generated AI image. Review model license and likeness rights before publishing."
         except ComfyUIUnavailable as exc:
             raise ImageUnavailable(str(exc)) from None
+    elif (kind == "scene" and os.getenv("SINTU_DOCUMENTARY_IMAGE_SOURCE", "procedural").strip().lower() == "wikimedia"):
+        try:
+            raw, provenance = fetch_documentary_image(prompt)
+            provider = "Wikimedia Commons (licensed real photograph)"
+            notice = "Real-world documentary photograph. Follow the recorded licence and attribution; see the generated image provenance JSON sidecar."
+        except CommonsImageUnavailable as exc:
+            raise ImageUnavailable(str(exc)) from None
+        except (ValueError, OSError) as exc:
+            raise ImageGenerationFailed(str(exc)) from None
     elif status["local_available"]:
         try:
             raw = generate_procedural_scene_bytes(clean_prompt, width, height)
@@ -135,7 +146,10 @@ def generate_image(prompt: str, kind: str = "scene", aspect: str = "portrait") -
             raise ImageGenerationFailed(f"Image generation failed ({type(exc).__name__}). Check API quota and model access.") from None
 
     image_id, image, output = _save_generated_image(raw)
+    if provider == "Wikimedia Commons (licensed real photograph)":
+        output.with_suffix(".source.json").write_text(json.dumps(provenance, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"image_id": image_id, "url": f"/api/images/{image_id}", "kind": kind,
             "aspect": aspect, "width": image.width, "height": image.height,
             "format": "JPEG", "size_bytes": output.stat().st_size,
-            "provider": provider, "local": provider != status.get("model"), "notice": notice}
+            "provider": provider, "local": provider != status.get("model"), "notice": notice,
+            **({"source": provenance} if provider == "Wikimedia Commons (licensed real photograph)" else {})}
