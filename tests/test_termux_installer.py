@@ -19,7 +19,7 @@ def test_termux_update_and_restart_helpers_have_valid_bash_syntax():
     bash = shutil.which("bash")
     if not bash:
         return
-    for name in ("termux_apply_update.sh", "restart_termux_workers.sh"):
+    for name in ("termux_apply_update.sh", "restart_termux_workers.sh", "termux_relay_bootstrap.sh"):
         script = ROOT / "scripts" / name
         result = subprocess.run([bash, "-n", str(script)], capture_output=True, text=True, check=False)
         assert result.returncode == 0, f"{name}: {result.stderr}"
@@ -42,3 +42,15 @@ def test_hindi_readme_points_to_canonical_one_command_installer():
     readme = (ROOT / "README_HI.md").read_text(encoding="utf-8")
     assert "scripts/termux_one_command.sh" in readme
     assert "START_SINTU_TERMUX.sh" not in readme.split("## Complete video-format groups", 1)[0]
+
+
+def test_dirty_checkout_relay_bootstrap_restarts_only_the_verified_relay():
+    bootstrap = (ROOT / "scripts" / "termux_relay_bootstrap.sh").read_text(encoding="utf-8")
+    assert 'relay_pid_file="$HOME/.sintu/github-relay.pid"' in bootstrap
+    assert '"/proc/$relay_pid/cmdline"' in bootstrap
+    assert 'ps -o args= -p "$relay_pid"' in bootstrap
+    assert '"scripts/github_termux_relay.py"' in bootstrap
+    assert 'kill -TERM "$relay_pid"' in bootstrap
+    assert "did not stop after TERM" in bootstrap
+    assert "kill -KILL" not in bootstrap
+    assert bootstrap.index('kill -TERM "$relay_pid"') < bootstrap.index("bash scripts/start_services.sh")
