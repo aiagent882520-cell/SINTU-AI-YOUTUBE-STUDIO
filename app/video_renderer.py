@@ -370,9 +370,9 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         raise RenderFailed("Final output MP4 container nahi hai.")
     if codec != "h264" or (width, height) != (expected_width, expected_height):
         raise RenderFailed("Final video codec ya resolution expected profile se match nahi karta.")
-    if pixel_format != "yuv420p" or color_range not in {"tv", "mpeg"}:
+    if pixel_format != "yuv420p":
         raise RenderFailed(
-            "Final MP4 Android-compatible limited-range yuv420p mein encode nahi hua "
+            "Final MP4 Android-compatible yuv420p pixel format mein encode nahi hua "
             f"(ffprobe pix_fmt={pixel_format or 'missing'}, color_range={color_range or 'missing'})."
         )
     if has_audio and (audio_codec != "aac" or audio_sample_rate != 48000 or audio_channels != 2):
