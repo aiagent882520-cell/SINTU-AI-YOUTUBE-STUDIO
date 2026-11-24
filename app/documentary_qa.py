@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -121,6 +122,41 @@ def audit_subtitle_pixel_bounds(
     }
 
 
+
+def audit_audio_quality(video_path: Path) -> dict:
+    """Measure final AAC loudness and true peak with FFmpeg EBU R128 analysis."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("Audio quality audit requires FFmpeg.")
+    result = subprocess.run(
+        [ffmpeg, "-hide_banner", "-nostats", "-i", str(video_path),
+         "-filter_complex", "ebur128=peak=true", "-f", "null", "-"],
+        capture_output=True, text=True, timeout=120, check=False,
+    )
+    if result.returncode:
+        raise RuntimeError(f"Final audio loudness analysis failed: {(result.stderr or '')[-1200:]}")
+    integrated = re.search(
+        r"Integrated loudness:\\s+I:\\s*(-?\\d+(?:\\.\\d+)?)\\s+LUFS",
+        result.stderr,
+    )
+    true_peak = re.search(
+        r"True peak:\\s+Peak:\\s*(-?\\d+(?:\\.\\d+)?)\\s+dBFS",
+        result.stderr,
+    )
+    if not integrated or not true_peak:
+        raise RuntimeError("FFmpeg did not return complete integrated-loudness and true-peak measurements.")
+    integrated_lufs = float(integrated.group(1))
+    true_peak_dbfs = float(true_peak.group(1))
+    passed = -35.0 <= integrated_lufs <= -14.0 and true_peak_dbfs <= -1.0
+    return {
+        "passed": passed,
+        "method": "FFmpeg EBU R128 integrated loudness and true-peak analysis",
+        "integrated_lufs": integrated_lufs,
+        "true_peak_dbfs": true_peak_dbfs,
+        "accepted_integrated_lufs": [-35.0, -14.0],
+        "maximum_true_peak_dbfs": -1.0,
+    }
+
 def audit_documentary_mp4(
     video_path: Path,
     subtitles: list[str],
@@ -136,10 +172,12 @@ def audit_documentary_mp4(
     subtitle_pixels = audit_subtitle_pixel_bounds(
         subtitles, durations, width, height,
     )
+    audio_quality = audit_audio_quality(video_path)
     report = {
-        "passed": bool(media["verified"] and subtitle_pixels["passed"]),
+        "passed": bool(media["verified"] and subtitle_pixels["passed"] and audio_quality["passed"]),
         "video": media,
         "subtitle_pixel_audit": subtitle_pixels,
+        "audio_quality": audio_quality,
     }
     report_path = video_path.with_name(f"{video_path.stem}-qa.json")
     report_path.write_text(
