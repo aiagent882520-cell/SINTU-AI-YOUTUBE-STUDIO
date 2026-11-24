@@ -22,3 +22,9 @@ def test_factory_one_click_request_enables_subtitle_burn_in_by_default():
     factory_js = Path(__file__).resolve().parents[1] / "app" / "static" / "factory.js"
     source = factory_js.read_text(encoding="utf-8")
     assert 'JSON.stringify({burn_subtitles:true,sound_effects_enabled:true,quality:"high",fps:30})' in source
+
+
+def test_documentary_factory_media_api_burns_subtitles_by_default():
+    from app.main import ProductionMediaInput
+
+    assert ProductionMediaInput().burn_subtitles is True
