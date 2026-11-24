@@ -349,3 +349,39 @@ def test_comfyui_image_generation_stops_on_history_execution_error(tmp_path, mon
         assert False, "Expected workflow execution failure"
     except comfyui_client.ComfyUIUnavailable as exc:
         assert "Missing image checkpoint" in str(exc)
+
+
+
+def test_comfyui_image_workflow_replaces_dimension_and_seed_placeholders_as_integers():
+    workflow = {
+        "1": {"class_type": "EmptyLatentImage", "inputs": {
+            "width": "__SINTU_WIDTH__", "height": "__SINTU_HEIGHT__", "batch_size": 1,
+        }},
+        "2": {"class_type": "KSampler", "inputs": {"seed": "__SINTU_SEED__"}},
+        "3": {"class_type": "CLIPTextEncode", "inputs": {"text": "__SINTU_PROMPT__"}},
+    }
+    replaced = comfyui_client._replace_placeholders(
+        workflow, "A documentary scene", "bad anatomy", 768, 1360, 123456
+    )
+    assert replaced["1"]["inputs"]["width"] == 768
+    assert isinstance(replaced["1"]["inputs"]["width"], int)
+    assert replaced["1"]["inputs"]["height"] == 1360
+    assert isinstance(replaced["1"]["inputs"]["height"], int)
+    assert replaced["2"]["inputs"]["seed"] == 123456
+    assert isinstance(replaced["2"]["inputs"]["seed"], int)
+    assert replaced["3"]["inputs"]["text"] == "A documentary scene"
+
+
+def test_comfyui_image_workflow_requires_prompt_and_dimensions(tmp_path, monkeypatch):
+    workflow = tmp_path / "image.json"
+    workflow.write_text(json.dumps({
+        "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "__SINTU_PROMPT__"}}
+    }), encoding="utf-8")
+    monkeypatch.setenv("COMFYUI_IMAGE_WORKFLOW_PATH", str(workflow))
+    loaded, valid, reason = comfyui_client._load_api_workflow(
+        "COMFYUI_IMAGE_WORKFLOW_PATH",
+        ("__SINTU_PROMPT__", "__SINTU_WIDTH__", "__SINTU_HEIGHT__"),
+    )
+    assert loaded is None
+    assert valid is False
+    assert "WIDTH" in reason and "HEIGHT" in reason
