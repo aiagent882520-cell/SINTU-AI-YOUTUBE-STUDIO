@@ -69,6 +69,7 @@ from .termux_bridge import router as termux_bridge_router
 from .youtube_upload import transfer_resumable_upload, sha256_file as youtube_sha256_file, validate_session_uri, validate_state_transition, UploadProtocolError, UPLOAD_STATES
 from .offline_media import (OfflineMediaError, MAX_MEDIA_BYTES, import_media_file, list_offline_media, get_offline_media_path)
 from .documentary_research import DOCUMENTARY_FORMAT_IDS, validate_documentary_evidence_for_production
+from .documentary_routing import uses_procedural_2d
 from .research_evidence_store import save_research_evidence, get_research_evidence
 from .resumable_media_upload import (ResumableUploadError, create_upload, get_upload, append_upload_chunk, complete_upload)
 
@@ -5703,12 +5704,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         _approve_owner_review_for_media(run_id, owner, run)
     except (ValueError, PermissionError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
-    # Documentary formats keep their persisted research-evidence gate above, then use
-    # deterministic local 2D animation rather than requiring ComfyUI image generation.
-    use_procedural_2d = (
-        run["format_id"] in {"2d-cartoon", "story-animation"}
-        or run["format_id"] in DOCUMENTARY_FORMAT_IDS
-    )
+    use_procedural_2d = uses_procedural_2d(run["format_id"])
     deliverables = run["result"].get("deliverables") or {}
     scene_prompts = [item.strip() for item in payload.scene_prompts]
     if not scene_prompts:
