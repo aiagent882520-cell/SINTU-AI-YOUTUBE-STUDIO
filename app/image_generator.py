@@ -1,5 +1,6 @@
 """Local ComfyUI plus offline procedural art, with explicitly gated paid image generation."""
 import base64
+import json
 import os
 import uuid
 from io import BytesIO
