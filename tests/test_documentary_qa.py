@@ -42,7 +42,6 @@ def test_audio_quality_audit_measures_integrated_loudness_and_true_peak(tmp_path
             ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
             "-f", "lavfi", "-i", "color=c=navy:s=160x284:r=24:d=3",
             "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=3",
-            "-filter:a", "volume=0.1",
             "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-ar", "48000", "-ac", "2", "-shortest",
             str(output),
