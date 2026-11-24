@@ -5732,7 +5732,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
     if not use_procedural_2d and not image_status().get("local_available"):
         raise HTTPException(status_code=503, detail="Local ComfyUI image workflow is not ready. Configure a validated free local workflow; paid providers are not enabled by this route.")
     if not voice_status().get("local_available"):
-        raise HTTPException(status_code=503, detail="Local Piper TTS executable and Hindi voice model are required. Paid voice providers are not enabled by this route.")
+        raise HTTPException(status_code=503, detail="Install local Piper TTS with a Hindi voice model or eSpeak NG with Hindi voice data. Paid voice providers are not enabled by this route.")
     try:
         transition_owner_media_stage(
             run_id, "render", "running", owner_username=owner,
