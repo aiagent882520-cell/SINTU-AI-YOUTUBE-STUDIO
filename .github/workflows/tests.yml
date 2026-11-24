@@ -152,7 +152,7 @@ jobs:
           python scripts/live_e2e.py --offline-video --topic "भारत के 10 रहस्यमयी किलों पर 60 सेकंड का हिंदी वीडियो" | tee offline-video-report.json
       - name: Enforce 60-second Hindi subtitle acceptance
         run: |
-          python -c 'import json; r=json.load(open("offline-video-report.json", encoding="utf-8")); v=r["live_tests"]["offline_storyboard_video"]; assert abs(v["duration_seconds"]-60) <= 0.1, v; assert v["subtitle_count"] == 15 and v["subtitles_burned_in"] is True, v; assert v["audio"] == "voiceover+music", v; assert "SINTU Procedural Art (offline)" in v["image_providers"], v; print("60-second Hindi video, 15 burned subtitle cues, narration, music and truthful procedural-art provenance: PASS")'
+          python -c 'import json; r=json.load(open("offline-video-report.json", encoding="utf-8")); v=r["live_tests"]["offline_storyboard_video"]; assert abs(v["duration_seconds"]-60) <= 0.1, v; assert v["subtitle_count"] == 15 and v["subtitles_burned_in"] is True, v; assert v["audio"] == "voiceover+music", v; assert "SINTU Procedural Art (offline)" in v["image_providers"], v; assert v["animation_report"]["all_scenes_animated"] is True and v["animation_report"]["scene_count"] == 15, v; assert set(v["animation_visual_types"]) == {"map","timeline","diagram","character","environment"}, v; assert v["final_qa_report"]["passed"] is True and v["final_qa_report"]["subtitle_pixel_audit"]["cue_count"] == 15, v; print("60-second Hindi documentary: 15 animated scenes, five visual grammars, narration/music, 15 subtitle pixel audits and MP4 QA: PASS")'
 
       - name: Audit final MP4 metadata, black frames and sampled motion
         env:
@@ -170,6 +170,7 @@ jobs:
           name: sintu-offline-video-e2e
           path: |
             .ci-data/generated_videos/*.mp4
+            .ci-data/generated_videos/*-qa.json
             offline-video-report.json
             offline-media-audit.json
           if-no-files-found: warn
