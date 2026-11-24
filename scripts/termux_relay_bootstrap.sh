@@ -92,6 +92,23 @@ PY
 echo "Backup: $backup_dir/github_termux_relay.py"
 echo "Existing dirty project files were not changed."
 
+# Require working GitHub authentication and an idle command queue before
+# stopping the relay. A bootstrap must never interrupt a command mid-result.
+REPOSITORY="${SINTU_GITHUB_REPOSITORY:-aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO}"
+command -v gh >/dev/null 2>&1 || {
+  echo "GitHub CLI is required; install gh and authenticate before relay restart." >&2
+  exit 4
+}
+gh auth status >/dev/null 2>&1 || {
+  echo "GitHub CLI is not authenticated; run gh auth login before relay restart." >&2
+  exit 4
+}
+running_count="$(gh api "repos/${REPOSITORY}/issues?state=open&labels=sintu-command-running&per_page=50" --jq 'map(select(.title | startswith("SINTU-CMD:"))) | length')"
+if [[ ! "$running_count" =~ ^[0-9]+$ ]] || [[ "$running_count" -gt 0 ]]; then
+  echo "A SINTU command is running or its queue state could not be verified; refusing to restart the relay." >&2
+  exit 4
+fi
+
 # start_services.sh deliberately leaves a correctly identified running relay
 # alone. Stop only the verified relay here so it reloads the patched allowlist;
 # never signal an unrelated/reused PID and never escalate to SIGKILL.
@@ -127,5 +144,15 @@ if [ -s "$relay_pid_file" ]; then
   rm -f "$relay_pid_file"
 fi
 
+started_at="$(date +%s)"
 bash scripts/start_services.sh
-echo "SINTU relay bootstrap completed; the relay was restarted only after process identity verification."
+HEARTBEAT="$HOME/.sintu/github-relay.heartbeat"
+for _ in $(seq 1 20); do
+  if .venv/bin/python -c 'import os,sys; p=sys.argv[1]; t=int(sys.argv[2]); raise SystemExit(0 if os.path.isfile(p) and int(os.path.getmtime(p)) >= t else 1)' "$HEARTBEAT" "$started_at" 2>/dev/null; then
+    echo "SINTU relay bootstrap completed; a fresh successful GitHub poll heartbeat was observed."
+    exit 0
+  fi
+  sleep 0.5
+done
+echo "Relay process start was requested, but no fresh successful GitHub poll heartbeat appeared; inspect $HOME/.sintu/github-relay.log." >&2
+exit 5
