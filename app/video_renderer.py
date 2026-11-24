@@ -215,10 +215,10 @@ def _create_subtitle_track(work: Path, subtitles: list[str] | None,
     # libass scales SRT style sizes against its script canvas; 0.027*height
     # made Devanagari captions several times larger than the intended pixel size.
     # Keep portrait glyphs legible while reserving enough room for real Hindi glyph widths.
-    font_size = max(16, round(height * 0.017))
+    font_size = max(14, round(height * 0.014))
     horizontal_margin = max(28, round(width * 0.06))
     available_width = max(1, width - 2 * horizontal_margin)
-    wrap_width = max(8, min(48, int(available_width / (font_size * 1.85))))
+    wrap_width = max(8, min(48, int(available_width / (font_size * 2.4))))
     cues = []
     cursor = 0.0
     cue_index = 1
