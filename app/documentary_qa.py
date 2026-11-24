@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 from .video_renderer import (
     OUTPUT_DIR,
@@ -42,6 +42,19 @@ def audit_subtitle_pixel_bounds(
     cues = []
     with tempfile.TemporaryDirectory(prefix="sintu-subtitle-pixel-audit-") as temporary:
         work = Path(temporary)
+        baseline_path = work / "baseline.png"
+        baseline_command = [
+            ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", f"color=c=black:s={width}x{height}:r=1:d=1",
+            "-frames:v", "1", str(baseline_path),
+        ]
+        baseline_result = subprocess.run(
+            baseline_command, capture_output=True, text=True, timeout=45, check=False,
+        )
+        if baseline_result.returncode or not baseline_path.is_file():
+            raise RuntimeError("Subtitle pixel audit could not render its black reference frame.")
+        with Image.open(baseline_path) as baseline_image:
+            baseline = baseline_image.convert("RGB").copy()
         for index, (subtitle, duration) in enumerate(zip(subtitles, durations), start=1):
             if not isinstance(subtitle, str) or not subtitle.strip():
                 raise ValueError(f"Subtitle {index} is empty.")
@@ -67,8 +80,10 @@ def audit_subtitle_pixel_bounds(
                     f"Subtitle {index} pixel render failed: {(rendered.stderr or '')[-500:]}"
                 )
             with Image.open(frame_path) as frame:
-                gray = frame.convert("L")
-                glyph_mask = gray.point(lambda value: 255 if value >= 24 else 0)
+                rendered_rgb = frame.convert("RGB")
+                difference = ImageChops.difference(rendered_rgb, baseline)
+                gray = difference.convert("L")
+                glyph_mask = gray.point(lambda value: 255 if value >= 12 else 0)
                 bounds = glyph_mask.getbbox()
             if bounds is None:
                 raise AssertionError(f"Subtitle {index} produced no visible glyph pixels.")
