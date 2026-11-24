@@ -6,7 +6,7 @@ inside Termux can execute it locally.
 
 ## Security model
 
-- The API accepts only these 17 fixed actions: `git_status`, `git_pull_ff_only`, `run_tests`, `compile_check`, `automation_self_test`, `health_audit`, `operational_readiness`, `live_preflight`, `engine_probe`, `safe_optional_install`, `restart_services`, `media_repair`, `media_forensics`, `watchdog_recovery_test`, `offline_video_e2e`, `full_self_test`, and `full_studio_e2e`.
+- The API accepts only these 18 fixed actions: `git_status`, `git_pull_ff_only`, `run_tests`, `main_worktree_tests`, `compile_check`, `automation_self_test`, `health_audit`, `operational_readiness`, `live_preflight`, `engine_probe`, `safe_optional_install`, `restart_services`, `media_repair`, `media_forensics`, `watchdog_recovery_test`, `offline_video_e2e`, `full_self_test`, `full_studio_e2e`.
 - No arbitrary shell text, executable path, environment variable, or command
   arguments are accepted from the remote caller.
 - A random bearer token of at least 32 characters is required on every route.
@@ -67,6 +67,7 @@ grant ChatGPT direct access to the phone.
 - `git_status`
 - `git_pull_ff_only`
 - `run_tests` (optionally one Python test file directly inside `tests/`)
+- `main_worktree_tests` (fetches `origin/main` and runs the full pytest suite in `~/.sintu/worktrees/main`; refuses symlinks, unregistered directories, dirty worktrees, or a HEAD mismatch; never resets, stashes, cleans, or overwrites the primary checkout)
 - `compile_check`
 - `health_audit`
 - `operational_readiness` (JSON readiness report; never prints secret values)
@@ -122,16 +123,12 @@ Example:
 {"action":"operational_readiness"}
 ```
 
-Allowed actions (exactly): `git_status`, `git_pull_ff_only`, `run_tests`,
-`compile_check`, `automation_self_test`, `health_audit`, `operational_readiness`,
-`live_preflight`, `engine_probe`, `safe_optional_install`, `restart_services`,
-`media_repair`, `media_forensics`, `watchdog_recovery_test`, `offline_video_e2e`,
-`full_self_test`, and `full_studio_e2e`.
+Allowed actions (exactly): `git_status`, `git_pull_ff_only`, `run_tests`, `main_worktree_tests`, `compile_check`, `automation_self_test`, `health_audit`, `operational_readiness`, `live_preflight`, `engine_probe`, `safe_optional_install`, `restart_services`, `media_repair`, `media_forensics`, `watchdog_recovery_test`, `offline_video_e2e`, `full_self_test`, `full_studio_e2e`.
 
 The issue body must be one JSON object with `action` required and no keys other
 than `action`, `topic`, and `test_path`. `test_path` is optional only for
 `run_tests` and must name an existing Python file directly inside `tests/`;
-without it, the full pytest suite runs. `topic` is optional only for
+without it, the full pytest suite runs. `main_worktree_tests` accepts no extra fields and runs against a dedicated clean worktree, preserving local changes in the user's primary checkout. `topic` is optional only for
 `offline_video_e2e`, `full_self_test`, and `full_studio_e2e`, and must contain
 1–300 characters. Every other action accepts no additional fields. For example,
 `full_project_task`, `priority`, `goals`, and `constraints` are not supported.
