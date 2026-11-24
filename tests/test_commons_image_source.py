@@ -4,7 +4,7 @@ import json
 import pytest
 from PIL import Image
 
-from app import commons_image_source as commons
+from app import commons_image_source as commons, image_generator
 
 
 def image_bytes():
@@ -78,3 +78,34 @@ def test_commons_request_rejects_redirect_to_untrusted_host(monkeypatch):
     monkeypatch.setattr(commons.urllib.request, "urlopen", lambda *args, **kwargs: Response())
     with pytest.raises(commons.CommonsImageUnavailable, match="untrusted host"):
         commons._request("https://upload.wikimedia.org/image.jpg")
+
+
+
+def test_documentary_scene_uses_commons_photo_and_writes_provenance(tmp_path, monkeypatch):
+    source = {
+        "provider": "Wikimedia Commons",
+        "title": "File:Historic Fort.jpg",
+        "source_url": "https://commons.wikimedia.org/wiki/File:Historic_Fort.jpg",
+        "license": "CC BY-SA 4.0",
+        "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "artist": "Photographer",
+        "credit": "Wikimedia Commons",
+        "attribution_required": True,
+        "search_query": "historic Indian fort",
+    }
+    monkeypatch.setenv("SINTU_DOCUMENTARY_IMAGE_SOURCE", "wikimedia")
+    monkeypatch.setattr(image_generator, "IMAGE_DIR", tmp_path)
+    monkeypatch.setattr(image_generator, "image_workflow_status", lambda: {
+        "available": False, "workflow_configured": False, "server_reachable": False,
+        "workflow_valid": False, "nodes_verified": False, "missing_nodes": [],
+        "missing_models": [], "reason": "ComfyUI not configured",
+    })
+    monkeypatch.setattr(image_generator, "fetch_documentary_image", lambda prompt: (image_bytes(), source))
+
+    result = image_generator.generate_image("Historic Indian fort with sandstone ramparts", kind="scene")
+
+    assert result["provider"] == "Wikimedia Commons (licensed real photograph)"
+    assert result["source"]["license"] == "CC BY-SA 4.0"
+    saved = tmp_path / (result["image_id"] + ".source.json")
+    assert saved.is_file()
+    assert json.loads(saved.read_text(encoding="utf-8"))["artist"] == "Photographer"
