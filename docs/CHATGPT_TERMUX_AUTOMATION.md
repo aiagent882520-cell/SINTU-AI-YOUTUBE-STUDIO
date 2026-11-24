@@ -4,7 +4,7 @@
 
 ChatGPT creates a GitHub issue in this repository with the `sintu-command-queued` label. The Android Termux GitHub relay accepts only issues created by the configured repository owner, validates the JSON body, runs a fixed allowlisted command, and posts the result as an issue comment.
 
-The GitHub issue contract is JSON-only: required `action`; optional `topic` only for `offline_video_e2e`, `full_self_test`, and `full_studio_e2e` (1–300 characters); optional `test_path` only for `run_tests` (an existing `tests/*.py` file). No other keys are accepted, and `full_project_task` is not a supported action. The issue must be authored by the configured owner, titled with the `SINTU-CMD:` prefix, and labeled `sintu-command-queued`.
+The GitHub issue body must start with a single-line JSON object containing required `action`; optional explanatory Markdown may follow on later lines. Optional `topic` is only for `offline_video_e2e`, `full_self_test`, and `full_studio_e2e` (1–300 characters); optional `test_path` is only for `run_tests` (an existing `tests/*.py` file). No other keys are accepted, and `full_project_task` is not a supported action. The issue must be authored by the configured owner, titled with the `SINTU-CMD:` prefix, and labeled `sintu-command-queued`.
 
 **Safety default:** `SINTU_AUTOMATION_ONLY=true` blocks `full_studio_e2e`, `full_self_test`, `offline_video_e2e`, and the mutating `media_repair` action. Do not queue the production example below while this mode is enabled; it will be rejected. Use `{"action":"operational_readiness"}` for a read-only device readiness check.
 
