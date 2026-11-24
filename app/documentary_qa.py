@@ -23,6 +23,7 @@ def audit_subtitle_pixel_bounds(
     height: int,
     *,
     safe_margin_ratio: float = 0.06,
+    safe_vertical_margin_ratio: float = 0.04,
 ) -> dict:
     """Burn each exact subtitle onto black via libass and inspect rendered glyph pixels.
 
@@ -34,11 +35,14 @@ def audit_subtitle_pixel_bounds(
         raise RuntimeError("Subtitle pixel audit requires FFmpeg.")
     if not subtitles or len(subtitles) != len(durations):
         raise ValueError("Subtitle and duration counts must match and be non-empty.")
-    if not 0 < safe_margin_ratio < 0.25:
+    if (not 0 < safe_margin_ratio < 0.25
+            or not 0 < safe_vertical_margin_ratio < 0.25):
         raise ValueError("Subtitle safe margin ratio is invalid.")
 
     minimum_x = round(width * safe_margin_ratio)
     maximum_x = width - minimum_x - 1
+    minimum_y = round(height * safe_vertical_margin_ratio)
+    maximum_y = height - minimum_y - 1
     cues = []
     with tempfile.TemporaryDirectory(prefix="sintu-subtitle-pixel-audit-") as temporary:
         work = Path(temporary)
@@ -88,24 +92,30 @@ def audit_subtitle_pixel_bounds(
             if bounds is None:
                 raise AssertionError(f"Subtitle {index} produced no visible glyph pixels.")
             left, top, right, bottom = bounds
-            passed = left >= minimum_x and right - 1 <= maximum_x
+            passed = (
+                left >= minimum_x and right - 1 <= maximum_x
+                and top >= minimum_y and bottom - 1 <= maximum_y
+            )
             cues.append({
                 "index": index,
                 "text": subtitle,
                 "pixel_bounds": [left, top, right, bottom],
                 "safe_x_bounds": [minimum_x, maximum_x],
+                "safe_y_bounds": [minimum_y, maximum_y],
                 "passed": passed,
             })
             if not passed:
                 raise AssertionError(
-                    f"Subtitle {index} clips the safe horizontal area: "
-                    f"pixels x={left}..{right - 1}, allowed={minimum_x}..{maximum_x}."
+                    f"Subtitle {index} clips the safe pixel area: "
+                    f"pixels x={left}..{right - 1}, y={top}..{bottom - 1}; "
+                    f"allowed x={minimum_x}..{maximum_x}, y={minimum_y}..{maximum_y}."
                 )
     return {
         "passed": all(cue["passed"] for cue in cues),
         "method": "FFmpeg libass burn on black + Pillow glyph-pixel bounding box",
         "resolution": f"{width}x{height}",
         "safe_margin_ratio": safe_margin_ratio,
+        "safe_vertical_margin_ratio": safe_vertical_margin_ratio,
         "cue_count": len(cues),
         "cues": cues,
     }
