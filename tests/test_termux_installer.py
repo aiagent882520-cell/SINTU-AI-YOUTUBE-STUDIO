@@ -47,6 +47,9 @@ def test_hindi_readme_points_to_canonical_one_command_installer():
 def test_dirty_checkout_relay_bootstrap_restarts_only_the_verified_relay():
     bootstrap = (ROOT / "scripts" / "termux_relay_bootstrap.sh").read_text(encoding="utf-8")
     assert 'relay_pid_file="$HOME/.sintu/github-relay.pid"' in bootstrap
+    assert "gh auth status" in bootstrap
+    assert "labels=sintu-command-running" in bootstrap
+    assert bootstrap.index("running_count=") < bootstrap.index('kill -TERM "$relay_pid"')
     assert '"/proc/$relay_pid/cmdline"' in bootstrap
     assert 'ps -o args= -p "$relay_pid"' in bootstrap
     assert '"scripts/github_termux_relay.py"' in bootstrap
@@ -54,3 +57,9 @@ def test_dirty_checkout_relay_bootstrap_restarts_only_the_verified_relay():
     assert "did not stop after TERM" in bootstrap
     assert "kill -KILL" not in bootstrap
     assert bootstrap.index('kill -TERM "$relay_pid"') < bootstrap.index("bash scripts/start_services.sh")
+    assert 'new_relay_pid="$(cat "$HOME/.sintu/github-relay.pid"' in bootstrap
+    assert 'new_relay_cmdline' in bootstrap
+    assert 'github-relay.heartbeat' in bootstrap
+    assert "git reset --hard" not in bootstrap
+    assert "git clean" not in bootstrap
+    assert "git stash" not in bootstrap
