@@ -103,11 +103,20 @@ gh auth status >/dev/null 2>&1 || {
   echo "GitHub CLI is not authenticated; run gh auth login before relay restart." >&2
   exit 4
 }
-running_count="$(gh api "repos/${REPOSITORY}/issues?state=open&labels=sintu-command-running&per_page=50" --jq 'map(select(.title | startswith("SINTU-CMD:"))) | length')"
-if [[ ! "$running_count" =~ ^[0-9]+$ ]] || [[ "$running_count" -gt 0 ]]; then
-  echo "A SINTU command is running or its queue state could not be verified; refusing to restart the relay." >&2
+running_issues="$(gh api "repos/${REPOSITORY}/issues?state=open&labels=sintu-command-running&per_page=50" --jq 'map(select(.title | startswith("SINTU-CMD:")) | {updated_at})')"
+active_count="$(printf '%s\n' "$running_issues" | python -c 'import json,sys; from datetime import datetime,timezone; rows=json.load(sys.stdin); now=datetime.now(timezone.utc); count=0
+for row in rows:
+ try: updated=datetime.fromisoformat(row["updated_at"].replace("Z","+00:00"))
+ except Exception: count+=1
+ else:
+  if (now-updated).total_seconds() < 2400: count+=1
+print(count)')"
+if [[ ! "$active_count" =~ ^[0-9]+$ ]] || [[ "$active_count" -gt 0 ]]; then
+  echo "A non-stale SINTU command is running or its queue state could not be verified; refusing to restart the relay." >&2
   exit 4
 fi
+# Running claims older than the relay's 40-minute lease are safe to recover
+# on the first poll after restart; the relay requeues them before FIFO work.
 
 # start_services.sh deliberately leaves a correctly identified running relay
 # alone. Stop only the verified relay here so it reloads the patched allowlist;
