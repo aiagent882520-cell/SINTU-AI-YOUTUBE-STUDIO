@@ -301,9 +301,12 @@ def _offline_storyboard_e2e(topic: str) -> dict:
             Path(clip_directory),
             resolution="720x1280",
             fps=24,
+            scene_images=image_paths,
         )
         if len(clip_paths) != 15 or not animation_report.get("all_scenes_animated"):
             raise RuntimeError("All 15 documentary scenes must pass frame-by-frame animation.")
+        if animation_report.get("scene_image_count") != 15 or not animation_report.get("scene_images_used_as_full_frame_backplates"):
+            raise RuntimeError("All 15 generated scene images must be visible full-frame documentary backplates.")
         visual_types = {item["visual_type"] for item in animation_report["scenes"]}
         if visual_types != {"map", "timeline", "diagram", "character", "environment"}:
             raise RuntimeError(f"Documentary visual diversity incomplete: {sorted(visual_types)}")
@@ -350,6 +353,8 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "topic": clean_topic,
         "forts_covered": forts,
         "animation_engine": animation_report["engine"],
+        "scene_images_used_as_full_frame_backplates": animation_report["scene_images_used_as_full_frame_backplates"],
+        "scene_image_count": animation_report["scene_image_count"],
         "animation_visual_types": sorted(visual_types),
         "animation_report": animation_report,
         "final_qa_report": qa_report,
