@@ -64,7 +64,7 @@ def test_documentary_animation_exports_real_scene_mp4s_and_motion_report(tmp_pat
         assert evidence["camera_move"] == "slow_push_with_alternating_track"
         probe = subprocess.run(
             [shutil.which("ffprobe"), "-v", "error", "-show_entries",
-             "stream=codec_type,width,height,pix_fmt,color_range", "-show_entries", "format=duration",
+             "format=duration:stream=codec_type,width,height,pix_fmt,color_range",
              "-of", "json", str(clip)],
             capture_output=True, text=True, timeout=30, check=False,
         )
