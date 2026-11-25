@@ -60,6 +60,16 @@ def test_documentary_factory_api_renders_real_animated_mp4_with_audio_and_subtit
         "Diagram animation: an architectural cutaway diagram explains the hidden water system.",
         "Character animation: a historical guide walks through the palace courtyard.",
         "Environment animation: a cinematic environment shows the fort above a moving river at sunrise.",
+        "Map animation: a regional map locates the fort among nearby rivers and settlements.",
+        "Timeline animation: archival eras transition across a chronological ruler.",
+        "Diagram animation: a layered cutaway reveals gates, walls and defensive passages.",
+        "Character animation: an artisan demonstrates traditional stone construction.",
+        "Environment animation: monsoon clouds move over the fort's mountain ridge.",
+        "Map animation: a siege route is traced around the outer fortifications.",
+        "Timeline animation: rulers and restoration periods appear in sequence.",
+        "Diagram animation: a water harvesting system is shown in cross-section.",
+        "Character animation: a guide walks through a restored palace courtyard.",
+        "Environment animation: a wide cinematic sunrise reveals the complete fort panorama.",
     ]
     captions = [
         "भारत में यह प्राचीन मार्ग व्यापार को जोड़ता था।",
@@ -67,6 +77,16 @@ def test_documentary_factory_api_renders_real_animated_mp4_with_audio_and_subtit
         "इस जल प्रणाली से वर्षा का पानी सुरक्षित रखा जाता था।",
         "इतिहास का यह अध्याय आज भी प्रेरित करता है।",
         "नदी के किनारे यह किला अपनी कहानी सुनाता है।",
+        "मानचित्र किले की भौगोलिक स्थिति दिखाता है।",
+        "समयरेखा निर्माण के अलग-अलग काल बताती है।",
+        "दीवारें और द्वार सुरक्षा का हिस्सा थे।",
+        "कारीगर पत्थर पर बारीक नक्काशी करते थे।",
+        "मानसून में पहाड़ी का दृश्य बदल जाता है।",
+        "घेराबंदी के रास्ते रक्षा रणनीति दिखाते हैं।",
+        "शासकों ने समय-समय पर किले का विस्तार किया।",
+        "वर्षा जल संग्रह जीवन के लिए जरूरी था।",
+        "महल का आँगन इतिहास की झलक देता है।",
+        "सूर्योदय में किले का विशाल दृश्य उभरता है।",
     ]
     narration = "भारत में यह प्राचीन मार्ग व्यापार को जोड़ता था। समय के साथ किले का निर्माण और विस्तार हुआ। इस जल प्रणाली से वर्षा का पानी सुरक्षित रखा जाता था। इतिहास का यह अध्याय आज भी प्रेरित करता है। नदी के किनारे यह किला अपनी कहानी सुनाता है।"
 
@@ -181,10 +201,10 @@ def test_documentary_factory_api_renders_real_animated_mp4_with_audio_and_subtit
     assert result["video_rendered"] is True
     assert result["published"] is False
     assert result["captions_burned_in"] is True
-    assert len(result["subtitles"]) == 5
+    assert len(result["subtitles"]) == 15
     assert result["render"]["animation_mode"] == "scene-aware 2D documentary animation"
     animation = result["render"]["animation_report"]
-    assert animation["scene_count"] == 5
+    assert animation["scene_count"] == 15
     assert animation["all_scenes_animated"] is True
     assert animation["scene_image_count"] == len(prompts)
     assert animation["scene_images_used_as_full_frame_backplates"] is True
@@ -206,7 +226,7 @@ def test_documentary_factory_api_renders_real_animated_mp4_with_audio_and_subtit
     assert documentary_qa["passed"] is True
     assert documentary_qa["audio_quality"]["passed"] is True
     assert documentary_qa["audio_quality"]["true_peak_dbfs"] <= -1.0
-    assert documentary_qa["subtitle_pixel_audit"]["cue_count"] == 5
+    assert documentary_qa["subtitle_pixel_audit"]["cue_count"] == 15
     assert all(cue["passed"] for cue in documentary_qa["subtitle_pixel_audit"]["cues"])
     assert Path(documentary_qa["report_path"]).is_file()
     rendered_file = output_dir / result["render"]["filename"]
