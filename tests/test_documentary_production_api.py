@@ -245,6 +245,7 @@ def test_documentary_scene_count_gate_requires_exactly_15_prompts():
     assert main._documentary_scene_count_error("documentary", prompts) is None
     assert "exactly 15" in main._documentary_scene_count_error("documentary", prompts[:14])
     assert "exactly 15" in main._documentary_scene_count_error("documentary", prompts + ["extra scene"])
+    assert "unique scene prompts" in main._documentary_scene_count_error("documentary", prompts[:-1] + [prompts[0]])
     assert main._documentary_scene_count_error("shorts", prompts[:5]) is None
 
 
