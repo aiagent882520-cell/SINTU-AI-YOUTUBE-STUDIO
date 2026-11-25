@@ -1049,7 +1049,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             # The RGBA watermark overlay/libass path can negotiate a non-yuv420
             # pixel format even when every source clip is yuv420p. Normalize the
             # final composed stream after all overlays/subtitles for Android MP4.
-            filters.append(f"{video_map}scale=iw:ih:in_range=auto:out_range=tv,format=yuv420p[vfinal]")
+            filters.append(f"{video_map}scale=iw:ih:in_range=auto:out_range=tv,format=yuv420p,setparams=range=limited[vfinal]")
             video_map = "[vfinal]"
             filters.append("".join(audio_labels) + f"concat=n={len(video_paths)}:v=0:a=1[clipaudio]")
 
