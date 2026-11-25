@@ -200,6 +200,7 @@ def render_documentary_animation_clips(
     scenes: list[str], seconds_per_scene: int, output_dir: Path,
     resolution: str = "720x1280", fps: int = 24,
     scene_images: list[Path] | None = None,
+    scene_image_providers: list[str] | None = None,
 ) -> tuple[list[Path], dict]:
     """Render scene-specific, frame-animated documentary clips and measurable motion evidence."""
     ffmpeg,ffprobe=shutil.which("ffmpeg"),shutil.which("ffprobe")
@@ -213,6 +214,8 @@ def render_documentary_animation_clips(
         raise ValueError("Unsupported documentary animation render profile.")
     if scene_images is not None and (len(scene_images) != len(scenes) or any(not Path(p).is_file() for p in scene_images)):
         raise ValueError("Every documentary scene must have one readable generated scene image.")
+    if scene_image_providers is not None and (scene_images is None or len(scene_image_providers) != len(scenes) or any(not isinstance(p, str) or not p.strip() for p in scene_image_providers)):
+        raise ValueError("Scene image provider evidence must identify every supplied scene image.")
     w,h=map(int,resolution.split("x"))
     out=Path(output_dir); out.mkdir(parents=True,exist_ok=True)
     clips=[]; evidence=[]
@@ -267,8 +270,10 @@ def render_documentary_animation_clips(
                           "motion_samples_passed":motion_pixels,
                          "motion_verified":True,"camera_move":"slow_push_with_alternating_track","file":target.name})
     report={"engine":"SINTU scene-aware 2D documentary animation",
-            "provider":"local vector animation with generated scene-image backplates" if scene_images is not None else "local vector animation; no external model inference",
+            "provider":"local vector animation with scene-image backplates" if scene_images is not None else "local vector animation; no external model inference",
             "scene_image_count":len(scene_images) if scene_images is not None else 0,
+            "scene_image_providers":list(scene_image_providers) if scene_image_providers is not None else [],
+            "scene_image_provider_summary":{name: (scene_image_providers or []).count(name) for name in sorted(set(scene_image_providers or []))},
             "scene_images_used_as_full_frame_backplates":scene_images is not None,
             "fps":fps,"animation_fps":ANIMATION_FPS,"resolution":resolution,
             "scene_count":len(clips),"map_geometry":"schematic_not_geospatial","scenes":evidence,
