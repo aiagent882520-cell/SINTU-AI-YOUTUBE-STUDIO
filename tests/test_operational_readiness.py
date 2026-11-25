@@ -130,3 +130,33 @@ def test_piper_model_requires_nonempty_onnx_and_valid_sidecar_config(tmp_path, m
     )
     report = doctor.build_report(tmp_path, env={}, check_network=False)
     assert "piper_hindi_voice" not in report["production_blockers"]
+
+
+def test_configured_piper_executable_must_be_executable(tmp_path, monkeypatch):
+    _valid_core_tree(tmp_path)
+    monkeypatch.setattr(doctor.shutil, "which", lambda name: None)
+    executable = tmp_path / "bin" / "piper"
+    executable.parent.mkdir()
+    executable.write_text("#!/bin/sh\\nexit 0\\n", encoding="utf-8")
+    model = tmp_path / "models" / "voices" / "hi_IN-pratham-medium.onnx"
+    model.parent.mkdir(parents=True)
+    model.write_bytes(b"x" * 2048)
+    model.with_suffix(model.suffix + ".json").write_text(
+        __import__("json").dumps({
+            "audio": {"sample_rate": 22050},
+            "phoneme_id_map": {" ": [0], "a": [1]},
+        }),
+        encoding="utf-8",
+    )
+
+    executable.chmod(0o644)
+    report = doctor.build_report(
+        tmp_path, env={"PIPER_EXECUTABLE": str(executable)}, check_network=False
+    )
+    assert "piper_hindi_voice" in report["production_blockers"]
+
+    executable.chmod(0o755)
+    report = doctor.build_report(
+        tmp_path, env={"PIPER_EXECUTABLE": str(executable)}, check_network=False
+    )
+    assert "piper_hindi_voice" not in report["production_blockers"]
