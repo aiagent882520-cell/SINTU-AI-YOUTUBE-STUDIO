@@ -420,8 +420,11 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         )
     ]
     longest_black_seconds = max((end - start for start, end in black_intervals), default=0.0)
-    if any(start <= 0.1 and end >= duration * 0.95 for start, end in black_intervals):
-        raise RenderFailed("Final video mein full-duration black frames hain.")
+    # blackdetect uses a threshold heuristic that can classify a limited-range
+    # Android H.264 stream as black even when its decoded RGB pixels are visible.
+    # The independent decoded-pixel audit below is authoritative for an all-black
+    # render; keep blackdetect for long black segments, where its interval timing
+    # provides useful coverage between the one-second pixel samples.
     if longest_black_seconds >= max(2.5, duration * 0.25):
         raise RenderFailed(
             f"Final video mein lamba black segment hai ({longest_black_seconds:.2f}s)."
