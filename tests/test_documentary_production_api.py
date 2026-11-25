@@ -125,9 +125,19 @@ def test_documentary_factory_api_renders_real_animated_mp4_with_audio_and_subtit
         "music_id": music_id, "provider": "Local procedural test music",
     })
     monkeypatch.setattr(main, "transition_owner_media_stage", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(main, "write_render_manifest", lambda **_kwargs: {
-        "manifest_path": "production_manifests/test-manifest.json",
-    })
+
+    def fake_write_render_manifest(**_kwargs):
+        manifest_path = data_dir / "production_manifests" / "test-manifest.json"
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(json.dumps({
+            "engines": {
+                "image": "ComfyUI (local AI)",
+                "image_providers_by_scene": ["ComfyUI (local AI)"] * len(prompts),
+            },
+        }), encoding="utf-8")
+        return {"manifest_path": "production_manifests/test-manifest.json"}
+
+    monkeypatch.setattr(main, "write_render_manifest", fake_write_render_manifest)
     monkeypatch.setattr(main, "create_delivery_package", lambda **_kwargs: {
         "verified": True, "path": "production_packages/test-delivery.zip",
         "filename": "test-delivery.zip", "size_bytes": 1024, "sha256": "delivery-sha256",
