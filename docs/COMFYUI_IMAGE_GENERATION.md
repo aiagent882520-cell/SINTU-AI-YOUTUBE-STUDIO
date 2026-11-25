@@ -30,3 +30,25 @@ The app's procedural renderer is an illustration fallback, not generative AI.
 A Wikimedia Commons photograph is a real source photograph, not AI generation.
 SINTU reports the provider so these outputs are not confused. Paid APIs remain
 disabled by default and are not required for the local ComfyUI path.
+
+
+## Strict documentary media acceptance
+
+The normal offline E2E can use explicitly labelled local fallbacks so CI remains
+fully offline. That is not proof of generative-AI imagery or natural narration.
+After configuring ComfyUI and a Piper Hindi voice model, run:
+
+```bash
+python scripts/live_e2e.py --offline-video --require-ai-images --require-piper-voice
+```
+
+This strict mode fails unless **all 15 scene images** report the
+`ComfyUI (local AI)` provider and the narration engine reports `Piper TTS`.
+It rejects procedural illustrations, Wikimedia photographs, and eSpeak as
+substitutes for those two acceptance requirements. The JSON result records
+per-scene providers and the selected voice engine. The command renders a
+local test video; it does not publish or upload anything.
+
+For an image-only acceptance run, omit `--require-piper-voice`; for a voice-only
+acceptance run, omit `--require-ai-images`. Real pronunciation and overall
+voice naturalness still require listening review by the owner before release.
