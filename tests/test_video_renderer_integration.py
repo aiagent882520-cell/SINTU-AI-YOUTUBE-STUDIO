@@ -664,3 +664,34 @@ def test_portrait_hindi_subtitles_wrap_to_safe_width(tmp_path, monkeypatch):
     assert len(caption_lines) >= 2
     assert max(map(len, caption_lines)) <= 15
 
+
+
+def test_ai_clip_renderer_confirms_blackdetect_full_black_with_decoded_pixels(tmp_path, monkeypatch):
+    """A blackdetect full-span heuristic must not override visible decoded Android pixels."""
+    from types import SimpleNamespace
+
+    _ffmpeg_tools()
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
+    source = _make_source_clip(tmp_path / "blackdetect-source.mp4")
+    real_run = video_renderer.render_process.run_render_process
+
+    def simulate_android_blackdetect_heuristic(command, **kwargs):
+        if "blackdetect=d=0.5:pix_th=0.10" in command:
+            return SimpleNamespace(
+                returncode=0, stdout="",
+                stderr="[blackdetect @ 0x1] black_start:0 black_end:1",
+            )
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(
+        video_renderer.render_process, "run_render_process",
+        simulate_android_blackdetect_heuristic,
+    )
+    result = video_renderer.render_ai_clips(
+        [source], resolution="720x1280", fps=24, quality="standard", transition="cut",
+    )
+
+    output = tmp_path / result["filename"]
+    assert output.is_file()
+    assert result["quality_report"]["visible_frame_count"] >= 1
+    assert result["quality_report"]["longest_black_segment_seconds"] == 1.0
