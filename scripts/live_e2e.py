@@ -399,6 +399,7 @@ def _offline_storyboard_e2e(topic: str, *, require_ai_images: bool = False, requ
         "research_source_count": len(research_sources),
         "scene_count": len(scenes),
         "image_providers": sorted({item.get("provider", "unknown") for item in image_results}),
+        "media_provider_acceptance": media_acceptance,
         "voice_engine": voice.get("voice"),
         "voice_format": voice.get("format"),
         "music_provider": music.get("provider"),
