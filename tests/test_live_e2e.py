@@ -388,3 +388,47 @@ def test_preflight_missing_comfyui_flag_fails_closed_but_reports_local_fallback(
     assert report["available"] is False
     assert report["local_fallback_available"] is True
     assert report["local_engine"] == "SINTU Procedural Art (offline fallback)"
+
+
+
+def test_media_provider_acceptance_records_ai_and_piper_success():
+    result = live_e2e._assert_media_provider_acceptance(
+        [{"provider": "ComfyUI (local AI)"} for _ in range(15)],
+        {"voice": "Piper TTS"},
+        require_ai_images=True,
+        require_piper_voice=True,
+    )
+    assert result["scene_count"] == 15
+    assert result["ai_image_acceptance_passed"] is True
+    assert result["piper_voice_acceptance_passed"] is True
+
+
+def test_media_provider_acceptance_rejects_procedural_images_for_ai_acceptance():
+    images = [
+        {"provider": "ComfyUI (local AI)"},
+        {"provider": "SINTU Procedural Art (offline)"},
+    ]
+    with pytest.raises(RuntimeError, match="every scene image"):
+        live_e2e._assert_media_provider_acceptance(
+            images, {"voice": "Piper TTS"}, require_ai_images=True
+        )
+
+
+def test_media_provider_acceptance_rejects_espeak_for_natural_voice_acceptance():
+    with pytest.raises(RuntimeError, match="eSpeak is a synthetic fallback"):
+        live_e2e._assert_media_provider_acceptance(
+            [{"provider": "ComfyUI (local AI)"}],
+            {"voice": "eSpeak NG"},
+            require_piper_voice=True,
+        )
+
+
+def test_media_provider_acceptance_keeps_default_local_fallbacks_explicit():
+    result = live_e2e._assert_media_provider_acceptance(
+        [{"provider": "SINTU Procedural Art (offline)"}],
+        {"voice": "eSpeak NG"},
+    )
+    assert result["ai_image_acceptance_required"] is False
+    assert result["ai_image_acceptance_passed"] is None
+    assert result["piper_voice_acceptance_required"] is False
+    assert result["piper_voice_acceptance_passed"] is None
