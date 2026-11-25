@@ -210,6 +210,23 @@ def test_documentary_factory_api_renders_real_animated_mp4_with_audio_and_subtit
     assert result["render"]["quality_report"]["documentary_qa"]["passed"] is True
 
 
+def test_documentary_image_gate_rejects_procedural_and_stock_fallbacks():
+    assert main._documentary_image_requirement_error({
+        "ai_available": False,
+        "local_available": True,
+        "local_engine": "SINTU Procedural Art (offline)",
+        "local_diagnostics": {"reason": "ComfyUI is unavailable."},
+    }) == (
+        "Documentary production requires real local ComfyUI AI images for every scene; "
+        "procedural artwork is not accepted as AI. ComfyUI is unavailable."
+    )
+    assert main._documentary_image_requirement_error({
+        "ai_available": True,
+        "local_available": True,
+        "ai_engine": "ComfyUI (local generative AI)",
+    }) is None
+
+
 def test_documentary_voice_gate_rejects_espeak_and_accepts_piper():
     assert main._documentary_voice_requirement_error(
         "documentary", {"local_available": True, "local_engine": "eSpeak NG Hindi"}
