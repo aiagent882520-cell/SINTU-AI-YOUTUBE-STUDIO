@@ -8,6 +8,8 @@ import subprocess
 import wave
 from pathlib import Path
 
+from PIL import Image
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -45,9 +47,11 @@ def test_documentary_factory_api_renders_real_animated_mp4_with_audio_and_subtit
     output_dir = data_dir / "generated_videos"
     audio_dir = data_dir / "generated_audio"
     music_dir = data_dir / "generated_music"
+    image_dir = data_dir / "generated_images"
     output_dir.mkdir(parents=True)
     audio_dir.mkdir(parents=True)
     music_dir.mkdir(parents=True)
+    image_dir.mkdir(parents=True)
 
     prompts = [
         "Map animation: an illustrated map traces the ancient trade route across India.",
@@ -81,6 +85,24 @@ def test_documentary_factory_api_renders_real_animated_mp4_with_audio_and_subtit
     monkeypatch.setattr(main, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(main, "AUDIO_DIR", audio_dir)
     monkeypatch.setattr(main, "MUSIC_DIR", music_dir)
+    monkeypatch.setattr(main, "IMAGE_DIR", image_dir)
+    monkeypatch.setattr(main, "image_status", lambda: {
+        "ai_available": True, "local_available": True, "ai_engine": "ComfyUI (local generative AI)",
+    })
+    image_counter = {"value": 0}
+
+    def fake_generate_ai_image(prompt, _kind, _aspect):
+        image_counter["value"] += 1
+        image_id = f"{image_counter['value']:032x}"
+        image = Image.new("RGB", (256, 256), (
+            (image_counter["value"] * 37) % 255,
+            (image_counter["value"] * 71) % 255,
+            (image_counter["value"] * 113) % 255,
+        ))
+        image.save(image_dir / f"{image_id}.jpg", format="JPEG")
+        return {"image_id": image_id, "provider": "ComfyUI (local AI)", "metadata": {"prompt": prompt}}
+
+    monkeypatch.setattr(main, "generate_image", fake_generate_ai_image)
     monkeypatch.setattr(video_renderer, "DATA_DIR", data_dir)
     monkeypatch.setattr(video_renderer, "OUTPUT_DIR", output_dir)
     monkeypatch.setattr(main, "get_production_run", lambda *_args: run)
@@ -153,6 +175,10 @@ def test_documentary_factory_api_renders_real_animated_mp4_with_audio_and_subtit
     animation = result["render"]["animation_report"]
     assert animation["scene_count"] == 5
     assert animation["all_scenes_animated"] is True
+    assert animation["scene_image_count"] == len(prompts)
+    assert animation["scene_images_used_as_full_frame_backplates"] is True
+    assert animation["scene_image_provider_summary"] == {"ComfyUI (local AI)": len(prompts)}
+    assert image_counter["value"] == len(prompts)
     assert {scene["visual_type"] for scene in animation["scenes"]} == {
         "map", "timeline", "diagram", "character", "environment",
     }
