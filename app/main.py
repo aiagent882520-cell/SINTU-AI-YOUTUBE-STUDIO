@@ -5671,6 +5671,19 @@ def _approve_owner_review_for_media(run_id: str, owner: str, run: dict) -> None:
         raise HTTPException(status_code=409, detail="Owner Review must be explicitly approved before media generation.")
 
 
+def _documentary_voice_requirement_error(format_id: str, voice_health: dict) -> str | None:
+    """Prevent synthetic eSpeak fallback from silently degrading documentary narration."""
+    if not voice_health.get("local_available"):
+        return "Install local Piper TTS with a Hindi voice model. Paid voice providers are not enabled by this route."
+    if format_id in DOCUMENTARY_FORMAT_IDS and voice_health.get("local_engine") != "Piper TTS":
+        return (
+            "Documentary narration requires the natural Hindi Piper neural voice. "
+            "eSpeak NG is only a synthetic fallback and is blocked for documentary production. "
+            "Run scripts/setup_hindi_voice.sh, then restart SINTU."
+        )
+    return None
+
+
 @app.post("/api/production/runs/{run_id}/produce-media")
 def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, request: Request):
     """Generate local scene images, Hindi voice, original music and a verified MP4 for an approved run."""
@@ -5731,14 +5744,9 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=400, detail="Unsupported FPS or render quality.")
     if not use_procedural_2d and not image_status().get("local_available"):
         raise HTTPException(status_code=503, detail="Local ComfyUI image workflow is not ready. Configure a validated free local workflow; paid providers are not enabled by this route.")
-    voice_health = voice_status()
-    if not voice_health.get("local_available"):
-        raise HTTPException(status_code=503, detail="Install local Piper TTS with a Hindi voice model. Paid voice providers are not enabled by this route.")
-    if run.get("format_id") in DOCUMENTARY_FORMAT_IDS and voice_health.get("local_engine") != "Piper TTS":
-        raise HTTPException(
-            status_code=503,
-            detail="Documentary narration requires the natural Hindi Piper neural voice. eSpeak NG is only a synthetic fallback and is blocked for documentary production. Run scripts/setup_hindi_voice.sh, then restart SINTU.",
-        )
+    voice_error = _documentary_voice_requirement_error(run.get("format_id", ""), voice_status())
+    if voice_error:
+        raise HTTPException(status_code=503, detail=voice_error)
     try:
         transition_owner_media_stage(
             run_id, "render", "running", owner_username=owner,
