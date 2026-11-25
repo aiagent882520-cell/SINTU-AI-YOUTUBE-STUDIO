@@ -177,3 +177,15 @@ def test_documentary_factory_api_renders_real_animated_mp4_with_audio_and_subtit
     assert result["delivery_package"]["verified"] is True
     assert result["research_evidence"]["human_fact_check_required"] is True
     assert result["render"]["quality_report"]["documentary_qa"]["passed"] is True
+
+
+def test_documentary_voice_gate_rejects_espeak_and_accepts_piper():
+    assert main._documentary_voice_requirement_error(
+        "documentary", {"local_available": True, "local_engine": "eSpeak NG Hindi"}
+    )
+    assert main._documentary_voice_requirement_error(
+        "documentary", {"local_available": True, "local_engine": "Piper TTS"}
+    ) is None
+    assert main._documentary_voice_requirement_error(
+        "2d-cartoon", {"local_available": True, "local_engine": "eSpeak NG Hindi"}
+    ) is None
