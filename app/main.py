@@ -5671,6 +5671,13 @@ def _approve_owner_review_for_media(run_id: str, owner: str, run: dict) -> None:
         raise HTTPException(status_code=409, detail="Owner Review must be explicitly approved before media generation.")
 
 
+def _documentary_scene_count_error(format_id: str, scene_prompts: list[str]) -> str | None:
+    """Keep documentary production aligned with the 15-scene acceptance specification."""
+    if format_id in DOCUMENTARY_FORMAT_IDS and len(scene_prompts) != 15:
+        return f"Documentary production requires exactly 15 distinct scene prompts; received {len(scene_prompts)}."
+    return None
+
+
 def _documentary_image_requirement_error(image_health: dict) -> str | None:
     """Reject procedural and stock fallbacks for documentary scene artwork."""
     if image_health.get("ai_available"):
@@ -5739,11 +5746,9 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
             status_code=400,
             detail="Approved run mein scene prompts nahi mile. AI Video Generator ko numbered SCENE PROMPTS dene dein ya prompts manually add karein.",
         )
-    if run.get("format_id") in DOCUMENTARY_FORMAT_IDS and len(scene_prompts) != 15:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Documentary production requires exactly 15 distinct scene prompts; received {len(scene_prompts)}.",
-        )
+    scene_count_error = _documentary_scene_count_error(run.get("format_id", ""), scene_prompts)
+    if scene_count_error:
+        raise HTTPException(status_code=400, detail=scene_count_error)
     if any(not item or len(item) > 3000 for item in scene_prompts):
         raise HTTPException(status_code=400, detail="Each scene prompt must contain 1 to 3000 characters.")
     narration = (payload.narration or "").strip()
