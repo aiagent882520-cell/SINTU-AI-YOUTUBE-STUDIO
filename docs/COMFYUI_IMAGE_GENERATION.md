@@ -52,3 +52,19 @@ local test video; it does not publish or upload anything.
 For an image-only acceptance run, omit `--require-piper-voice`; for a voice-only
 acceptance run, omit `--require-ai-images`. Real pronunciation and overall
 voice naturalness still require listening review by the owner before release.
+
+## Production Factory documentary route
+
+The approved Production Factory `/api/production/runs/{run_id}/produce-media`
+route now applies the same real-image requirement to documentary formats:
+ComfyUI must be healthy before rendering starts, and SINTU generates one
+ComfyUI image for every scene prompt. A procedural or Wikimedia result cannot
+satisfy this gate. The scene-specific images are passed into the animation
+renderer as full-frame visual plates, with the local motion layers rendered
+over them. The animation report records the image count, provider for each
+scene, and whether the images were used as full-frame plates.
+
+Documentary narration has a separate neural-voice gate: local Piper TTS with
+the Hindi voice model is required. eSpeak remains available only as a clearly
+synthetic fallback for non-documentary workflows. These production gates do
+not install models automatically; configure ComfyUI/SDXL and Piper first.
