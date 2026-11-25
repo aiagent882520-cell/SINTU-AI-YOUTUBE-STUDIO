@@ -408,7 +408,7 @@ def test_media_provider_acceptance_rejects_procedural_images_for_ai_acceptance()
         {"provider": "ComfyUI (local AI)"},
         {"provider": "SINTU Procedural Art (offline)"},
     ]
-    with pytest.raises(RuntimeError, match="every scene image"):
+    with pytest.raises(RuntimeError, match="for every scene"):
         live_e2e._assert_media_provider_acceptance(
             images, {"voice": "Piper TTS"}, require_ai_images=True
         )
