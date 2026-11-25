@@ -108,7 +108,7 @@ def test_documentary_scene_uses_commons_photo_and_writes_provenance(tmp_path, mo
     assert result["source"]["license"] == "CC BY-SA 4.0"
     saved = tmp_path / (result["image_id"] + ".source.json")
     assert saved.is_file()
-    assert json.loads(saved.read_text(encoding="utf-8"))["artist"] == "Photographer"
+    assert json.loads(saved.read_text(encoding="utf-8"))["source"]["artist"] == "Photographer"
 
 
 @pytest.mark.parametrize("licence", [
