@@ -85,7 +85,7 @@ def image_status():
         "provider": "ComfyUI local AI / SINTU Procedural Art offline / optional OpenAI",
         "model": os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
         "formats": ["jpeg"],
-        "notice": "Generative AI images require a ready local ComfyUI workflow. Procedural art is only an illustration fallback and is never reported as AI. Paid image generation remains locked until revenue and explicit approval.",
+        "notice": "Procedural art is not generative AI; it is an illustration fallback only. Generative AI images require a ready local ComfyUI workflow. Paid image generation remains locked until revenue and explicit approval.",
     }
 
 
