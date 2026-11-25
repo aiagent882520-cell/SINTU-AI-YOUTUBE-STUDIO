@@ -5752,7 +5752,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
             detail="Documentary production requires real local ComfyUI AI images for every scene; procedural artwork is not accepted as AI. " + str(reason),
         )
     if not is_documentary and not use_procedural_2d and not image_health.get("local_available"):
-        raise HTTPException(status_code=503, detail="Local image workflow is not ready. Configure a validated free local workflow; paid providers are not enabled by this route.")
+        raise HTTPException(status_code=503, detail="Local ComfyUI image workflow is not ready. Configure a validated free local ComfyUI workflow; paid providers are not enabled by this route.")
     voice_error = _documentary_voice_requirement_error(run.get("format_id", ""), voice_status())
     if voice_error:
         raise HTTPException(status_code=503, detail=voice_error)
