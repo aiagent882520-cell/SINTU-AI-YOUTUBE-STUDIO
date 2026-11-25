@@ -94,9 +94,9 @@ def test_documentary_factory_api_renders_real_animated_mp4_with_audio_and_subtit
         "generic_export_available": True, "default_resolution": "720x1280", "limitations": [],
     })
     monkeypatch.setattr(main, "_approve_owner_review_for_media", lambda *_args: None)
-    monkeypatch.setattr(main, "voice_status", lambda: {"local_available": True})
+    monkeypatch.setattr(main, "voice_status", lambda: {"local_available": True, "local_engine": "Piper TTS"})
     monkeypatch.setattr(main, "generate_voiceover", lambda _text: {
-        "audio_id": voice_id, "filename": "voice.wav", "provider": "Local test Hindi TTS",
+        "audio_id": voice_id, "filename": "voice.wav", "provider": "Local TTS", "voice": "Piper TTS",
     })
     monkeypatch.setattr(main, "generate_music", lambda *_args: {
         "music_id": music_id, "provider": "Local procedural test music",
