@@ -693,5 +693,5 @@ def test_ai_clip_renderer_confirms_blackdetect_full_black_with_decoded_pixels(tm
 
     output = tmp_path / result["filename"]
     assert output.is_file()
-    assert result["quality_report"]["visible_frame_count"] >= 1
-    assert result["quality_report"]["longest_black_segment_seconds"] == 1.0
+    assert result["visible_frame_count"] >= 1
+    assert result["longest_black_segment_seconds"] == 1.0
