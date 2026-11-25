@@ -38,9 +38,6 @@ def test_report_never_exposes_secret_values_and_separates_core_from_production(t
     # Do not let a real device worker PID affect this isolated fixture.
     monkeypatch.setattr(doctor.Path, "home", lambda: tmp_path)
     monkeypatch.setattr(doctor.shutil, "which", lambda name: "/usr/bin/" + name)
-    model = tmp_path / "models" / "voices" / "hi_IN-pratham-medium.onnx"
-    model.parent.mkdir(parents=True)
-    model.write_bytes(b"fixture model")
     report = doctor.build_report(tmp_path, env={}, check_network=False)
     rendered = __import__("json").dumps(report)
     assert "SUPER_SECRET" not in rendered
