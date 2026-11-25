@@ -70,6 +70,21 @@ def build_report(root: Path = ROOT, env: dict[str, str] | None = None,
     ffprobe = shutil.which("ffprobe")
     checks.append(check("ffmpeg", bool(ffmpeg), ffmpeg or "Install FFmpeg"))
     checks.append(check("ffprobe", bool(ffprobe), ffprobe or "Install FFprobe"))
+    piper_name = file_env.get("PIPER_EXECUTABLE", "piper")
+    piper_executable = shutil.which(piper_name) or (piper_name if Path(piper_name).is_file() else None)
+    configured_model = file_env.get("PIPER_MODEL_PATH", "").strip()
+    model_candidates = [
+        Path(configured_model).expanduser() if configured_model else None,
+        root / "models" / "voices" / "hi_IN-pratham-medium.onnx",
+        root / "app" / "models" / "voices" / "hi_IN-pratham-medium.onnx",
+    ]
+    piper_model = next((candidate for candidate in model_candidates
+                        if candidate is not None and candidate.is_file()), None)
+    piper_ready = bool(piper_executable and piper_model)
+    checks.append(check("piper_hindi_voice", piper_ready,
+                        "Piper executable and Hindi neural model found" if piper_ready else
+                        "Hindi neural voice unavailable; install Piper and configure PIPER_MODEL_PATH",
+                        required=False))
     checks.append(check("private_environment", (root / ".env").is_file(),
                         ".env exists; values are never displayed"))
     checks.append(check("admin_auth", file_env.get("SINTU_AUTH_REQUIRED", "true").lower() == "true"
@@ -123,6 +138,7 @@ def build_report(root: Path = ROOT, env: dict[str, str] | None = None,
         "comfyui": engine_results["comfyui"],
         "ffmpeg": bool(ffmpeg),
         "ffprobe": bool(ffprobe),
+        "piper_hindi_voice": piper_ready,
         "bridge_credentials": bridge_ok,
         "termux_bridge_worker": worker_alive,
     }
