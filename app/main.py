@@ -5739,6 +5739,11 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
             status_code=400,
             detail="Approved run mein scene prompts nahi mile. AI Video Generator ko numbered SCENE PROMPTS dene dein ya prompts manually add karein.",
         )
+    if run.get("format_id") in DOCUMENTARY_FORMAT_IDS and len(scene_prompts) != 15:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Documentary production requires exactly 15 distinct scene prompts; received {len(scene_prompts)}.",
+        )
     if any(not item or len(item) > 3000 for item in scene_prompts):
         raise HTTPException(status_code=400, detail="Each scene prompt must contain 1 to 3000 characters.")
     narration = (payload.narration or "").strip()
