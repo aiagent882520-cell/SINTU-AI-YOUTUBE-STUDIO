@@ -240,6 +240,14 @@ def test_documentary_factory_api_renders_real_animated_mp4_with_audio_and_subtit
     assert result["render"]["quality_report"]["documentary_qa"]["passed"] is True
 
 
+def test_documentary_scene_count_gate_requires_exactly_15_prompts():
+    prompts = [f"Distinct documentary scene {index}" for index in range(15)]
+    assert main._documentary_scene_count_error("documentary", prompts) is None
+    assert "exactly 15" in main._documentary_scene_count_error("documentary", prompts[:14])
+    assert "exactly 15" in main._documentary_scene_count_error("documentary", prompts + ["extra scene"])
+    assert main._documentary_scene_count_error("shorts", prompts[:5]) is None
+
+
 def test_documentary_image_gate_rejects_procedural_and_stock_fallbacks():
     assert main._documentary_image_requirement_error({
         "ai_available": False,
