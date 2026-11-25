@@ -5731,8 +5731,14 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=400, detail="Unsupported FPS or render quality.")
     if not use_procedural_2d and not image_status().get("local_available"):
         raise HTTPException(status_code=503, detail="Local ComfyUI image workflow is not ready. Configure a validated free local workflow; paid providers are not enabled by this route.")
-    if not voice_status().get("local_available"):
-        raise HTTPException(status_code=503, detail="Install local Piper TTS with a Hindi voice model or eSpeak NG with Hindi voice data. Paid voice providers are not enabled by this route.")
+    voice_health = voice_status()
+    if not voice_health.get("local_available"):
+        raise HTTPException(status_code=503, detail="Install local Piper TTS with a Hindi voice model. Paid voice providers are not enabled by this route.")
+    if run.get("format_id") in DOCUMENTARY_FORMAT_IDS and voice_health.get("local_engine") != "Piper TTS":
+        raise HTTPException(
+            status_code=503,
+            detail="Documentary narration requires the natural Hindi Piper neural voice. eSpeak NG is only a synthetic fallback and is blocked for documentary production. Run scripts/setup_hindi_voice.sh, then restart SINTU.",
+        )
     try:
         transition_owner_media_stage(
             run_id, "render", "running", owner_username=owner,
