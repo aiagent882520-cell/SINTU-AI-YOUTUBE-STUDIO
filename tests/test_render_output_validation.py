@@ -188,7 +188,7 @@ def test_publish_gate_rejects_full_duration_black_mp4_even_with_valid_audio(tmp_
     assert probe.returncode == 0
     metadata = json.loads(probe.stdout)
     assert needs_audio_repair(metadata) is False
-    with pytest.raises(RenderFailed, match="full-duration black"):
+    with pytest.raises(RenderFailed, match="lamba black segment"):
         verify_publishable_mp4(black)
 
 
