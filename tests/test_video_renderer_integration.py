@@ -695,3 +695,38 @@ def test_ai_clip_renderer_confirms_blackdetect_full_black_with_decoded_pixels(tm
     assert output.is_file()
     assert result["visible_frame_count"] >= 1
     assert result["longest_black_segment_seconds"] == 1.0
+
+
+def test_publish_verifier_uses_decoded_pixels_not_full_span_blackdetect_heuristic(tmp_path, monkeypatch):
+    """Android blackdetect can report a full-span interval on visible limited-range video."""
+    from types import SimpleNamespace
+
+    ffmpeg, _ = _ffmpeg_tools()
+    source = tmp_path / "visible-limited-range.mp4"
+    encoded = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+         "-f", "lavfi", "-i", "testsrc2=size=720x1280:rate=24:duration=1",
+         "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+         "-color_range", "tv", "-t", "1", str(source)],
+        capture_output=True, check=False, timeout=60,
+    )
+    assert encoded.returncode == 0, encoded.stderr.decode("utf-8", "replace")
+
+    real_run = video_renderer.render_process.run_render_process
+
+    def simulate_android_blackdetect_heuristic(command, **kwargs):
+        if "blackdetect=d=0.5:pix_th=0.10" in command:
+            return SimpleNamespace(
+                returncode=0, stdout="",
+                stderr="[blackdetect @ 0x1] black_start:0 black_end:1",
+            )
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(
+        video_renderer.render_process, "run_render_process",
+        simulate_android_blackdetect_heuristic,
+    )
+    result = video_renderer.verify_publishable_mp4(source)
+    assert result["verified"] is True
+    assert result["visible_frame_count"] >= 1
+    assert result["longest_black_segment_seconds"] == 1.0
