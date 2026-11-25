@@ -62,8 +62,24 @@ def copy_verified(root: Path, source: Path, destination: Path, expected_sha256: 
             os.fsync(output.fileno())
         if sha256_file(temporary) != expected_sha256:
             raise ValueError("copied quarantine file failed SHA-256 verification")
-        # Hard-link creation is atomic and fails rather than replacing an existing path.
-        os.link(temporary, destination)
+        # O_EXCL is supported on Android/Termux and prevents replacing an
+        # existing destination, unlike a check-then-rename sequence.
+        destination_fd = os.open(
+            destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+        )
+        try:
+            with os.fdopen(destination_fd, "wb") as output, temporary.open("rb") as verified:
+                shutil.copyfileobj(verified, output, length=1024 * 1024)
+                output.flush()
+                os.fsync(output.fileno())
+            if sha256_file(destination) != expected_sha256:
+                raise ValueError("final quarantine file failed SHA-256 verification")
+        except BaseException:
+            try:
+                destination.unlink()
+            except FileNotFoundError:
+                pass
+            raise
     finally:
         try:
             temporary.unlink()
