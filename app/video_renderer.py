@@ -555,8 +555,10 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
         )
     ]
     longest_black_seconds = max((end - start for start, end in black_intervals), default=0.0)
-    if any(start <= 0.1 and end >= duration * 0.95 for start, end in black_intervals):
-        raise RenderFailed("Upload MP4 mein full-duration black video frames hain; publishing blocked.")
+    # As in render-time QA, blackdetect is a threshold heuristic rather than
+    # proof that every decoded frame is black. The decoded-pixel audit below
+    # decides whether the picture is actually blank; retain interval checks
+    # for long black sections that can fall between pixel samples.
     maximum_black_segment = max(2.5, duration * 0.25)
     if longest_black_seconds >= maximum_black_segment:
         raise RenderFailed(
