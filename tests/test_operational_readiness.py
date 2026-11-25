@@ -54,7 +54,14 @@ def test_production_ready_requires_every_engine_and_worker(tmp_path, monkeypatch
     monkeypatch.setattr(doctor.Path, "home", lambda: tmp_path)
     model = tmp_path / "models" / "voices" / "hi_IN-pratham-medium.onnx"
     model.parent.mkdir(parents=True)
-    model.write_bytes(b"fixture model")
+    model.write_bytes(b"x" * 2048)
+    model.with_suffix(model.suffix + ".json").write_text(
+        __import__("json").dumps({
+            "audio": {"sample_rate": 22050},
+            "phoneme_id_map": {" ": [0], "a": [1]},
+        }),
+        encoding="utf-8",
+    )
     worker_dir = tmp_path / ".sintu"
     worker_dir.mkdir()
     worker_pid = worker_dir / "bridge-worker.pid"
@@ -102,3 +109,24 @@ def test_reused_pid_cannot_make_production_ready(tmp_path, monkeypatch):
     assert "termux_bridge_worker" in report["production_blockers"]
     worker_check = next(item for item in report["checks"] if item["name"] == "termux_bridge_worker")
     assert worker_check["status"] == "warn"
+
+
+
+def test_piper_model_requires_nonempty_onnx_and_valid_sidecar_config(tmp_path, monkeypatch):
+    _valid_core_tree(tmp_path)
+    monkeypatch.setattr(doctor.shutil, "which", lambda name: "/usr/bin/" + name)
+    model = tmp_path / "models" / "voices" / "hi_IN-pratham-medium.onnx"
+    model.parent.mkdir(parents=True)
+    model.write_bytes(b"x" * 2048)
+    report = doctor.build_report(tmp_path, env={}, check_network=False)
+    assert "piper_hindi_voice" in report["production_blockers"]
+
+    model.with_suffix(model.suffix + ".json").write_text(
+        __import__("json").dumps({
+            "audio": {"sample_rate": 22050},
+            "phoneme_id_map": {" ": [0], "a": [1]},
+        }),
+        encoding="utf-8",
+    )
+    report = doctor.build_report(tmp_path, env={}, check_network=False)
+    assert "piper_hindi_voice" not in report["production_blockers"]
