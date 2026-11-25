@@ -38,13 +38,16 @@ def test_report_never_exposes_secret_values_and_separates_core_from_production(t
     # Do not let a real device worker PID affect this isolated fixture.
     monkeypatch.setattr(doctor.Path, "home", lambda: tmp_path)
     monkeypatch.setattr(doctor.shutil, "which", lambda name: "/usr/bin/" + name)
+    model = tmp_path / "models" / "voices" / "hi_IN-pratham-medium.onnx"
+    model.parent.mkdir(parents=True)
+    model.write_bytes(b"fixture model")
     report = doctor.build_report(tmp_path, env={}, check_network=False)
     rendered = __import__("json").dumps(report)
     assert "SUPER_SECRET" not in rendered
     assert report["core_ready"] is True
     assert report["ready"] is True
     assert report["production_ready"] is False
-    assert {"local_ai_model", "comfyui", "termux_bridge_worker"} <= set(report["production_blockers"])
+    assert {"local_ai_model", "comfyui", "piper_hindi_voice", "termux_bridge_worker"} <= set(report["production_blockers"])
     assert report["summary"]["warnings"] >= 1
 
 
@@ -52,6 +55,9 @@ def test_production_ready_requires_every_engine_and_worker(tmp_path, monkeypatch
     _valid_core_tree(tmp_path)
     monkeypatch.setattr(doctor.shutil, "which", lambda name: "/usr/bin/" + name)
     monkeypatch.setattr(doctor.Path, "home", lambda: tmp_path)
+    model = tmp_path / "models" / "voices" / "hi_IN-pratham-medium.onnx"
+    model.parent.mkdir(parents=True)
+    model.write_bytes(b"fixture model")
     worker_dir = tmp_path / ".sintu"
     worker_dir.mkdir()
     worker_pid = worker_dir / "bridge-worker.pid"
