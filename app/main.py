@@ -5675,6 +5675,10 @@ def _documentary_scene_count_error(format_id: str, scene_prompts: list[str]) -> 
     """Keep documentary production aligned with the 15-scene acceptance specification."""
     if format_id in DOCUMENTARY_FORMAT_IDS and len(scene_prompts) != 15:
         return f"Documentary production requires exactly 15 distinct scene prompts; received {len(scene_prompts)}."
+    if format_id in DOCUMENTARY_FORMAT_IDS:
+        normalized = [prompt.strip().casefold() for prompt in scene_prompts]
+        if len(set(normalized)) != 15:
+            return "Documentary production requires 15 unique scene prompts; duplicate prompts were detected."
     return None
 
 
