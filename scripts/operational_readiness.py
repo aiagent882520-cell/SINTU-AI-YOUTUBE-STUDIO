@@ -71,7 +71,11 @@ def build_report(root: Path = ROOT, env: dict[str, str] | None = None,
     checks.append(check("ffmpeg", bool(ffmpeg), ffmpeg or "Install FFmpeg"))
     checks.append(check("ffprobe", bool(ffprobe), ffprobe or "Install FFprobe"))
     piper_name = file_env.get("PIPER_EXECUTABLE", "piper")
-    piper_executable = shutil.which(piper_name) or (piper_name if Path(piper_name).is_file() else None)
+    piper_executable = shutil.which(piper_name)
+    if not piper_executable:
+        configured_piper = Path(piper_name).expanduser()
+        if configured_piper.is_file() and os.access(configured_piper, os.X_OK):
+            piper_executable = str(configured_piper)
     configured_model = file_env.get("PIPER_MODEL_PATH", "").strip()
     model_candidates = [
         Path(configured_model).expanduser() if configured_model else None,
