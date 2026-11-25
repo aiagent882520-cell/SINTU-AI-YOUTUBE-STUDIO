@@ -302,6 +302,7 @@ def _offline_storyboard_e2e(topic: str) -> dict:
             resolution="720x1280",
             fps=24,
             scene_images=image_paths,
+            scene_image_providers=[str(item.get("provider", "unknown")) for item in image_results],
         )
         if len(clip_paths) != 15 or not animation_report.get("all_scenes_animated"):
             raise RuntimeError("All 15 documentary scenes must pass frame-by-frame animation.")
