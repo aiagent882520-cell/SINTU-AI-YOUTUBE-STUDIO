@@ -78,12 +78,33 @@ def build_report(root: Path = ROOT, env: dict[str, str] | None = None,
         root / "models" / "voices" / "hi_IN-pratham-medium.onnx",
         root / "app" / "models" / "voices" / "hi_IN-pratham-medium.onnx",
     ]
+    def valid_piper_model(candidate: Path | None) -> bool:
+        """Require a non-empty ONNX model and its parseable Piper voice config."""
+        if candidate is None:
+            return False
+        try:
+            if not candidate.is_file() or candidate.stat().st_size < 1024:
+                return False
+            config_path = Path(str(candidate) + ".json")
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            audio = config.get("audio", {})
+            phoneme_map = config.get("phoneme_id_map", {})
+            return (
+                isinstance(audio, dict)
+                and isinstance(audio.get("sample_rate"), int)
+                and audio["sample_rate"] > 0
+                and isinstance(phoneme_map, dict)
+                and bool(phoneme_map)
+            )
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            return False
+
     piper_model = next((candidate for candidate in model_candidates
-                        if candidate is not None and candidate.is_file()), None)
+                        if valid_piper_model(candidate)), None)
     piper_ready = bool(piper_executable and piper_model)
     checks.append(check("piper_hindi_voice", piper_ready,
-                        "Piper executable and Hindi neural model found" if piper_ready else
-                        "Hindi neural voice unavailable; install Piper and configure PIPER_MODEL_PATH",
+                        "Piper executable and validated Hindi ONNX model/config found" if piper_ready else
+                        "Hindi neural voice unavailable or invalid; install Piper and configure PIPER_MODEL_PATH",
                         required=False))
     checks.append(check("private_environment", (root / ".env").is_file(),
                         ".env exists; values are never displayed"))
