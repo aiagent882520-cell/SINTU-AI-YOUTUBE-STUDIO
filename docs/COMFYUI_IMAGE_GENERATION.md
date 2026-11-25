@@ -56,7 +56,12 @@ voice naturalness still require listening review by the owner before release.
 ## Production Factory documentary route
 
 The approved Production Factory `/api/production/runs/{run_id}/produce-media`
-route now applies the same real-image requirement to documentary formats:
+route requires exactly **15 unique scene prompts** for documentary formats.
+Missing, duplicate, or incorrectly counted scenes are rejected before media
+generation starts. The API integration test exercises all 15 scenes rather
+than a shortened fixture.
+
+The route also applies the same real-image requirement to documentary formats:
 ComfyUI must be healthy before rendering starts, and SINTU generates one
 ComfyUI image for every scene prompt. A procedural or Wikimedia result cannot
 satisfy this gate. The scene-specific images are passed into the animation
