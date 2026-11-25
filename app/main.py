@@ -5671,6 +5671,18 @@ def _approve_owner_review_for_media(run_id: str, owner: str, run: dict) -> None:
         raise HTTPException(status_code=409, detail="Owner Review must be explicitly approved before media generation.")
 
 
+def _documentary_image_requirement_error(image_health: dict) -> str | None:
+    """Reject procedural and stock fallbacks for documentary scene artwork."""
+    if image_health.get("ai_available"):
+        return None
+    diagnostics = image_health.get("local_diagnostics") or {}
+    reason = diagnostics.get("reason") or "Configure the local ComfyUI SDXL workflow."
+    return (
+        "Documentary production requires real local ComfyUI AI images for every scene; "
+        "procedural artwork is not accepted as AI. " + str(reason)
+    )
+
+
 def _documentary_voice_requirement_error(format_id: str, voice_health: dict) -> str | None:
     """Prevent synthetic eSpeak fallback from silently degrading documentary narration."""
     if not voice_health.get("local_available"):
@@ -5744,13 +5756,9 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=400, detail="Unsupported FPS or render quality.")
     is_documentary = run.get("format_id") in DOCUMENTARY_FORMAT_IDS
     image_health = image_status()
-    if is_documentary and not image_health.get("ai_available"):
-        diagnostics = image_health.get("local_diagnostics") or {}
-        reason = diagnostics.get("reason") or "Configure the local ComfyUI SDXL workflow."
-        raise HTTPException(
-            status_code=503,
-            detail="Documentary production requires real local ComfyUI AI images for every scene; procedural artwork is not accepted as AI. " + str(reason),
-        )
+    image_error = _documentary_image_requirement_error(image_health) if is_documentary else None
+    if image_error:
+        raise HTTPException(status_code=503, detail=image_error)
     if not is_documentary and not use_procedural_2d and not image_health.get("local_available"):
         raise HTTPException(status_code=503, detail="Local ComfyUI image workflow is not ready. Configure a validated free local ComfyUI workflow; paid providers are not enabled by this route.")
     voice_error = _documentary_voice_requirement_error(run.get("format_id", ""), voice_status())
