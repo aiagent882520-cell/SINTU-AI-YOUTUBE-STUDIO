@@ -91,4 +91,90 @@ print("SINTU isolated-main relay action installed.")
 PY
 echo "Backup: $backup_dir/github_termux_relay.py"
 echo "Existing dirty project files were not changed."
-echo "Next: bash scripts/start_services.sh"
+
+# Require working GitHub authentication and an idle command queue before
+# stopping the relay. A bootstrap must never interrupt a command mid-result.
+REPOSITORY="${SINTU_GITHUB_REPOSITORY:-aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO}"
+command -v gh >/dev/null 2>&1 || {
+  echo "GitHub CLI is required; install gh and authenticate before relay restart." >&2
+  exit 4
+}
+gh auth status >/dev/null 2>&1 || {
+  echo "GitHub CLI is not authenticated; run gh auth login before relay restart." >&2
+  exit 4
+}
+running_issues="$(gh api "repos/${REPOSITORY}/issues?state=open&labels=sintu-command-running&per_page=50" --jq 'map(select(.title | startswith("SINTU-CMD:")) | {updated_at})')"
+active_count="$(printf '%s\n' "$running_issues" | python -c 'import json,sys; from datetime import datetime,timezone; rows=json.load(sys.stdin); now=datetime.now(timezone.utc); count=0
+for row in rows:
+ try: updated=datetime.fromisoformat(row["updated_at"].replace("Z","+00:00"))
+ except Exception: count+=1
+ else:
+  if (now-updated).total_seconds() < 2400: count+=1
+print(count)')"
+if [[ ! "$active_count" =~ ^[0-9]+$ ]] || [[ "$active_count" -gt 0 ]]; then
+  echo "A non-stale SINTU command is running or its queue state could not be verified; refusing to restart the relay." >&2
+  exit 4
+fi
+# Running claims older than the relay's 40-minute lease are safe to recover
+# on the first poll after restart; the relay requeues them before FIFO work.
+
+# start_services.sh deliberately leaves a correctly identified running relay
+# alone. Stop only the verified relay here so it reloads the patched allowlist;
+# never signal an unrelated/reused PID and never escalate to SIGKILL.
+relay_pid_file="$HOME/.sintu/github-relay.pid"
+if [ -s "$relay_pid_file" ]; then
+  relay_pid="$(cat "$relay_pid_file" 2>/dev/null || true)"
+  if [[ "$relay_pid" =~ ^[0-9]+$ ]] && kill -0 "$relay_pid" 2>/dev/null; then
+    relay_cmdline="$(tr '\0' ' ' < "/proc/$relay_pid/cmdline" 2>/dev/null || true)"
+    if [[ -z "$relay_cmdline" ]]; then
+      relay_cmdline="$(ps -o args= -p "$relay_pid" 2>/dev/null || true)"
+    fi
+    if [[ -z "$relay_cmdline" ]]; then
+      echo "Cannot verify GitHub relay process identity; refusing to signal PID $relay_pid." >&2
+      exit 4
+    fi
+    if [[ "$relay_cmdline" != *"scripts/github_termux_relay.py"* ]]; then
+      echo "GitHub relay PID identity mismatch; refusing to signal PID $relay_pid." >&2
+      exit 4
+    fi
+    kill -TERM "$relay_pid" 2>/dev/null || true
+    for _ in $(seq 1 20); do
+      kill -0 "$relay_pid" 2>/dev/null || break
+      sleep 0.25
+    done
+    if kill -0 "$relay_pid" 2>/dev/null; then
+      echo "GitHub relay did not stop after TERM; refusing to SIGKILL it." >&2
+      exit 4
+    fi
+  elif [[ ! "$relay_pid" =~ ^[0-9]+$ ]]; then
+    echo "Invalid GitHub relay PID file; refusing to start a duplicate." >&2
+    exit 4
+  fi
+  rm -f "$relay_pid_file"
+fi
+
+started_at="$(date +%s)"
+bash scripts/start_services.sh
+new_relay_pid="$(cat "$HOME/.sintu/github-relay.pid" 2>/dev/null || true)"
+if [[ ! "$new_relay_pid" =~ ^[0-9]+$ ]] || ! kill -0 "$new_relay_pid" 2>/dev/null; then
+  echo "GitHub relay process did not remain alive after startup; inspect $HOME/.sintu/github-relay.log." >&2
+  exit 5
+fi
+new_relay_cmdline="$(tr '\0' ' ' < "/proc/$new_relay_pid/cmdline" 2>/dev/null || true)"
+if [[ -z "$new_relay_cmdline" ]]; then
+  new_relay_cmdline="$(ps -o args= -p "$new_relay_pid" 2>/dev/null || true)"
+fi
+if [[ "$new_relay_cmdline" != *"scripts/github_termux_relay.py"* ]]; then
+  echo "Started PID does not match the GitHub relay; refusing to claim relay recovery." >&2
+  exit 5
+fi
+HEARTBEAT="$HOME/.sintu/github-relay.heartbeat"
+for _ in $(seq 1 20); do
+  if .venv/bin/python -c 'import os,sys; p=sys.argv[1]; t=int(sys.argv[2]); raise SystemExit(0 if os.path.isfile(p) and int(os.path.getmtime(p)) >= t else 1)' "$HEARTBEAT" "$started_at" 2>/dev/null; then
+    echo "SINTU relay bootstrap completed; a fresh successful GitHub poll heartbeat was observed."
+    exit 0
+  fi
+  sleep 0.5
+done
+echo "Relay process start was requested, but no fresh successful GitHub poll heartbeat appeared; inspect $HOME/.sintu/github-relay.log." >&2
+exit 5
