@@ -307,7 +307,7 @@ $("localAiRefresh")?.addEventListener("click", refreshLocalAiRuntime);
 
 async function refresh() {
   try {
-    const [status,agents,studioAgents,tasks,providers,workflows] = await Promise.all([
+    const [status,agents,studioAgents,tasks,providers,workflows,capabilities] = await Promise.all([
       request("/api/status"), request("/api/agents"), request("/api/studio/agents"), request("/api/tasks"),
       request("/api/providers"), request("/api/workflows"), request("/api/capabilities")
     ]);
