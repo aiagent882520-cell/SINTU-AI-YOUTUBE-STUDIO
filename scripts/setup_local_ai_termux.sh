@@ -26,6 +26,10 @@ if ! command -v llama-server >/dev/null 2>&1; then
   pkg update -y
   pkg install -y llama-cpp
 fi
+if ! command -v curl >/dev/null 2>&1; then
+  pkg install -y curl
+fi
+command -v curl >/dev/null 2>&1 || fail "Model download ke liye curl install nahi ho saka."
 command -v llama-server >/dev/null 2>&1 || fail "llama-cpp install hua, lekin llama-server command nahi mila. Package output check karein; source build automatically nahi kiya gaya."
 
 if [ -s "$MODEL_FILE" ]; then
