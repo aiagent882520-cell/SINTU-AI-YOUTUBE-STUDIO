@@ -267,7 +267,7 @@ function renderProductionReadiness(capabilities) {
     ["Master text AI", local.local ? "READY · LOCAL MODEL" : "BLOCKED · LOCAL MODEL NOT READY", "Paid upgrades " + (capabilities?.paid_upgrades_allowed ? "owner-enabled" : "locked") + "; automatic paid fallback is disabled."],
     ["Image generation", status(image.comfyui_available, image.local_available ? "PROCEDURAL FALLBACK · NOT AI" : "BLOCKED"), image.provider || "No image provider detected."],
     ["AI video generation", status(video.local_available, "BLOCKED · LOCAL VIDEO WORKFLOW MISSING"), video.provider || "ComfyUI/video workflow needs a compatible host and model."],
-    ["Hindi voiceover", voice.local_available ? "READY · " + (voice.local_engine || "LOCAL TTS") : "BLOCKED · PIPER / HINDI TTS MODEL MISSING", voice.local_engine || "No local Hindi TTS engine detected."],
+    ["Hindi voiceover", voice.local_available ? ((voice.local_engine || "").toLowerCase().includes("espeak") ? "READY · BASIC SYNTHETIC" : "READY · " + (voice.local_engine || "LOCAL TTS")) : "BLOCKED · PIPER / HINDI TTS MODEL MISSING", voice.local_engine || "No local Hindi TTS engine detected."],
     ["Music generation", music.local_available ? "READY · LOCAL" : "BLOCKED · LOCAL MUSIC ENGINE MISSING", music.provider || "Music generation unavailable."],
     ["MP4 renderer", renderer.available ? "READY · FFMPEG" : "BLOCKED · FFMPEG MISSING", renderer.output || "FFmpeg renderer not available."],
     ["3D / Blender", blender.available ? "READY · BLENDER" : "OPTIONAL · BLENDER MISSING", blender.engine || "3D rendering requires Blender."]
