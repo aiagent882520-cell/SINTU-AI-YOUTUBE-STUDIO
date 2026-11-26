@@ -34,3 +34,8 @@ html{scroll-padding-top:110px}
 .local-ai-setup pre{overflow:auto;padding:12px;border-radius:8px;background:#050b14;color:#dce9fa;font-size:12px}
 .local-ai-setup p{font-size:12px;line-height:1.55;color:var(--muted)}
 .local-ai-runtime .panel-head{align-items:flex-start}
+
+.production-readiness{margin-top:14px}
+.production-readiness .status-grid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.production-readiness .status-grid>div{min-width:0}
+.production-readiness .status-grid strong{display:inline-block;margin:3px 0;color:var(--text)}
