@@ -6,6 +6,7 @@ set -Eeuo pipefail
 MODEL_DIR="${SINTU_LOCAL_MODEL_DIR:-$HOME/.sintu/models}"
 MODEL_FILE="$MODEL_DIR/qwen2.5-0.5b-instruct-q4_k_m.gguf"
 MODEL_URL="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+MODEL_SHA256="74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db"
 MIN_DISK_KB=1250000
 MIN_RAM_KB=900000
 
@@ -32,17 +33,26 @@ fi
 command -v curl >/dev/null 2>&1 || fail "Model download ke liye curl install nahi ho saka."
 command -v llama-server >/dev/null 2>&1 || fail "llama-cpp install hua, lekin llama-server command nahi mila. Package output check karein; source build automatically nahi kiya gaya."
 
+verify_model() {
+  local file="$1"
+  local magic
+  magic="$(head -c 4 "$file" | od -An -tx1 | tr -d ' \\n')"
+  [ "$magic" = "47475546" ] || return 1
+  echo "$MODEL_SHA256  $file" | sha256sum --check --status
+}
+
 if [ -s "$MODEL_FILE" ]; then
-  magic="$(head -c 4 "$MODEL_FILE" | od -An -tx1 | tr -d ' \n')"
-  [ "$magic" = "47475546" ] || fail "Existing model file GGUF format mein nahi hai: $MODEL_FILE. Original file ko delete nahi kiya."
-  printf '\n[2/3] Existing valid GGUF model reuse kiya.\n'
+  verify_model "$MODEL_FILE" || fail "Existing model failed GGUF/SHA-256 verification: $MODEL_FILE. File was preserved; no automatic deletion or overwrite."
+  printf '\n[2/3] Existing SHA-256 verified GGUF model reuse kiya.\n'
 else
   printf '\n[2/3] Official Qwen model download (~491 MB)...\n'
   temp_file="$MODEL_FILE.part"
   rm -f "$temp_file"
   curl --fail --location --retry 3 --connect-timeout 20 --output "$temp_file" "$MODEL_URL"
-  magic="$(head -c 4 "$temp_file" | od -An -tx1 | tr -d ' \n')"
-  [ "$magic" = "47475546" ] || { rm -f "$temp_file"; fail "Downloaded file GGUF nahi hai; partial download hata diya." ; }
+  if ! verify_model "$temp_file"; then
+    rm -f "$temp_file"
+    fail "Downloaded model failed GGUF/SHA-256 verification; incomplete download removed."
+  fi
   mv "$temp_file" "$MODEL_FILE"
 fi
 
