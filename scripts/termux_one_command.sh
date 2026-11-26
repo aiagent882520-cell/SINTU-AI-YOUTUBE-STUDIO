@@ -240,6 +240,7 @@ defaults = {
     "SINTU_BRIDGE_BASE_URL": "http://127.0.0.1:8000",
     "SINTU_GITHUB_REPOSITORY": "aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO",
     "SINTU_GITHUB_ALLOWED_ACTOR": "aiagent882520-cell",
+    "SINTU_DOCUMENTARY_IMAGE_SOURCE": "wikimedia",
 }
 lines = content.splitlines()
 for key, value in defaults.items():

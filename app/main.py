@@ -69,6 +69,7 @@ from .termux_bridge import router as termux_bridge_router
 from .youtube_upload import transfer_resumable_upload, sha256_file as youtube_sha256_file, validate_session_uri, validate_state_transition, UploadProtocolError, UPLOAD_STATES
 from .offline_media import (OfflineMediaError, MAX_MEDIA_BYTES, import_media_file, list_offline_media, get_offline_media_path)
 from .documentary_research import DOCUMENTARY_FORMAT_IDS, validate_documentary_evidence_for_production
+from .documentary_routing import uses_procedural_2d
 from .research_evidence_store import save_research_evidence, get_research_evidence
 from .resumable_media_upload import (ResumableUploadError, create_upload, get_upload, append_upload_chunk, complete_upload)
 
@@ -5670,6 +5671,42 @@ def _approve_owner_review_for_media(run_id: str, owner: str, run: dict) -> None:
         raise HTTPException(status_code=409, detail="Owner Review must be explicitly approved before media generation.")
 
 
+def _documentary_scene_count_error(format_id: str, scene_prompts: list[str]) -> str | None:
+    """Keep documentary production aligned with the 15-scene acceptance specification."""
+    if format_id in DOCUMENTARY_FORMAT_IDS and len(scene_prompts) != 15:
+        return f"Documentary production requires exactly 15 distinct scene prompts; received {len(scene_prompts)}."
+    if format_id in DOCUMENTARY_FORMAT_IDS:
+        normalized = [prompt.strip().casefold() for prompt in scene_prompts]
+        if len(set(normalized)) != 15:
+            return "Documentary production requires 15 unique scene prompts; duplicate prompts were detected."
+    return None
+
+
+def _documentary_image_requirement_error(image_health: dict) -> str | None:
+    """Reject procedural and stock fallbacks for documentary scene artwork."""
+    if image_health.get("ai_available"):
+        return None
+    diagnostics = image_health.get("local_diagnostics") or {}
+    reason = diagnostics.get("reason") or "Configure the local ComfyUI SDXL workflow."
+    return (
+        "Documentary production requires real local ComfyUI AI images for every scene; "
+        "procedural artwork is not accepted as AI. " + str(reason)
+    )
+
+
+def _documentary_voice_requirement_error(format_id: str, voice_health: dict) -> str | None:
+    """Prevent synthetic eSpeak fallback from silently degrading documentary narration."""
+    if not voice_health.get("local_available"):
+        return "Install local Piper TTS with a Hindi voice model. Paid voice providers are not enabled by this route."
+    if format_id in DOCUMENTARY_FORMAT_IDS and voice_health.get("local_engine") != "Piper TTS":
+        return (
+            "Documentary narration requires the natural Hindi Piper neural voice. "
+            "eSpeak NG is only a synthetic fallback and is blocked for documentary production. "
+            "Run scripts/setup_hindi_voice.sh, then restart SINTU."
+        )
+    return None
+
+
 @app.post("/api/production/runs/{run_id}/produce-media")
 def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, request: Request):
     """Generate local scene images, Hindi voice, original music and a verified MP4 for an approved run."""
@@ -5703,7 +5740,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         _approve_owner_review_for_media(run_id, owner, run)
     except (ValueError, PermissionError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
-    use_procedural_2d = run["format_id"] in {"2d-cartoon", "story-animation"}
+    use_procedural_2d = uses_procedural_2d(run["format_id"])
     deliverables = run["result"].get("deliverables") or {}
     scene_prompts = [item.strip() for item in payload.scene_prompts]
     if not scene_prompts:
@@ -5713,6 +5750,9 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
             status_code=400,
             detail="Approved run mein scene prompts nahi mile. AI Video Generator ko numbered SCENE PROMPTS dene dein ya prompts manually add karein.",
         )
+    scene_count_error = _documentary_scene_count_error(run.get("format_id", ""), scene_prompts)
+    if scene_count_error:
+        raise HTTPException(status_code=400, detail=scene_count_error)
     if any(not item or len(item) > 3000 for item in scene_prompts):
         raise HTTPException(status_code=400, detail="Each scene prompt must contain 1 to 3000 characters.")
     narration = (payload.narration or "").strip()
@@ -5728,26 +5768,41 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         raise HTTPException(status_code=400, detail="Unsupported output resolution profile.")
     if payload.fps not in {24, 30, 60} or payload.quality not in {"standard", "high", "maximum"}:
         raise HTTPException(status_code=400, detail="Unsupported FPS or render quality.")
-    if not use_procedural_2d and not image_status().get("local_available"):
-        raise HTTPException(status_code=503, detail="Local ComfyUI image workflow is not ready. Configure a validated free local workflow; paid providers are not enabled by this route.")
-    if not voice_status().get("local_available"):
-        raise HTTPException(status_code=503, detail="Local Piper TTS executable and Hindi voice model are required. Paid voice providers are not enabled by this route.")
+    is_documentary = run.get("format_id") in DOCUMENTARY_FORMAT_IDS
+    image_health = image_status()
+    image_error = _documentary_image_requirement_error(image_health) if is_documentary else None
+    if image_error:
+        raise HTTPException(status_code=503, detail=image_error)
+    if not is_documentary and not use_procedural_2d and not image_health.get("local_available"):
+        raise HTTPException(status_code=503, detail="Local ComfyUI image workflow is not ready. Configure a validated free local ComfyUI workflow; paid providers are not enabled by this route.")
+    voice_error = _documentary_voice_requirement_error(run.get("format_id", ""), voice_status())
+    if voice_error:
+        raise HTTPException(status_code=503, detail=voice_error)
     try:
         transition_owner_media_stage(
             run_id, "render", "running", owner_username=owner,
         )
     except (ValueError, PermissionError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
-    created_images, audio_id, music_id = [], None, None
+    created_images, created_image_providers = [], []
+    audio_id = music_id = None
     render_output_path = render_manifest_file = delivery_package_file = thumbnail_path = None
+    documentary_qa_file = None
     package_verified = False
     try:
-        if not use_procedural_2d:
-            for prompt in scene_prompts:
+        if is_documentary or not use_procedural_2d:
+            for scene_number, prompt in enumerate(scene_prompts, start=1):
                 width, height = (int(value) for value in resolution.split("x"))
                 aspect = "portrait" if height > width else ("square" if height == width else "landscape")
                 image_result = generate_image(prompt, "scene", aspect)
+                provider = str(image_result.get("provider", "")).strip()
+                if is_documentary and provider != "ComfyUI (local AI)":
+                    raise RenderFailed(
+                        f"Documentary scene {scene_number} was not generated by local ComfyUI AI; "
+                        "procedural or stock fallback cannot satisfy the AI-image acceptance gate."
+                    )
                 created_images.append(image_result["image_id"])
+                created_image_providers.append(provider)
         voice_result = generate_voiceover(narration)
         audio_id = voice_result["audio_id"]
         music_result = generate_music(
@@ -5775,6 +5830,8 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 animation_clips, animation_report = render_documentary_animation_clips(
                     scene_prompts, payload.seconds_per_scene, Path(animation_temp),
                     resolution=resolution, fps=payload.fps,
+                    scene_images=image_paths,
+                    scene_image_providers=created_image_providers,
                 )
                 rendered = render_ai_clips(
                     animation_clips, audio_path=audio_path, music_path=music_matches[0],
@@ -5801,6 +5858,27 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
         quality_report = rendered.get("quality_report") if isinstance(rendered, dict) else None
         if not isinstance(quality_report, dict) or quality_report.get("verified") is not True:
             raise RenderFailed("Renderer did not return a verified quality report; provenance PASS withheld.")
+        documentary_qa_report = None
+        if use_procedural_2d and subtitle_lines:
+            # Independently re-open the final MP4 and inspect actual burned Hindi
+            # glyph pixels; renderer metadata or character counts are not enough.
+            from .documentary_qa import audit_documentary_mp4
+            width, height = (int(value) for value in resolution.split("x"))
+            try:
+                documentary_qa_report = audit_documentary_mp4(
+                    render_output_path,
+                    subtitle_lines,
+                    [payload.seconds_per_scene] * len(scene_prompts),
+                    width,
+                    height,
+                )
+            except Exception as exc:
+                raise RenderFailed(f"Independent documentary MP4/subtitle QA failed: {exc}") from exc
+            if documentary_qa_report.get("passed") is not True:
+                raise RenderFailed("Independent documentary MP4/subtitle pixel QA did not pass.")
+            documentary_qa_file = Path(documentary_qa_report["report_path"])
+            rendered["documentary_qa"] = documentary_qa_report
+            quality_report["documentary_qa"] = documentary_qa_report
         thumbnail_result = create_video_frame_thumbnail(render_output_path, run_id)
         thumbnail_path = thumbnail_result["path"]
         try:
@@ -5810,7 +5888,8 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 format_id=run["format_id"],
                 topic=run.get("topic", ""),
                 output_path=render_output_path,
-                asset_paths=[*image_paths, audio_path, music_matches[0], thumbnail_path],
+                asset_paths=[*image_paths, audio_path, music_matches[0], thumbnail_path,
+                             *([Path(documentary_qa_report["report_path"])] if documentary_qa_report else [])],
                 settings={
                     "resolution": resolution,
                     "fps": payload.fps,
@@ -5823,7 +5902,8 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                     "research_evidence_status": "STRUCTURAL_TRACEABILITY_VALIDATED_NOT_FACT_VERIFIED" if research_record else None,
                 },
                 engines={
-                    "image": str((image_result.get("provider") if not use_procedural_2d else "SINTU Scene-aware 2D Animation") or "local"),
+                    "image": created_image_providers[0] if created_image_providers else "SINTU Scene-aware 2D Animation",
+                    "image_providers_by_scene": list(created_image_providers),
                     "animation": animation_report["engine"] if animation_report else None,
                     "voice": str(voice_result.get("provider") or "local"),
                     "music": str(music_result.get("provider") or "local"),
@@ -5853,7 +5933,8 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 "seconds_per_scene": payload.seconds_per_scene,
                 "scene_count": len(scene_prompts),
                 "captions_burned_in": bool(subtitle_lines),
-                "image_engine": str((image_result.get("provider") if not use_procedural_2d else "SINTU Scene-aware 2D Animation") or "local"),
+                "image_engine": created_image_providers[0] if created_image_providers else "SINTU Scene-aware 2D Animation",
+                "image_providers_by_scene": list(created_image_providers),
                 "voice_engine": str(voice_result.get("provider") or "local"),
                 "music_engine": str(music_result.get("provider") or "local"),
                 "renderer": "FFmpeg",
@@ -5950,7 +6031,7 @@ def produce_approved_run_media(run_id: str, payload: ProductionMediaInput, reque
                 except Exception:
                     pass
             if not package_verified:
-                for artifact in (render_output_path, render_manifest_file, delivery_package_file, thumbnail_path):
+                for artifact in (render_output_path, render_manifest_file, delivery_package_file, thumbnail_path, documentary_qa_file):
                     try:
                         if (artifact is not None and not artifact.is_symlink() and artifact.is_file()
                                 and artifact.resolve().is_relative_to(DATA_DIR.resolve())):

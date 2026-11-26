@@ -91,3 +91,15 @@ def test_local_engine_prefers_termux_espeak_ng_binary(monkeypatch):
         "/data/data/com.termux/files/usr/bin/espeak-ng",
         None,
     )
+
+
+def test_local_engine_discovers_project_managed_hindi_piper_model(tmp_path, monkeypatch):
+    model = tmp_path / "models" / "voices" / "hi_IN-pratham-medium.onnx"
+    model.parent.mkdir(parents=True)
+    model.write_bytes(b"model-placeholder")
+    monkeypatch.setattr(voice_generator, "DATA_DIR", tmp_path)
+    monkeypatch.delenv("PIPER_MODEL_PATH", raising=False)
+    monkeypatch.delenv("PIPER_EXECUTABLE", raising=False)
+    monkeypatch.delenv("ESPEAK_EXECUTABLE", raising=False)
+    monkeypatch.setattr(voice_generator.shutil, "which", lambda name: "/usr/bin/piper" if name == "piper" else None)
+    assert voice_generator._local_tts_engines() == ("Piper TTS", "/usr/bin/piper", str(model))

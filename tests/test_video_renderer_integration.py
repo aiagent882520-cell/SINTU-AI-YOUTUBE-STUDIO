@@ -1,6 +1,7 @@
 import shutil
 from pathlib import Path
 import subprocess
+import json
 
 import pytest
 from PIL import Image, ImageDraw
@@ -283,6 +284,42 @@ def test_storyboard_renderer_burns_hindi_subtitles_into_final_mp4(tmp_path, monk
     )
     assert probe.returncode == 0
     assert "video" in probe.stdout
+
+
+def test_ai_clip_renderer_normalizes_full_range_jpeg_input_to_android_yuv420p(tmp_path, monkeypatch):
+    ffmpeg, ffprobe = _ffmpeg_tools()
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
+    frame_dir = tmp_path / "full-range-frames"
+    frame_dir.mkdir()
+    for index in range(12):
+        Image.new("RGB", (160, 284), (30 + index * 8, 55 + index * 5, 85 + index * 3)).save(
+            frame_dir / f"frame_{index:05d}.jpg", quality=88,
+        )
+    source = tmp_path / "full-range-source.mp4"
+    encoded = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-framerate", "12",
+         "-i", str(frame_dir / "frame_%05d.jpg"), "-vf", "fps=24,format=yuv420p",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-t", "1", str(source)],
+        capture_output=True, check=False, timeout=60,
+    )
+    assert encoded.returncode == 0, encoded.stderr.decode("utf-8", "replace")
+
+    result = video_renderer.render_ai_clips(
+        [source], subtitles=["हिंदी documentary का pixel-range test।"],
+        resolution="720x1280", fps=24, quality="standard", transition="cut",
+    )
+    output = tmp_path / result["filename"]
+    probe = subprocess.run(
+        [ffprobe, "-v", "error", "-show_entries", "stream=pix_fmt,color_range",
+         "-of", "json", str(output)],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert probe.returncode == 0, probe.stderr
+    stream = json.loads(probe.stdout)["streams"][0]
+    assert stream["pix_fmt"] == "yuv420p"
+    assert stream["color_range"] in {"tv", "mpeg"}
+    assert result["pixel_format"] == "yuv420p"
+    assert result["color_range"] in {"tv", "mpeg"}
 
 
 def test_ai_clip_renderer_burns_timed_subtitles_into_final_mp4(tmp_path, monkeypatch):
@@ -627,6 +664,72 @@ def test_portrait_hindi_subtitles_wrap_to_safe_width(tmp_path, monkeypatch):
     assert len(caption_lines) >= 2
     assert max(map(len, caption_lines)) <= 15
 
+
+
+def test_ai_clip_renderer_confirms_blackdetect_full_black_with_decoded_pixels(tmp_path, monkeypatch):
+    """A blackdetect full-span heuristic must not override visible decoded Android pixels."""
+    from types import SimpleNamespace
+
+    _ffmpeg_tools()
+    monkeypatch.setattr(video_renderer, "OUTPUT_DIR", tmp_path)
+    source = _make_source_clip(tmp_path / "blackdetect-source.mp4")
+    real_run = video_renderer.render_process.run_render_process
+
+    def simulate_android_blackdetect_heuristic(command, **kwargs):
+        if "blackdetect=d=0.5:pix_th=0.10" in command:
+            return SimpleNamespace(
+                returncode=0, stdout="",
+                stderr="[blackdetect @ 0x1] black_start:0 black_end:1",
+            )
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(
+        video_renderer.render_process, "run_render_process",
+        simulate_android_blackdetect_heuristic,
+    )
+    result = video_renderer.render_ai_clips(
+        [source], resolution="720x1280", fps=24, quality="standard", transition="cut",
+    )
+
+    output = tmp_path / result["filename"]
+    assert output.is_file()
+    assert result["quality_report"]["visible_frame_count"] >= 1
+    assert result["quality_report"]["longest_black_segment_seconds"] == 1.0
+
+
+def test_publish_verifier_uses_decoded_pixels_not_full_span_blackdetect_heuristic(tmp_path, monkeypatch):
+    """Android blackdetect can report a full-span interval on visible limited-range video."""
+    from types import SimpleNamespace
+
+    ffmpeg, _ = _ffmpeg_tools()
+    source = tmp_path / "visible-limited-range.mp4"
+    encoded = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+         "-f", "lavfi", "-i", "testsrc2=size=720x1280:rate=24:duration=1",
+         "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+         "-color_range", "tv", "-t", "1", str(source)],
+        capture_output=True, check=False, timeout=60,
+    )
+    assert encoded.returncode == 0, encoded.stderr.decode("utf-8", "replace")
+
+    real_run = video_renderer.render_process.run_render_process
+
+    def simulate_android_blackdetect_heuristic(command, **kwargs):
+        if "blackdetect=d=0.5:pix_th=0.10" in command:
+            return SimpleNamespace(
+                returncode=0, stdout="",
+                stderr="[blackdetect @ 0x1] black_start:0 black_end:1",
+            )
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(
+        video_renderer.render_process, "run_render_process",
+        simulate_android_blackdetect_heuristic,
+    )
+    result = video_renderer.verify_publishable_mp4(source)
+    assert result["verified"] is True
+    assert result["visible_frame_count"] >= 1
+    assert result["longest_black_segment_seconds"] == 1.0
 
 
 @pytest.mark.parametrize("motion", ["pan-left", "pan-right", "pan-up", "pan-down"])

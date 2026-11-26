@@ -20,8 +20,8 @@ Offline configuration-only checks:
 
 The doctor checks repository/PWA files, core Python imports, FFmpeg/FFprobe,
 private environment configuration, admin authentication, separate bridge
-credentials, the Termux worker process, API health, local OpenAI-compatible
-model reachability, and ComfyUI reachability. It never prints secret values.
+credentials, the Termux worker process, Piper Hindi neural voice executable/model,
+API health, local OpenAI-compatible model reachability, and ComfyUI reachability. It never prints secret values.
 
 A **READY** result means required local files, dependencies, media tools and
 security configuration are present. Optional services are shown as warnings

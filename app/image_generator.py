@@ -1,13 +1,16 @@
 """Local ComfyUI plus offline procedural art, with explicitly gated paid image generation."""
 import base64
+import json
 import os
 import uuid
+from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from .policy import paid_upgrades_allowed
 from PIL import Image, UnidentifiedImageError
 from .comfyui_client import image_workflow_status, generate_image_bytes, ComfyUIUnavailable
 from .procedural_art import generate_procedural_scene_bytes
+from .commons_image_source import fetch_documentary_image, CommonsImageUnavailable
 
 DATA_DIR = Path(os.getenv("SINTU_DATA_DIR", str(Path(__file__).resolve().parent.parent))).expanduser().resolve()
 IMAGE_DIR = DATA_DIR / "generated_images"
@@ -61,11 +64,16 @@ def image_status():
     configured = bool(os.getenv("OPENAI_API_KEY"))
     token_configured = bool(os.getenv("MEDIA_GENERATION_TOKEN"))
     comfy = image_workflow_status()
-    local_available = True  # The offline procedural renderer is always available.
-    engine = "ComfyUI" if comfy["available"] else "SINTU Procedural Art (offline fallback)"
+    # Keep AI availability distinct from the always-available illustration fallback.
+    ai_available = bool(comfy["available"])
+    local_available = True  # Offline procedural illustration only; not generative AI.
+    commons_enabled = os.getenv("SINTU_DOCUMENTARY_IMAGE_SOURCE", "procedural").strip().lower() == "wikimedia"
+    engine = ("ComfyUI" if comfy["available"] else "Wikimedia Commons (licensed real photographs)" if commons_enabled else "SINTU Procedural Art (offline fallback)")
     return {
         "available": local_available or (enabled and configured and token_configured),
         "local_available": local_available,
+        "ai_available": ai_available,
+        "ai_engine": "ComfyUI (local generative AI)" if ai_available else None,
         "local_engine": engine,
         "comfyui_available": comfy["available"],
         "procedural_fallback_available": True,
@@ -77,7 +85,7 @@ def image_status():
         "provider": "ComfyUI local AI / SINTU Procedural Art offline / optional OpenAI",
         "model": os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
         "formats": ["jpeg"],
-        "notice": "Without ComfyUI, SINTU creates original procedural illustrations locally; this fallback is not generative AI. Paid image generation remains locked until revenue and explicit approval.",
+        "notice": "Procedural art is not generative AI; it is an illustration fallback only. Generative AI images require a ready local ComfyUI workflow. Paid image generation remains locked until revenue and explicit approval.",
     }
 
 
@@ -90,6 +98,9 @@ def generate_image(prompt: str, kind: str = "scene", aspect: str = "portrait") -
     prompt = prompt.strip()
     if not prompt or len(prompt) > 3000:
         raise ValueError("Image prompt must contain 1 to 3000 characters.")
+    generation_mode = os.getenv("SINTU_IMAGE_GENERATION_MODE", "auto").strip().lower()
+    if generation_mode not in {"auto", "ai", "procedural", "wikimedia"}:
+        raise ValueError("SINTU_IMAGE_GENERATION_MODE must be auto, ai, procedural or wikimedia.")
     size = {"portrait": "1024x1536", "landscape": "1536x1024", "square": "1024x1024"}[aspect]
     clean_prompt = prompt
     if kind == "scene":
@@ -97,14 +108,33 @@ def generate_image(prompt: str, kind: str = "scene", aspect: str = "portrait") -
     if kind == "thumbnail" and aspect != "landscape":
         raise ValueError("YouTube thumbnails must use landscape aspect ratio.")
     width, height = {"portrait": (768, 1360), "landscape": (1360, 768), "square": (1024, 1024)}[aspect]
-    if status.get("comfyui_available", False):
+    if generation_mode == "ai" and not status.get("comfyui_available", False):
+        reason = (status.get("local_diagnostics") or {}).get("reason") or "Configure and start the local ComfyUI SDXL workflow."
+        raise ImageUnavailable("AI-only mode is enabled but ComfyUI is not ready: " + reason)
+    if generation_mode == "ai" and status.get("comfyui_available", False):
         try:
             raw = generate_image_bytes(clean_prompt, width, height)
             provider = "ComfyUI (local AI)"
             notice = "Locally generated AI image. Review model license and likeness rights before publishing."
         except ComfyUIUnavailable as exc:
             raise ImageUnavailable(str(exc)) from None
-    elif status["local_available"]:
+    elif status.get("comfyui_available", False):
+        try:
+            raw = generate_image_bytes(clean_prompt, width, height)
+            provider = "ComfyUI (local AI)"
+            notice = "Locally generated AI image. Review model license and likeness rights before publishing."
+        except ComfyUIUnavailable as exc:
+            raise ImageUnavailable(str(exc)) from None
+    elif (generation_mode == "wikimedia" or (generation_mode == "auto" and kind == "scene" and os.getenv("SINTU_DOCUMENTARY_IMAGE_SOURCE", "procedural").strip().lower() == "wikimedia")):
+        try:
+            raw, provenance = fetch_documentary_image(prompt)
+            provider = "Wikimedia Commons (licensed real photograph)"
+            notice = "Real-world documentary photograph. Follow the recorded licence and attribution; see the generated image provenance JSON sidecar."
+        except CommonsImageUnavailable as exc:
+            raise ImageUnavailable(str(exc)) from None
+        except (ValueError, OSError) as exc:
+            raise ImageGenerationFailed(str(exc)) from None
+    elif status["local_available"] and generation_mode in {"auto", "procedural"}:
         try:
             raw = generate_procedural_scene_bytes(clean_prompt, width, height)
             provider = "SINTU Procedural Art (offline)"
@@ -112,6 +142,8 @@ def generate_image(prompt: str, kind: str = "scene", aspect: str = "portrait") -
         except (ValueError, OSError) as exc:
             raise ImageGenerationFailed(str(exc)) from None
     else:
+        if generation_mode == "ai":
+            raise ImageUnavailable("Local generative AI is not ready. Start ComfyUI and configure its SDXL checkpoint; procedural fallback is disabled in AI-only mode.")
         if not status["enabled_by_admin"]:
             raise ImageUnavailable("Free image generation is unavailable and paid generation remains locked.")
         if not status["provider_configured"] or not status["access_token_configured"]:
@@ -135,7 +167,26 @@ def generate_image(prompt: str, kind: str = "scene", aspect: str = "portrait") -
             raise ImageGenerationFailed(f"Image generation failed ({type(exc).__name__}). Check API quota and model access.") from None
 
     image_id, image, output = _save_generated_image(raw)
+    metadata = {
+        "image_id": image_id,
+        "provider": provider,
+        "prompt": prompt,
+        "kind": kind,
+        "aspect": aspect,
+        "width": image.width,
+        "height": image.height,
+        "format": "JPEG",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "notice": notice,
+    }
+    if provider == "Wikimedia Commons (licensed real photograph)":
+        metadata["source"] = provenance
+    output.with_suffix(".source.json").write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return {"image_id": image_id, "url": f"/api/images/{image_id}", "kind": kind,
             "aspect": aspect, "width": image.width, "height": image.height,
             "format": "JPEG", "size_bytes": output.stat().st_size,
-            "provider": provider, "local": provider != status.get("model"), "notice": notice}
+            "provider": provider, "local": provider != status.get("model"), "notice": notice,
+            "metadata": metadata,
+            **({"source": provenance} if provider == "Wikimedia Commons (licensed real photograph)" else {})}

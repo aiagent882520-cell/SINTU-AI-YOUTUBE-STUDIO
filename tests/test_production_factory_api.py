@@ -181,7 +181,7 @@ def test_factory_dashboard_exposes_confirmed_local_media_generation():
     source = script.read_text(encoding="utf-8")
     assert "/api/production/runs/" in source
     assert "/produce-media" in source
-    assert "burn_subtitles:false" in source
+    assert "burn_subtitles:true" in source
     assert "window.confirm" in source
 
 
@@ -391,7 +391,8 @@ def test_local_media_route_builds_package_before_completing_package_stage():
     source = (Path(__file__).resolve().parents[1] / "app" / "main.py").read_text(encoding="utf-8")
     assert "create_delivery_package(" in source
     assert "create_video_frame_thumbnail(render_output_path, run_id)" in source
-    assert "asset_paths=[*image_paths, audio_path, music_matches[0], thumbnail_path]" in source
+    assert "asset_paths=[*image_paths, audio_path, music_matches[0], thumbnail_path," in source
+    assert "documentary_qa_report" in source
     assert "captions=caption_lines" in source
     assert "delivery_package['sha256']" in source
     assert '"/api/production/runs/{run_id}/package"' in source

@@ -64,7 +64,7 @@ def test_documentary_animation_exports_real_scene_mp4s_and_motion_report(tmp_pat
         assert evidence["camera_move"] == "slow_push_with_alternating_track"
         probe = subprocess.run(
             [shutil.which("ffprobe"), "-v", "error", "-show_entries",
-             "stream=codec_type,width,height", "-show_entries", "format=duration",
+             "format=duration:stream=codec_type,width,height,pix_fmt,color_range",
              "-of", "json", str(clip)],
             capture_output=True, text=True, timeout=30, check=False,
         )
@@ -72,6 +72,10 @@ def test_documentary_animation_exports_real_scene_mp4s_and_motion_report(tmp_pat
         metadata = json.loads(probe.stdout)
         video = next(x for x in metadata["streams"] if x["codec_type"] == "video")
         assert (video["width"], video["height"]) == (360, 640)
+        assert video["pix_fmt"] == "yuv420p"
+        assert video["color_range"] in {"tv", "mpeg"}
+        assert evidence["pixel_format"] == "yuv420p"
+        assert evidence["color_range"] in {"tv", "mpeg"}
         assert float(metadata["format"]["duration"]) == pytest.approx(2.0, abs=0.2)
     saved = json.loads((tmp_path / "documentary-animation-report.json").read_text())
     assert saved["all_scenes_animated"] is True
@@ -90,3 +94,45 @@ def test_documentary_animation_exports_real_scene_mp4s_and_motion_report(tmp_pat
 def test_documentary_animation_rejects_invalid_profiles(tmp_path, scenes, duration, resolution, fps):
     with pytest.raises(ValueError):
         render_documentary_animation_clips(scenes, duration, tmp_path, resolution, fps)
+
+
+
+def test_documentary_animation_records_each_scene_image_provider(tmp_path):
+    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+        pytest.skip("FFmpeg and FFprobe are required")
+    image_paths = []
+    for index in range(2):
+        image = tmp_path / f"scene-{index}.jpg"
+        from PIL import Image
+        Image.new("RGB", (360, 640), (30 + index * 40, 70, 110)).save(image)
+        image_paths.append(image)
+    _, report = render_documentary_animation_clips(
+        ["A historic fort at sunrise", "A guard at the fort gate"],
+        seconds_per_scene=2,
+        output_dir=tmp_path / "clips",
+        resolution="360x640",
+        fps=24,
+        scene_images=image_paths,
+        scene_image_providers=["Wikimedia Commons (licensed real photograph)", "SINTU Procedural Art (offline)"],
+    )
+    assert report["scene_image_provider_summary"] == {
+        "SINTU Procedural Art (offline)": 1,
+        "Wikimedia Commons (licensed real photograph)": 1,
+    }
+    saved = json.loads((tmp_path / "clips" / "documentary-animation-report.json").read_text())
+    assert saved["scene_image_providers"] == report["scene_image_providers"]
+
+
+def test_documentary_animation_rejects_incomplete_scene_image_provider_evidence(tmp_path):
+    image_paths = []
+    from PIL import Image
+    for index in range(2):
+        image = tmp_path / f"scene-{index}.jpg"
+        Image.new("RGB", (64, 64), (30, 70, 110)).save(image)
+        image_paths.append(image)
+    with pytest.raises(ValueError, match="provider evidence"):
+        render_documentary_animation_clips(
+            ["Scene one", "Scene two"], 2, tmp_path / "clips",
+            resolution="360x640", fps=24, scene_images=image_paths,
+            scene_image_providers=["SINTU Procedural Art (offline)"],
+        )

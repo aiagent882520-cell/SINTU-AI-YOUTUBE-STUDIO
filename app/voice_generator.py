@@ -99,6 +99,12 @@ def _local_tts_engines() -> tuple[str | None, str | None, str | None]:
     piper_name = os.getenv("PIPER_EXECUTABLE") or "piper"
     piper_executable = _find_executable(piper_name)
     piper_model = os.getenv("PIPER_MODEL_PATH", "").strip()
+    if not piper_model:
+        candidates = [
+            DATA_DIR / "models" / "voices" / "hi_IN-pratham-medium.onnx",
+            Path(__file__).resolve().parent.parent / "models" / "voices" / "hi_IN-pratham-medium.onnx",
+        ]
+        piper_model = str(next((candidate for candidate in candidates if candidate.is_file()), ""))
     if piper_executable and piper_model and Path(piper_model).is_file():
         return "Piper TTS", piper_executable, piper_model
 

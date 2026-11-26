@@ -244,14 +244,34 @@ def test_offline_storyboard_e2e_creates_verified_local_video(monkeypatch, tmp_pa
     monkeypatch.setattr(live_e2e, "generate_voiceover", lambda text: {
         "filename": "voice.wav", "voice": "eSpeak NG Hindi", "format": "WAV"
     })
+    visual_types = ["map", "timeline", "diagram", "character", "environment"]
+    animation_report = {
+        "engine": "SINTU scene-aware procedural 2D documentary animation",
+        "scene_count": 15,
+        "scene_image_count": 15,
+        "scene_images_used_as_full_frame_backplates": True,
+        "all_scenes_animated": True,
+        "scenes": [
+            {"visual_type": visual_types[index % len(visual_types)], "motion_verified": True}
+            for index in range(15)
+        ],
+    }
+    animation_calls = []
+    monkeypatch.setattr(live_e2e, "render_documentary_animation_clips", lambda *args, **kwargs: (
+        animation_calls.append((args, kwargs)) or ([Path(f"clip-{i}.mp4") for i in range(15)], animation_report)
+    ))
     render_calls = []
-    monkeypatch.setattr(live_e2e, "render_storyboard", lambda **kwargs: (
-        render_calls.append(kwargs) or {
+    monkeypatch.setattr(live_e2e, "render_ai_clips", lambda clips, **kwargs: (
+        render_calls.append((clips, kwargs)) or {
             "filename": "final.mp4", "video_id": "final-id", "duration_seconds": 60,
             "resolution": "720x1280", "brand_watermark": "SINTU AI YOUTUBE STUDIO",
-            "subtitles_burned_in": True, "audio": "voiceover+music",
+            "subtitles_burned_in": True, "audio": "voiceover+music+sound-effects",
+            "sound_effects": True, "sound_effect_cue_count": 29,
         }
     ))
+    monkeypatch.setattr(live_e2e, "audit_documentary_mp4", lambda *args, **kwargs: {
+        "passed": True, "subtitle_pixel_audit": {"passed": True, "cue_count": 15},
+    })
 
     result = live_e2e._offline_storyboard_e2e("भारत के किले")
     assert len(calls) == 15
@@ -270,15 +290,25 @@ def test_offline_storyboard_e2e_creates_verified_local_video(monkeypatch, tmp_pa
     assert by_fort["Junagarh Fort"]["url"].endswith("/forts.html")
     assert "1459" in by_fort["Mehrangarh Fort"]["claim"]
     assert "seven gates" not in by_fort["Mehrangarh Fort"]["claim"]
-    assert "folklore" in render_calls[0]["scenes"][1].lower()
+    assert "folklore" in render_calls[0][1]["scene_descriptions"][1].lower()
     assert result["duration_seconds"] == 60
     assert result["subtitle_count"] == 15
     assert result["target_duration_seconds"] == 60
     assert result["subtitles_burned_in"] is True
     assert music_calls[0]["duration"] == 60
-    assert render_calls[0]["seconds_per_scene"] == 4
-    assert len(render_calls[0]["scenes"]) == 15
-    assert len(render_calls[0]["subtitles"]) == 15
+    assert animation_calls[0][0][1] == 4
+    assert len(render_calls[0][0]) == 15
+    assert len(render_calls[0][1]["subtitles"]) == 15
+    assert render_calls[0][1]["audio_path"] == audio_dir / "voice.wav"
+    assert render_calls[0][1]["music_path"] == music_dir / "music.wav"
+    assert render_calls[0][1]["sound_effects_enabled"] is True
+    assert render_calls[0][1]["sound_effects_volume"] == 0.18
+    assert result["sound_effects"] is True
+    assert result["sound_effect_cue_count"] == 29
+    assert "sound-effects" in result["audio"]
+    assert render_calls[0][1]["resolution"] == "720x1280"
+    assert result["animation_visual_types"] == ["character", "diagram", "environment", "map", "timeline"]
+    assert result["final_qa_report"]["passed"] is True
     assert result["voice_engine"] == "eSpeak NG Hindi"
     assert result["verified_by_renderer"] is True
     assert result["final_render_bytes"] == 2000
@@ -314,6 +344,50 @@ def test_preflight_does_not_report_procedural_fallback_as_comfyui(monkeypatch):
     assert report["available"] is False
     assert report["local_fallback_available"] is True
     assert report["local_engine"] == "SINTU Procedural Art (offline fallback)"
+
+
+
+def test_media_provider_acceptance_records_ai_and_piper_success():
+    result = live_e2e._assert_media_provider_acceptance(
+        [{"provider": "ComfyUI (local AI)"} for _ in range(15)],
+        {"voice": "Piper TTS"},
+        require_ai_images=True,
+        require_piper_voice=True,
+    )
+    assert result["scene_count"] == 15
+    assert result["ai_image_acceptance_passed"] is True
+    assert result["piper_voice_acceptance_passed"] is True
+
+
+def test_media_provider_acceptance_rejects_procedural_images_for_ai_acceptance():
+    images = [
+        {"provider": "ComfyUI (local AI)"},
+        {"provider": "SINTU Procedural Art (offline)"},
+    ]
+    with pytest.raises(RuntimeError, match="for every scene"):
+        live_e2e._assert_media_provider_acceptance(
+            images, {"voice": "Piper TTS"}, require_ai_images=True
+        )
+
+
+def test_media_provider_acceptance_rejects_espeak_for_natural_voice_acceptance():
+    with pytest.raises(RuntimeError, match="eSpeak is a synthetic fallback"):
+        live_e2e._assert_media_provider_acceptance(
+            [{"provider": "ComfyUI (local AI)"}],
+            {"voice": "eSpeak NG"},
+            require_piper_voice=True,
+        )
+
+
+def test_media_provider_acceptance_keeps_default_local_fallbacks_explicit():
+    result = live_e2e._assert_media_provider_acceptance(
+        [{"provider": "SINTU Procedural Art (offline)"}],
+        {"voice": "eSpeak NG"},
+    )
+    assert result["ai_image_acceptance_required"] is False
+    assert result["ai_image_acceptance_passed"] is None
+    assert result["piper_voice_acceptance_required"] is False
+    assert result["piper_voice_acceptance_passed"] is None
     assert report["workflow_configured"] is False
 
 
