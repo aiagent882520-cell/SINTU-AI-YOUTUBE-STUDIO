@@ -10,7 +10,7 @@ From the SINTU repository root in Termux:
 bash scripts/setup_local_ai_termux.sh
 ```
 
-The script checks arm64, available RAM and free storage, installs `llama-cpp` through Termux's package manager, downloads the model to `~/.sintu/models`, and verifies the GGUF magic bytes. It does not alter `.env`, credentials, the SINTU database, or source media.
+The script checks arm64, available RAM and free storage, installs `llama-cpp` through Termux's package manager, downloads the model to `~/.sintu/models`, and verifies the pinned SHA-256 checksum plus GGUF magic bytes before publishing the model file. Existing models are verified too; an invalid existing file is preserved and reported rather than overwritten. It does not alter `.env`, credentials, the SINTU database, or source media.
 
 ## Start
 
