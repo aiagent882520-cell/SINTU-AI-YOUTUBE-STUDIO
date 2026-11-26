@@ -1,3 +1,4 @@
+import errno
 import hashlib
 import json
 import platform
@@ -5,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.media_quarantine import process_manifest, safe_source
+from scripts.media_quarantine import _publish_no_replace, process_manifest, safe_source
 
 
 def digest(path: Path) -> str:
@@ -112,3 +113,44 @@ def test_symlinked_quarantine_root_is_rejected_without_touching_source(tmp_path)
     assert report["targets"][0]["status"] == "REJECTED"
     assert source.read_bytes() == b"original"
     assert list(outside.iterdir()) == []
+
+
+@pytest.mark.skipif(
+    platform.system() != "Linux"
+    or platform.machine().lower() not in {"aarch64", "arm64", "x86_64", "amd64", "i386", "i686", "armv7l"},
+    reason="requires Linux renameat2 syscall support",
+)
+def test_apply_succeeds_when_hardlinks_are_unavailable(tmp_path, monkeypatch):
+    source = tmp_path / "generated_videos" / "clip.mp4"
+    source.parent.mkdir()
+    source.write_bytes(b"original video bytes")
+    expected = digest(source)
+
+    def unavailable_link(*args, **kwargs):
+        raise OSError(errno.EPERM, "hard links are unavailable")
+
+    monkeypatch.setattr("scripts.media_quarantine.os.link", unavailable_link)
+    report = process_manifest(tmp_path, {
+        "targets": [{"path": "generated_videos/clip.mp4", "sha256": expected}]
+    }, apply=True)
+
+    item = report["targets"][0]
+    copied = tmp_path / item["quarantine_copy"]
+    assert item["status"] == "COPIED_VERIFIED"
+    assert copied.read_bytes() == source.read_bytes()
+    assert digest(copied) == expected
+    assert source.read_bytes() == b"original video bytes"
+    assert not list(copied.parent.glob(".sintu-quarantine-*"))
+
+
+def test_atomic_publish_refuses_destination_collision(tmp_path):
+    temporary = tmp_path / "verified.tmp"
+    destination = tmp_path / "destination.mp4"
+    temporary.write_bytes(b"verified")
+    destination.write_bytes(b"do not replace")
+
+    with pytest.raises(FileExistsError):
+        _publish_no_replace(temporary, destination)
+
+    assert temporary.read_bytes() == b"verified"
+    assert destination.read_bytes() == b"do not replace"
