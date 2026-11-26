@@ -48,6 +48,7 @@ def test_production_readiness_panel_reports_real_capabilities_and_labels_fallbac
     assert 'id="productionReadinessRefresh"' in HTML
     assert 'request("/api/capabilities")' in JS
     assert "renderProductionReadiness(capabilities)" in JS
+    assert "workflows,capabilities] = await Promise.all" in JS
     assert "PROCEDURAL FALLBACK · NOT AI" in JS
     assert "PIPER / HINDI TTS MODEL MISSING" in JS
     assert "BLOCKED · LOCAL VIDEO WORKFLOW MISSING" in JS
