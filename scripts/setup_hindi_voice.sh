@@ -25,16 +25,15 @@ download_voice() {
   local model="$VOICE_DIR/hi_IN-$name-medium.onnx"
   local config="$model.json"
   local url="$BASE/$speaker/medium"
-  if [[ ! -s "$model" ]]; then
+  if [[ -s "$model" ]]; then
+    echo "$expected_sha  $model" | sha256sum --check
+  else
     curl --fail --location --retry 3 "$url/hi_IN-$name-medium.onnx" -o "$model.part"
+    echo "$expected_sha  $model.part" | sha256sum --check
     mv "$model.part" "$model"
   fi
-  if [[ ! -s "$config" ]]; then
-    curl --fail --location --retry 3 "$url/hi_IN-$name-medium.onnx.json" -o "$config.part"
-    mv "$config.part" "$config"
-  fi
-  echo "$expected_sha  $model" | sha256sum --check
-  python - "$config" <<'PY'
+  if [[ -s "$config" ]]; then
+    python - "$config" <<'PY'
 import json, sys
 from pathlib import Path
 data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
@@ -43,6 +42,19 @@ if data.get("language", {}).get("code") != "hi_IN":
 if data.get("audio", {}).get("quality") != "medium":
     raise SystemExit("Unexpected Piper model quality metadata.")
 PY
+  else
+    curl --fail --location --retry 3 "$url/hi_IN-$name-medium.onnx.json" -o "$config.part"
+    python - "$config.part" <<'PY'
+import json, sys
+from pathlib import Path
+data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+if data.get("language", {}).get("code") != "hi_IN":
+    raise SystemExit("Piper model config is not a Hindi (hi_IN) voice.")
+if data.get("audio", {}).get("quality") != "medium":
+    raise SystemExit("Unexpected Piper model quality metadata.")
+PY
+    mv "$config.part" "$config"
+  fi
 }
 
 # Official rhasspy/piper-voices v1.0.0 model hashes (SHA-256).
