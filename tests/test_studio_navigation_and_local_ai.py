@@ -39,6 +39,10 @@ def test_termux_bootstrap_is_guarded_and_preserves_existing_config():
     assert '47475546' in SETUP
     assert "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db" in SETUP
     assert "sha256sum --check --status" in SETUP
+    assert "AVAILABLE_RAM_KB" in START
+    assert "MIN_RAM_KB=900000" in START
+    assert "getconf _NPROCESSORS_ONLN" in START
+    assert "CONTEXT=512" in START and "CONTEXT=1024" in START and "CONTEXT=2048" in START
     assert 'No .env secrets or paid-provider settings were changed.' in SETUP
     assert '127.0.0.1' in START
     assert '--host 127.0.0.1' in START
