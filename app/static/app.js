@@ -246,14 +246,23 @@ async function refresh() {
     $("taskCount").textContent = status.tasks_saved;
     $("doneCount").textContent = status.tasks_completed;
     const available = [];
-    if (providers.local.configured) available.push("Free local Ollama");
+    const local = providers.local || {};
+    if (local.configured) available.push("Free local " + (local.backend || "AI") + " · " + (local.model || "model ready"));
     if (providers.paid_upgrades_allowed && providers.openai.configured) available.push("OpenAI (optional)");
     if (providers.paid_upgrades_allowed && providers.gemini.configured) available.push("Gemini (optional)");
     if (providers.paid_upgrades_allowed && providers.deepseek.configured) available.push("DeepSeek (optional)");
     if (providers.paid_upgrades_allowed && providers.claude.configured) available.push("Claude (optional)");
-    $("providerStatus").textContent = available.length
-      ? "Available: " + available.join(" + ") + " · selected: " + providers.selected
-      : "Free local AI setup needed: install/start Ollama and pull the configured model. Paid providers locked until revenue + approval.";
+    const localState = local.configured
+      ? "Local engine READY"
+      : (local.service_running ? "Local server RUNNING, model NOT READY" : "Local AI server NOT RUNNING");
+    const compatible = local.openai_compatible || {};
+    const localHint = local.configured ? "" :
+      " · Ollama: " + (local.base_url || "127.0.0.1:11434") +
+      " · llama.cpp/OpenAI-compatible: " + (compatible.base_url || "127.0.0.1:8080/v1") +
+      " · Start a local server and load a GGUF/model before generation.";
+    $("providerStatus").textContent = localState + " · backend: " + (local.backend || "none") +
+      " · selected: " + providers.selected + (available.length ? " · " + available.join(" + ") : "") +
+      localHint + " · Paid fallback stays disabled without Owner approval.";
     $("agents").innerHTML = agents.agents.map(a =>
       '<div class="agent"><span>'+a.id+'. '+escapeHtml(a.name)+'</span><small>'+escapeHtml(a.status)+'</small></div>'
     ).join("");
@@ -1934,3 +1943,11 @@ $("chatMessageInput")?.addEventListener("keydown", event => {
   }
 });
 loadChatConversations();
+
+/* Accessible navigation: keep the selected Studio destination visible to keyboard and touch users. */
+document.querySelectorAll(".studio-sidebar nav a[href^='#']").forEach(link => {
+  link.addEventListener("click", () => {
+    document.querySelectorAll(".studio-sidebar nav a[aria-current='location']").forEach(item => item.removeAttribute("aria-current"));
+    link.setAttribute("aria-current", "location");
+  });
+});
