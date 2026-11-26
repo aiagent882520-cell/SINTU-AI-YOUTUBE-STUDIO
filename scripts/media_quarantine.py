@@ -50,12 +50,12 @@ def safe_source(root: Path, relative: str) -> Path:
 def _publish_no_replace(temporary: Path, destination: Path) -> None:
     """Atomically publish a verified file without replacing an existing path.
 
-    Linux renameat2(RENAME_NOREPLACE) works on filesystems where hard links are
+    Linux/Android renameat2(RENAME_NOREPLACE) works on filesystems where hard links are
     unavailable (notably some Android/Termux storage setups). If the syscall is
     unavailable, retain the portable hard-link implementation: link creation is
     also atomic and fails if the destination already exists.
     """
-    if os.name == "posix" and platform.system() == "Linux":
+    if os.name == "posix" and platform.system() in {"Linux", "Android"}:
         syscall_numbers = {
             "aarch64": 276,
             "arm64": 276,
