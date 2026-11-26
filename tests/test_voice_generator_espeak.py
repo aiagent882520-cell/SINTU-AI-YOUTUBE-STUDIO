@@ -36,7 +36,7 @@ def test_espeak_generates_validated_local_hindi_wav(tmp_path, monkeypatch):
     monkeypatch.setattr(
         voice_generator,
         "_local_tts_engines",
-        lambda: ("eSpeak NG Hindi", "/usr/bin/espeak", None),
+        lambda speaker="male": ("eSpeak NG Hindi", "/usr/bin/espeak", None) if speaker == "male" else (None, None, None),
     )
     monkeypatch.setattr(
         voice_generator,
