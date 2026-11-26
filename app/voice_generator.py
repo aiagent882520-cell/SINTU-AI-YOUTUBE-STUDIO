@@ -94,23 +94,45 @@ def _find_executable(configured: str) -> str | None:
     return shutil.which(configured) or (configured if Path(configured).is_file() else None)
 
 
-def _local_tts_engines() -> tuple[str | None, str | None, str | None]:
-    """Return (engine, executable, Piper model), preferring Piper over eSpeak NG."""
-    piper_name = os.getenv("PIPER_EXECUTABLE") or "piper"
-    piper_executable = _find_executable(piper_name)
-    piper_model = os.getenv("PIPER_MODEL_PATH", "").strip()
-    if not piper_model:
-        candidates = [
-            DATA_DIR / "models" / "voices" / "hi_IN-pratham-medium.onnx",
-            Path(__file__).resolve().parent.parent / "models" / "voices" / "hi_IN-pratham-medium.onnx",
-        ]
-        piper_model = str(next((candidate for candidate in candidates if candidate.is_file()), ""))
-    if piper_executable and piper_model and Path(piper_model).is_file():
+def _normalize_local_voice(voice: str) -> str:
+    """Normalize an explicit Hindi speaker choice; legacy 'alloy' remains male."""
+    value = str(voice or "male").strip().casefold()
+    if value in {"male", "pratham", "alloy", "onyx", "ash", "echo"}:
+        return "male"
+    if value in {"female", "priyamvada", "nova", "shimmer", "coral", "sage", "ballad", "fable", "verse"}:
+        return "female"
+    raise ValueError("Hindi local voice must be male/pratham or female/priyamvada.")
+
+
+def _piper_model_for_voice(voice: str) -> str:
+    """Resolve only an installed, speaker-matched Hindi Piper model."""
+    speaker = _normalize_local_voice(voice)
+    filename = f"hi_IN-{'pratham' if speaker == 'male' else 'priyamvada'}-medium.onnx"
+    configured = os.getenv("PIPER_MODEL_PATH" if speaker == "male" else "PIPER_FEMALE_MODEL_PATH", "").strip()
+    if configured:
+        return configured if Path(configured).is_file() else ""
+    candidates = [
+        DATA_DIR / "models" / "voices" / filename,
+        Path(__file__).resolve().parent.parent / "models" / "voices" / filename,
+    ]
+    return str(next((candidate for candidate in candidates if candidate.is_file()), ""))
+
+
+def _local_tts_engines(voice: str = "male") -> tuple[str | None, str | None, str | None]:
+    """Return (engine, executable, model) for the requested speaker.
+
+    eSpeak is deliberately male-only here: it must never silently replace a requested
+    female neural voice with a different synthetic speaker.
+    """
+    speaker = _normalize_local_voice(voice)
+    piper_executable = _find_executable(os.getenv("PIPER_EXECUTABLE") or "piper")
+    piper_model = _piper_model_for_voice(speaker)
+    if piper_executable and piper_model:
         return "Piper TTS", piper_executable, piper_model
+    if speaker == "female":
+        return None, None, None
 
     configured_espeak = os.getenv("ESPEAK_EXECUTABLE")
-    # Termux and many Linux packages expose the executable as espeak-ng;
-    # Debian-compatible hosts may also provide the espeak compatibility name.
     espeak_names = [configured_espeak] if configured_espeak else ["espeak-ng", "espeak"]
     for espeak_name in espeak_names:
         espeak_executable = _find_executable(espeak_name)
@@ -135,13 +157,21 @@ def voice_status():
     enabled = os.getenv("ENABLE_PAID_MEDIA_GENERATION", "false").strip().lower() == "true" and paid_upgrades_allowed()
     configured = bool(os.getenv("OPENAI_API_KEY"))
     token_configured = bool(os.getenv("MEDIA_GENERATION_TOKEN"))
-    local_engine, local_executable, local_model = _local_tts_engines()
-    local_available = bool(local_engine and local_executable)
+    male = _local_tts_engines("male")
+    female = _local_tts_engines("female")
+    local_available = bool((male[0] and male[1]) or (female[0] and female[1]))
+    selected = male if male[0] and male[1] else female
     return {
         "available": local_available or (enabled and configured and token_configured),
         "local_available": local_available,
-        "local_engine": local_engine or "Not installed",
-        "local_model_configured": bool(local_model),
+        "local_engine": selected[0] or "Not installed",
+        "local_model_configured": bool(selected[2]),
+        "local_voices": {
+            "male": {"available": bool(male[0] and male[1]), "engine": male[0] or "Not installed",
+                     "model": Path(male[2]).name if male[2] else None},
+            "female": {"available": bool(female[0] and female[1]), "engine": female[0] or "Not installed",
+                       "model": Path(female[2]).name if female[2] else None},
+        },
         "enabled_by_admin": enabled,
         "provider_configured": configured,
         "access_token_required": not local_available,
@@ -149,7 +179,7 @@ def voice_status():
         "provider": "Piper / eSpeak NG local / optional OpenAI",
         "model": os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
         "format": "WAV or MP3",
-        "notice": "Free local Hindi TTS is preferred. Paid APIs remain locked until revenue is confirmed and the user explicitly approves upgrades.",
+        "notice": "Piper Hindi male/female models are selectable when installed. eSpeak NG is synthetic and is never presented as natural human voice. Paid APIs remain locked until revenue is confirmed and the user explicitly approves upgrades.",
     }
 
 def hindi_letter_ratio(text: str) -> float:
@@ -167,12 +197,14 @@ def generate_voiceover(text: str, voice: str = "alloy") -> dict:
     if status["local_available"]:
         if hindi_letter_ratio(text) < 0.95:
             raise ValueError("Video voiceover must be at least 95% Hindi in Devanagari. Rewrite the narration in Hindi.")
+        speaker = _normalize_local_voice(voice)
+        engine, executable, model = _local_tts_engines(speaker)
+        if not executable or not engine:
+            requested = "female (Priyamvada)" if speaker == "female" else "male (Pratham)"
+            raise VoiceUnavailable(f"Hindi {requested} Piper model is not installed. Run scripts/setup_hindi_voice.sh and verify the model paths.")
         AUDIO_DIR.mkdir(parents=True, exist_ok=True)
         audio_id = uuid.uuid4().hex
         output = AUDIO_DIR / f"{audio_id}.wav"
-        engine, executable, model = _local_tts_engines()
-        if not executable or not engine:
-            raise VoiceUnavailable("No supported local Hindi TTS engine is available.")
         try:
             if engine == "Piper TTS":
                 completed = subprocess.run(
@@ -203,9 +235,14 @@ def generate_voiceover(text: str, voice: str = "alloy") -> dict:
         return {
             "audio_id": audio_id, "filename": output.name,
             "url": f"/api/audio/{audio_id}", "format": "WAV",
-            "voice": engine, "provider": "Local TTS", "model": model and Path(model).name or "Hindi",
+            "voice": engine, "speaker": "female" if speaker == "female" else "male",
+            "voice_name": "Priyamvada" if speaker == "female" and engine == "Piper TTS" else
+                          "Pratham" if speaker == "male" and engine == "Piper TTS" else "eSpeak NG Hindi (synthetic)",
+            "provider": "Local TTS", "model": model and Path(model).name or "Hindi",
             "size_bytes": audio_info["size_bytes"], "local": True,
-            "notice": "Locally generated Hindi speech. eSpeak NG has a synthetic voice; review pronunciation before publishing."
+            "notice": ("Piper neural Hindi voice. Review pronunciation and listen to the result before publishing."
+                       if engine == "Piper TTS" else
+                       "eSpeak NG is synthetic speech, not a natural human voice. Review pronunciation; it is a fallback only.")
         }
     if not status["enabled_by_admin"]:
         raise VoiceUnavailable("Paid media generation is disabled by server administrator.")

@@ -40,3 +40,25 @@ A model being downloaded or the server process starting is not an inference PASS
 
 - llama.cpp Android / Termux instructions: https://github.com/ggml-org/llama.cpp/blob/master/docs/android.md
 - Official Qwen model and license: https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF
+
+
+## Hindi male and female neural voices (Piper)
+
+Run `bash scripts/setup_hindi_voice.sh` to install the pinned Piper Hindi medium models:
+- Male: Pratham (`hi_IN-pratham-medium.onnx`)
+- Female: Priyamvada (`hi_IN-priyamvada-medium.onnx`)
+
+The installer verifies the ONNX model SHA-256 values against the official
+`rhasspy/piper-voices` v1.0.0 files, validates both Hindi model configuration files,
+and updates only `PIPER_EXECUTABLE`, `PIPER_MODEL_PATH` and
+`PIPER_FEMALE_MODEL_PATH` in `.env`; unrelated settings are preserved.
+The models are approximately 64 MB each. The default legacy voice value `alloy`
+continues to select Pratham. Use `male`/`pratham` or `female`/`priyamvada`
+in `POST /api/voice`. The capabilities endpoint reports availability separately
+for each speaker. If the requested female model is absent, SINTU fails explicitly
+instead of silently substituting the male or eSpeak voice.
+
+Piper is a local neural TTS engine, not a guarantee of studio-grade acting or
+pronunciation. Listen to every output and verify names, numbers and emotional delivery.
+eSpeak NG remains clearly labelled synthetic fallback only; it is not represented as
+a natural human voice.
