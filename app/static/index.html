@@ -101,6 +101,13 @@
       <div class="integration-card local-ai-runtime" aria-live="polite">
         <div class="panel-head"><div><strong>Local AI Runtime Diagnostics</strong><p class="muted">Ollama aur llama.cpp compatible server ki real readiness. Koi paid fallback automatic nahi hoga.</p></div><button id="localAiRefresh" class="secondary" type="button">Check Local AI</button></div>
         <div id="localAiRuntimeStatus" class="status-grid"><div><b>Checking…</b><span>Local server status load ho raha hai.</span></div></div>
+        <details class="local-ai-setup"><summary>Android / Termux Local AI setup</summary>
+          <p>Repository update hone ke baad Termux mein repository root se pehle setup chalayein; yeh official Termux llama.cpp package aur chhota starter GGUF model install karta hai.</p>
+          <pre><code>bash scripts/setup_local_ai_termux.sh</code></pre>
+          <p>Model setup complete hone ke baad local server start karein aur Termux session ko running rakhein:</p>
+          <pre><code>bash scripts/start_local_ai_termux.sh</code></pre>
+          <p class="muted">Server sirf 127.0.0.1 par bind hota hai. Setup .env, passwords, database ya original media ko edit nahi karta. Chhota model starter/testing profile hai; professional Hindi output quality ka PASS alag se verify hoga.</p>
+        </details>
       </div>
     </section>
     <section class="panel" id="videoEditor" data-feature="video_editor">
