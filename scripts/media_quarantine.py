@@ -8,9 +8,12 @@ place. This tool never repairs, overwrites, moves, or deletes source media.
 from __future__ import annotations
 
 import argparse
+import ctypes
+import errno
 import hashlib
 import json
 import os
+import platform
 import shutil
 import tempfile
 from pathlib import Path, PurePosixPath
@@ -44,6 +47,44 @@ def safe_source(root: Path, relative: str) -> Path:
     return resolved
 
 
+def _publish_no_replace(temporary: Path, destination: Path) -> None:
+    """Atomically publish a verified file without replacing an existing path.
+
+    Linux renameat2(RENAME_NOREPLACE) works on filesystems where hard links are
+    unavailable (notably some Android/Termux storage setups). If the syscall is
+    unavailable, retain the portable hard-link implementation: link creation is
+    also atomic and fails if the destination already exists.
+    """
+    if os.name == "posix" and platform.system() == "Linux":
+        syscall_numbers = {
+            "aarch64": 276,
+            "arm64": 276,
+            "x86_64": 316,
+            "amd64": 316,
+            "i386": 353,
+            "i686": 353,
+            "armv7l": 382,
+        }
+        syscall_number = syscall_numbers.get(platform.machine().lower())
+        if syscall_number is not None:
+            libc = ctypes.CDLL(None, use_errno=True)
+            result = libc.syscall(
+                ctypes.c_long(syscall_number),
+                ctypes.c_int(-100),  # AT_FDCWD
+                ctypes.c_char_p(os.fsencode(temporary)),
+                ctypes.c_int(-100),  # AT_FDCWD
+                ctypes.c_char_p(os.fsencode(destination)),
+                ctypes.c_uint(1),  # RENAME_NOREPLACE
+            )
+            if result == 0:
+                return
+            error = ctypes.get_errno()
+            if error not in {errno.ENOSYS, errno.EINVAL, errno.EOPNOTSUPP, errno.EPERM}:
+                raise OSError(error, os.strerror(error), str(destination))
+    # Atomic, no-overwrite fallback for platforms without renameat2.
+    os.link(temporary, destination)
+
+
 def copy_verified(root: Path, source: Path, destination: Path, expected_sha256: str) -> None:
     quarantine_root = root / "media_quarantine"
     if quarantine_root.is_symlink():
@@ -62,8 +103,8 @@ def copy_verified(root: Path, source: Path, destination: Path, expected_sha256: 
             os.fsync(output.fileno())
         if sha256_file(temporary) != expected_sha256:
             raise ValueError("copied quarantine file failed SHA-256 verification")
-        # Hard-link creation is atomic and fails rather than replacing an existing path.
-        os.link(temporary, destination)
+        # Atomic no-replace publication; supports Termux where os.link may fail.
+        _publish_no_replace(temporary, destination)
     finally:
         try:
             temporary.unlink()
