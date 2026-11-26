@@ -98,6 +98,10 @@
       <textarea id="chatMessageInput" rows="3" maxlength="12000" placeholder="SINTU se kuch bhi poochhein… (Ctrl + Enter to send)"></textarea>
       <div class="actions"><button id="chatSendMessage" type="button">Send message</button></div>
       <p id="chatNotice" class="muted" role="status" aria-live="polite">Local AI model unavailable ho to SINTU blocked status dikhayega; paid fallback automatic nahi hai.</p>
+      <div class="integration-card local-ai-runtime" aria-live="polite">
+        <div class="panel-head"><div><strong>Local AI Runtime Diagnostics</strong><p class="muted">Ollama aur llama.cpp compatible server ki real readiness. Koi paid fallback automatic nahi hoga.</p></div><button id="localAiRefresh" class="secondary" type="button">Check Local AI</button></div>
+        <div id="localAiRuntimeStatus" class="status-grid"><div><b>Checking…</b><span>Local server status load ho raha hai.</span></div></div>
+      </div>
     </section>
     <section class="panel" id="videoEditor" data-feature="video_editor">
       <div class="panel-head"><div><h2>MP4 Storyboard Renderer</h2><p>AI clips, still-image scenes aur local 2D character animation ko voiceover, music, SFX, subtitles aur camera movement ke saath final MP4 mein banayein.</p></div></div>
