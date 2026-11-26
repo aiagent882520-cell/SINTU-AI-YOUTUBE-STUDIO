@@ -2,6 +2,8 @@ import errno
 import hashlib
 import json
 import platform
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -154,3 +156,63 @@ def test_atomic_publish_refuses_destination_collision(tmp_path):
 
     assert temporary.read_bytes() == b"verified"
     assert destination.read_bytes() == b"do not replace"
+
+
+
+def test_non_linux_hardlink_fallback_is_atomic_and_no_replace(tmp_path, monkeypatch):
+    temporary = tmp_path / "verified.tmp"
+    destination = tmp_path / "destination.mp4"
+    temporary.write_bytes(b"verified")
+    monkeypatch.setattr("scripts.media_quarantine.platform.system", lambda: "Darwin")
+
+    _publish_no_replace(temporary, destination)
+
+    assert destination.read_bytes() == b"verified"
+    assert not temporary.exists()
+
+
+def test_concurrent_publishers_only_one_wins_without_overwrite(tmp_path):
+    destination = tmp_path / "destination.mp4"
+    temporaries = [tmp_path / "first.tmp", tmp_path / "second.tmp"]
+    temporaries[0].write_bytes(b"first verified payload")
+    temporaries[1].write_bytes(b"second verified payload")
+    barrier = threading.Barrier(2)
+
+    def publish(path):
+        barrier.wait()
+        try:
+            _publish_no_replace(path, destination)
+            return "published"
+        except FileExistsError:
+            return "collision"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(publish, temporaries))
+
+    assert sorted(outcomes) == ["collision", "published"]
+    assert destination.read_bytes() in {
+        b"first verified payload", b"second verified payload"
+    }
+
+
+def test_partial_copy_failure_cleans_temp_and_preserves_original(tmp_path, monkeypatch):
+    source = tmp_path / "generated_videos" / "clip.mp4"
+    source.parent.mkdir()
+    source.write_bytes(b"original video bytes")
+    expected = digest(source)
+
+    def fail_after_partial_copy(source_stream, destination_stream, length=0):
+        destination_stream.write(b"partial")
+        destination_stream.flush()
+        raise OSError(errno.EIO, "simulated interrupted copy")
+
+    monkeypatch.setattr("scripts.media_quarantine.shutil.copyfileobj", fail_after_partial_copy)
+    report = process_manifest(tmp_path, {
+        "targets": [{"path": "generated_videos/clip.mp4", "sha256": expected}]
+    }, apply=True)
+
+    quarantine = tmp_path / "media_quarantine"
+    assert report["targets"][0]["status"] == "REJECTED"
+    assert source.read_bytes() == b"original video bytes"
+    assert not list(quarantine.rglob(".sintu-quarantine-*"))
+    assert not list(quarantine.rglob("clip.mp4"))
