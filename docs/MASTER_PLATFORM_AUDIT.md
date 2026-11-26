@@ -1,8 +1,8 @@
 # SINTU AI YOUTUBE STUDIO — Master Platform Audit
 
-**Audit date:** 2026-11-18  
+**Audit date:** 2026-11-26  
 **Repository:** `aiagent882520-cell/SINTU-AI-YOUTUBE-STUDIO`  
-**Audited main commit:** `d2a7c4f4da394c0b00e67d91f97a3a27e5d1c646`  
+**Audit update:** Studio completion branch `work/studio-completion-foundation`; this is a focused update, not a fresh full-system audit.  
 **Source of truth:** `app/studio_scope.py`, `app/production_catalog.py`, repository Git tree, README and current GitHub/Termux evidence.
 
 ## Executive finding
@@ -15,7 +15,7 @@ Release status: **NOT READY**. Media production and external publishing remain f
 
 - Backend: Python 3 / FastAPI; SQLite persistence; authentication/roles; API middleware; production runtime and orchestration.
 - Frontend: `app/static/` HTML/CSS/JavaScript responsive dashboard and PWA service worker.
-- Android: Termux install/start/restart/watchdog/bridge scripts; browser PWA support. No native Android Gradle project, manifest, Kotlin/Java source, or APK build configuration exists in the audited Git tree.
+- Android: A native Kotlin/Jetpack Compose Gradle app exists under `android/`, with secure session storage, login, assistant, image generation, project/video flows, resumable WorkManager media transfer, and APK CI packaging. It is still partial parity: in-app playback, complete timeline editing, offline project queue, broad accessibility/device matrix, physical-device acceptance, and signed release are outstanding. The native app now uses SINTU-branded vector/adaptive launcher assets on the completion branch. Termux service scripts and browser PWA also exist.
 - AI text: local Ollama/OpenAI-compatible gateway with optional external adapters. Current Android evidence says Ollama endpoint/model was unavailable at the last engine probe.
 - Images/video: ComfyUI connector and workflow templates; actual ComfyUI service/workflow/model availability is not established on the Android device.
 - Audio: Piper if a model is configured; eSpeak NG fallback; procedural music and sound effects; FFmpeg mixing/rendering.

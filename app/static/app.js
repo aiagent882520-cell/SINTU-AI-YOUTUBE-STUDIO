@@ -234,26 +234,108 @@ async function request(path, options={}) {
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
+function renderLocalAiRuntime(providers) {
+  const target = $("localAiRuntimeStatus");
+  if (!target) return;
+  const local = providers?.local || {};
+  const compatible = local.openai_compatible || {};
+  const state = local.model_available ? "READY" : local.service_running ? "SERVER RUNNING · MODEL MISSING" : "SERVER NOT RUNNING";
+  const compatibleState = compatible.model_available ? "READY" : compatible.service_running ? "SERVER RUNNING · MODEL MISSING" : "NOT RUNNING";
+  const rows = [
+    ["Selected local engine", local.backend || "none", "Preference: " + (local.backend_preference || "auto")],
+    ["Ollama", local.service_running && local.backend === "ollama" ? "ACTIVE" : (local.service_running ? "SERVICE DETECTED" : "NOT DETECTED"), (local.base_url || "http://127.0.0.1:11434") + " · model: " + (local.model || "qwen2.5:3b")],
+    ["Local model readiness", state, local.model_available ? "Local model is available for inference." : "A running server alone is not enough; its model must also be loaded."],
+    ["llama.cpp / OpenAI-compatible", compatibleState, (compatible.base_url || "http://127.0.0.1:8080/v1") + " · model: " + (compatible.model || "auto")],
+    ["Paid fallback", providers?.paid_upgrades_allowed ? "OWNER POLICY ENABLED" : "LOCKED", "No automatic paid-provider fallback."]
+  ];
+  target.innerHTML = rows.map(([label, value, detail]) =>
+    '<div><b>' + escapeHtml(label) + '</b><span><strong>' + escapeHtml(value) + '</strong><br>' + escapeHtml(detail) + '</span></div>'
+  ).join("");
+}
+function renderProductionReadiness(capabilities) {
+  const target = $("productionReadinessStatus");
+  if (!target) return;
+  const local = capabilities?.providers || {};
+  const image = capabilities?.image_generation || {};
+  const video = capabilities?.ai_video_generation || {};
+  const voice = capabilities?.voiceover || {};
+  const music = capabilities?.ai_music_generation || {};
+  const renderer = capabilities?.storyboard_renderer || {};
+  const blender = capabilities?.blender_3d || {};
+  const status = (ready, fallback) => ready ? "READY · LOCAL" : fallback;
+  const rows = [
+    ["Master text AI", local.local ? "READY · LOCAL MODEL" : "BLOCKED · LOCAL MODEL NOT READY", "Paid upgrades " + (capabilities?.paid_upgrades_allowed ? "owner-enabled" : "locked") + "; automatic paid fallback is disabled."],
+    ["Image generation", status(image.comfyui_available, image.local_available ? "PROCEDURAL FALLBACK · NOT AI" : "BLOCKED"), image.provider || "No image provider detected."],
+    ["AI video generation", status(video.local_available, "BLOCKED · LOCAL VIDEO WORKFLOW MISSING"), video.provider || "ComfyUI/video workflow needs a compatible host and model."],
+    ["Hindi voiceover", voice.local_available ? ((voice.local_engine || "").toLowerCase().includes("espeak") ? "READY · BASIC SYNTHETIC" : "READY · " + (voice.local_engine || "LOCAL TTS")) : "BLOCKED · PIPER / HINDI TTS MODEL MISSING", voice.local_engine || "No local Hindi TTS engine detected."],
+    ["Music generation", music.local_available ? "READY · LOCAL" : "BLOCKED · LOCAL MUSIC ENGINE MISSING", music.provider || "Music generation unavailable."],
+    ["MP4 renderer", renderer.available ? "READY · FFMPEG" : "BLOCKED · FFMPEG MISSING", renderer.output || "FFmpeg renderer not available."],
+    ["3D / Blender", blender.available ? "READY · BLENDER" : "OPTIONAL · BLENDER MISSING", blender.engine || "3D rendering requires Blender."]
+  ];
+  target.innerHTML = rows.map(([label, value, detail]) =>
+    '<div><b>' + escapeHtml(label) + '</b><span><strong>' + escapeHtml(value) + '</strong><br>' + escapeHtml(detail) + '</span></div>'
+  ).join("");
+}
+async function refreshProductionReadiness() {
+  const button = $("productionReadinessRefresh");
+  if (button) button.disabled = true;
+  try {
+    renderProductionReadiness(await request("/api/capabilities"));
+  } catch (error) {
+    const target = $("productionReadinessStatus");
+    if (target) target.textContent = "Production readiness check unavailable: " + error.message;
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+$("productionReadinessRefresh")?.addEventListener("click", refreshProductionReadiness);
+
+async function refreshLocalAiRuntime() {
+  const button = $("localAiRefresh");
+  if (button) button.disabled = true;
+  try {
+    const providers = await request("/api/providers");
+    renderLocalAiRuntime(providers);
+  } catch (error) {
+    const target = $("localAiRuntimeStatus");
+    if (target) target.textContent = "Local AI diagnostics unavailable: " + error.message;
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+$("localAiRefresh")?.addEventListener("click", refreshLocalAiRuntime);
+
 async function refresh() {
   try {
-    const [status,agents,studioAgents,tasks,providers,workflows] = await Promise.all([
+    const [status,agents,studioAgents,tasks,providers,workflows,capabilities] = await Promise.all([
       request("/api/status"), request("/api/agents"), request("/api/studio/agents"), request("/api/tasks"),
-      request("/api/providers"), request("/api/workflows")
+      request("/api/providers"), request("/api/workflows"), request("/api/capabilities")
     ]);
     $("health").textContent = "API online";
+    renderProductionReadiness(capabilities);
     $("agentCount").textContent = studioAgents.total_role_instances;
     $("workflowCount").textContent = workflows.total;
     $("taskCount").textContent = status.tasks_saved;
     $("doneCount").textContent = status.tasks_completed;
     const available = [];
-    if (providers.local.configured) available.push("Free local Ollama");
+    const local = providers.local || {};
+    renderLocalAiRuntime(providers);
+    if (local.configured) available.push("Free local " + (local.backend || "AI") + " · " + (local.model || "model ready"));
     if (providers.paid_upgrades_allowed && providers.openai.configured) available.push("OpenAI (optional)");
     if (providers.paid_upgrades_allowed && providers.gemini.configured) available.push("Gemini (optional)");
     if (providers.paid_upgrades_allowed && providers.deepseek.configured) available.push("DeepSeek (optional)");
     if (providers.paid_upgrades_allowed && providers.claude.configured) available.push("Claude (optional)");
-    $("providerStatus").textContent = available.length
-      ? "Available: " + available.join(" + ") + " · selected: " + providers.selected
-      : "Free local AI setup needed: install/start Ollama and pull the configured model. Paid providers locked until revenue + approval.";
+    const localState = local.configured
+      ? "Local engine READY"
+      : (local.service_running ? "Local server RUNNING, model NOT READY" : "Local AI server NOT RUNNING");
+    const compatible = local.openai_compatible || {};
+    const localHint = local.configured ? "" :
+      " · Ollama: " + (local.base_url || "127.0.0.1:11434") +
+      " · llama.cpp/OpenAI-compatible: " + (compatible.base_url || "127.0.0.1:8080/v1") +
+      " · Start a local server and load a GGUF/model before generation.";
+    $("providerStatus").textContent = localState + " · backend: " + (local.backend || "none") +
+      " · selected: " + providers.selected + (available.length ? " · " + available.join(" + ") : "") +
+      localHint + " · Paid fallback stays disabled without Owner approval.";
     $("agents").innerHTML = agents.agents.map(a =>
       '<div class="agent"><span>'+a.id+'. '+escapeHtml(a.name)+'</span><small>'+escapeHtml(a.status)+'</small></div>'
     ).join("");
@@ -1291,6 +1373,10 @@ async function applyFeatureAccessUI() {
     document.querySelectorAll("[data-feature]").forEach(panel => {
       panel.hidden = !allowed.has(panel.dataset.feature);
     });
+    document.querySelectorAll("[data-feature-all]").forEach(panel => {
+      const required = panel.dataset.featureAll.split(",").map(value => value.trim()).filter(Boolean);
+      panel.hidden = !required.length || !required.every(feature => allowed.has(feature));
+    });
     if ($("adminPanel")) $("adminPanel").hidden = true;
     const catalog = new Map((access.features || []).map(item => [item.key, item.name]));
     const grants = [...allowed].map(key => catalog.get(key) || key);
@@ -1934,3 +2020,11 @@ $("chatMessageInput")?.addEventListener("keydown", event => {
   }
 });
 loadChatConversations();
+
+/* Accessible navigation: keep the selected Studio destination visible to keyboard and touch users. */
+document.querySelectorAll(".studio-sidebar nav a[href^='#']").forEach(link => {
+  link.addEventListener("click", () => {
+    document.querySelectorAll(".studio-sidebar nav a[aria-current='location']").forEach(item => item.removeAttribute("aria-current"));
+    link.setAttribute("aria-current", "location");
+  });
+});

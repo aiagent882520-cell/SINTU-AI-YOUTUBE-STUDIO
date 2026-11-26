@@ -20,8 +20,27 @@
     <div><img src="/static/brand-logo.svg" alt="SINTU AI YOUTUBE STUDIO" style="width:68px;height:52px;object-fit:contain;margin-right:12px"><div><h1>SINTU AI YOUTUBE STUDIO</h1><p>AI Video Production Workspace</p></div></div>
     <div class="actions"><span id="health" class="status" role="status">Connecting…</span><a class="secondary" href="/earnings">Earning System</a><a class="secondary" href="/static/factory.html">Production Factory</a><button id="logout" class="secondary" type="button">Logout</button></div>
   </header>
-  <main>
-    <section class="hero" data-feature="dashboard">
+  <main><aside class="studio-sidebar" aria-label="Studio navigation">
+  <div class="studio-sidebar-brand"><img src="/static/icon.svg" alt=""><span>STUDIO MENU</span></div>
+  <nav>
+    <a href="#dashboard" data-feature="dashboard"><span>⌂</span> Dashboard</a>
+    <a href="#create" data-feature="ai_assistant"><span>✦</span> AI Production Desk</a>
+    <a href="#aiChat" data-feature="ai_assistant"><span>◉</span> AI Assistant</a>
+    <a href="#videoEditor" data-feature="video_editor"><span>▣</span> Video Editor</a>
+    <a href="#productionStudio" data-feature="production"><span>⚙</span> Production Studio</a>
+    <a href="#agentOperationsPanel" data-feature="agents"><span>◇</span> AI Agents</a>
+    <a href="#offlineMediaPanel" data-feature="media_library"><span>▤</span> Media Library</a>
+    <a href="#providerAdminPanel" data-feature-all="ai_settings,integrations"><span>⌘</span> AI & Providers</a>
+    <a href="#publishingConnectionsPanel" data-feature="integrations"><span>⇄</span> Integrations</a>
+    <a href="#youtubeAdminPanel" data-feature="youtube"><span>▶</span> YouTube</a>
+    <a href="#calendarPanel" data-feature="social_publish"><span>▦</span> Publishing Calendar</a>
+    <a href="/earnings"><span>₹</span> Earnings</a>
+    <a href="/static/factory.html" data-feature="production"><span>⚡</span> Production Factory</a>
+  </nav>
+  <p class="studio-sidebar-foot">Owner-controlled · Free-first</p>
+</aside>
+
+    <section class="hero" id="dashboard" data-feature="dashboard">
       <p class="eyebrow">SINTU AI YOUTUBE STUDIO · VIDEO PRODUCTION</p>
       <h2>Idea se <em>production plan</em> tak.</h2>
       <p>Ek hi workspace mein video scripts, research, thumbnails, courses aur social content.</p>
@@ -79,8 +98,23 @@
       <textarea id="chatMessageInput" rows="3" maxlength="12000" placeholder="SINTU se kuch bhi poochhein… (Ctrl + Enter to send)"></textarea>
       <div class="actions"><button id="chatSendMessage" type="button">Send message</button></div>
       <p id="chatNotice" class="muted" role="status" aria-live="polite">Local AI model unavailable ho to SINTU blocked status dikhayega; paid fallback automatic nahi hai.</p>
+      <div class="integration-card local-ai-runtime" aria-live="polite">
+        <div class="panel-head"><div><strong>Local AI Runtime Diagnostics</strong><p class="muted">Ollama aur llama.cpp compatible server ki real readiness. Koi paid fallback automatic nahi hoga.</p></div><button id="localAiRefresh" class="secondary" type="button">Check Local AI</button></div>
+        <div id="localAiRuntimeStatus" class="status-grid"><div><b>Checking…</b><span>Local server status load ho raha hai.</span></div></div>
+        <div class="integration-card production-readiness" aria-live="polite">
+          <div class="panel-head"><div><strong>Production Factory Readiness</strong><p class="muted">Text AI, image, video, voice, music aur renderer ki live capability. READY ka matlab configured/local check hai; real output ka test alag hai.</p></div><button id="productionReadinessRefresh" class="secondary" type="button">Check Media Engines</button></div>
+          <div id="productionReadinessStatus" class="status-grid"><div><b>Checking…</b><span>Production engines ki real capability check ho rahi hai.</span></div></div>
+        </div>
+        <details class="local-ai-setup"><summary>Android / Termux Local AI setup</summary>
+          <p>Repository update hone ke baad Termux mein repository root se pehle setup chalayein; yeh official Termux llama.cpp package aur chhota starter GGUF model install karta hai.</p>
+          <pre><code>bash scripts/setup_local_ai_termux.sh</code></pre>
+          <p>Model setup complete hone ke baad local server start karein aur Termux session ko running rakhein:</p>
+          <pre><code>bash scripts/start_local_ai_termux.sh</code></pre>
+          <p class="muted">Server sirf 127.0.0.1 par bind hota hai. Setup .env, passwords, database ya original media ko edit nahi karta. Chhota model starter/testing profile hai; professional Hindi output quality ka PASS alag se verify hoga.</p>
+        </details>
+      </div>
     </section>
-    <section class="panel" data-feature="video_editor">
+    <section class="panel" id="videoEditor" data-feature="video_editor">
       <div class="panel-head"><div><h2>MP4 Storyboard Renderer</h2><p>AI clips, still-image scenes aur local 2D character animation ko voiceover, music, SFX, subtitles aur camera movement ke saath final MP4 mein banayein.</p></div></div>
       <label for="renderFormat">Video format</label>
       <select id="renderFormat"><option value="youtube-shorts">YouTube Shorts</option></select>
@@ -131,7 +165,7 @@
       <label for="renderTransition">Scene transition</label>
       <select id="renderTransition"><option value="fade">Fade</option><option value="cut">Cut</option></select>
       <label for="renderMotion">Cinematic motion effect</label>
-      <select id="renderMotion"><option value="slow-zoom-in" selected>Slow cinematic zoom in (recommended)</option><option value="slow-zoom-out">Slow cinematic zoom out</option><option value="none">Static (short clips only)</option></select>
+      <select id="renderMotion"><option value="slow-zoom-in" selected>Slow cinematic zoom in</option><option value="slow-zoom-out">Slow cinematic zoom out</option><option value="pan-left">Camera pan left</option><option value="pan-right">Camera pan right</option><option value="pan-up">Camera pan up</option><option value="pan-down">Camera pan down</option><option value="none">Static (short clips only)</option></select>
       <label for="renderSubtitles">Video text overlays</label>
       <label for="renderSubtitles">Optional burned-in subtitles / lyric captions (one line per scene or clip)</label>
       <textarea id="renderSubtitles" rows="4" maxlength="25000" placeholder="Scene 1 subtitle&#10;Scene 2 subtitle&#10;Scene 3 subtitle"></textarea>

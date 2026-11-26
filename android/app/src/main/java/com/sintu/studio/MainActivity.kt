@@ -1,6 +1,10 @@
 package com.sintu.studio
 
 import android.os.Bundle
+import androidx.compose.ui.viewinterop.AndroidView
+import android.widget.VideoView
+import android.widget.MediaController
+import android.net.Uri
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.content.Intent
@@ -24,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
@@ -69,9 +74,17 @@ private fun SintuRoot() {
     if (loggedIn && api != null) {
         Column(Modifier.fillMaxSize().padding(12.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text("SINTU AI YOUTUBE STUDIO", fontWeight = FontWeight.Bold)
-                    Text("Signed in as " + username, style = MaterialTheme.typography.bodySmall)
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Image(
+                        painter = painterResource(id = R.drawable.sintu_icon_foreground),
+                        contentDescription = "SINTU AI Studio logo",
+                        modifier = Modifier.size(42.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text("SINTU AI YOUTUBE STUDIO", fontWeight = FontWeight.Bold)
+                        Text("Signed in as " + username, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
                 OutlinedButton(onClick = {
                     scope.launch {
@@ -89,6 +102,12 @@ private fun SintuRoot() {
         var otpCode by remember { mutableStateOf("") }
         var user by remember { mutableStateOf(username) }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.Center) {
+            Image(
+                painter = painterResource(id = R.drawable.sintu_icon_foreground),
+                contentDescription = "SINTU AI Studio logo",
+                modifier = Modifier.size(84.dp)
+            )
+            Spacer(Modifier.height(12.dp))
             Text("SINTU AI STUDIO", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text("Native Android client · free-first local AI")
             Spacer(Modifier.height(24.dp))
@@ -668,6 +687,8 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
             }
             if (downloadedUri.isNotBlank()) {
                 Text("Saved to Movies/SINTU · " + downloadedUri, style = MaterialTheme.typography.bodySmall)
+                Text("In-app MP4 preview", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                SintuInlineVideoPlayer(downloadedUri)
                 OutlinedButton(
                     onClick = {
                         try {
@@ -728,6 +749,37 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodySmall
         )
     }
+}
+
+@Composable
+private fun SintuInlineVideoPlayer(contentUri: String) {
+    AndroidView(
+        modifier = Modifier.fillMaxWidth().aspectRatio(9f / 16f),
+        factory = { context ->
+            VideoView(context).apply {
+                val controls = MediaController(context)
+                controls.setAnchorView(this)
+                setMediaController(controls)
+                tag = contentUri
+                setVideoURI(Uri.parse(contentUri))
+                setOnPreparedListener { player ->
+                    player.isLooping = false
+                    start()
+                }
+            }
+        },
+        update = { player ->
+            if (player.tag != contentUri) {
+                player.stopPlayback()
+                player.tag = contentUri
+                player.setVideoURI(Uri.parse(contentUri))
+                player.setOnPreparedListener { prepared ->
+                    prepared.isLooping = false
+                    player.start()
+                }
+            }
+        }
+    )
 }
 
 @Composable

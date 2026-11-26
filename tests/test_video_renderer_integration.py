@@ -627,3 +627,17 @@ def test_portrait_hindi_subtitles_wrap_to_safe_width(tmp_path, monkeypatch):
     assert len(caption_lines) >= 2
     assert max(map(len, caption_lines)) <= 15
 
+
+
+@pytest.mark.parametrize("motion", ["pan-left", "pan-right", "pan-up", "pan-down"])
+def test_storyboard_directional_pan_filters_move_within_safe_crop(motion):
+    camera = video_renderer._storyboard_motion_filter(
+        motion, width=720, height=1280, fps=24, seconds_per_scene=4
+    )
+    assert camera is not None
+    assert "mod(on,96)" in camera
+    assert "1.120" in camera
+    if motion in {"pan-left", "pan-right"}:
+        assert "(iw-iw/zoom)" in camera
+    else:
+        assert "(ih-ih/zoom)" in camera
