@@ -4785,7 +4785,7 @@ def render_capabilities():
         "renderer": "FFmpeg + Pillow storyboard renderer",
         "supported_output": "MP4 / H.264; selectable 720x1280, 1080x1920, 1080x1080, 1280x720, 1920x1080; 24/30/60 FPS; standard/high/maximum CRF quality",
         "profiles": {"resolutions": ["720x1280", "1080x1920", "1080x1080", "1280x720", "1920x1080"], "fps": [24, 30, 60], "quality": ["standard", "high", "maximum"]},
-        "limitations": ["background music is user-uploaded; music licensing remains user's responsibility", "basic slow zoom motion only; no advanced 2D/3D VFX", "FFmpeg must be installed"],
+        "limitations": ["background music is user-uploaded; music licensing remains user's responsibility", "per-scene slow zoom and directional pan camera motion; advanced character rigging, 2D compositing and 3D VFX require dedicated engines", "FFmpeg must be installed"],
     }
 
 
