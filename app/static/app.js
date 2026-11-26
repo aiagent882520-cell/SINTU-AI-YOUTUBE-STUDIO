@@ -252,6 +252,44 @@ function renderLocalAiRuntime(providers) {
     '<div><b>' + escapeHtml(label) + '</b><span><strong>' + escapeHtml(value) + '</strong><br>' + escapeHtml(detail) + '</span></div>'
   ).join("");
 }
+function renderProductionReadiness(capabilities) {
+  const target = $("productionReadinessStatus");
+  if (!target) return;
+  const local = capabilities?.providers || {};
+  const image = capabilities?.image_generation || {};
+  const video = capabilities?.ai_video_generation || {};
+  const voice = capabilities?.voiceover || {};
+  const music = capabilities?.ai_music_generation || {};
+  const renderer = capabilities?.storyboard_renderer || {};
+  const blender = capabilities?.blender_3d || {};
+  const status = (ready, fallback) => ready ? "READY · LOCAL" : fallback;
+  const rows = [
+    ["Master text AI", local.local ? "READY · LOCAL MODEL" : "BLOCKED · LOCAL MODEL NOT READY", "Paid upgrades " + (capabilities?.paid_upgrades_allowed ? "owner-enabled" : "locked") + "; automatic paid fallback is disabled."],
+    ["Image generation", status(image.comfyui_available, image.local_available ? "PROCEDURAL FALLBACK · NOT AI" : "BLOCKED"), image.provider || "No image provider detected."],
+    ["AI video generation", status(video.local_available, "BLOCKED · LOCAL VIDEO WORKFLOW MISSING"), video.provider || "ComfyUI/video workflow needs a compatible host and model."],
+    ["Hindi voiceover", voice.local_available ? "READY · " + (voice.local_engine || "LOCAL TTS") : "BLOCKED · PIPER / HINDI TTS MODEL MISSING", voice.local_engine || "No local Hindi TTS engine detected."],
+    ["Music generation", music.local_available ? "READY · LOCAL" : "BLOCKED · LOCAL MUSIC ENGINE MISSING", music.provider || "Music generation unavailable."],
+    ["MP4 renderer", renderer.available ? "READY · FFMPEG" : "BLOCKED · FFMPEG MISSING", renderer.output || "FFmpeg renderer not available."],
+    ["3D / Blender", blender.available ? "READY · BLENDER" : "OPTIONAL · BLENDER MISSING", blender.engine || "3D rendering requires Blender."]
+  ];
+  target.innerHTML = rows.map(([label, value, detail]) =>
+    '<div><b>' + escapeHtml(label) + '</b><span><strong>' + escapeHtml(value) + '</strong><br>' + escapeHtml(detail) + '</span></div>'
+  ).join("");
+}
+async function refreshProductionReadiness() {
+  const button = $("productionReadinessRefresh");
+  if (button) button.disabled = true;
+  try {
+    renderProductionReadiness(await request("/api/capabilities"));
+  } catch (error) {
+    const target = $("productionReadinessStatus");
+    if (target) target.textContent = "Production readiness check unavailable: " + error.message;
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+$("productionReadinessRefresh")?.addEventListener("click", refreshProductionReadiness);
+
 async function refreshLocalAiRuntime() {
   const button = $("localAiRefresh");
   if (button) button.disabled = true;
@@ -271,9 +309,10 @@ async function refresh() {
   try {
     const [status,agents,studioAgents,tasks,providers,workflows] = await Promise.all([
       request("/api/status"), request("/api/agents"), request("/api/studio/agents"), request("/api/tasks"),
-      request("/api/providers"), request("/api/workflows")
+      request("/api/providers"), request("/api/workflows"), request("/api/capabilities")
     ]);
     $("health").textContent = "API online";
+    renderProductionReadiness(capabilities);
     $("agentCount").textContent = studioAgents.total_role_instances;
     $("workflowCount").textContent = workflows.total;
     $("taskCount").textContent = status.tasks_saved;
