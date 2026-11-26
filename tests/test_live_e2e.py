@@ -344,6 +344,7 @@ def test_preflight_does_not_report_procedural_fallback_as_comfyui(monkeypatch):
     assert report["available"] is False
     assert report["local_fallback_available"] is True
     assert report["local_engine"] == "SINTU Procedural Art (offline fallback)"
+    assert report["workflow_configured"] is False
 
 
 
@@ -388,7 +389,6 @@ def test_media_provider_acceptance_keeps_default_local_fallbacks_explicit():
     assert result["ai_image_acceptance_passed"] is None
     assert result["piper_voice_acceptance_required"] is False
     assert result["piper_voice_acceptance_passed"] is None
-    assert report["workflow_configured"] is False
 
 
 def test_preflight_reports_comfyui_only_when_workflow_is_ready():
