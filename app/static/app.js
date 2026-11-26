@@ -1165,9 +1165,21 @@ async function checkVoiceService() {
   try {
     const info = await request("/api/voice/capabilities");
     window.SINTU_VOICE_LOCAL_AVAILABLE=!!info.local_available;
-    $("voiceNotice").textContent = info.local_available
-      ? "Ready: free local Piper TTS · WAV · no API key or media token."
-      : info.available ? "Ready: optional paid voice provider." : "Free voice needs Piper executable + voice model. Paid provider remains locked until revenue and approval.";
+    const localVoices = info.local_voices || {};
+    for (const speaker of ["male", "female"]) {
+      const option = $("voiceChoice").querySelector('option[value="' + speaker + '"]');
+      if (option) option.disabled = !localVoices[speaker]?.available;
+    }
+    if (info.local_available) {
+      const male = localVoices.male?.available ? "पुरुष Pratham" : "पुरुष neural voice अनुपलब्ध";
+      const female = localVoices.female?.available ? "महिला Priyamvada" : "महिला neural voice अनुपलब्ध";
+      const engine = info.local_engine || "Local TTS";
+      $("voiceNotice").textContent = "स्थानीय आवाज़: " + engine + " · " + male + " · " + female + ". eSpeak NG केवल synthetic fallback है.";
+    } else {
+      $("voiceNotice").textContent = info.available
+        ? "Ready: optional paid voice provider. Male/Female Piper models are not installed locally."
+        : "Free voice needs Piper executable + Hindi voice models. Paid provider remains locked until revenue and approval.";
+    }
     $("voiceButton").disabled = !info.available;
   } catch (error) {
     $("voiceNotice").textContent = "Voice service status unavailable.";
