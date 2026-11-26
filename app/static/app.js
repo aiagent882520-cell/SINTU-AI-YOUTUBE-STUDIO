@@ -1300,6 +1300,10 @@ async function applyFeatureAccessUI() {
     document.querySelectorAll("[data-feature]").forEach(panel => {
       panel.hidden = !allowed.has(panel.dataset.feature);
     });
+    document.querySelectorAll("[data-feature-all]").forEach(panel => {
+      const required = panel.dataset.featureAll.split(",").map(value => value.trim()).filter(Boolean);
+      panel.hidden = !required.length || !required.every(feature => allowed.has(feature));
+    });
     if ($("adminPanel")) $("adminPanel").hidden = true;
     const catalog = new Map((access.features || []).map(item => [item.key, item.name]));
     const grants = [...allowed].map(key => catalog.get(key) || key);
