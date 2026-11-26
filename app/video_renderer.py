@@ -145,11 +145,17 @@ def _storyboard_motion_filter(motion: str, width: int, height: int,
         zoom = f"1+{zoom_strength:.3f}*({phase})"
     elif motion == "slow-zoom-out":
         zoom = f"{1 + zoom_strength:.3f}-{zoom_strength:.3f}*({phase})"
+    elif motion in {"pan-left", "pan-right", "pan-up", "pan-down"}:
+        # A small constant crop gives the camera room for a smooth, deterministic pan.
+        zoom = "1.120"
+        x = f"(iw-iw/zoom)*({'1-(' + phase + ')' if motion == 'pan-left' else '(' + phase + ')' if motion == 'pan-right' else '0.5'})"
+        y = f"(ih-ih/zoom)*({'1-(' + phase + ')' if motion == 'pan-up' else '(' + phase + ')' if motion == 'pan-down' else '0.5'})"
     else:
         raise ValueError("Unsupported storyboard motion.")
-    # Drift within the available crop margin, so pan remains in-bounds even at zoom=1.
-    x = f"(iw-iw/zoom)/2+sin(2*PI*({phase}))*((iw-iw/zoom)*0.22)"
-    y = f"(ih-ih/zoom)/2+cos(2*PI*({phase}))*((ih-ih/zoom)*0.12)"
+    if motion not in {"pan-left", "pan-right", "pan-up", "pan-down"}:
+        # Subtle drift stays within the available crop margin for zoom moves.
+        x = f"(iw-iw/zoom)/2+sin(2*PI*({phase}))*((iw-iw/zoom)*0.22)"
+        y = f"(ih-ih/zoom)/2+cos(2*PI*({phase}))*((ih-ih/zoom)*0.12)"
     return (
         f"zoompan=z='{zoom}':x='{x}':y='{y}':d=1:"
         f"s={width}x{height}:fps={fps}"
@@ -703,8 +709,8 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         raise ValueError("8 seconds se lambi storyboard video mein cinematic camera motion zaroori hai; static slideshow disabled hai.")
     if transition not in {"cut", "fade"}:
         raise ValueError("Transition cut ya fade hona chahiye.")
-    if motion not in {"none", "slow-zoom-in", "slow-zoom-out"}:
-        raise ValueError("Motion none, slow-zoom-in ya slow-zoom-out hona chahiye.")
+    if motion not in {"none", "slow-zoom-in", "slow-zoom-out", "pan-left", "pan-right", "pan-up", "pan-down"}:
+        raise ValueError("Unsupported camera motion. Choose zoom-in, zoom-out, pan-left, pan-right, pan-up, pan-down or none.")
     if not 0.0 <= music_volume <= 1.0:
         raise ValueError("Music volume 0 se 1 ke beech hona chahiye.")
     if not isinstance(sound_effects_enabled, bool) or not 0.0 <= sound_effects_volume <= 1.0:
