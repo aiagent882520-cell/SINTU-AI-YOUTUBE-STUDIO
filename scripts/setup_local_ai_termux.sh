@@ -36,7 +36,7 @@ command -v llama-server >/dev/null 2>&1 || fail "llama-cpp install hua, lekin ll
 verify_model() {
   local file="$1"
   local magic
-  magic="$(head -c 4 "$file" | od -An -tx1 | tr -d ' \\n')"
+  magic="$(head -c 4 "$file" | od -An -tx1 | tr -d ' \n')"
   [ "$magic" = "47475546" ] || return 1
   echo "$MODEL_SHA256  $file" | sha256sum --check --status
 }
