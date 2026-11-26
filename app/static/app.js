@@ -234,6 +234,39 @@ async function request(path, options={}) {
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
+function renderLocalAiRuntime(providers) {
+  const target = $("localAiRuntimeStatus");
+  if (!target) return;
+  const local = providers?.local || {};
+  const compatible = local.openai_compatible || {};
+  const state = local.model_available ? "READY" : local.service_running ? "SERVER RUNNING · MODEL MISSING" : "SERVER NOT RUNNING";
+  const compatibleState = compatible.model_available ? "READY" : compatible.service_running ? "SERVER RUNNING · MODEL MISSING" : "NOT RUNNING";
+  const rows = [
+    ["Selected local engine", local.backend || "none", "Preference: " + (local.backend_preference || "auto")],
+    ["Ollama", local.service_running && local.backend === "ollama" ? "ACTIVE" : (local.service_running ? "SERVICE DETECTED" : "NOT DETECTED"), (local.base_url || "http://127.0.0.1:11434") + " · model: " + (local.model || "qwen2.5:3b")],
+    ["Local model readiness", state, local.model_available ? "Local model is available for inference." : "A running server alone is not enough; its model must also be loaded."],
+    ["llama.cpp / OpenAI-compatible", compatibleState, (compatible.base_url || "http://127.0.0.1:8080/v1") + " · model: " + (compatible.model || "auto")],
+    ["Paid fallback", providers?.paid_upgrades_allowed ? "OWNER POLICY ENABLED" : "LOCKED", "No automatic paid-provider fallback."]
+  ];
+  target.innerHTML = rows.map(([label, value, detail]) =>
+    '<div><b>' + escapeHtml(label) + '</b><span><strong>' + escapeHtml(value) + '</strong><br>' + escapeHtml(detail) + '</span></div>'
+  ).join("");
+}
+async function refreshLocalAiRuntime() {
+  const button = $("localAiRefresh");
+  if (button) button.disabled = true;
+  try {
+    const providers = await request("/api/providers");
+    renderLocalAiRuntime(providers);
+  } catch (error) {
+    const target = $("localAiRuntimeStatus");
+    if (target) target.textContent = "Local AI diagnostics unavailable: " + error.message;
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+$("localAiRefresh")?.addEventListener("click", refreshLocalAiRuntime);
+
 async function refresh() {
   try {
     const [status,agents,studioAgents,tasks,providers,workflows] = await Promise.all([
@@ -247,6 +280,7 @@ async function refresh() {
     $("doneCount").textContent = status.tasks_completed;
     const available = [];
     const local = providers.local || {};
+    renderLocalAiRuntime(providers);
     if (local.configured) available.push("Free local " + (local.backend || "AI") + " · " + (local.model || "model ready"));
     if (providers.paid_upgrades_allowed && providers.openai.configured) available.push("OpenAI (optional)");
     if (providers.paid_upgrades_allowed && providers.gemini.configured) available.push("Gemini (optional)");
