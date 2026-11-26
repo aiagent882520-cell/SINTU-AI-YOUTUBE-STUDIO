@@ -41,3 +41,14 @@ def test_termux_bootstrap_is_guarded_and_preserves_existing_config():
     assert '127.0.0.1' in START
     assert '--host 127.0.0.1' in START
     assert '0.0.0.0' not in START
+
+
+def test_production_readiness_panel_reports_real_capabilities_and_labels_fallbacks():
+    assert 'id="productionReadinessStatus"' in HTML
+    assert 'id="productionReadinessRefresh"' in HTML
+    assert 'request("/api/capabilities")' in JS
+    assert "renderProductionReadiness(capabilities)" in JS
+    assert "PROCEDURAL FALLBACK · NOT AI" in JS
+    assert "PIPER / HINDI TTS MODEL MISSING" in JS
+    assert "BLOCKED · LOCAL VIDEO WORKFLOW MISSING" in JS
+    assert "FFMPEG" in JS
