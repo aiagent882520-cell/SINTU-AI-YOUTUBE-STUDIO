@@ -1,4 +1,5 @@
 import errno
+import os
 import hashlib
 import json
 import platform
@@ -118,9 +119,9 @@ def test_symlinked_quarantine_root_is_rejected_without_touching_source(tmp_path)
 
 
 @pytest.mark.skipif(
-    platform.system() != "Linux"
+    platform.system() not in {"Linux", "Android"}
     or platform.machine().lower() not in {"aarch64", "arm64", "x86_64", "amd64", "i386", "i686", "armv7l"},
-    reason="requires Linux renameat2 syscall support",
+    reason="requires Linux/Android renameat2 syscall support",
 )
 def test_apply_succeeds_when_hardlinks_are_unavailable(tmp_path, monkeypatch):
     source = tmp_path / "generated_videos" / "clip.mp4"
@@ -131,7 +132,7 @@ def test_apply_succeeds_when_hardlinks_are_unavailable(tmp_path, monkeypatch):
     def unavailable_link(*args, **kwargs):
         raise OSError(errno.EPERM, "hard links are unavailable")
 
-    monkeypatch.setattr("scripts.media_quarantine.os.link", unavailable_link)
+    monkeypatch.setattr("scripts.media_quarantine.os.link", unavailable_link, raising=False)
     report = process_manifest(tmp_path, {
         "targets": [{"path": "generated_videos/clip.mp4", "sha256": expected}]
     }, apply=True)
@@ -159,6 +160,7 @@ def test_atomic_publish_refuses_destination_collision(tmp_path):
 
 
 
+@pytest.mark.skipif(not hasattr(os, "link"), reason="os.link is unavailable")
 def test_non_linux_hardlink_fallback_is_atomic_and_no_replace(tmp_path, monkeypatch):
     source = tmp_path / "generated_videos" / "clip.mp4"
     source.parent.mkdir()
