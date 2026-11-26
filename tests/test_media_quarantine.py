@@ -160,15 +160,22 @@ def test_atomic_publish_refuses_destination_collision(tmp_path):
 
 
 def test_non_linux_hardlink_fallback_is_atomic_and_no_replace(tmp_path, monkeypatch):
-    temporary = tmp_path / "verified.tmp"
-    destination = tmp_path / "destination.mp4"
-    temporary.write_bytes(b"verified")
+    source = tmp_path / "generated_videos" / "clip.mp4"
+    source.parent.mkdir()
+    source.write_bytes(b"original video bytes")
+    expected = digest(source)
     monkeypatch.setattr("scripts.media_quarantine.platform.system", lambda: "Darwin")
 
-    _publish_no_replace(temporary, destination)
+    report = process_manifest(tmp_path, {
+        "targets": [{"path": "generated_videos/clip.mp4", "sha256": expected}]
+    }, apply=True)
 
-    assert destination.read_bytes() == b"verified"
-    assert not temporary.exists()
+    item = report["targets"][0]
+    destination = tmp_path / item["quarantine_copy"]
+    assert item["status"] == "COPIED_VERIFIED"
+    assert destination.read_bytes() == source.read_bytes()
+    assert source.read_bytes() == b"original video bytes"
+    assert not list(destination.parent.glob(".sintu-quarantine-*"))
 
 
 def test_concurrent_publishers_only_one_wins_without_overwrite(tmp_path):
