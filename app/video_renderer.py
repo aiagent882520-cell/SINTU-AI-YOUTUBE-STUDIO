@@ -218,10 +218,13 @@ def _create_subtitle_track(work: Path, subtitles: list[str] | None,
             "Burned-in subtitles ke liye FFmpeg ka libass subtitles filter chahiye. "
             "Termux mein libass aur fontconfig install karke FFmpeg support check karein."
         )
-    font_size = max(22, round(height * 0.027))
+    # libass scales SRT style sizes against its script canvas; 0.027*height
+    # made Devanagari captions several times larger than the intended pixel size.
+    # Keep portrait glyphs legible while reserving enough room for real Hindi glyph widths.
+    font_size = max(14, round(height * 0.014))
     horizontal_margin = max(28, round(width * 0.06))
     available_width = max(1, width - 2 * horizontal_margin)
-    wrap_width = max(12, min(48, int(available_width / (font_size * 1.2))))
+    wrap_width = max(8, min(48, int(available_width / (font_size * 2.4))))
     cues = []
     cursor = 0.0
     cue_index = 1
@@ -337,7 +340,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         result = render_process.run_render_process(
             [ffprobe, "-v", "error", "-count_frames",
              "-show_entries",
-             "format=format_name,duration:stream=codec_type,codec_name,width,height,pix_fmt,duration,nb_read_frames,avg_frame_rate,sample_rate,channels,duration_ts,time_base",
+             "format=format_name,duration:stream=codec_type,codec_name,width,height,pix_fmt,color_range,duration,nb_read_frames,avg_frame_rate,sample_rate,channels,duration_ts,time_base",
              "-of", "json", str(path)],
             capture_output=True, text=True, timeout=30, check=False,
         )
@@ -357,6 +360,7 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         width, height = int(video.get("width", 0)), int(video.get("height", 0))
         codec = str(video.get("codec_name", "")).lower()
         pixel_format = str(video.get("pix_fmt", "")).lower()
+        color_range = str(video.get("color_range", "")).lower()
         audio_stream = next((item for item in streams if item.get("codec_type") == "audio"), None)
         audio_codec = str(audio_stream.get("codec_name", "")).lower() if audio_stream else ""
         audio_sample_rate = int(audio_stream.get("sample_rate", 0)) if audio_stream else 0
@@ -373,7 +377,10 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
     if codec != "h264" or (width, height) != (expected_width, expected_height):
         raise RenderFailed("Final video codec ya resolution expected profile se match nahi karta.")
     if pixel_format != "yuv420p":
-        raise RenderFailed("Final MP4 Android-compatible yuv420p pixel format mein encode nahi hua.")
+        raise RenderFailed(
+            "Final MP4 Android-compatible yuv420p pixel format mein encode nahi hua "
+            f"(ffprobe pix_fmt={pixel_format or 'missing'}, color_range={color_range or 'missing'})."
+        )
     if has_audio and (audio_codec != "aac" or audio_sample_rate != 48000 or audio_channels != 2):
         raise RenderFailed("Final MP4 audio Android-compatible AAC, 48 kHz stereo profile mein nahi hai.")
     if not math.isfinite(duration) or duration <= 0 or abs(duration - expected_duration) > max(1.0, expected_duration * 0.03):
@@ -419,8 +426,11 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
         )
     ]
     longest_black_seconds = max((end - start for start, end in black_intervals), default=0.0)
-    if any(start <= 0.1 and end >= duration * 0.95 for start, end in black_intervals):
-        raise RenderFailed("Final video mein full-duration black frames hain.")
+    # blackdetect uses a threshold heuristic that can classify a limited-range
+    # Android H.264 stream as black even when its decoded RGB pixels are visible.
+    # The independent decoded-pixel audit below is authoritative for an all-black
+    # render; keep blackdetect for long black segments, where its interval timing
+    # provides useful coverage between the one-second pixel samples.
     if longest_black_seconds >= max(2.5, duration * 0.25):
         raise RenderFailed(
             f"Final video mein lamba black segment hai ({longest_black_seconds:.2f}s)."
@@ -453,7 +463,8 @@ def _verify_rendered_output(path: Path, expected_width: int, expected_height: in
     verified = {"verified": True, "duration_seconds": duration, "video_duration_seconds": video_duration,
                 "frame_count": frame_count, "fps": actual_fps,
                 "audio_duration_seconds": audio_duration if has_audio else None,
-                "resolution": f"{width}x{height}", "video_codec": codec, "audio": has_audio,
+                "resolution": f"{width}x{height}", "video_codec": codec, "pixel_format": pixel_format,
+                 "color_range": color_range, "audio": has_audio,
                 "black_intervals": black_intervals,
                 "longest_black_segment_seconds": round(longest_black_seconds, 3),
                 "visible_frame_count": visible, "sampled_frame_count": len(sampled)}
@@ -550,8 +561,10 @@ def verify_publishable_mp4(path: Path, max_bytes: int = 512 * 1024 * 1024) -> di
         )
     ]
     longest_black_seconds = max((end - start for start, end in black_intervals), default=0.0)
-    if any(start <= 0.1 and end >= duration * 0.95 for start, end in black_intervals):
-        raise RenderFailed("Upload MP4 mein full-duration black video frames hain; publishing blocked.")
+    # As in render-time QA, blackdetect is a threshold heuristic rather than
+    # proof that every decoded frame is black. The decoded-pixel audit below
+    # decides whether the picture is actually blank; retain interval checks
+    # for long black sections that can fall between pixel samples.
     maximum_black_segment = max(2.5, duration * 0.25)
     if longest_black_seconds >= maximum_black_segment:
         raise RenderFailed(
@@ -823,7 +836,8 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
                 audio_filters.append(
                     "".join(mix_labels) +
                     f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,"
-                    f"apad,atrim=duration={duration}[aout]"
+                    f"apad,atrim=duration={duration},"
+                    "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary[aout]"
                 )
                 command += ["-filter_complex", ";".join(audio_filters),
                             "-map", "0:v:0", "-map", "[aout]", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
@@ -868,6 +882,8 @@ def render_storyboard(title: str, scenes: list[str], seconds_per_scene: int = 4,
         "fps": fps,
         "quality": quality,
         "video_codec": "H.264 / libx264",
+        "pixel_format": (verified or {}).get("pixel_format"),
+        "color_range": (verified or {}).get("color_range"),
         "audio": "+".join([label for label, enabled in (("voiceover", audio_path), ("music", music_path), ("sound-effects", sfx_path)) if enabled]) or "none",
         "music": bool(music_path),
         "music_volume": music_volume if music_path else None,
@@ -1019,7 +1035,7 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                 video_labels.append(f"[{vlabel}]")
                 audio_labels.append(f"[{alabel}]")
                 vfilters = (
-                    f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+                    f"scale={width}:{height}:force_original_aspect_ratio=increase:in_range=auto:out_range=tv,"
                     f"crop={width}:{height},fps={fps},setsar=1,format=yuv420p,setpts=PTS-STARTPTS"
                 )
                 if len(clip_info) > 1:
@@ -1041,6 +1057,11 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
             if subtitle_filter:
                 filters.append(f"[vbrand]{subtitle_filter}[vsub]")
                 video_map = "[vsub]"
+            # The RGBA watermark overlay/libass path can negotiate a non-yuv420
+            # pixel format even when every source clip is yuv420p. Normalize the
+            # final composed stream after all overlays/subtitles for Android MP4.
+            filters.append(f"{video_map}scale=iw:ih:in_range=auto:out_range=tv,format=yuv420p,setparams=range=limited[vfinal]")
+            video_map = "[vfinal]"
             filters.append("".join(audio_labels) + f"concat=n={len(video_paths)}:v=0:a=1[clipaudio]")
 
             mix_labels = []
@@ -1062,10 +1083,12 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
                     f"apad,atrim=duration={total_duration:.3f}[sfx]"
                 )
                 mix_labels.append("[sfx]")
-            filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,apad,atrim=duration={total_duration:.3f}[aout]")
+            has_real_audio = any(item["has_audio"] for item in clip_info) or voice_index is not None or music_index is not None or sound_effect_index is not None
+            audio_post_filter = "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary" if has_real_audio else "anull"
+            filters.append("".join(mix_labels) + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=2,apad,atrim=duration={total_duration:.3f},{audio_post_filter}[aout]")
 
             command += ["-filter_complex", ";".join(filters), "-map", video_map, "-map", "[aout]",
-                        "-c:v", "libx264", "-threads", str(_ffmpeg_thread_count()), "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
+                        "-c:v", "libx264", "-threads", str(_ffmpeg_thread_count()), "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p", "-color_range", "tv", "-bsf:v", "h264_metadata=video_full_range_flag=0", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
                         "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", "-t", f"{total_duration:.3f}",
                         "-movflags", "+faststart", str(temporary_output_path)]
             completed = render_process.run_render_process(command, capture_output=True, text=True, timeout=RENDER_TIMEOUT_SECONDS, check=False)
@@ -1099,14 +1122,17 @@ def render_ai_clips(video_paths: list[Path], audio_path: Path | None = None,
         "fps": fps,
         "quality": quality,
         "video_codec": "H.264 / libx264",
-        "audio": "source" + ("+voiceover" if audio_path else "") + ("+music" if music_path else "") + ("+sound-effects" if sfx_result else ""),
+        "pixel_format": (verified or {}).get("pixel_format"),
+        "color_range": (verified or {}).get("color_range"),
+        "audio": "+".join((["source"] if any(item["has_audio"] for item in clip_info) else []) + (["voiceover"] if audio_path else []) + (["music"] if music_path else []) + (["sound-effects"] if sfx_result else [])) or "silence",
         "music": bool(music_path),
         "music_volume": music_volume if music_path else None,
         "sound_effects": bool(sfx_result),
         "sound_effect_cue_count": sfx_result["cue_count"] if sfx_result else 0,
         "transition": transition,
-        "motion": "source AI clip motion",
+        "motion": "source clip motion",
         "motion_audit": (verified or {}).get("motion_audit"),
+        "quality_report": verified,
         "scene_images": 0,
         "subtitles_burned_in": bool(subtitle_file),
         "brand_watermark": "SINTU AI YOUTUBE STUDIO",

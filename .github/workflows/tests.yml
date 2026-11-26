@@ -39,10 +39,10 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "22"
-      - name: Setup FFmpeg
-        uses: AnimMouse/setup-ffmpeg@178e0b4a408f06ce40d896c3cd79f50fa6f8b0c3
-        with:
-          version: "release"
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Verify FFmpeg
         run: |
           ffmpeg -version
@@ -55,7 +55,7 @@ jobs:
       - name: Compile Python
         run: python -m compileall -q app tests scripts
       - name: Validate Termux launcher syntax
-        run: bash -n START_SINTU_TERMUX.sh scripts/termux_one_command.sh scripts/start_services.sh scripts/restart_termux_workers.sh scripts/termux_boot.sh scripts/termux_relay_bootstrap.sh scripts/android_physical_device_smoke.sh scripts/setup_local_ai_termux.sh scripts/start_local_ai_termux.sh
+        run: bash -n START_SINTU_TERMUX.sh scripts/termux_one_command.sh scripts/start_services.sh scripts/restart_termux_workers.sh scripts/termux_boot.sh scripts/termux_relay_bootstrap.sh scripts/android_physical_device_smoke.sh scripts/setup_local_ai_termux.sh scripts/start_local_ai_termux.sh scripts/setup_hindi_voice.sh
       - name: Check browser JavaScript syntax
         run: |
           node --check app/static/app.js
@@ -85,10 +85,10 @@ jobs:
         run: npm install --prefix tests/browser --no-audit --no-fund --package-lock=false
       - name: Install Chromium and browser dependencies
         run: tests/browser/node_modules/.bin/playwright install chromium
-      - name: Setup FFmpeg
-        uses: AnimMouse/setup-ffmpeg@178e0b4a408f06ce40d896c3cd79f50fa6f8b0c3
-        with:
-          version: "release"
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Run real browser Video Editor acceptance tests
         run: node --test tests/browser/*.test.cjs
 
@@ -106,10 +106,10 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements-dev.txt
-      - name: Setup FFmpeg
-        uses: AnimMouse/setup-ffmpeg@178e0b4a408f06ce40d896c3cd79f50fa6f8b0c3
-        with:
-          version: "release"
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Install free local voice and font tools
         run: |
           # The regional EC2 mirror and security.ubuntu.com returned repeated 503s.
@@ -119,6 +119,9 @@ jobs:
             -e 's|https://us-east-2.ec2.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
             -e 's|http://security.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
             -e 's|https://security.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' {} +
+          # eSpeak NG and Noto Sans Devanagari are in Ubuntu Universe on hosted runners.
+          sudo find /etc/apt -type f -name '*.sources' -exec sed -i -E \
+            '/^Components:/ { /(^|[[:space:]])universe([[:space:]]|$)/! s/$/ universe/; }' {} +
           font_family="$(fc-match -f '%{family}' 'Noto Sans Devanagari' 2>/dev/null | cut -d, -f1 || true)"
           if ! command -v espeak-ng >/dev/null 2>&1 || [[ "$font_family" != "Noto Sans Devanagari" ]]; then
             # Refresh indexes after mirror rewrite so package archives resolve
@@ -142,17 +145,36 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
+          python -m pip install piper-tts==1.3.0
+      - name: Download pinned Hindi Piper neural voice
+        run: |
+          set -euo pipefail
+          mkdir -p models/voices
+          base="https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/hi/hi_IN/pratham/medium"
+          curl --fail --location --retry 3 "$base/hi_IN-pratham-medium.onnx" -o models/voices/hi_IN-pratham-medium.onnx
+          curl --fail --location --retry 3 "$base/hi_IN-pratham-medium.onnx.json" -o models/voices/hi_IN-pratham-medium.onnx.json
+          echo "169964b0871667f6793416d4b35e97357a68ba1ad01df8580c28048989ee7693  models/voices/hi_IN-pratham-medium.onnx" | sha256sum --check
+          piper --help >/dev/null
+      - name: Exercise the actual documentary Production Factory API
+        env:
+          SINTU_DATA_DIR: ${{ github.workspace }}/.ci-data
+          ESPEAK_EXECUTABLE: espeak-ng
+          PIPER_EXECUTABLE: piper
+          PIPER_MODEL_PATH: ${{ github.workspace }}/models/voices/hi_IN-pratham-medium.onnx
+        run: python -m pytest -q tests/test_documentary_production_api.py
       - name: Generate real offline Hindi video
         env:
           SINTU_DATA_DIR: ${{ github.workspace }}/.ci-data
           ESPEAK_EXECUTABLE: espeak-ng
+          PIPER_EXECUTABLE: piper
+          PIPER_MODEL_PATH: ${{ github.workspace }}/models/voices/hi_IN-pratham-medium.onnx
           SINTU_RENDER_TIMEOUT_SECONDS: "600"
         run: |
           set -euo pipefail
           python scripts/live_e2e.py --offline-video --topic "भारत के 10 रहस्यमयी किलों पर 60 सेकंड का हिंदी वीडियो" | tee offline-video-report.json
       - name: Enforce 60-second Hindi subtitle acceptance
         run: |
-          python -c 'import json; r=json.load(open("offline-video-report.json", encoding="utf-8")); v=r["live_tests"]["offline_storyboard_video"]; assert abs(v["duration_seconds"]-60) <= 0.1, v; assert v["subtitle_count"] == 15 and v["subtitles_burned_in"] is True, v; assert v["audio"] == "voiceover+music", v; assert "SINTU Procedural Art (offline)" in v["image_providers"], v; print("60-second Hindi video, 15 burned subtitle cues, narration, music and truthful procedural-art provenance: PASS")'
+          python -c 'import json; r=json.load(open("offline-video-report.json", encoding="utf-8")); v=r["live_tests"]["offline_storyboard_video"]; assert abs(v["duration_seconds"]-60) <= 0.1, v; assert v["subtitle_count"] == 15 and v["subtitles_burned_in"] is True, v; assert all(track in v["audio"] for track in ("voiceover","music","sound-effects")), v; assert v["sound_effects"] is True and v["sound_effect_cue_count"] >= 1, v; assert v["final_qa_report"]["audio_quality"]["passed"] is True, v; assert v["final_qa_report"]["audio_quality"]["true_peak_dbfs"] <= -1.0, v; assert v["voice_engine"] == "Piper TTS" and v["voice_format"] == "WAV", v; assert v["scene_images_used_as_full_frame_backplates"] is True and v["scene_image_count"] == 15, v; assert "SINTU Procedural Art (offline)" in v["image_providers"], v; assert v["animation_report"]["all_scenes_animated"] is True and v["animation_report"]["scene_count"] == 15, v; assert set(v["animation_visual_types"]) == {"map","timeline","diagram","character","environment"}, v; assert v["final_qa_report"]["passed"] is True and v["final_qa_report"]["subtitle_pixel_audit"]["cue_count"] == 15, v; assert v["final_qa_report"]["visual_scene_audit"]["passed"] is True, v; print("60-second Hindi documentary: 15 animated scenes, five visual grammars, narration/music/SFX, loudness/true-peak, 15 subtitle pixel audits and MP4 QA: PASS")'
 
       - name: Audit final MP4 metadata, black frames and sampled motion
         env:
@@ -170,6 +192,7 @@ jobs:
           name: sintu-offline-video-e2e
           path: |
             .ci-data/generated_videos/*.mp4
+            .ci-data/generated_videos/*-qa.json
             offline-video-report.json
             offline-media-audit.json
           if-no-files-found: warn
@@ -238,3 +261,35 @@ jobs:
           echo "Production container did not become healthy within 90 seconds."
           docker logs sintu-ci-app || true
           exit 1
+
+  android-debug-build:
+    name: Android debug APK build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v5
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android 35 SDK components
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Compile Android debug APK
+        run: gradle -p android --no-daemon --stacktrace assembleDebug
+      - name: Preserve Android debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sintu-android-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7

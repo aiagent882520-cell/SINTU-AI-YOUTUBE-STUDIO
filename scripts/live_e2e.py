@@ -45,6 +45,8 @@ from app.music_generator import MUSIC_DIR, generate_music, music_status
 from app.production_runtime import REVIEWERS, attach_render_result, create_run, execute_run, get_run
 from app.video_generator import AI_VIDEO_DIR, generate_video, video_status
 from app.video_renderer import OUTPUT_DIR, render_ai_clips
+from app.documentary_animation import render_documentary_animation_clips
+from app.documentary_qa import audit_documentary_mp4
 from app.voice_generator import voice_status
 
 
@@ -172,7 +174,38 @@ def _live_video(prompt: str | list[str]) -> dict:
 
 
 
-def _offline_storyboard_e2e(topic: str) -> dict:
+def _assert_media_provider_acceptance(image_results: list[dict], voice: dict, *,
+                                     require_ai_images: bool = False,
+                                     require_piper_voice: bool = False) -> dict:
+    """Fail closed when a real-device acceptance run requires specific local media engines."""
+    providers = [str(item.get("provider", "unknown")) for item in image_results]
+    if require_ai_images:
+        non_ai = [name for name in providers if name != "ComfyUI (local AI)"]
+        if not image_results or non_ai:
+            raise RuntimeError(
+                "AI-image acceptance requires ComfyUI (local AI) for every scene; "
+                f"observed providers: {sorted(set(providers)) or ['none']}."
+            )
+    voice_engine = str(voice.get("voice", voice.get("provider", "unknown")))
+    if require_piper_voice and voice_engine != "Piper TTS":
+        raise RuntimeError(
+            "Natural Hindi voice acceptance requires Piper TTS; "
+            f"observed engine: {voice_engine}. eSpeak is a synthetic fallback."
+        )
+    return {
+        "scene_count": len(image_results),
+        "scene_image_providers": providers,
+        "ai_image_acceptance_required": require_ai_images,
+        "ai_image_acceptance_passed": bool(image_results) and all(
+            name == "ComfyUI (local AI)" for name in providers
+        ) if require_ai_images else None,
+        "voice_engine": voice_engine,
+        "piper_voice_acceptance_required": require_piper_voice,
+        "piper_voice_acceptance_passed": voice_engine == "Piper TTS" if require_piper_voice else None,
+    }
+
+
+def _offline_storyboard_e2e(topic: str, *, require_ai_images: bool = False, require_piper_voice: bool = False) -> dict:
     """Render a researched 60-second Hindi short covering ten named Indian forts."""
     clean_topic = topic.strip()
     if not clean_topic or len(clean_topic) > 300:
@@ -219,9 +252,26 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "Massive bastions, iron-studded gates and winding defensive passages, historical architectural detail",
         "Cinematic closing montage of India's ten forts at dusk, heritage documentary atmosphere",
     ]
+    visual_cues = [
+        "map route geography location मानचित्र",
+        "timeline chronology year date century समयरेखा",
+        "diagram chart comparison process structure आरेख",
+        "character king soldier traveller व्यक्ति",
+        "environment mountain fort architecture",
+        "environment water river engineering",
+        "character artisan builder व्यक्ति",
+        "map route border location नक्शा",
+        "timeline year date chronology कालक्रम",
+        "diagram data comparison structure आंकड़े",
+        "environment desert sandstone fort",
+        "character guard soldier leader सैनिक",
+        "diagram process water storage प्रणाली",
+        "map route defensive geography मार्ग",
+        "environment cinematic closing panorama",
+    ]
     scenes = [
-        f"{clean_topic}. Historical scene: {shot}"
-        for shot in shot_specs
+        f"{visual_cues[index]}. {clean_topic}. Historical scene: {shot}"
+        for index, shot in enumerate(shot_specs)
     ]
     image_results = [generate_image(prompt, kind="scene", aspect="portrait") for prompt in scenes]
     image_paths = [IMAGE_DIR / f"{item['image_id']}.jpg" for item in image_results]
@@ -259,6 +309,10 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "रहस्य: इंजीनियरिंग और साहस।",
     ]
     voice = generate_voiceover(narration)
+    media_acceptance = _assert_media_provider_acceptance(
+        image_results, voice, require_ai_images=require_ai_images,
+        require_piper_voice=require_piper_voice,
+    )
     audio_path = AUDIO_DIR / voice["filename"]
     if not audio_path.is_file() or audio_path.stat().st_size <= 0:
         raise RuntimeError("Local Hindi voiceover was not saved.")
@@ -274,21 +328,38 @@ def _offline_storyboard_e2e(topic: str) -> dict:
     if not music_path.is_file() or music_path.stat().st_size <= 0:
         raise RuntimeError("Local cinematic background soundtrack was not saved.")
 
-    rendered = render_storyboard(
-        title=clean_topic,
-        scenes=scenes,
-        seconds_per_scene=seconds_per_scene,
-        image_paths=image_paths,
-        audio_path=audio_path,
-        subtitles=subtitles,
-        music_path=music_path,
-        music_volume=0.12,
-        transition="fade",
-        motion="slow-zoom-in",
-        resolution="720x1280",
-        fps=24,
-        quality="high",
-    )
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="sintu-documentary-clips-") as clip_directory:
+        clip_paths, animation_report = render_documentary_animation_clips(
+            scenes,
+            seconds_per_scene,
+            Path(clip_directory),
+            resolution="720x1280",
+            fps=24,
+            scene_images=image_paths,
+            scene_image_providers=[str(item.get("provider", "unknown")) for item in image_results],
+        )
+        if len(clip_paths) != 15 or not animation_report.get("all_scenes_animated"):
+            raise RuntimeError("All 15 documentary scenes must pass frame-by-frame animation.")
+        if animation_report.get("scene_image_count") != 15 or not animation_report.get("scene_images_used_as_full_frame_backplates"):
+            raise RuntimeError("All 15 generated scene images must be visible full-frame documentary backplates.")
+        visual_types = {item["visual_type"] for item in animation_report["scenes"]}
+        if visual_types != {"map", "timeline", "diagram", "character", "environment"}:
+            raise RuntimeError(f"Documentary visual diversity incomplete: {sorted(visual_types)}")
+        rendered = render_ai_clips(
+            clip_paths,
+            audio_path=audio_path,
+            music_path=music_path,
+            music_volume=0.12,
+            subtitles=subtitles,
+            transition="fade",
+            resolution="720x1280",
+            fps=24,
+            quality="high",
+            scene_descriptions=scenes,
+            sound_effects_enabled=True,
+            sound_effects_volume=0.18,
+        )
     final_path = OUTPUT_DIR / rendered["filename"]
     if not final_path.is_file() or final_path.stat().st_size <= 1000:
         raise RuntimeError("Offline storyboard MP4 was not created.")
@@ -296,19 +367,39 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         raise RuntimeError("Offline storyboard MP4 is missing the mandatory SINTU watermark.")
     if rendered.get("subtitles_burned_in") is not True:
         raise RuntimeError("60-second Hindi acceptance MP4 must contain burned-in subtitles.")
-    if rendered.get("audio") != "voiceover+music":
-        raise RuntimeError("Offline storyboard MP4 must contain Hindi narration and background music.")
+    if "voiceover" not in rendered.get("audio", "") or "music" not in rendered.get("audio", ""):
+        raise RuntimeError("Offline documentary MP4 must contain Hindi narration and background music.")
+    if (rendered.get("sound_effects") is not True
+            or int(rendered.get("sound_effect_cue_count", 0)) < 1
+            or "sound-effects" not in rendered.get("audio", "")):
+        raise RuntimeError("Offline documentary MP4 must contain generated, mixed, verified scene sound effects.")
     if abs(float(rendered.get("duration_seconds", 0)) - target_duration) > 0.1:
         raise RuntimeError("Offline storyboard MP4 duration does not match the 60-second acceptance target.")
 
+    qa_report = audit_documentary_mp4(
+        final_path,
+        subtitles,
+        [seconds_per_scene] * len(scenes),
+        720,
+        1280,
+    )
+    if not qa_report.get("passed"):
+        raise RuntimeError("Independent final MP4 or subtitle pixel QA failed.")
     return {
         "topic": clean_topic,
         "forts_covered": forts,
+        "animation_engine": animation_report["engine"],
+        "scene_images_used_as_full_frame_backplates": animation_report["scene_images_used_as_full_frame_backplates"],
+        "scene_image_count": animation_report["scene_image_count"],
+        "animation_visual_types": sorted(visual_types),
+        "animation_report": animation_report,
+        "final_qa_report": qa_report,
         "research_sources": research_sources,
         "research_method": "curated_official_sources",
         "research_source_count": len(research_sources),
         "scene_count": len(scenes),
         "image_providers": sorted({item.get("provider", "unknown") for item in image_results}),
+        "media_provider_acceptance": media_acceptance,
         "voice_engine": voice.get("voice"),
         "voice_format": voice.get("format"),
         "music_provider": music.get("provider"),
@@ -321,6 +412,8 @@ def _offline_storyboard_e2e(topic: str) -> dict:
         "resolution": rendered["resolution"],
         "watermark": rendered["brand_watermark"],
         "audio": rendered["audio"],
+        "sound_effects": rendered["sound_effects"],
+        "sound_effect_cue_count": rendered["sound_effect_cue_count"],
         "subtitles_burned_in": rendered["subtitles_burned_in"],
         "verified_by_renderer": True,
     }
@@ -431,7 +524,9 @@ def main() -> int:
     parser.add_argument("--live-text", action="store_true", help="Make one real local Ollama text inference.")
     parser.add_argument("--live-agent-catalog", action="store_true", help="Run every unique core and specialist worker/checker role plus five final reviewers using local Ollama.")
     parser.add_argument("--generate-video", action="store_true", help="Generate a real 3-second ComfyUI clip and render a branded MP4.")
-    parser.add_argument("--offline-video", action="store_true", help="Generate procedural scene images, local Hindi voiceover and a verified branded MP4 without ComfyUI or paid APIs.")
+    parser.add_argument("--offline-video", action="store_true", help="Generate local scene images, Hindi voiceover and a verified branded MP4 without paid APIs.")
+    parser.add_argument("--require-ai-images", action="store_true", help="Fail documentary acceptance unless every scene image is generated by local ComfyUI AI.")
+    parser.add_argument("--require-piper-voice", action="store_true", help="Fail documentary acceptance unless Hindi narration is generated by Piper TTS (not synthetic eSpeak).")
     parser.add_argument("--full-studio-e2e", action="store_true", help="Run every unique core and specialist worker/checker role plus five reviewers, use the approved AI Video Generator scene prompt, render a branded MP4, and attach it to the production run.")
     parser.add_argument("--topic", default="भारत के प्राचीन किले में सुबह का सिनेमाई दृश्य")
     parser.add_argument("--deployment-url", help="Probe a deployed /api/health URL.")
@@ -439,6 +534,8 @@ def main() -> int:
 
     report = {"preflight": preflight(), "live_tests": {}}
     failed = False
+    if (args.require_ai_images or args.require_piper_voice) and not args.offline_video:
+        parser.error("--require-ai-images and --require-piper-voice require --offline-video.")
     try:
         if args.live_text:
             response = generate_text(
@@ -455,7 +552,10 @@ def main() -> int:
         if args.full_studio_e2e:
             report["live_tests"]["full_studio_e2e"] = _full_studio_e2e(args.topic)
         if args.offline_video:
-            report["live_tests"]["offline_storyboard_video"] = _offline_storyboard_e2e(args.topic)
+            report["live_tests"]["offline_storyboard_video"] = _offline_storyboard_e2e(
+                args.topic, require_ai_images=args.require_ai_images,
+                require_piper_voice=args.require_piper_voice,
+            )
         if args.generate_video:
             report["live_tests"]["comfyui_video_and_branded_render"] = _live_video(args.topic)
         if args.deployment_url:
