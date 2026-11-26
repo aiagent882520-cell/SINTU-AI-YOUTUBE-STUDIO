@@ -1,6 +1,10 @@
 package com.sintu.studio
 
 import android.os.Bundle
+import androidx.compose.ui.viewinterop.AndroidView
+import android.widget.VideoView
+import android.widget.MediaController
+import android.net.Uri
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.content.Intent
@@ -683,6 +687,8 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
             }
             if (downloadedUri.isNotBlank()) {
                 Text("Saved to Movies/SINTU · " + downloadedUri, style = MaterialTheme.typography.bodySmall)
+                Text("In-app MP4 preview", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                SintuInlineVideoPlayer(downloadedUri)
                 OutlinedButton(
                     onClick = {
                         try {
@@ -743,6 +749,37 @@ private fun VideoScreen(api: SintuApi, modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodySmall
         )
     }
+}
+
+@Composable
+private fun SintuInlineVideoPlayer(contentUri: String) {
+    AndroidView(
+        modifier = Modifier.fillMaxWidth().aspectRatio(9f / 16f),
+        factory = { context ->
+            VideoView(context).apply {
+                val controls = MediaController(context)
+                controls.setAnchorView(this)
+                setMediaController(controls)
+                tag = contentUri
+                setVideoURI(Uri.parse(contentUri))
+                setOnPreparedListener { player ->
+                    player.isLooping = false
+                    start()
+                }
+            }
+        },
+        update = { player ->
+            if (player.tag != contentUri) {
+                player.stopPlayback()
+                player.tag = contentUri
+                player.setVideoURI(Uri.parse(contentUri))
+                player.setOnPreparedListener { prepared ->
+                    prepared.isLooping = false
+                    player.start()
+                }
+            }
+        }
+    )
 }
 
 @Composable
