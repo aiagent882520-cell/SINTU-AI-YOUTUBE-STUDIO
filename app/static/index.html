@@ -20,8 +20,27 @@
     <div><img src="/static/brand-logo.svg" alt="SINTU AI YOUTUBE STUDIO" style="width:68px;height:52px;object-fit:contain;margin-right:12px"><div><h1>SINTU AI YOUTUBE STUDIO</h1><p>AI Video Production Workspace</p></div></div>
     <div class="actions"><span id="health" class="status" role="status">Connecting…</span><a class="secondary" href="/earnings">Earning System</a><a class="secondary" href="/static/factory.html">Production Factory</a><button id="logout" class="secondary" type="button">Logout</button></div>
   </header>
-  <main>
-    <section class="hero" data-feature="dashboard">
+  <main><aside class="studio-sidebar" aria-label="Studio navigation">
+  <div class="studio-sidebar-brand"><img src="/static/icon.svg" alt=""><span>STUDIO MENU</span></div>
+  <nav>
+    <a href="#dashboard" data-feature="dashboard"><span>⌂</span> Dashboard</a>
+    <a href="#create" data-feature="ai_assistant"><span>✦</span> AI Production Desk</a>
+    <a href="#aiChat" data-feature="ai_assistant"><span>◉</span> AI Assistant</a>
+    <a href="#videoEditor" data-feature="video_editor"><span>▣</span> Video Editor</a>
+    <a href="#productionStudio" data-feature="production"><span>⚙</span> Production Studio</a>
+    <a href="#agentOperationsPanel" data-feature="agents"><span>◇</span> AI Agents</a>
+    <a href="#offlineMediaPanel" data-feature="media_library"><span>▤</span> Media Library</a>
+    <a href="#providerAdminPanel" data-feature="ai_settings"><span>⌘</span> AI & Providers</a>
+    <a href="#publishingConnectionsPanel" data-feature="integrations"><span>⇄</span> Integrations</a>
+    <a href="#youtubeAdminPanel" data-feature="youtube"><span>▶</span> YouTube</a>
+    <a href="#calendarPanel" data-feature="social_publish"><span>▦</span> Publishing Calendar</a>
+    <a href="/earnings"><span>₹</span> Earnings</a>
+    <a href="/static/factory.html" data-feature="production"><span>⚡</span> Production Factory</a>
+  </nav>
+  <p class="studio-sidebar-foot">Owner-controlled · Free-first</p>
+</aside>
+
+    <section class="hero" id="dashboard" data-feature="dashboard">
       <p class="eyebrow">SINTU AI YOUTUBE STUDIO · VIDEO PRODUCTION</p>
       <h2>Idea se <em>production plan</em> tak.</h2>
       <p>Ek hi workspace mein video scripts, research, thumbnails, courses aur social content.</p>
@@ -80,7 +99,7 @@
       <div class="actions"><button id="chatSendMessage" type="button">Send message</button></div>
       <p id="chatNotice" class="muted" role="status" aria-live="polite">Local AI model unavailable ho to SINTU blocked status dikhayega; paid fallback automatic nahi hai.</p>
     </section>
-    <section class="panel" data-feature="video_editor">
+    <section class="panel" id="videoEditor" data-feature="video_editor">
       <div class="panel-head"><div><h2>MP4 Storyboard Renderer</h2><p>AI clips, still-image scenes aur local 2D character animation ko voiceover, music, SFX, subtitles aur camera movement ke saath final MP4 mein banayein.</p></div></div>
       <label for="renderFormat">Video format</label>
       <select id="renderFormat"><option value="youtube-shorts">YouTube Shorts</option></select>
