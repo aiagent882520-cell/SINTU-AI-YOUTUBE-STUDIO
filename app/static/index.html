@@ -101,6 +101,10 @@
       <div class="integration-card local-ai-runtime" aria-live="polite">
         <div class="panel-head"><div><strong>Local AI Runtime Diagnostics</strong><p class="muted">Ollama aur llama.cpp compatible server ki real readiness. Koi paid fallback automatic nahi hoga.</p></div><button id="localAiRefresh" class="secondary" type="button">Check Local AI</button></div>
         <div id="localAiRuntimeStatus" class="status-grid"><div><b>Checking…</b><span>Local server status load ho raha hai.</span></div></div>
+        <div class="integration-card production-readiness" aria-live="polite">
+          <div class="panel-head"><div><strong>Production Factory Readiness</strong><p class="muted">Text AI, image, video, voice, music aur renderer ki live capability. READY ka matlab configured/local check hai; real output ka test alag hai.</p></div><button id="productionReadinessRefresh" class="secondary" type="button">Check Media Engines</button></div>
+          <div id="productionReadinessStatus" class="status-grid"><div><b>Checking…</b><span>Production engines ki real capability check ho rahi hai.</span></div></div>
+        </div>
         <details class="local-ai-setup"><summary>Android / Termux Local AI setup</summary>
           <p>Repository update hone ke baad Termux mein repository root se pehle setup chalayein; yeh official Termux llama.cpp package aur chhota starter GGUF model install karta hai.</p>
           <pre><code>bash scripts/setup_local_ai_termux.sh</code></pre>
