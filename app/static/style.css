@@ -14,3 +14,17 @@
 .feature-grant-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:7px 12px}
 .feature-grant-grid label{display:flex;align-items:center;gap:7px;font-size:.88rem;min-width:0}
 .feature-grant-grid input{width:auto;min-width:16px;min-height:16px}
+
+/* Studio navigation shell */
+.studio-sidebar{position:fixed;z-index:4;left:16px;top:108px;bottom:18px;width:210px;padding:14px 10px;overflow:auto;border:1px solid var(--line);border-radius:16px;background:#0b1423f5;box-shadow:0 12px 36px #0004}
+.studio-sidebar-brand{display:flex;align-items:center;gap:9px;padding:4px 9px 14px;color:#a9c8ff;font-size:10px;font-weight:900;letter-spacing:1.5px}
+.studio-sidebar-brand img{width:25px;height:25px;object-fit:contain}
+.studio-sidebar nav{display:grid;gap:4px}
+.studio-sidebar nav a{display:flex;align-items:center;gap:10px;padding:10px 11px;border:1px solid transparent;border-radius:10px;color:#c8d5e8;text-decoration:none;font-size:12px;font-weight:650;line-height:1.35}
+.studio-sidebar nav a span{width:18px;text-align:center;color:#8db7ff;font-size:16px}
+.studio-sidebar nav a:hover,.studio-sidebar nav a:focus-visible,.studio-sidebar nav a[aria-current="location"]{background:#172a43;border-color:#38577e;color:#fff;outline:none}
+.studio-sidebar-foot{margin:14px 8px 4px;padding-top:12px;border-top:1px solid var(--line);font-size:10px;color:var(--muted)}
+@media(min-width:1101px){body:has(.studio-sidebar) main{width:min(1080px,calc(100% - 280px));margin:30px 24px 70px 250px}}
+@media(max-width:1100px){.studio-sidebar{position:sticky;top:82px;bottom:auto;left:auto;width:auto;margin:10px 4% 0;padding:8px;border-radius:12px}.studio-sidebar-brand{display:none}.studio-sidebar nav{display:flex;gap:6px;overflow-x:auto;scrollbar-width:thin}.studio-sidebar nav a{white-space:nowrap;flex:0 0 auto;padding:9px 11px}.studio-sidebar-foot{display:none}body:has(.studio-sidebar) main{width:92%;margin:16px auto 70px}}
+@media(max-width:700px){.studio-sidebar{top:76px;margin:8px 4% 0}.studio-sidebar nav a{font-size:11px;padding:8px 10px}.studio-sidebar nav a span{width:auto}}
+html{scroll-padding-top:110px}
