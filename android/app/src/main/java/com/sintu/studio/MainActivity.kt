@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
@@ -69,9 +70,17 @@ private fun SintuRoot() {
     if (loggedIn && api != null) {
         Column(Modifier.fillMaxSize().padding(12.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text("SINTU AI YOUTUBE STUDIO", fontWeight = FontWeight.Bold)
-                    Text("Signed in as " + username, style = MaterialTheme.typography.bodySmall)
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Image(
+                        painter = painterResource(id = R.drawable.sintu_icon_foreground),
+                        contentDescription = "SINTU AI Studio logo",
+                        modifier = Modifier.size(42.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text("SINTU AI YOUTUBE STUDIO", fontWeight = FontWeight.Bold)
+                        Text("Signed in as " + username, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
                 OutlinedButton(onClick = {
                     scope.launch {
@@ -89,6 +98,12 @@ private fun SintuRoot() {
         var otpCode by remember { mutableStateOf("") }
         var user by remember { mutableStateOf(username) }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.Center) {
+            Image(
+                painter = painterResource(id = R.drawable.sintu_icon_foreground),
+                contentDescription = "SINTU AI Studio logo",
+                modifier = Modifier.size(84.dp)
+            )
+            Spacer(Modifier.height(12.dp))
             Text("SINTU AI STUDIO", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text("Native Android client · free-first local AI")
             Spacer(Modifier.height(24.dp))
