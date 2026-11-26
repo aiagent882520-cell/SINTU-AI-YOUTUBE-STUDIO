@@ -10,8 +10,8 @@ START = (ROOT / "scripts/start_local_ai_termux.sh").read_text(encoding="utf-8")
 
 
 def test_studio_sidebar_links_resolve_to_real_sections():
-    ids = set(re.findall(r'\\bid=["\\']([^"\\']+)["\\']', HTML))
-    targets = re.findall(r'<a\\s+href="#([^"]+)"', HTML)
+    ids = set(re.findall(r'id="([^"]+)"', HTML))
+    targets = re.findall(r'<a\s+href="#([^"]+)"', HTML)
     assert len(targets) >= 10
     assert targets
     assert set(targets).issubset(ids)
