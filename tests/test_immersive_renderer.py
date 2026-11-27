@@ -144,3 +144,26 @@ def test_360_projection_export_runs_real_ffmpeg_v360_when_available(tmp_path):
     assert result["platform_ready"] is False
     assert destination.is_file() and destination.stat().st_size > 1000
 
+@pytest.mark.parametrize("failure", [OSError("disk unavailable"), subprocess.TimeoutExpired("ffmpeg", 1)])
+def test_360_projection_export_removes_partial_output_after_process_failure(
+    tmp_path, monkeypatch, failure
+):
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"source")
+    destination = tmp_path / "partial.mp4"
+    monkeypatch.setattr(immersive_renderer.shutil, "which", lambda name: f"/usr/bin/{name}")
+
+    def fake_run(command, **kwargs):
+        if command[0].endswith("ffprobe"):
+            return _probe_result(300, 200)
+        destination.write_bytes(b"partial output")
+        raise failure
+
+    monkeypatch.setattr(immersive_renderer.render_process, "run_render_process", fake_run)
+    with pytest.raises(immersive_renderer.ImmersiveRenderError, match="failed or timed out"):
+        immersive_renderer.render_360_projection(
+            source, destination, input_projection="c3x2"
+        )
+    assert source.read_bytes() == b"source"
+    assert not destination.exists()
+
