@@ -7,7 +7,7 @@ from copy import deepcopy
 from .studio_scope import video_formats
 
 _SPECIALIZED_ONLY = {
-    "360-video": "360-degree projection and metadata pipeline is not implemented.",
+    "360-video": "Projection conversion is available for compatible supplied footage; spherical MP4 metadata, original 360 scene generation, and platform playback validation are not implemented.",
     "vr-video": "VR-specific projection, stereo layout and headset validation are not implemented.",
     "ar-video": "AR scene tracking and platform packaging are not implemented.",
     "virtual-production": "Live virtual-production capture and tracking integration are not implemented.",
@@ -19,7 +19,9 @@ def _resolution_for(item: dict) -> str:
         return "1080x1920"
     if ratio == "1:1":
         return "1080x1080"
-    if ratio == "2:1 / 360" or ratio in {"VR", "AR", "Platform-dependent"}:
+    if ratio == "2:1 / 360":
+        return "1920x960"
+    if ratio in {"VR", "AR", "Platform-dependent"}:
         return "1920x1080"
     if ratio == "9:16 or 16:9":
         return "1080x1920" if item["preset"] in {"short", "ad", "avatar"} else "1920x1080"
@@ -46,7 +48,12 @@ def format_render_profile(format_id: str) -> dict:
         "generic_export_available": blocked_reason is None,
         "native_generation_ready": procedural_2d,
         "required_source": "Scene descriptions; no input images required" if procedural_2d else "Approved scene images or generated MP4 clips",
-        "engine": "SINTU Procedural 2D Animation + FFmpeg" if procedural_2d else "FFmpeg storyboard/clip assembly",
+        "engine": (
+            "FFmpeg v360 projection conversion; compatible source footage required"
+            if item["id"] == "360-video"
+            else "SINTU Procedural 2D Animation + FFmpeg" if procedural_2d
+            else "FFmpeg storyboard/clip assembly"
+        ),
         "limitations": [blocked_reason] if blocked_reason else (
             ["Local vector cartoon character animation with camera pan/zoom; not a full 3D rig or generative-AI art engine."]
             if procedural_2d else [
@@ -55,6 +62,20 @@ def format_render_profile(format_id: str) -> dict:
             ]
         ),
     }
+    if item["id"] == "360-video":
+        profile["immersive_export"] = {
+            "projection_conversion_available": True,
+            "engine": "FFmpeg v360",
+            "accepted_source_projections": [
+                "equirectangular", "cubemap-3x2", "cubemap-6x1",
+                "cubemap-1x6", "equi-angular-cubemap", "dual-fisheye",
+            ],
+            "output_projection": "equirectangular",
+            "output_profiles": ["1920x960", "3840x1920"],
+            "spherical_metadata_embedded": False,
+            "platform_ready": False,
+            "generates_original_360_scenes": False,
+        }
     if item["preset"] in {"3d", "film", "immersive", "hybrid"}:
         profile["optional_native_engine"] = "Blender"
         profile["native_engine_status"] = "Install Blender and configure a validated scene workflow."
