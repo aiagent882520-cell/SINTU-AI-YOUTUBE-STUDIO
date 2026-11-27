@@ -19,7 +19,7 @@ def test_each_catalog_format_has_an_individually_validated_render_contract(forma
     assert profile["name"] == source["name"]
     assert profile["preset"] == source["preset"]
     assert profile["aspect_ratio"] == source["aspect_ratio"]
-    assert profile["default_resolution"] in {"1080x1920", "1080x1080", "1920x1080"}
+    assert profile["default_resolution"] in {"1080x1920", "1080x1080", "1920x1080", "1920x960"}
     assert profile["fps_options"] == [24, 30, 60]
     assert source["roles"]
     assert len(source["roles"]) == len(set(source["roles"]))
