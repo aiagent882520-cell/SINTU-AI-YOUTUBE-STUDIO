@@ -30,7 +30,7 @@ def test_360_profile_exposes_projection_conversion_without_claiming_platform_rea
     profile = format_render_profile("360-video")
     assert profile["default_resolution"] == "1920x960"
     assert profile["engine"].startswith("FFmpeg v360")
-    assert profile["required_source"] == "Approved scene images or generated MP4 clips"
+    assert profile["required_source"] == "Compatible supplied 360 projection MP4 footage"
     assert profile["immersive_export"]["projection_conversion_available"] is True
     assert profile["immersive_export"]["output_profiles"] == ["1920x960", "3840x1920"]
     assert profile["immersive_export"]["spherical_metadata_embedded"] is False
