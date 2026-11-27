@@ -47,7 +47,12 @@ def format_render_profile(format_id: str) -> dict:
         "burned_in_text": False,
         "generic_export_available": blocked_reason is None,
         "native_generation_ready": procedural_2d,
-        "required_source": "Scene descriptions; no input images required" if procedural_2d else "Approved scene images or generated MP4 clips",
+        "required_source": (
+            "Compatible supplied 360 projection MP4 footage"
+            if item["id"] == "360-video"
+            else "Scene descriptions; no input images required" if procedural_2d
+            else "Approved scene images or generated MP4 clips"
+        ),
         "engine": (
             "FFmpeg v360 projection conversion; compatible source footage required"
             if item["id"] == "360-video"
