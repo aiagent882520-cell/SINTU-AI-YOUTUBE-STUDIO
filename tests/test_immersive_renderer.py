@@ -104,3 +104,43 @@ def test_360_projection_export_refuses_existing_destination_and_symlink_source(t
         immersive_renderer.render_360_projection(
             link, tmp_path / "other.mp4", input_projection="e"
         )
+
+def test_360_projection_export_runs_real_ffmpeg_v360_when_available(tmp_path):
+    import shutil
+    import subprocess
+
+    ffmpeg = shutil.which("ffmpeg")
+    ffprobe = shutil.which("ffprobe")
+    if not ffmpeg or not ffprobe:
+        pytest.skip("FFmpeg and FFprobe are required for the real 360 conversion test")
+    filters = subprocess.run(
+        [ffmpeg, "-hide_banner", "-filters"],
+        capture_output=True, text=True, check=False, timeout=20,
+    )
+    if filters.returncode != 0 or "v360" not in filters.stdout:
+        pytest.skip("Installed FFmpeg does not provide the v360 filter")
+
+    source = tmp_path / "real-cubemap-3x2.mp4"
+    destination = tmp_path / "real-equirectangular.mp4"
+    generated = subprocess.run(
+        [
+            ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+            "-f", "lavfi", "-i", "testsrc2=size=300x200:rate=12:duration=1",
+            "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(source),
+        ],
+        capture_output=True, text=True, check=False, timeout=30,
+    )
+    assert generated.returncode == 0, generated.stderr
+
+    result = immersive_renderer.render_360_projection(
+        source, destination, input_projection="c3x2",
+        resolution="1920x960", fps=24, quality=24,
+    )
+
+    assert result["success"] is True
+    assert result["stage"] == "projection_conversion_only"
+    assert result["resolution"] == "1920x960"
+    assert result["spherical_metadata_embedded"] is False
+    assert result["platform_ready"] is False
+    assert destination.is_file() and destination.stat().st_size > 1000
+
