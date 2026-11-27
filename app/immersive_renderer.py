@@ -147,11 +147,21 @@ def render_360_projection(
         if abs(output_info["duration"] - source_info["duration"]) > max(1.0, source_info["duration"] * 0.03):
             raise ImmersiveRenderError("Converted output duration differs materially from the source.")
     except (OSError, subprocess.TimeoutExpired):
+        # FFmpeg may leave a partial destination before an OS error or timeout.
+        # Remove only this invocation's non-symlink output; never touch the source.
+        try:
+            if destination_path.exists() and not destination_path.is_symlink():
+                destination_path.unlink()
+        except OSError:
+            pass
         raise ImmersiveRenderError("360 projection conversion failed or timed out.") from None
     except ImmersiveRenderError:
         # Only remove the new destination created by this invocation. Never touch the source.
-        if destination_path.exists() and not destination_path.is_symlink():
-            destination_path.unlink()
+        try:
+            if destination_path.exists() and not destination_path.is_symlink():
+                destination_path.unlink()
+        except OSError:
+            pass
         raise
 
     return {
