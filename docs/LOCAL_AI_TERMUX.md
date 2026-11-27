@@ -10,7 +10,7 @@ From the SINTU repository root in Termux:
 bash scripts/setup_local_ai_termux.sh
 ```
 
-The script checks arm64, available RAM and free storage, installs `llama-cpp` through Termux's package manager, downloads the model to `~/.sintu/models`, and verifies the GGUF magic bytes. It does not alter `.env`, credentials, the SINTU database, or source media.
+The script checks arm64, available RAM and free storage, installs `llama-cpp` through Termux's package manager, downloads the model to `~/.sintu/models`, and verifies the pinned SHA-256 checksum plus GGUF magic bytes before publishing the model file. Existing models are verified too; an invalid existing file is preserved and reported rather than overwritten. It does not alter `.env`, credentials, the SINTU database, or source media.
 
 ## Start
 
@@ -24,7 +24,7 @@ The server binds only to `127.0.0.1:8080`. SINTU's existing local AI detector pr
 
 ## Resource profile
 
-Default context is 1024 tokens and four CPU threads. On a phone with less than 900 MB currently available RAM, the bootstrap refuses to proceed. Close other apps and retry later. Do not raise context/thread limits until the device has been benchmarked. The model download needs at least 1.25 GB free storage for a safe temporary download.
+The launcher detects available RAM and CPU count. It refuses to start below 900 MB available RAM, caps automatic CPU threads at four, and selects a conservative context (512 tokens below 1.2 GB available RAM, 1024 below 1.8 GB, otherwise 2048). Explicit `SINTU_LOCAL_AI_CONTEXT` and `SINTU_LOCAL_AI_THREADS` overrides remain bounded by validation. These are conservative defaults, not a claim of measured performance on every device. The model download needs at least 1.25 GB free storage for a safe temporary download.
 
 ## Verify
 
