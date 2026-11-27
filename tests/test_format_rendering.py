@@ -10,7 +10,7 @@ def test_all_sixty_formats_have_a_render_profile_and_explicit_capability():
     for profile in result["profiles"]:
         assert profile["format_id"]
         assert profile["default_resolution"] in {
-            "1080x1920", "1080x1080", "1920x1080"
+            "1080x1920", "1080x1080", "1920x1080", "1920x960"
         }
         assert profile["output"] == "MP4 / H.264"
         assert profile["brand_watermark"] == "SINTU AI YOUTUBE STUDIO"
@@ -24,6 +24,18 @@ def test_specialized_immersive_and_virtual_production_formats_are_not_overclaime
         profile = format_render_profile(format_id)
         assert profile["generic_export_available"] is False
         assert profile["limitations"]
+
+
+def test_360_profile_exposes_projection_conversion_without_claiming_platform_readiness():
+    profile = format_render_profile("360-video")
+    assert profile["default_resolution"] == "1920x960"
+    assert profile["engine"].startswith("FFmpeg v360")
+    assert profile["required_source"] == "Approved scene images or generated MP4 clips"
+    assert profile["immersive_export"]["projection_conversion_available"] is True
+    assert profile["immersive_export"]["output_profiles"] == ["1920x960", "3840x1920"]
+    assert profile["immersive_export"]["spherical_metadata_embedded"] is False
+    assert profile["immersive_export"]["platform_ready"] is False
+    assert profile["immersive_export"]["generates_original_360_scenes"] is False
 
 
 def test_short_vertical_formats_default_to_vertical_export():
