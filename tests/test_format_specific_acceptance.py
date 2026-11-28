@@ -43,6 +43,12 @@ def test_each_catalog_format_has_an_individually_validated_render_contract(forma
     if format_id in PROCEDURAL_NATIVE:
         assert "no input images required" in profile["required_source"]
         assert "SINTU Procedural 2D Animation" in profile["engine"]
+    elif format_id == "360-video":
+        assert profile["required_source"] == "Compatible supplied 360 projection MP4 footage"
+        assert profile["immersive_export"]["projection_conversion_available"] is True
+        assert profile["immersive_export"]["spherical_metadata_embedded"] is False
+        assert profile["immersive_export"]["platform_ready"] is False
+        assert profile["immersive_export"]["generates_original_360_scenes"] is False
     else:
         assert profile["required_source"] == "Approved scene images or generated MP4 clips"
 
